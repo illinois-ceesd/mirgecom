@@ -49,14 +49,14 @@ def _interior_trace_pair(discr, vec):
             i)
     return TracePair("int_faces", i, e)
 
-def _inviscid_flux_2d(discr,q):
+def _inviscid_flux_2d(q):
         
     # q = [ rho rhoE rhoV ]
     ndim = discr.dim
     
     rho = q[0]
     rhoE = q[1]
-    rhoV = q[2:2+ndim]
+    rhoV = q[2:4]
     # should do V?
     #    V = rhoV/rho
     # --- EOS stuff TBD ---
@@ -72,22 +72,32 @@ def _inviscid_flux_2d(discr,q):
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.X.V + delta_ij*p) ]
     
-    # Flux in the V1 direction
-    pflux1 = join_fields(
-        rhoV[1], (rhoE + p)*rhoV[1]/rho,
+    flux = join_fields(
+        rhoV,
+        scalevec((rhoE + p)/rho,rhoV),
         rhoV[1]*rhoV[1]/rho + p,
-        rhoV[1]*rhoV[2]/rho
-        )
-    
-    # Flux in the V2 direction
-    pflux2 = join_fields(
-        rhoV[2], (rhoE + p)*rhoV[2]/rho,
+        rhoV[1]*rhoV[2]/rho,
         rhoV[2]*rhoV[1]/rho,
         rhoV[2]*rhoV[2]/rho + p
         )
+    return flux
+        
+    # Flux in the V1 direction
+#    pflux1 = join_fields(
+#        rhoV[1], (rhoE + p)*rhoV[1]/rho,
+#        rhoV[1]*rhoV[1]/rho + p,
+#        rhoV[1]*rhoV[2]/rho
+#        )
     
-    pflux = join_fields(pflux1,pflux2)
-    return pflux
+#    # Flux in the V2 direction
+#    pflux2 = join_fields(
+#        rhoV[2], (rhoE + p)*rhoV[2]/rho,
+#        rhoV[2]*rhoV[1]/rho,
+#        rhoV[2]*rhoV[2]/rho + p
+#        )
+    
+#    pflux = join_fields(pflux1,pflux2)
+#    return pflux
 
 
 def _flux(discr, w_tpair):
@@ -102,8 +112,8 @@ def _flux(discr, w_tpair):
     # How to get inviscid fluxes at this stage? (like this?)
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
-    flux_int = _inviscid_flux_2d(discr, qint)
-    flux_ext = _inviscid_flux_2d(discr, qext)
+    flux_int = _inviscid_flux_2d(qint)
+    flux_ext = _inviscid_flux_2d(qext)
 
     flux_avg = 0.5*(flux_int + flux_ext)
     # Surface fluxes should be inviscid flux .dot. normal
