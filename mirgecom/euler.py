@@ -25,35 +25,40 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
-    join_fields, make_obj_array,
-    with_object_array_or_scalar)
+    join_fields,
+    make_obj_array,
+    with_object_array_or_scalar,
+)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
 # TODO: Remove grudge dependence?
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 
 #
 # Euler flow eqns:
-# d_t(q) + d_x .dot. f = 0 (no sources atm)
+# d_t(q) + nabla .dot. f = 0 (no sources atm)
 # state vector q: [rho rhoE rhoV]
-# flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p)] 
+# flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p)]
 #
 __doc__ = """
 .. autofunction:: euler_operator
 """
 
+
 def _interior_trace_pair(discr, vec):
     i = discr.interp("vol", "int_faces", vec)
     e = with_object_array_or_scalar(
-            lambda el: discr.opposite_face_connection()(el.queue, el),
-            i)
+        lambda el: discr.opposite_face_connection()(el.queue, el), i
+    )
     return TracePair("int_faces", i, e)
 
+
 def _inviscid_flux_2d(q):
-        
+
     # q = [ rho rhoE rhoV ]
     ndim = discr.dim
-    
+
     rho = q[0]
     rhoE = q[1]
     rhoV = q[2:4]
@@ -63,51 +68,51 @@ def _inviscid_flux_2d(q):
     # gamma (ideal monatomic) = 1.4
     gamma = 1.4
     # p(ideal single gas) =
-    p = (gamma - 1.0)*(rhoE - 0.5*(np.dot(rhoV,rhoV))/rho)
-                       
-    def scalevec(scalar,vec):
+    p = (gamma - 1.0) * (rhoE - 0.5 * (np.dot(rhoV, rhoV)) / rho)
+
+    def scalevec(scalar, vec):
         # workaround for object array behavior
-        return make_obj_array([ni*scalar for ni in vec])
+        return make_obj_array([ni * scalar for ni in vec])
 
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.X.V + delta_ij*p) ]
-    
+
     flux = join_fields(
         rhoV,
-        scalevec((rhoE + p)/rho,rhoV),
-        rhoV[1]*rhoV[1]/rho + p,
-        rhoV[1]*rhoV[2]/rho,
-        rhoV[2]*rhoV[1]/rho,
-        rhoV[2]*rhoV[2]/rho + p
-        )
+        scalevec((rhoE + p) / rho, rhoV),
+        rhoV[1] * rhoV[1] / rho + p,
+        rhoV[1] * rhoV[2] / rho,
+        rhoV[2] * rhoV[1] / rho,
+        rhoV[2] * rhoV[2] / rho + p,
+    )
     return flux
-        
+
     # Flux in the V1 direction
 #    pflux1 = join_fields(
 #        rhoV[1], (rhoE + p)*rhoV[1]/rho,
 #        rhoV[1]*rhoV[1]/rho + p,
 #        rhoV[1]*rhoV[2]/rho
 #        )
-    
+
 #    # Flux in the V2 direction
 #    pflux2 = join_fields(
 #        rhoV[2], (rhoE + p)*rhoV[2]/rho,
 #        rhoV[2]*rhoV[1]/rho,
 #        rhoV[2]*rhoV[2]/rho + p
 #        )
-    
+
 #    pflux = join_fields(pflux1,pflux2)
 #    return pflux
 
 
 def _flux(discr, w_tpair):
-    
+
     rho = w_tpair[0]
     rhoE = w_tpair[1]
     rhoV = w_tpair[2:]
 
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
-    
+
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     # How to get inviscid fluxes at this stage? (like this?)
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
@@ -115,31 +120,31 @@ def _flux(discr, w_tpair):
     flux_int = _inviscid_flux_2d(qint)
     flux_ext = _inviscid_flux_2d(qext)
 
-    flux_avg = 0.5*(flux_int + flux_ext)
+    flux_avg = 0.5 * (flux_int + flux_ext)
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
     # (rhoE + p)V  .dot. normal
     # (rhoV.x.V)_1 .dot. normal
     # (rhoV.x.V)_2 .dot. normal
     # What about upwinding?
-    
-#    def normal_times(scalar):
-#        # workaround for object array behavior
-#        return make_obj_array([ni*scalar for ni in normal])
+
+    #    def normal_times(scalar):
+    #        # workaround for object array behavior
+    #        return make_obj_array([ni*scalar for ni in normal])
 
     flux_weak = join_fields(
-            np.dot(flux_avg[1], normal),
-            np.dot(flux_avg[2], normal),
-            np.dat(flux_avg[3], normal),
-            np.dat(flux_avg[4], normal),
-            )
+        np.dot(flux_avg[1], normal),
+        np.dot(flux_avg[2], normal),
+        np.dat(flux_avg[3], normal),
+        np.dat(flux_avg[4], normal),
+    )
 
     #  HOWTO: --- upwinding?
-#    v_jump = np.dot(normal, v.int-v.ext)
-#    flux_weak -= join_fields(
-#            0.5*(u.int-u.ext),
-#            0.5*normal_times(v_jump),
-#            )
+    #    v_jump = np.dot(normal, v.int-v.ext)
+    #    flux_weak -= join_fields(
+    #            0.5*(u.int-u.ext),
+    #            0.5*normal_times(v_jump),
+    #            )
 
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
@@ -147,11 +152,10 @@ def _flux(discr, w_tpair):
 def inviscid_operator(discr, w):
 
     ndim = discr.dim
-    
+
     rho = w[0]
     rhoE = w[1]
-    rhoV = w[2:2+ndim]
-
+    rhoV = w[2 : 2 + ndim]
 
     # We'll use exact soln of isentropic vortex for boundary/BC
     # Spiegel (https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20150018403.pdf)
@@ -165,21 +169,13 @@ def inviscid_operator(discr, w):
     #        = [ (rho*u, rho*v), ( (rhoE+p)*u, (rhoE+p)*v ),
     #            ( (rhouu + p), rhouv ), ( (rhovu, (rhovv + p)) )
     #          ]
-    v_flux = _inviscid_flux_2d(discr,w)
-    
-    return (
-            discr.inverse_mass(
-                join_fields( 
-                    v_flux[1],
-                    v_flux[2],
-                    v_flux[3],
-                    v_flux[4]
-                    )
-                -  # noqa: W504
-                discr.face_mass(
-                    _flux(discr, w_tpair=_interior_trace_pair(discr, w))
-#                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
-#                    dir_bc))
-                    ))
-                )
+    v_flux = _inviscid_flux_2d(discr, w)
 
+    return discr.inverse_mass(
+        join_fields(v_flux[1], v_flux[2], v_flux[3], v_flux[4])
+        - discr.face_mass(  # noqa: W504
+            _flux(discr, w_tpair=_interior_trace_pair(discr, w))
+            #                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
+            #                    dir_bc))
+        )
+    )
