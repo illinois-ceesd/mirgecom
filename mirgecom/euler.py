@@ -35,15 +35,18 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 
+
+__doc__ = """
+.. autofunction:: euler_operator
+"""
+
+
 #
 # Euler flow eqns:
 # d_t(q) + nabla .dot. f = 0 (no sources atm)
 # state vector q: [rho rhoE rhoV]
 # flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p)]
 #
-__doc__ = """
-.. autofunction:: euler_operator
-"""
 
 
 def _interior_trace_pair(discr, vec):
@@ -57,13 +60,12 @@ def _interior_trace_pair(discr, vec):
 def _inviscid_flux_2d(q):
 
     # q = [ rho rhoE rhoV ]
-    ndim = discr.dim
+    #    ndim = discr.dim
 
     rho = q[0]
     rhoE = q[1]
     rhoV = q[2:4]
-    # should do V?
-    #    V = rhoV/rho
+
     # --- EOS stuff TBD ---
     # gamma (ideal monatomic) = 1.4
     gamma = 1.4
@@ -74,35 +76,16 @@ def _inviscid_flux_2d(q):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
 
-    # physical flux =
-    # [ rhoV (rhoE + p)V (rhoV.X.V + delta_ij*p) ]
-
-    flux = join_fields(
-        rhoV,
-        scalevec((rhoE + p) / rho, rhoV),
-        rhoV[1] * rhoV[1] / rho + p,
-        rhoV[1] * rhoV[2] / rho,
-        rhoV[2] * rhoV[1] / rho,
-        rhoV[2] * rhoV[2] / rho + p,
+    momFlux1 = make_obj_array(
+        [(rhoV[1] * rhoV[1] / rho + p), (rhoV[1] * rhoV[2] / rho)]
     )
+    momFlux2 = make_obj_array(
+        [(rhoV[1] * rhoV[2] / rho), (rhoV[2] * rhoV[2] / rho + p)]
+    )
+    # physical flux =
+    # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
+    flux = join_fields(rhoV, scalevec((rhoE + p) / rho, rhoV), momFlux1, momFlux2,)
     return flux
-
-    # Flux in the V1 direction
-#    pflux1 = join_fields(
-#        rhoV[1], (rhoE + p)*rhoV[1]/rho,
-#        rhoV[1]*rhoV[1]/rho + p,
-#        rhoV[1]*rhoV[2]/rho
-#        )
-
-#    # Flux in the V2 direction
-#    pflux2 = join_fields(
-#        rhoV[2], (rhoE + p)*rhoV[2]/rho,
-#        rhoV[2]*rhoV[1]/rho,
-#        rhoV[2]*rhoV[2]/rho + p
-#        )
-
-#    pflux = join_fields(pflux1,pflux2)
-#    return pflux
 
 
 def _flux(discr, w_tpair):
@@ -114,13 +97,13 @@ def _flux(discr, w_tpair):
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    # How to get inviscid fluxes at this stage? (like this?)
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
     flux_int = _inviscid_flux_2d(qint)
     flux_ext = _inviscid_flux_2d(qext)
 
     flux_avg = 0.5 * (flux_int + flux_ext)
+
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
     # (rhoE + p)V  .dot. normal
@@ -128,15 +111,11 @@ def _flux(discr, w_tpair):
     # (rhoV.x.V)_2 .dot. normal
     # What about upwinding?
 
-    #    def normal_times(scalar):
-    #        # workaround for object array behavior
-    #        return make_obj_array([ni*scalar for ni in normal])
-
     flux_weak = join_fields(
         np.dot(flux_avg[1], normal),
         np.dot(flux_avg[2], normal),
-        np.dat(flux_avg[3], normal),
-        np.dat(flux_avg[4], normal),
+        np.dot(flux_avg[3], normal),
+        np.dot(flux_avg[4], normal),
     )
 
     #  HOWTO: --- upwinding?
@@ -149,7 +128,11 @@ def _flux(discr, w_tpair):
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(discr, w):
+def euler_operator(discr, w):
+    """
+    Returns the RHS of the Euler flow equations:
+    :math: \partial_t Q = - \\nabla \\cdot F
+    """
 
     ndim = discr.dim
 
