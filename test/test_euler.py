@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la  # noqa
+import pyopencl as cl
+import pyopencl.clrandom
 from pytools.obj_array import (
     join_fields, make_obj_array,
     with_object_array_or_scalar)
@@ -35,5 +37,21 @@ from mirgecom.euler import _inviscid_flux_2d
 
 # Tests go here
 
-def test_inviscid_flux_2d:
+def test_inviscid_flux_2d():
+    ctx = cl.create_some_context(interactive=False)
+    queue = cl.CommandQueue(ctx)
+
+    rho = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoE = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoV0 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoV1 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoV = make_obj_array([rhoV0,rhoV1])
+    rho[:] = 1.0
+    rhoE[:] = 2.5
+    rhoV[:] = 0.0
+    q = join_fields(rho, rhoE, rhoV)
+    
+    flux = _inviscid_flux_2d(q)
+
+    print(flux)
     
