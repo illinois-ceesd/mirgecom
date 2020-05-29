@@ -45,13 +45,26 @@ def test_inviscid_flux_2d():
     rhoE = cl.clrandom.rand(queue, (10,), dtype=np.float64)
     rhoV0 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
     rhoV1 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
-    rhoV = make_obj_array([rhoV0,rhoV1])
+    
     rho[:] = 1.0
     rhoE[:] = 2.5
-    rhoV[:] = 0.0
+    rhoV0[:] = 0.0
+    rhoV1[:] = 0.0
+
+    rhoV = make_obj_array([rhoV0,rhoV1])
     q = join_fields(rho, rhoE, rhoV)
     
     flux = _inviscid_flux_2d(q)
+    
+    rhoflux = flux[0:1]
+    rhoEflux = flux[2:3]
+    rhoV0flux = flux[4:5]
+    rhoV1flux = flux[6:7]
 
-    print(flux)
+    print('rhoflux = ',rhoflux)
+    print('rhoEflux = ',rhoEflux)
+    print('rhoV0flux = ',rhoV0flux)
+    print('rhoV1flux = ',rhoV1flux)
+    
+#    print(flux)
     
