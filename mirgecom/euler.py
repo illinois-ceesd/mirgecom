@@ -77,10 +77,10 @@ def _inviscid_flux_2d(q):
         return make_obj_array([ni * scalar for ni in vec])
 
     momFlux1 = make_obj_array(
-        [(rhoV[1] * rhoV[1] / rho + p), (rhoV[1] * rhoV[2] / rho)]
+        [(rhoV[0] * rhoV[0] / rho + p), (rhoV[0] * rhoV[1] / rho)]
     )
     momFlux2 = make_obj_array(
-        [(rhoV[1] * rhoV[2] / rho), (rhoV[2] * rhoV[2] / rho + p)]
+        [(rhoV[0] * rhoV[1] / rho), (rhoV[1] * rhoV[1] / rho + p)]
     )
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
@@ -112,10 +112,10 @@ def _flux(discr, w_tpair):
     # What about upwinding?
 
     flux_weak = join_fields(
+        np.dot(flux_avg[0], normal),
         np.dot(flux_avg[1], normal),
         np.dot(flux_avg[2], normal),
         np.dot(flux_avg[3], normal),
-        np.dot(flux_avg[4], normal),
     )
 
     #  HOWTO: --- upwinding?
@@ -155,7 +155,7 @@ def euler_operator(discr, w):
     v_flux = _inviscid_flux_2d(discr, w)
 
     return discr.inverse_mass(
-        join_fields(v_flux[1], v_flux[2], v_flux[3], v_flux[4])
+        join_fields(v_flux[0], v_flux[1], v_flux[2], v_flux[3])
         - discr.face_mass(  # noqa: W504
             _flux(discr, w_tpair=_interior_trace_pair(discr, w))
             #                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
