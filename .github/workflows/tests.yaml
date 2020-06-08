@@ -18,7 +18,9 @@ jobs:
         auto-update-conda: true
     - name: Install prerequisites
       shell: bash -l {0}
-      run: conda install pocl islpy pocl pyopencl
+      run: |
+        conda config --add channels conda-forge
+        conda install pocl islpy pocl pyopencl
     - name: Run tests
       shell: bash -l {0}
       run: |
