@@ -20,7 +20,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda config --add channels conda-forge
-        conda install pocl islpy pocl pyopencl pytest pip pymbolic
+        conda install pocl islpy pyopencl pytest pip
         pip install git+https://github.com/inducer/{meshmode,dagrt,leap,loopy,modepy,meshpy,grudge}
     - name: Run tests
       shell: bash -l {0}
