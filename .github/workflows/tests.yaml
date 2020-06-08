@@ -1,0 +1,25 @@
+name: CI test
+
+# Trigger the workflow on push and cron
+on:
+  push:
+  schedule:
+  - cron:  '5 0 * * *'
+
+
+jobs:
+  Linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: goanpeca/setup-miniconda@v1
+      with:
+        auto-update-conda: true
+    - name: Install prerequisites
+      shell: bash -l {0}
+      run: conda install pocl islpy pocl pyopencl
+    - name: Run tests
+      shell: bash -l {0}
+      run: |
+        pytest
