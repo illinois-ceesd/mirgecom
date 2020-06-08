@@ -16,12 +16,12 @@ jobs:
     - uses: goanpeca/setup-miniconda@v1
       with:
         auto-update-conda: true
+        channels: conda-forge
     - name: Install prerequisites
       shell: bash -l {0}
       run: |
-        conda config --add channels conda-forge
         conda install pocl islpy pyopencl pytest pip
-        pip install git+https://github.com/inducer/{meshmode,dagrt,leap,loopy,modepy,meshpy,grudge}
+        pip install git+https://gitlab.tiker.net/inducer/{meshmode,dagrt,leap,loopy,modepy,meshpy,grudge}
     - name: Run tests
       shell: bash -l {0}
       run: |
