@@ -21,7 +21,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda install pocl islpy pyopencl pytest pip
-        pip install git+https://gitlab.tiker.net/inducer/{meshmode,dagrt,leap,loopy,modepy,meshpy,grudge}
+        pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
     - name: Run tests
       shell: bash -l {0}
       run: |
