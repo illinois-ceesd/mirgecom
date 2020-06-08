@@ -20,7 +20,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda config --add channels conda-forge
-        conda install pocl islpy pocl pyopencl
+        conda install pocl islpy pocl pyopencl pytest meshmode genpy
     - name: Run tests
       shell: bash -l {0}
       run: |
