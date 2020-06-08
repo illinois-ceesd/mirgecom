@@ -59,32 +59,28 @@ def test_wave(ctx_factory, dim, order):
 
         nodes = discr.nodes().with_queue(queue)
 
-        # TODO: change t in cosine to c*t -- makes more sense
-        # 2D: phi(x,y,t) = cos(t-pi/4)*cos(x)*cos(2*y)
-        # 3D: phi(x,y,z,t) = cos(t-pi/4)*cos(x)*cos(2*y)*cos(3*z)
+        # 2D: phi(x,y,t) = cos(sqrt(2)*c*t-pi/4)*cos(x)*cos(y)
+        # 3D: phi(x,y,z,t) = cos(sqrt(3)*c*t-pi/4)*cos(x)*cos(y)*cos(z)
 
-        t_offset = np.pi/4.
-
-        c_invsq = 0.
-        for i in range(dim):
-            c_invsq = c_invsq + float(i+1)**2
-        c = 1./np.sqrt(c_invsq)
+        c = 2.
+        offset = np.pi/4.
+        omega = np.sqrt(dim) * c
 
         # u = phi_t
         # v_i = c*phi_{x_i}
         u = discr.empty(queue, dtype=np.float64)
-        u[:] = -np.sin(-t_offset)
+        u[:] = -omega * np.sin(-offset)
         for i in range(dim):
-            u = u * clmath.cos(float(i+1)*nodes[i])
+            u = u * clmath.cos(nodes[i])
         v = []
         for i in range(dim):
             v_i = discr.empty(queue, dtype=np.float64)
-            v_i[:] = c * np.sin(-t_offset)
+            v_i[:] = -c * np.sin(-offset)
             for j in range(dim):
                 if i == j:
-                    v_i = v_i * -float(j+1) * clmath.sin(float(j+1)*nodes[j])
+                    v_i = v_i * clmath.sin(nodes[j])
                 else:
-                    v_i = v_i * clmath.cos(float(j+1)*nodes[j])
+                    v_i = v_i * clmath.cos(nodes[j])
             v.append(v_i)
         fields = join_fields(u, v)
 
@@ -92,19 +88,20 @@ def test_wave(ctx_factory, dim, order):
         rhs = wave_operator(discr, c=c, w=fields)
 
         expected_rhs_u = discr.empty(queue, dtype=np.float64)
-        expected_rhs_u[:] = -np.cos(-t_offset)
+        expected_rhs_u[:] = -omega**2 * np.cos(-offset)
         for i in range(dim):
-            expected_rhs_u = expected_rhs_u * clmath.cos(float(i+1)*nodes[i])
+            expected_rhs_u = expected_rhs_u * clmath.cos(nodes[i])
         expected_rhs_v = []
         for i in range(dim):
             rhs_v_i = discr.empty(queue, dtype=np.float64)
-            rhs_v_i[:] = c * -np.sin(-t_offset)
+            # Why negative sign?
+            # rhs_v_i[:] = omega*c * np.sin(-offset)
+            rhs_v_i[:] = -omega*c * np.sin(-offset)
             for j in range(dim):
                 if i == j:
-                    rhs_v_i = (rhs_v_i * -float(j+1) * clmath.sin(
-                            float(j+1)*nodes[j]))
+                    rhs_v_i = rhs_v_i * clmath.sin(nodes[j])
                 else:
-                    rhs_v_i = rhs_v_i * clmath.cos(float(j+1)*nodes[j])
+                    rhs_v_i = rhs_v_i * clmath.cos(nodes[j])
             expected_rhs_v.append(rhs_v_i)
         expected_rhs = join_fields(expected_rhs_u, expected_rhs_v)
 
@@ -112,15 +109,17 @@ def test_wave(ctx_factory, dim, order):
                 for i in range(dim+1)]))
         eoc_rec.add_data_point(1./n, err)
 
-        from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order)
-        vis.write_vtk_file("result_{n}.vtu".format(n=n),
-                [
-                    ("rhs_u_actual", rhs[0]),
-                    ("rhs_v_actual", rhs[1:]),
-                    ("rhs_u_expected", expected_rhs[0]),
-                    ("rhs_v_expected", expected_rhs[1:]),
-                    ])
+        # from grudge.shortcuts import make_visualizer
+        # vis = make_visualizer(discr, discr.order)
+        # vis.write_vtk_file("result_{n}.vtu".format(n=n),
+        #         [
+        #             ("u", fields[0]),
+        #             ("v", fields[1:]),
+        #             ("rhs_u_actual", rhs[0]),
+        #             ("rhs_v_actual", rhs[1:]),
+        #             ("rhs_u_expected", expected_rhs[0]),
+        #             ("rhs_v_expected", expected_rhs[1:]),
+        #             ])
 
     print("Approximation error:")
     print(eoc_rec)
@@ -150,28 +149,29 @@ def test_wave_manufactured(ctx_factory, dim, order):
 
         nodes = discr.nodes().with_queue(queue)
 
-        # 2D: phi(x,y,t) = cos(c*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
-        # 3D: phi(x,y,z,t) = cos(c*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
+        # 2D: phi(x,y,t) = cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
+        # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
         #                      *(z-1)^3*(z+1)^3
         # Not actual solutions, but we can still apply wave operator to them
 
         c = 2.
-        t_offset = np.pi/4.
+        offset = np.pi/4.
+        omega = 1.
 
         # u = phi_t
         # v_i = c*phi_{x_i}
         u = discr.empty(queue, dtype=np.float64)
-        u[:] = -c * np.sin(-t_offset)
+        u[:] = -omega * np.sin(-offset)
         for i in range(dim):
             u = u * (nodes[i]-1.)**3 * (nodes[i]+1.)**3
         v = []
         for i in range(dim):
             v_i = discr.empty(queue, dtype=np.float64)
-            v_i[:] = c * np.cos(-t_offset)
+            v_i[:] = c * np.cos(-offset)
             for j in range(dim):
                 if i == j:
-                    v_i = v_i * 3. * ((nodes[j]-1.)**2 * (nodes[j]+1.)**3
-                            + (nodes[j]-1.)**3 * (nodes[j]+1.)**2)
+                    v_i = v_i * (3. * (nodes[j]-1.)**2 * (nodes[j]+1.)**3
+                            + 3. * (nodes[j]-1.)**3 * (nodes[j]+1.)**2)
                 else:
                     v_i = v_i * (nodes[j]-1.)**3 * (nodes[j]+1.)**3
             v.append(v_i)
@@ -194,17 +194,19 @@ def test_wave_manufactured(ctx_factory, dim, order):
                     spatial_part_i = spatial_part_i * ((nodes[j]-1.)**3
                             * (nodes[j]+1.)**3)
             expected_rhs_u = expected_rhs_u + spatial_part_i
-        # why negative sign?
-        expected_rhs_u = expected_rhs_u * -c**2 * np.cos(-t_offset)
+        # Why negative sign?
+        # expected_rhs_u = expected_rhs_u * c**2 * np.cos(-offset)
+        expected_rhs_u = expected_rhs_u * -c**2 * np.cos(-offset)
         expected_rhs_v = []
         for i in range(dim):
             rhs_v_i = discr.empty(queue, dtype=np.float64)
-            # why no negative sign?
-            rhs_v_i[:] = c**2 * np.sin(-t_offset)
+            # Why no negative sign?
+            # rhs_v_i[:] = -omega*c * np.sin(-offset)
+            rhs_v_i[:] = omega*c * np.sin(-offset)
             for j in range(dim):
                 if i == j:
-                    rhs_v_i = rhs_v_i * 3. * ((nodes[j]-1.)**2 * (nodes[j]+1.)**3
-                            + (nodes[j]-1.)**3 * (nodes[j]+1.)**2)
+                    rhs_v_i = rhs_v_i * (3. * (nodes[j]-1.)**2 * (nodes[j]+1.)**3
+                            + 3. * (nodes[j]-1.)**3 * (nodes[j]+1.)**2)
                 else:
                     rhs_v_i = rhs_v_i * (nodes[j]-1.)**3 * (nodes[j]+1.)**3
             expected_rhs_v.append(rhs_v_i)
