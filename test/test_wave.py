@@ -82,7 +82,7 @@ def test_wave(ctx_factory, dim, order):
         v = []
         for i in range(dim):
             v_i = discr.empty(queue, dtype=np.float64)
-            v_i[:] = -c * np.sin(-offset)
+            v_i[:] = -c * np.cos(-offset)
             for j in range(dim):
                 if i == j:
                     v_i = v_i * clmath.sin(nodes[j])
@@ -98,7 +98,9 @@ def test_wave(ctx_factory, dim, order):
         # 2D: rhs(u part) = -2*c^2*cos(omega*t-pi/4)*cos(x)*cos(y)
         # 3D: rhs(u part) = -3*c^2*cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
         expected_rhs_u = discr.empty(queue, dtype=np.float64)
-        expected_rhs_u[:] = -omega**2 * np.cos(-offset)
+        # Why no negative sign?
+        # expected_rhs_u[:] = -omega**2 * np.cos(-offset)
+        expected_rhs_u[:] = omega**2 * np.cos(-offset)
         for i in range(dim):
             expected_rhs_u = expected_rhs_u * clmath.cos(nodes[i])
 
@@ -270,6 +272,8 @@ def test_wave_manufactured(ctx_factory, dim, order):
         # vis = make_visualizer(discr, discr.order)
         # vis.write_vtk_file("result_{n}.vtu".format(n=n),
         #         [
+        #             ("u", fields[0]),
+        #             ("v", fields[1:]),
         #             ("rhs_u_actual", rhs[0]),
         #             ("rhs_v_actual", rhs[1:]),
         #             ("rhs_u_expected", expected_rhs[0]),
