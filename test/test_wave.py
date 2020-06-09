@@ -59,19 +59,26 @@ def test_wave(ctx_factory, dim, order):
 
         nodes = discr.nodes().with_queue(queue)
 
-        # 2D: phi(x,y,t) = cos(sqrt(2)*c*t-pi/4)*cos(x)*cos(y)
-        # 3D: phi(x,y,z,t) = cos(sqrt(3)*c*t-pi/4)*cos(x)*cos(y)*cos(z)
+        # 2D: phi(x,y,t) = cos(omega*t-pi/4)*cos(x)*cos(y)
+        # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
+        # omega = sqrt(#dims)*c
 
         c = 2.
         offset = np.pi/4.
         omega = np.sqrt(dim) * c
 
-        # u = phi_t
-        # v_i = c*phi_{x_i}
+        # 2D: u = phi_t = -omega*sin(omega*t-pi/4)*cos(x)*cos(y)
+        # 3D: u = phi_t = -omega*sin(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
         u = discr.empty(queue, dtype=np.float64)
         u[:] = -omega * np.sin(-offset)
         for i in range(dim):
             u = u * clmath.cos(nodes[i])
+
+        # 2D: v[0] = c*phi_x = -c*cos(omega*t-pi/4)*sin(x)*cos(y)
+        #     v[1] = c*phi_y = -c*cos(omega*t-pi/4)*cos(x)*sin(y)
+        # 3D: v[0] = c*phi_x = -c*cos(omega*t-pi/4)*sin(x)*cos(y)*cos(z)
+        #     v[1] = c*phi_y = -c*cos(omega*t-pi/4)*cos(x)*sin(y)*cos(z)
+        #     v[2] = c*phi_z = -c*cos(omega*t-pi/4)*cos(x)*cos(y)*sin(z)
         v = []
         for i in range(dim):
             v_i = discr.empty(queue, dtype=np.float64)
@@ -87,10 +94,20 @@ def test_wave(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
+        # rhs(u part) = c*div(v)
+        # 2D: rhs(u part) = -2*c^2*cos(omega*t-pi/4)*cos(x)*cos(y)
+        # 3D: rhs(u part) = -3*c^2*cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
         expected_rhs_u = discr.empty(queue, dtype=np.float64)
         expected_rhs_u[:] = -omega**2 * np.cos(-offset)
         for i in range(dim):
             expected_rhs_u = expected_rhs_u * clmath.cos(nodes[i])
+
+        # rhs(v part) = c*grad(u)
+        # 2D: rhs(v part)[0] = omega*c*sin(omega*t-pi/4)*sin(x)*cos(y)
+        #     rhs(v part)[1] = omega*c*sin(omega*t-pi/4)*cos(x)*sin(y)
+        # 3D: rhs(v part)[0] = omega*c*sin(omega*t-pi/4)*sin(x)*cos(y)*cos(z)
+        #     rhs(v part)[1] = omega*c*sin(omega*t-pi/4)*cos(x)*sin(y)*cos(z)
+        #     rhs(v part)[2] = omega*c*sin(omega*t-pi/4)*cos(x)*cos(y)*sin(z)
         expected_rhs_v = []
         for i in range(dim):
             rhs_v_i = discr.empty(queue, dtype=np.float64)
@@ -158,12 +175,24 @@ def test_wave_manufactured(ctx_factory, dim, order):
         offset = np.pi/4.
         omega = 1.
 
-        # u = phi_t
-        # v_i = c*phi_{x_i}
+        # 2D: u = phi_t = -omega*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
+        # 3D: u = phi_t = -omega*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
+        #                   *(z-1)^3*(z+1)^3
         u = discr.empty(queue, dtype=np.float64)
         u[:] = -omega * np.sin(-offset)
         for i in range(dim):
             u = u * (nodes[i]-1.)**3 * (nodes[i]+1.)**3
+
+        # 2D: v[0] = c*phi_x = c*cos(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
+        #                        *(y-1)^3*(y+1)^3
+        #     v[1] = c*phi_y = c*cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
+        #                        + 3*(y-1)^3*(y+1)^2)
+        # 3D: v[0] = c*phi_x = c*cos(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
+        #                        *(y-1)^3*(y+1)^3*(z-1)^3*(z+1)^3
+        #     v[1] = c*phi_y = c*cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
+        #                        + 3*(y-1)^3*(y+1)^2)*(z-1)^3*(z+1)^3
+        #     v[2] = c*phi_z = c*cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
+        #                        *(3*(z-1)^2*(z+1)^3 + 3*(z-1)^3*(z+1)^2)
         v = []
         for i in range(dim):
             v_i = discr.empty(queue, dtype=np.float64)
@@ -180,6 +209,15 @@ def test_wave_manufactured(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
+        # rhs(u part) = c*div(v)
+        # 2D: rhs(u part) = c^2*cos(omega*t-pi/4)*((6*(x-1)*(x+1)^3 + 18*(x-1)^2*(x+1)^2
+        #                     + 6*(x-1)^3*(x+1))*(y-1)^3*(y+1)^3 + (x-1)^3*(x+1)^3
+        #                     * (6*(y-1)*(y+1)^3 + 18*(y-1)^2*(y+1)^2 + 6*(y-1)^3*(y+1)))
+        # 3D: rhs(u part) = c^2*cos(omega*t-pi/4)*((6*(x-1)*(x+1)^3 + 18*(x-1)^2*(x+1)^2
+        #                     + 6*(x-1)^3*(x+1))*(y-1)^3*(y+1)^3*(z-1)^3*(z+1)^3
+        #                     + (x-1)^3*(x+1)^3*(6*(y-1)*(y+1)^3 + 18*(y-1)^2*(y+1)^2
+        #                     + 6*(y-1)^3*(y+1))*(z-1)^3*(z+1)^3 + (x-1)^3*(x+1)^3*(y-1)^3
+        #                     * (y+1)^3*(6*(z-1)*(z-1)^3 + 18*(z-1)^2*(z+1)^2 + 6*(z-1)^3*(z+1)))
         expected_rhs_u = discr.zeros(queue, dtype=np.float64)
         for i in range(dim):
             spatial_part_i = discr.empty(queue, dtype=np.float64)
@@ -197,6 +235,18 @@ def test_wave_manufactured(ctx_factory, dim, order):
         # Why negative sign?
         # expected_rhs_u = expected_rhs_u * c**2 * np.cos(-offset)
         expected_rhs_u = expected_rhs_u * -c**2 * np.cos(-offset)
+
+        # rhs(v part) = c*grad(u)
+        # 2D: rhs(v part)[0] = -omega*c*sin(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
+        #                        *(y-1)^3*(y+1)^3
+        #     rhs(v part)[1] = -omega*c*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
+        #                        + 3*(y-1)^3*(y+1)^2)
+        # 3D: rhs(v part)[0] = -omega*c*sin(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
+        #                        *(y-1)^3*(y+1)^3*(z-1)^3*(z+1)^3
+        #     rhs(v part)[1] = -omega*c*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
+        #                        + 3*(y-1)^3*(y+1)^2)*(z-1)^3*(z+1)^3
+        #     rhs(v part)[2] = -omega*c*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
+        #                        *(3*(z-1)^2*(z+1)^3 + 3*(z-1)^3*(z+1)^2)
         expected_rhs_v = []
         for i in range(dim):
             rhs_v_i = discr.empty(queue, dtype=np.float64)
