@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 # !/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -28,9 +27,10 @@ def main():
               'License :: OSI Approved :: MIT License',
               'Natural Language :: English',
               'Programming Language :: Python',
-              'Programming Language :: Python :: 2.6',
-              'Programming Language :: Python :: 2.7',
-              'Programming Language :: Python :: 3',
+              'Programming Language :: Python :: 3.6',
+              'Programming Language :: Python :: 3.7',
+              'Programming Language :: Python :: 3.8',
+              'Programming Language :: Python :: 3.9',
               'Topic :: Scientific/Engineering',
               'Topic :: Scientific/Engineering :: Information Analysis',
               'Topic :: Scientific/Engineering :: Mathematics',
