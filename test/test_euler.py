@@ -34,13 +34,14 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import _inviscid_flux_2d
+from mirgecom.euler import _inviscid_flux_3d
 
 # Tests go here
 
+        
 def test_inviscid_flux_2d():
     ctx = cl.create_some_context(interactive=False)
     queue = cl.CommandQueue(ctx)
-    gamma = 1.4
     
     def scalevec(scalar, vec):
         # workaround for object array behavior
@@ -55,11 +56,13 @@ def test_inviscid_flux_2d():
     
     rhoV = make_obj_array([rhoV0,rhoV1])
     ke = 0.5*(rhoV0*rhoV0 + rhoV1*rhoV1)/rho
-    p = (gamma-1.0)*(rhoE - ke) # ideal single spec
-    scal1 = (rhoE + p)/rho
-
+    
+    # ideal single spec
+    gamma = 1.4
+    p = (gamma-1.0)*(rhoE - ke)
+    escale = (rhoE + p)/rho
     expected_mass_flux = rhoV
-    expected_energy_flux = scalevec(scal1,rhoV)
+    expected_energy_flux = scalevec(escale,rhoV)
     expected_mom_flux1 = rhoV0*rhoV0/rho + p
     expected_mom_flux2 = rhoV0*rhoV1/rho # crossterms
     expected_mom_flux4 = rhoV1*rhoV1/rho + p
@@ -73,11 +76,72 @@ def test_inviscid_flux_2d():
     rhoV0flux = flux[4:6]
     rhoV1flux = flux[6:]
 
-    assert(rhoflux[0].get().all() == expected_mass_flux[0].get().all())
-    assert(rhoflux[1].get().all() == expected_mass_flux[1].get().all())
-    assert(rhoEflux[0].get().all() == expected_energy_flux[0].get().all())
-    assert(rhoEflux[1].get().all() == expected_energy_flux[1].get().all())
-    assert(rhoV0flux[0].get().all() == expected_mom_flux1.get().all())
-    assert(rhoV0flux[1].get().all() == expected_mom_flux2.get().all()) # crossterms
-    assert(rhoV1flux[0].get().all() == expected_mom_flux2.get().all()) # crossterms
-    assert(rhoV1flux[1].get().all() == expected_mom_flux4.get().all())
+    # these should be exact, right?    
+    assert(la.norm(rhoflux[0].get() - expected_mass_flux[0].get()) == 0.0)
+    assert(la.norm(rhoflux[1].get() - expected_mass_flux[1].get()) == 0.0)
+    assert(la.norm(rhoEflux[0].get() - expected_energy_flux[0].get()) == 0.0)
+    assert(la.norm(rhoEflux[1].get() - expected_energy_flux[1].get()) == 0.0)
+    assert(la.norm(rhoV0flux[0].get() - expected_mom_flux1.get()) == 0.0)
+    assert(la.norm(rhoV0flux[1].get() - expected_mom_flux2.get()) == 0.0) # crossterms
+    assert(la.norm(rhoV1flux[0].get() - expected_mom_flux2.get()) == 0.0) # crossterms
+    assert(la.norm(rhoV1flux[1].get() - expected_mom_flux4.get()) == 0.0)
+
+    
+def test_inviscid_flux_3d():
+    ctx = cl.create_some_context(interactive=False)
+    queue = cl.CommandQueue(ctx)
+    gamma = 1.4
+    
+    def scalevec(scalar, vec):
+        # workaround for object array behavior
+        return make_obj_array([ni * scalar for ni in vec])
+
+    rho = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoE = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoV0 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoV1 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    rhoV2 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    scal1 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    p = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    
+    rhoV = make_obj_array([rhoV0,rhoV1,rhoV2])
+    ke = 0.5*(rhoV0*rhoV0 + rhoV1*rhoV1 + rhoV2*rhoV2)/rho
+    p = (gamma-1.0)*(rhoE - ke) # ideal single spec
+    scal1 = (rhoE + p)/rho
+
+    expected_mass_flux = rhoV
+    expected_energy_flux = scalevec(scal1,rhoV)
+    expected_mom_flux1 = rhoV0*rhoV0/rho + p
+    expected_mom_flux2 = rhoV0*rhoV1/rho # crossterm1 
+    expected_mom_flux3 = rhoV0*rhoV2/rho # crossterm2
+    expected_mom_flux5 = rhoV1*rhoV1/rho + p
+    expected_mom_flux6 = rhoV1*rhoV2/rho # crossterm3
+    expected_mom_flux9 = rhoV2*rhoV2/rho + p
+
+    q = join_fields(rho, rhoE, rhoV)
+    
+    flux = _inviscid_flux_3d(q)
+    
+    rhoflux = flux[0:3]
+    rhoEflux = flux[3:6]
+    rhoV0flux = flux[6:9]
+    rhoV1flux = flux[9:12]
+    rhoV2flux = flux[12:]
+
+    assert(la.norm(rhoflux[0].get() - expected_mass_flux[0].get()) == 0.0)
+    assert(la.norm(rhoflux[1].get() - expected_mass_flux[1].get()) == 0.0)
+    assert(la.norm(rhoflux[2].get() - expected_mass_flux[2].get()) == 0.0)
+    assert(la.norm(rhoEflux[0].get() - expected_energy_flux[0].get()) == 0.0)
+    assert(la.norm(rhoEflux[1].get() - expected_energy_flux[1].get()) == 0.0)
+    assert(la.norm(rhoEflux[2].get() - expected_energy_flux[2].get()) == 0.0)
+    assert(la.norm(rhoV0flux[0].get() - expected_mom_flux1.get()) == 0.0)
+    assert(la.norm(rhoV0flux[1].get() - expected_mom_flux2.get()) == 0.0) # crossterm1
+    assert(la.norm(rhoV0flux[2].get() - expected_mom_flux3.get()) == 0.0) # crossterm2
+    assert(la.norm(rhoV1flux[0].get() - expected_mom_flux2.get()) == 0.0) # crossterm1 
+    assert(la.norm(rhoV1flux[1].get() - expected_mom_flux5.get()) == 0.0) 
+    assert(la.norm(rhoV1flux[2].get() - expected_mom_flux6.get()) == 0.0) # crossterm3
+    assert(la.norm(rhoV2flux[0].get() - expected_mom_flux3.get()) == 0.0) # crossterm1 
+    assert(la.norm(rhoV2flux[1].get() - expected_mom_flux6.get()) == 0.0) # crossterm3
+    assert(la.norm(rhoV2flux[2].get() - expected_mom_flux9.get()) == 0.0) 
+
+

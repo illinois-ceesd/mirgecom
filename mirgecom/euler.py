@@ -91,7 +91,7 @@ def _inviscid_flux_2d(q):
     return flux
 
 
-def _flux(discr, w_tpair):
+def _flux_2d(discr, w_tpair):
 
     rho = w_tpair[0]
     rhoE = w_tpair[1]
@@ -104,6 +104,134 @@ def _flux(discr, w_tpair):
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
     flux_int = _inviscid_flux_2d(qint)
     flux_ext = _inviscid_flux_2d(qext)
+
+    flux_avg = 0.5 * (flux_int + flux_ext)
+    
+    rhofluxavg = flux_avg[0:2]
+    rhoefluxavg = flux_avg[2:4]
+    rhov0fluxavg = flux_avg[4:6]
+    rhov1fluxavg = flux_avg[6:]
+    
+    # Surface fluxes should be inviscid flux .dot. normal
+    # rhoV .dot. normal
+    # (rhoE + p)V  .dot. normal
+    # (rhoV.x.V)_1 .dot. normal
+    # (rhoV.x.V)_2 .dot. normal
+    # What about upwinding?
+
+    flux_weak = join_fields(
+        np.dot(rhofluxavg, normal),
+        np.dot(rhofluxavg, normal),
+        np.dot(rhoefluxavg, normal),
+        np.dot(rhov0fluxavg, normal),
+        np.dot(rhov1fluxavg, normal),
+    )
+
+    #  HOWTO: --- upwinding?
+    #    v_jump = np.dot(normal, v.int-v.ext)
+    #    flux_weak -= join_fields(
+    #            0.5*(u.int-u.ext),
+    #            0.5*normal_times(v_jump),
+    #            )
+
+    return discr.interp(w_tpair.dd, "all_faces", flux_weak)
+
+
+def euler_operator(discr, w):
+    """
+    Returns the RHS of the Euler flow equations:
+    :math: \partial_t Q = - \\nabla \\cdot F
+    """
+
+    ndim = discr.dim
+
+    rho = w[0]
+    rhoE = w[1]
+    rhoV = w[2:]
+
+    # We'll use exact soln of isentropic vortex for boundary/BC
+    # Spiegel (https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20150018403.pdf)
+    # AK has this coded in "hedge" code: gas_dynamics_initials.py
+    #    dir_u = discr.interp("vol", BTAG_ALL, u)
+    #    dir_v = discr.interp("vol", BTAG_ALL, v)
+    #    dir_bval = join_fields(dir_u, dir_v)
+    #    dir_bc = join_fields(-dir_u, dir_v)
+
+    # vol_flux = [ rhoV, (rhoE + p)V, ((rhoV.x.V) + p*delta_ij) ]
+    #        = [ (rho*u, rho*v), ( (rhoE+p)*u, (rhoE+p)*v ),
+    #            ( (rhouu + p), rhouv ), ( (rhovu, (rhovv + p)) )
+    #          ]
+    vol_flux = _inviscid_flux_2d(discr, w)
+    # vol_flux is already "joined"
+    return discr.inverse_mass(
+        vol_flux
+        - discr.face_mass(  # noqa: W504
+            _flux_2d(discr, w_tpair=_interior_trace_pair(discr, w))
+            #                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
+            #                    dir_bc))
+        )
+    )
+
+
+
+def _inviscid_flux_3d(q):
+
+    # q = [ rho rhoE rhoV ]
+    #    ndim = discr.dim
+
+    rho = q[0]
+    rhoE = q[1]
+    rhoV = q[2:]
+
+    #    print('rhoV shape = ',rhoV.shape)
+    
+    # --- EOS stuff TBD ---
+    # gamma (ideal monatomic) = 1.4
+    gamma = 1.4
+    # p(ideal single gas) =
+    p = (gamma - 1.0) * (rhoE - 0.5 * (np.dot(rhoV, rhoV)) / rho)
+
+    def scalevec(scalar, vec):
+        # workaround for object array behavior
+        return make_obj_array([ni * scalar for ni in vec])
+
+    momFlux1 = make_obj_array(
+        [(rhoV[0] * rhoV[0] / rho + p), (rhoV[0] * rhoV[1] / rho),
+         (rhoV[0] * rhoV[2] / rho)]
+    )
+    #    print('momFlux1.shape = ',momFlux1.shape)
+    
+    momFlux2 = make_obj_array(
+        [(rhoV[0] * rhoV[1] / rho), (rhoV[1] * rhoV[1] / rho + p),
+         (rhoV[1] * rhoV[2] / rho)]
+    )
+
+    momFlux3 = make_obj_array(
+        [(rhoV[0] * rhoV[2] / rho ), (rhoV[2] * rhoV[1]/rho),
+         (rhoV[2] * rhoV[2] / rho + p)]
+    )
+        
+    # physical flux =
+    # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
+    flux = join_fields(scalevec(1.0,rhoV),
+                       scalevec((rhoE + p) / rho, rhoV),
+                       momFlux1, momFlux2, momFlux3)
+    #    print("flux.shape = ",flux.shape)
+    return flux
+
+def _flux_3d(discr, w_tpair):
+
+    rho = w_tpair[0]
+    rhoE = w_tpair[1]
+    rhoV = w_tpair[2:]
+
+    normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
+
+    # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
+    qint = join_fields(rho.int, rhoE.int, rhoV.int)
+    qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
+    flux_int = _inviscid_flux_3d(qint)
+    flux_ext = _inviscid_flux_3d(qext)
 
     flux_avg = 0.5 * (flux_int + flux_ext)
     
@@ -165,7 +293,7 @@ def euler_operator(discr, w):
     return discr.inverse_mass(
         vol_flux
         - discr.face_mass(  # noqa: W504
-            _flux(discr, w_tpair=_interior_trace_pair(discr, w))
+            _flux_2d(discr, w_tpair=_interior_trace_pair(discr, w))
             #                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
             #                    dir_bc))
         )
