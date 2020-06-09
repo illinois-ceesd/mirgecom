@@ -16,7 +16,7 @@ jobs:
     - uses: goanpeca/setup-miniconda@v1
       with:
         auto-update-conda: true
-        channels: conda-forge
+        channels: conda-forge, nodefaults
     - name: Install prerequisites
       shell: bash -l {0}
       run: |
