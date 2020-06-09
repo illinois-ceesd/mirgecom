@@ -40,31 +40,44 @@ from mirgecom.euler import _inviscid_flux_2d
 def test_inviscid_flux_2d():
     ctx = cl.create_some_context(interactive=False)
     queue = cl.CommandQueue(ctx)
+    gamma = 1.4
+    
+    def scalevec(scalar, vec):
+        # workaround for object array behavior
+        return make_obj_array([ni * scalar for ni in vec])
 
     rho = cl.clrandom.rand(queue, (10,), dtype=np.float64)
     rhoE = cl.clrandom.rand(queue, (10,), dtype=np.float64)
     rhoV0 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
     rhoV1 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    scal1 = cl.clrandom.rand(queue, (10,), dtype=np.float64)
+    p = cl.clrandom.rand(queue, (10,), dtype=np.float64)
     
-    rho[:] = 1.0
-    rhoE[:] = 2.5
-    rhoV0[:] = 0.0
-    rhoV1[:] = 0.0
-
     rhoV = make_obj_array([rhoV0,rhoV1])
+    ke = 0.5*(rhoV0*rhoV0 + rhoV1*rhoV1)/rho
+    p = (gamma-1.0)*(rhoE - ke) # ideal single spec
+    scal1 = (rhoE + p)/rho
+
+    expected_mass_flux = rhoV
+    expected_energy_flux = scalevec(scal1,rhoV)
+    expected_mom_flux1 = rhoV0*rhoV0/rho + p
+    expected_mom_flux2 = rhoV0*rhoV1/rho # crossterms
+    expected_mom_flux4 = rhoV1*rhoV1/rho + p
+
     q = join_fields(rho, rhoE, rhoV)
     
     flux = _inviscid_flux_2d(q)
     
-    rhoflux = flux[0:1]
-    rhoEflux = flux[2:3]
-    rhoV0flux = flux[4:5]
-    rhoV1flux = flux[6:7]
+    rhoflux = flux[0:2]
+    rhoEflux = flux[2:4]
+    rhoV0flux = flux[4:6]
+    rhoV1flux = flux[6:]
 
-    print('rhoflux = ',rhoflux)
-    print('rhoEflux = ',rhoEflux)
-    print('rhoV0flux = ',rhoV0flux)
-    print('rhoV1flux = ',rhoV1flux)
-    
-#    print(flux)
-    
+    assert(rhoflux[0].get().all() == expected_mass_flux[0].get().all())
+    assert(rhoflux[1].get().all() == expected_mass_flux[1].get().all())
+    assert(rhoEflux[0].get().all() == expected_energy_flux[0].get().all())
+    assert(rhoEflux[1].get().all() == expected_energy_flux[1].get().all())
+    assert(rhoV0flux[0].get().all() == expected_mom_flux1.get().all())
+    assert(rhoV0flux[1].get().all() == expected_mom_flux2.get().all()) # crossterms
+    assert(rhoV1flux[0].get().all() == expected_mom_flux2.get().all()) # crossterms
+    assert(rhoV1flux[1].get().all() == expected_mom_flux4.get().all())

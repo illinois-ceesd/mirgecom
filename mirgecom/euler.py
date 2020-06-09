@@ -64,7 +64,7 @@ def _inviscid_flux_2d(q):
     rhoE = q[1]
     rhoV = q[2:]
 
-    print('rhoV shape = ',rhoV.shape)
+    #    print('rhoV shape = ',rhoV.shape)
     
     # --- EOS stuff TBD ---
     # gamma (ideal monatomic) = 1.4
@@ -79,14 +79,15 @@ def _inviscid_flux_2d(q):
     momFlux1 = make_obj_array(
         [(rhoV[0] * rhoV[0] / rho + p), (rhoV[0] * rhoV[1] / rho)]
     )
-    print('momFlux1.shape = ',momFlux1.shape)
+    #    print('momFlux1.shape = ',momFlux1.shape)
     
     momFlux2 = make_obj_array(
         [(rhoV[0] * rhoV[1] / rho), (rhoV[1] * rhoV[1] / rho + p)]
     )
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    flux = join_fields(rhoV, scalevec((rhoE + p) / rho, rhoV), momFlux1, momFlux2,)
+    flux = join_fields(scalevec(1.0,rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux1, momFlux2,)
+    #    print("flux.shape = ",flux.shape)
     return flux
 
 
