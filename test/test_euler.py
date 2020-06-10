@@ -186,8 +186,9 @@ def test_uniform_flow():
     inviscid_rhs = inviscid_operator(discr,fields)
 
     rhs_resid = inviscid_rhs - expected_rhs
-    
-    assert(False)
+    for rhs_resid_comp in rhs_resid:
+        assert(la.norm(rhs_resid_comp) < 1e-15)
+
     
 
     
