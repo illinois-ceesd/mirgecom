@@ -36,6 +36,8 @@ from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import _inviscid_flux_2d
 from mirgecom.euler import _inviscid_flux_3d
 from mirgecom.euler import inviscid_operator
+from mirgecom.euler import _facial_flux
+from mirgecom.euler import _interior_trace_pair
 from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 # Tests go here
@@ -146,6 +148,46 @@ def test_inviscid_flux_3d():
     assert(la.norm(rhoV2flux[1].get() - expected_mom_flux6.get()) == 0.0) # crossterm3
     assert(la.norm(rhoV2flux[2].get() - expected_mom_flux9.get()) == 0.0) 
 
+
+def test_facial_flux():
+    cl_ctx = cl.create_some_context()
+    queue = cl.CommandQueue(cl_ctx)
+
+    dim = 2
+    nel_1d = 16
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+            a=(-0.5,)*dim,
+            b=(0.5,)*dim,
+            n=(nel_1d,)*dim)
+
+    order = 3
+
+    if dim == 2:
+        # no deep meaning here, just a fudge factor
+        dt = 0.75/(nel_1d*order**2)
+    elif dim == 3:
+        # no deep meaning here, just a fudge factor
+        dt = 0.45/(nel_1d*order**2)
+    else:
+        raise ValueError("don't have a stable time step guesstimate")
+
+    print("%d elements" % mesh.nelements)
+
+    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+
+    mass_input = discr.zeros(queue)
+    energy_input = discr.zeros(queue)
+    mass_input[:] = 1.0
+    energy_input[:] = 2.5
+    mom_input = join_fields( [discr.zeros(queue) for i in range(discr.dim) ] )
+    fields = join_fields( mass_input, energy_input, mom_input)
+
+    interior_face_flux = _facial_flux(discr,w_tpair=_interior_trace_pair(discr,fields))
+
+    err = np.max(np.array([ la.norm(interior_face_flux[i].get(), np.inf)
+                           for i in range(discr.dim+2)]))
+    assert(err < 1e-16)
 
 def test_uniform_flow():
     cl_ctx = cl.create_some_context()
