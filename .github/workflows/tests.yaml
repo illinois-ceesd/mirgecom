@@ -25,8 +25,8 @@ jobs:
         pip install -e .
     - name: Run tests
       shell: bash -l {0}
-      run: |
-        pytest
+      run: pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+
 
   MacOS:
     runs-on: macos-latest
