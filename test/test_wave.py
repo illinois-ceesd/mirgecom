@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave(ctx_factory, dim, order):
+def test_standing_wave(ctx_factory, dim, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
