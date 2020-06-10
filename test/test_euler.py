@@ -182,13 +182,40 @@ def test_uniform_flow():
     fields = join_fields( mass_input, energy_input, mom_input)
     
     expected_rhs = join_fields( [discr.zeros(queue) for i in range(discr.dim+2) ] )
-    
+
     inviscid_rhs = inviscid_operator(discr,fields)
 
-    rhs_resid = inviscid_rhs - expected_rhs
-    for rhs_resid_comp in rhs_resid:
-        assert(la.norm(rhs_resid_comp) < 1e-15)
-
+#    print('inviscid_rhs shape = ',inviscid_rhs.shape)
+#    print('inviscid_rhs rho = ',inviscid_rhs[0])
+#    print('inviscid_rhs rhoE = ',inviscid_rhs[1])
+#    print('inviscid_rhs mom1 = ',inviscid_rhs[2])
+#    print('inviscid_rhs mom2 = ',inviscid_rhs[3])
     
+    rhs_resid = inviscid_rhs - expected_rhs
+    rho_resid = rhs_resid[0]
+    rhoe_resid = rhs_resid[1]
+    mom_resid = rhs_resid[2:]
+    assert(la.norm(rho_resid.get()) < 1e-9)
+    assert(la.norm(rhoe_resid.get()) < 1e-9)
+    assert(la.norm(mom_resid[0].get()) < 1e-9)
+    assert(la.norm(mom_resid[1].get()) < 1e-9)
+
+    # set a non-zero, but uniform velocity component
+    i = 0
+    for mom_component in mom_input:
+        mom_component[:] = (-1.0)**i
+        i = i + 1
+    
+    inviscid_rhs = inviscid_operator(discr,fields)
+    rhs_resid = inviscid_rhs - expected_rhs
+    rho_resid = rhs_resid[0]
+    rhoe_resid = rhs_resid[1]
+    mom_resid = rhs_resid[2:]
+    assert(la.norm(rho_resid.get()) < 1e-9)
+    assert(la.norm(rhoe_resid.get()) < 1e-9)
+    assert(la.norm(mom_resid[0].get()) < 1e-9)
+    assert(la.norm(mom_resid[1].get()) < 1e-9)
+
+    # next test lump propagation 
 
     

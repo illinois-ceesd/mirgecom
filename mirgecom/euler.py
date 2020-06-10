@@ -91,28 +91,37 @@ def _inviscid_flux_2d(q):
     return flux
 
 
-def _flux_2d(discr, w_tpair):
+def _facial_flux(discr, w_tpair):
 
+    dim = discr.dim
+    
     rho = w_tpair[0]
     rhoE = w_tpair[1]
     rhoV = w_tpair[2:]
 
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
-    print ("normal shape = ",normal.shape)
-    print("normal = ",normal)
+    #    print ("normal shape = ",normal.shape)
+    #    print("normal = ",normal)
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
 
-    flux_int = _inviscid_flux_2d(qint)
-    flux_ext = _inviscid_flux_2d(qext)
-
+    if dim == 2:
+        flux_int = _inviscid_flux_2d(qint)
+        flux_ext = _inviscid_flux_2d(qext)
+    if dim == 3:
+        flux_int = _inviscid_flux_3d(qint)
+        flux_ext = _inviscid_flux_3d(qext)
+        
     flux_avg = 0.5 * (flux_int + flux_ext)
     
-    rhofluxavg = flux_avg[0:2]
-    rhoefluxavg = flux_avg[2:4]
-    rhov0fluxavg = flux_avg[4:6]
-    rhov1fluxavg = flux_avg[6:]
+    rhofluxavg = flux_avg[0:dim]
+    rhoefluxavg = flux_avg[dim:2*dim]
+    momfluxavg = flux_avg[2*dim:]
+
+#    print('rhofluxavg shape = ',rhofluxavg.shape)
+#    print('rhoefluxavg shape = ',rhoefluxavg.shape)
+#    print('momfluxavg shape = ',momfluxavg.shape)
     
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
@@ -121,12 +130,18 @@ def _flux_2d(discr, w_tpair):
     # (rhoV.x.V)_2 .dot. normal
     # What about upwinding?
 
+    if dim == 2:
+        mom_flux_weak = join_fields(np.dot(momfluxavg[0:2],normal),
+                                    np.dot(momfluxavg[2:4],normal))
+    if dim == 3:
+        mom_flux_weak = join_fields(np.dot(momfluxavg[0:2],normal),
+                                    np.dot(momfluxavg[2:4],normal),
+                                    np.dot(momfluxavg[4:6],normal))
+        
     flux_weak = join_fields(
         np.dot(rhofluxavg, normal),
-        np.dot(rhofluxavg, normal),
         np.dot(rhoefluxavg, normal),
-        np.dot(rhov0fluxavg, normal),
-        np.dot(rhov1fluxavg, normal),
+        mom_flux_weak
     )
 
     #  HOWTO: --- upwinding?
@@ -154,8 +169,12 @@ def inviscid_operator(discr, w):
     # We'll use exact soln of isentropic vortex for boundary/BC
     # Spiegel (https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20150018403.pdf)
     # AK has this coded in "hedge" code: gas_dynamics_initials.py
-    #    dir_u = discr.interp("vol", BTAG_ALL, u)
-    #    dir_v = discr.interp("vol", BTAG_ALL, v)
+    dir_rho = discr.interp("vol", BTAG_ALL, rho)
+    dir_e = discr.interp("vol",BTAG_ALL, rhoE)
+    dir_mom = discr.interp("vol",BTAG_ALL, rhoV)
+
+    dir_bval = join_fields(dir_rho, dir_e, dir_mom)
+    dir_bc = join_fields(dir_rho,dir_e,dir_mom)
     #    dir_bval = join_fields(dir_u, dir_v)
     #    dir_bc = join_fields(-dir_u, dir_v)
 
@@ -163,18 +182,24 @@ def inviscid_operator(discr, w):
     #        = [ (rho*u, rho*v), ( (rhoE+p)*u, (rhoE+p)*v ),
     #            ( (rhouu + p), rhouv ), ( (rhovu, (rhovv + p)) )
     #          ]
-    vol_flux = _inviscid_flux_2d(discr, w)
+    vol_flux = _inviscid_flux_2d(w)
+    #    print('vol_flux shape = ',vol_flux.shape)
+    dflux = join_fields( discr.weak_div(vol_flux[0:ndim]),
+                         discr.weak_div(vol_flux[ndim:2*ndim]),
+                         discr.weak_div(vol_flux[2*ndim:3*ndim]),
+                         discr.weak_div(vol_flux[3*ndim:4*ndim]) )
+    #    print('dflux shape = ',dflux.shape)
+    #    print('dflux = ',dflux)
+    interior_face_flux = _facial_flux(discr,w_tpair=_interior_trace_pair(discr,w))
+    #    print('interior_face_flux shape = ',interior_face_flux.shape)
+    
+    boundary_flux = _facial_flux(discr,w_tpair=TracePair(BTAG_ALL,dir_bval,dir_bc))
+    #    print('boundary_flux = shape',boundary_flux.shape)
+    
     # vol_flux is already "joined"
     return discr.inverse_mass(
-        vol_flux
-        - discr.face_mass(  # noqa: W504
-            _flux_2d(discr, w_tpair=_interior_trace_pair(discr, w))
-            #                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
-            #                    dir_bc))
-        )
-    )
-
-
+        dflux -
+        discr.face_mass( interior_face_flux + boundary_flux ))
 
 def _inviscid_flux_3d(q):
 
@@ -281,8 +306,12 @@ def euler_operator(discr, w):
     # We'll use exact soln of isentropic vortex for boundary/BC
     # Spiegel (https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20150018403.pdf)
     # AK has this coded in "hedge" code: gas_dynamics_initials.py
-    #    dir_u = discr.interp("vol", BTAG_ALL, u)
-    #    dir_v = discr.interp("vol", BTAG_ALL, v)
+    dir_rho = discr.interp("vol", BTAG_ALL, rho)
+    dir_e = discr.interp("vol",BTAG_ALL, rhoE)
+    dir_mom = discr.interp("vol",BTAG_ALL, rhoV)
+    
+    dir_bval = join_fields(dir_rho, dir_e, dir_mom)
+    dir_bc = join_fields(dir_rho,dir_e,dir_mom)
     #    dir_bval = join_fields(dir_u, dir_v)
     #    dir_bc = join_fields(-dir_u, dir_v)
 
@@ -296,8 +325,8 @@ def euler_operator(discr, w):
         vol_flux
         - discr.face_mass(  # noqa: W504
             _flux_2d(discr, w_tpair=_interior_trace_pair(discr, w))
-            #                    + _flux(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
-            #                    dir_bc))
+            + _flux_2d(discr, w_tpair=TracePair(BTAG_ALL, dir_bval,
+                                                dir_bc))
         )
     )
 
