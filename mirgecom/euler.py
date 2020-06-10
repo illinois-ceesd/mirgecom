@@ -35,7 +35,7 @@ from grudge.symbolic.primitives import TracePair
 
 
 __doc__ = """
-.. autofunction:: euler_operator
+.. autofunction:: inviscid_operator
 """
 
 
@@ -98,10 +98,12 @@ def _flux_2d(discr, w_tpair):
     rhoV = w_tpair[2:]
 
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
-
+    print ("normal shape = ",normal.shape)
+    print("normal = ",normal)
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
+
     flux_int = _inviscid_flux_2d(qint)
     flux_ext = _inviscid_flux_2d(qext)
 
@@ -137,7 +139,7 @@ def _flux_2d(discr, w_tpair):
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
-def euler_operator(discr, w):
+def inviscid_operator(discr, w):
     """
     Returns the RHS of the Euler flow equations:
     :math: \partial_t Q = - \\nabla \\cdot F
@@ -298,3 +300,5 @@ def euler_operator(discr, w):
             #                    dir_bc))
         )
     )
+
+
