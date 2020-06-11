@@ -38,12 +38,14 @@ from mirgecom.euler import _inviscid_flux_3d
 from mirgecom.euler import inviscid_operator
 from mirgecom.euler import _facial_flux
 from mirgecom.euler import _interior_trace_pair
+from mirgecom.euler import Vortex
 from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 # Tests go here
 
         
 def test_inviscid_flux_2d():
+
     ctx = cl.create_some_context(interactive=False)
     queue = cl.CommandQueue(ctx)
     
@@ -185,14 +187,28 @@ def test_facial_flux():
 
     interior_face_flux = _facial_flux(discr,w_tpair=_interior_trace_pair(discr,fields))
 
-    err = np.max(np.array([ la.norm(interior_face_flux[i].get(), np.inf)
+    err = np.max(np.array([ la.norm(interior_face_flux[i].get(),np.inf)
                            for i in range(discr.dim+2)]))
-    assert(err < 1e-16)
+    assert(err < 1e-15)
+
+    dir_rho = discr.interp("vol", BTAG_ALL, mass_input)
+    dir_e = discr.interp("vol",BTAG_ALL, energy_input)
+    dir_mom = discr.interp("vol",BTAG_ALL, mom_input)
+
+    dir_bval = join_fields(dir_rho, dir_e, dir_mom)
+    dir_bc = join_fields(dir_rho,dir_e,dir_mom)
+
+    boundary_flux = _facial_flux(discr,w_tpair=TracePair(BTAG_ALL,dir_bval,dir_bc))
+    
+    err = np.max(np.array([ la.norm(boundary_flux[i].get(),np.inf)
+                           for i in range(discr.dim+2)]))
+    assert(err < 1e-15)
 
 def test_uniform_flow():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-
+    iotag = 'test_uniform_flow: '
+    
     dim = 2
     nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -212,7 +228,7 @@ def test_uniform_flow():
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
-    print("%d elements" % mesh.nelements)
+    print(iotag+"%d elements" % mesh.nelements)
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
@@ -237,6 +253,14 @@ def test_uniform_flow():
     rho_resid = rhs_resid[0]
     rhoe_resid = rhs_resid[1]
     mom_resid = rhs_resid[2:]
+    rho_rhs = inviscid_rhs[0]
+    rhoe_rhs = inviscid_rhs[1]
+    rhov_rhs = inviscid_rhs[2:]
+    
+    print(iotag+'rho_rhs = ',rho_rhs)
+    print(iotag+'rhoe_rhs = ',rhoe_rhs)
+    print(iotag+'rhov_rhs = ',rhov_rhs)
+    
     assert(la.norm(rho_resid.get()) < 1e-9)
     assert(la.norm(rhoe_resid.get()) < 1e-9)
     assert(la.norm(mom_resid[0].get()) < 1e-9)
@@ -253,11 +277,59 @@ def test_uniform_flow():
     rho_resid = rhs_resid[0]
     rhoe_resid = rhs_resid[1]
     mom_resid = rhs_resid[2:]
+
     assert(la.norm(rho_resid.get()) < 1e-9)
     assert(la.norm(rhoe_resid.get()) < 1e-9)
     assert(la.norm(mom_resid[0].get()) < 1e-9)
     assert(la.norm(mom_resid[1].get()) < 1e-9)
 
     # next test lump propagation 
+
+    
+def test_isentropic_vortex():
+
+    cl_ctx = cl.create_some_context()
+    queue = cl.CommandQueue(cl_ctx)
+    iotag = 'test_isentropic_vortex: '
+    dim = 2
+    nel_1d = 16
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    
+    for nel_1d in [4, 8, 16]:
+        mesh = generate_regular_rect_mesh(
+            a=(-0.5,)*dim,
+            b=(0.5,)*dim,
+            n=(nel_1d,)*dim)
+
+        order = 3
+
+        if dim == 2:
+            # no deep meaning here, just a fudge factor
+            dt = 0.75/(nel_1d*order**2)
+        elif dim == 3:
+            # no deep meaning here, just a fudge factor
+            dt = 0.45/(nel_1d*order**2)
+        else:
+            raise ValueError("don't have a stable time step guesstimate")
+
+        print(iotag+"%d elements" % mesh.nelements)
+
+        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        nodes = discr.nodes().with_queue(queue)
+
+        # Init soln with Vortex
+        mass_input = discr.zeros(queue)
+        energy_input = discr.zeros(queue)
+        mom_input = join_fields( [discr.zeros(queue) for i in range(discr.dim) ] )
+        vortex_soln = join_fields( [discr.zeros(queue) for i in range(discr.dim+2) ] )
+        vortex = Vortex()
+        for i in range(discr.dim):
+            vortex_soln = vortex_soln + vortex(0,nodes[i])
+        
+        fields = vortex_soln
+
+        # Hardcode failure for now
+        assert(False)
+
 
     
