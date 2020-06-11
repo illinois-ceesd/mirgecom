@@ -188,9 +188,14 @@ def test_facial_flux():
     interior_face_flux = _facial_flux(discr,w_tpair=_interior_trace_pair(discr,fields))
 
     err = np.max(np.array([ la.norm(interior_face_flux[i].get(),np.inf)
-                           for i in range(discr.dim+2)]))
+                           for i in range(0,2)]))
     assert(err < 1e-15)
 
+    # mom flux should be p = 1
+    for i in range(2,2+discr.dim):
+        err = np.max(np.array([ la.norm(interior_face_flux[i].get(),np.inf) ]))
+        assert((err - 1.0) < 1e-15)
+    
     dir_rho = discr.interp("vol", BTAG_ALL, mass_input)
     dir_e = discr.interp("vol",BTAG_ALL, energy_input)
     dir_mom = discr.interp("vol",BTAG_ALL, mom_input)
@@ -201,9 +206,14 @@ def test_facial_flux():
     boundary_flux = _facial_flux(discr,w_tpair=TracePair(BTAG_ALL,dir_bval,dir_bc))
     
     err = np.max(np.array([ la.norm(boundary_flux[i].get(),np.inf)
-                           for i in range(discr.dim+2)]))
+                           for i in range(0,2)]))
     assert(err < 1e-15)
 
+    # mom flux should be p = 1
+    for i in range(2,2+discr.dim):
+        err = np.max(np.array([ la.norm(boundary_flux[i].get(),np.inf) ]))
+        assert((err - 1.0) < 1e-15)
+    
 def test_uniform_flow():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)

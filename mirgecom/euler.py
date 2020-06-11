@@ -162,18 +162,22 @@ def _facial_flux(discr, w_tpair):
     rhoV_ext = rhoV.ext
     v_int = join_fields([ rhoV_int[i]/rho.int for i in range(dim) ])
     v_ext = join_fields([ rhoV_ext[i]/rho.ext for i in range(dim) ])
+    # unsure why abs - if gamma*p/rho is negative, this should fail; not
+    # continue silently
     c_int = join_fields( np.sqrt(np.abs((gamma*pint/rho.int).get())) )
     c_ext = join_fields( np.sqrt(np.abs((gamma*pext/rho.ext).get())) )
 
     fspeed_int = join_fields( np.sqrt((np.dot(v_int,v_int)).get()) + c_int) 
     fspeed_ext = join_fields( np.sqrt((np.dot(v_ext,v_ext)).get()) + c_ext)    
-# - Gak!  What's the matter with this block?    
-#    lam = np.max(fspeed_int.get(),fspeed_ext.get())
-#    lam = fspeed_int
-#    print('lam shape = ',lam.shape)
-#    print('qjump[0] shape = ',qjump[0].shape)
-#    lfr = lam*qjump[0]
-#    nflux = flux_jump + lfr
+
+    # - Gak!  What's the matter with this block?   (CL issues?) 
+    #    lam = np.max(fspeed_int.get(),fspeed_ext.get())
+    lam = fspeed_int
+    #    print('lam shape = ',lam.shape)
+    #    print('qjump[0] shape = ',qjump[0].shape)
+    lfr = join_fields( [lam*qjump[i].get() for i in range(dim+2) ] )
+    lfr = scalevec(0.5,lfr)
+    #    nflux = np.dot(flux_jump,normal) + lfr
     nflux = flux_jump # skip lax/friedrichs for now
     
     rhofluxjump = nflux[0:dim]
@@ -202,7 +206,12 @@ def _facial_flux(discr, w_tpair):
         mom_flux_weak
     )
 
-    return discr.interp(w_tpair.dd, "all_faces", flux_weak)
+    # - maybe not working due to cl vs. non-cl obj?
+    #    flux_weak = flux_weak + lfr
+    print('flux_weak shape = ',flux_weak.shape)
+    print('lfr shape = ',lfr.shape)
+    
+    return discr.interp(w_tpair.dd, "all_faces", flux_weak )
 
 
 def _inviscid_flux_3d(q):
