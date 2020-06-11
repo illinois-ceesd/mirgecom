@@ -27,6 +27,7 @@ from pytools.obj_array import (
     make_obj_array,
     with_object_array_or_scalar,
 )
+import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 # TODO: Remove grudge dependence?
@@ -69,8 +70,8 @@ class Vortex:
         # also JSH/TW Nodal DG Methods, p. 209
 
         from math import pi
-        r = np.sqrt(x_rel**2+y_rel**2)
-        expterm = self.beta*numpy.exp(1-r**2)
+        r = clmath.sqrt(x_rel**2+y_rel**2)
+        expterm = self.beta*clmath.exp(1-r**2)
         u = self.velocity[0] - expterm*y_rel/(2*pi)
         v = self.velocity[1] + expterm*x_rel/(2*pi)
         rho = (1-(self.gamma-1)/(16*self.gamma*pi**2)*expterm**2)**(1/(self.gamma-1))
