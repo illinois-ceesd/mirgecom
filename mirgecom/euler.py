@@ -27,6 +27,7 @@ from pytools.obj_array import (
     make_obj_array,
     with_object_array_or_scalar,
 )
+import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 # TODO: Remove grudge dependence?
@@ -89,10 +90,10 @@ def _interior_trace_pair(discr, vec):
     return TracePair("int_faces", i, e)
 
 
-def _inviscid_flux_2d(q):
+def _inviscid_flux(discr,q):
 
     # q = [ rho rhoE rhoV ]
-    #    ndim = discr.dim
+    ndim = discr.dim
 
     rho = q[0]
     rhoE = q[1]
@@ -109,20 +110,13 @@ def _inviscid_flux_2d(q):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
 
-    momFlux1 = make_obj_array(
-        [(rhoV[0] * rhoV[0] / rho + p), (rhoV[0] * rhoV[1] / rho)]
-    )
-    
-    momFlux2 = make_obj_array(
-        [(rhoV[0] * rhoV[1] / rho), (rhoV[1] * rhoV[1] / rho + p)]
-    )
-
+    momFlux = make_obj_array( [ (rhoV[i]*rhoV[j]/rho + (p if i == j else 0))
+                                for i in range(ndim) for j in range(ndim) ] ) 
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    flux = join_fields(scalevec(1.0,rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux1, momFlux2,)
+    flux = join_fields(scalevec(1.0,rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux,)
 
     return flux
-
 
 def _facial_flux(discr, w_tpair):
 
@@ -142,126 +136,49 @@ def _facial_flux(discr, w_tpair):
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
     qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
-    
-    if dim == 2:
-        flux_int = _inviscid_flux_2d(qint)
-        flux_ext = _inviscid_flux_2d(qext)
-    if dim == 3:
-        flux_int = _inviscid_flux_3d(qint)
-        flux_ext = _inviscid_flux_3d(qext)
-
-#    flux_jump = scalevec(1.0,(flux_int - flux_ext))
-    flux_jump = scalevec(0.5,(flux_int + flux_ext))
+    flux_int = _inviscid_flux(discr,qint)
+    flux_ext = _inviscid_flux(discr,qext)
 
     # Lax/Friedrichs/Rusunov after JSH/TW Nodal DG Methods, p. 209
+    #    flux_jump = scalevec(1.0,(flux_int - flux_ext))
+    flux_jump = scalevec(0.5,(flux_int + flux_ext))
+
     gamma = 1.4
     # p(ideal single gas) = (gamma - 1)*(rhoE - .5(rhoV*V))
-    pint = (gamma - 1.0) * (rhoE.int - 0.5 * (np.dot(rhoV.int, rhoV.int)) / rho.int)
-    pext = (gamma - 1.0) * (rhoE.ext - 0.5 * (np.dot(rhoV.ext, rhoV.ext)) / rho.ext)
-    rhoV_int = rhoV.int
-    rhoV_ext = rhoV.ext
-    v_int = join_fields([ rhoV_int[i]/rho.int for i in range(dim) ])
-    v_ext = join_fields([ rhoV_ext[i]/rho.ext for i in range(dim) ])
-    # unsure why abs - if gamma*p/rho is negative, this should fail; not
-    # continue silently
-    c_int = join_fields( np.sqrt(np.abs((gamma*pint/rho.int).get())) )
-    c_ext = join_fields( np.sqrt(np.abs((gamma*pext/rho.ext).get())) )
+    pint,pext = [ ((gamma - 1.0) * (rhoe - 0.5*(np.dot(rhov,rhov)/lrho)))
+                  for rhoe,rhov,lrho in [ (rhoE.int,rhoV.int,rho.int),
+                                          (rhoE.ext,rhoV.ext,rho.ext) ] ]
+    v_int,v_ext = [scalevec(1.0/lrho,lrhov) for lrho,lrhov in
+                   [ (rho.int, rhoV.int), (rho.ext, rhoV.ext) ] ]
 
-    fspeed_int = join_fields( np.sqrt((np.dot(v_int,v_int)).get()) + c_int) 
-    fspeed_ext = join_fields( np.sqrt((np.dot(v_ext,v_ext)).get()) + c_ext)    
-
+    c_int,c_ext = [clmath.sqrt(gamma*lp/lrho) for lp,lrho in
+                   [ (pint, rho.int), (pext, rho.ext) ] ]
+    
+    fspeed_int, fspeed_ext = [ (clmath.sqrt(np.dot(lv,lv)) + lc) for lv,lc
+                               in [ (v_int, c_int), (v_ext, c_ext) ] ]
+    
     # - Gak!  What's the matter with this block?   (CL issues?) 
     #    lam = np.max(fspeed_int.get(),fspeed_ext.get())
     lam = fspeed_int
     #    print('lam shape = ',lam.shape)
     #    print('qjump[0] shape = ',qjump[0].shape)
-    lfr = join_fields( [lam*qjump[i].get() for i in range(dim+2) ] )
-    lfr = scalevec(0.5,lfr)
-    #    nflux = np.dot(flux_jump,normal) + lfr
-    nflux = flux_jump # skip lax/friedrichs for now
+    lfr = scalevec(0.5*lam,qjump)
     
-    rhofluxjump = nflux[0:dim]
-    rhoefluxjump = nflux[dim:2*dim]
-    momfluxjump = nflux[2*dim:]
     
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
     # (rhoE + p)V  .dot. normal
     # (rhoV.x.V)_1 .dot. normal
     # (rhoV.x.V)_2 .dot. normal
-    rho_flux_weak = np.dot(rhofluxjump,normal)
-    rhoe_flux_weak = np.dot(rhoefluxjump,normal)
+    nflux = join_fields ([ np.dot(flux_jump[i*dim:(i+1)*dim],normal) for i
+              in range(dim + 2) ])
     
-    if dim == 2:
-        mom_flux_weak = join_fields(np.dot(momfluxjump[0:2],normal),
-                                    np.dot(momfluxjump[2:4],normal))
-    if dim == 3:
-        mom_flux_weak = join_fields(np.dot(momfluxjump[0:2],normal),
-                                    np.dot(momfluxjump[2:4],normal),
-                                    np.dot(momfluxjump[4:6],normal))
-        
-    flux_weak = join_fields(
-        rho_flux_weak,
-        rhoe_flux_weak,
-        mom_flux_weak
-    )
-
-    # - maybe not working due to cl vs. non-cl obj?
-    #    flux_weak = flux_weak + lfr
-    print('flux_weak shape = ',flux_weak.shape)
-    print('lfr shape = ',lfr.shape)
+    # add Lax/Friedrichs term
+    flux_weak = nflux + lfr
     
     return discr.interp(w_tpair.dd, "all_faces", flux_weak )
 
 
-def _inviscid_flux_3d(q):
-
-    # q = [ rho rhoE rhoV ]
-    #    ndim = discr.dim
-
-    rho = q[0]
-    rhoE = q[1]
-    rhoV = q[2:]
-
-    # --- EOS stuff TBD ---
-    # gamma (ideal monatomic) = 1.4
-    gamma = 1.4
-    # p(ideal single gas) =
-    p = (gamma - 1.0) * (rhoE - 0.5 * (np.dot(rhoV, rhoV)) / rho)
-
-    def scalevec(scalar, vec):
-        # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])
-
-    momFlux1 = make_obj_array(
-        [(rhoV[0] * rhoV[0] / rho + p), (rhoV[0] * rhoV[1] / rho),
-         (rhoV[0] * rhoV[2] / rho)]
-    )
-    
-    momFlux2 = make_obj_array(
-        [(rhoV[0] * rhoV[1] / rho), (rhoV[1] * rhoV[1] / rho + p),
-         (rhoV[1] * rhoV[2] / rho)]
-    )
-
-    momFlux3 = make_obj_array(
-        [(rhoV[0] * rhoV[2] / rho ), (rhoV[2] * rhoV[1]/rho),
-         (rhoV[2] * rhoV[2] / rho + p)]
-    )
-        
-    # physical flux =
-    # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    flux = join_fields(scalevec(1.0,rhoV),
-                       scalevec((rhoE + p) / rho, rhoV),
-                       momFlux1, momFlux2, momFlux3)
-    return flux
-
-
-def _inviscid_flux(discr,w):
-    if discr.dim == 2:
-        return _inviscid_flux_2d(w)
-
-    if discr.dim == 3:
-        return _inviscid_flux_3d(w)
 
 def inviscid_operator(discr, w):
     """
