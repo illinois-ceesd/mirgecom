@@ -125,6 +125,7 @@ def _inviscid_flux(discr, q):
             for j in range(ndim)
         ]
     )
+    
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     flux = join_fields(
@@ -132,6 +133,45 @@ def _inviscid_flux(discr, q):
     )
 
     return flux
+
+def _get_wavespeeds(discr, w_tpair):
+
+    dim = discr.dim
+
+    rho = w_tpair[0]
+    rhoE = w_tpair[1]
+    rhoV = w_tpair[2]
+    
+    def scalevec(scalar, vec):
+        # workaround for object array behavior
+        return make_obj_array([ni * scalar for ni in vec])
+
+    gamma = 1.4
+
+    pint, pext = [
+        ((gamma - 1.0) * (rhoe - 0.5 * (np.dot(rhov, rhov) / lrho)))
+        for rhoe, rhov, lrho in [
+            (rhoE.int, rhoV.int, rho.int),
+            (rhoE.ext, rhoV.ext, rho.ext),
+        ]
+    ]
+    
+    v_int, v_ext = [
+        scalevec(1.0 / lrho, lrhov)
+        for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
+    ]
+
+    c_int, c_ext = [
+        clmath.sqrt(gamma * lp / lrho)
+        for lp, lrho in [(pint, rho.int), (pext, rho.ext)]
+    ]
+
+    fspeed_int, fspeed_ext = [
+        (clmath.sqrt(np.dot(lv, lv)) + lc)
+        for lv, lc in [(v_int, c_int), (v_ext, c_ext)]
+    ]
+
+    return join_fields(fspeed_int, fspeed_ext)
 
 
 def _facial_flux(discr, w_tpair):
@@ -151,14 +191,15 @@ def _facial_flux(discr, w_tpair):
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
-    qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
+    # - Figure out how to manage grudge branch dependencies
+    #    qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
+    qjump = qext - qint
     flux_int = _inviscid_flux(discr, qint)
     flux_ext = _inviscid_flux(discr, qext)
 
     # Lax/Friedrichs/Rusunov after JSH/TW Nodal DG Methods, p. 209
     #    flux_jump = scalevec(1.0,(flux_int - flux_ext))
     flux_jump = scalevec(0.5, (flux_int + flux_ext))
-
     gamma = 1.4
     # p(ideal single gas) = (gamma - 1)*(rhoE - .5(rhoV*V))
     pint, pext = [
@@ -182,8 +223,9 @@ def _facial_flux(discr, w_tpair):
         (clmath.sqrt(np.dot(lv, lv)) + lc)
         for lv, lc in [(v_int, c_int), (v_ext, c_ext)]
     ]
-
-    # - Gak!  What's the matter with this block?   (CL issues?)
+    # fspeed_int, fspeed_ext = _get_wavespeeds(discr, w_tpair)
+    
+    # - Gak!  What's the matter with this next line?   (CL issues?)
     #    lam = np.max(fspeed_int.get(),fspeed_ext.get())
     lam = fspeed_int
     #    print('lam shape = ',lam.shape)
@@ -233,19 +275,10 @@ def inviscid_operator(discr, w):
     dir_bval = join_fields(dir_rho, dir_e, dir_mom)
     dir_bc = join_fields(dir_rho, dir_e, dir_mom)
 
-    # vol_flux = [ rhoV, (rhoE + p)V, ((rhoV.x.V) + p*delta_ij) ]
-    #        = [ (rho*u, rho*v), ( (rhoE+p)*u, (rhoE+p)*v ),
-    #            ( (rhouu + p), rhouv ), ( (rhovu, (rhovv + p)) )
-    #          ]
     vol_flux = _inviscid_flux(discr, w)
-
-    dflux = join_fields(
-        discr.weak_div(vol_flux[0:ndim]),
-        discr.weak_div(vol_flux[ndim : 2 * ndim]),
-        discr.weak_div(vol_flux[2 * ndim : 3 * ndim]),
-        discr.weak_div(vol_flux[3 * ndim : 4 * ndim]),
-    )
-
+    dflux = join_fields( [discr.weak_div(vol_flux[i*ndim:(i+1)*ndim])
+                          for i in range(ndim+2) ]  )
+    
     interior_face_flux = _facial_flux(
         discr, w_tpair=_interior_trace_pair(discr, w)
     )
