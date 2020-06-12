@@ -1,4 +1,6 @@
-__copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
+__copyright__ = (
+    "Copyright (C) 2020 University of Illinois Board of Trustees"
+)
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -47,6 +49,7 @@ __doc__ = """
 # flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p)]
 #
 
+
 class Vortex:
     def __init__(self):
         self.beta = 5
@@ -60,7 +63,7 @@ class Vortex:
         self.spec_gas_const = 287.1
 
     def __call__(self, t, x_vec):
-        vortex_loc = self.center + t*self.velocity
+        vortex_loc = self.center + t * self.velocity
 
         # coordinates relative to vortex center
         x_rel = x_vec[0] - vortex_loc[0]
@@ -70,16 +73,22 @@ class Vortex:
         # also JSH/TW Nodal DG Methods, p. 209
 
         from math import pi
-        r = clmath.sqrt(x_rel**2+y_rel**2)
-        expterm = self.beta*clmath.exp(1-r**2)
-        u = self.velocity[0] - expterm*y_rel/(2*pi)
-        v = self.velocity[1] + expterm*x_rel/(2*pi)
-        rho = (1-(self.gamma-1)/(16*self.gamma*pi**2)*expterm**2)**(1/(self.gamma-1))
-        p = rho**self.gamma
 
-        e = p/(self.gamma-1) + rho/2*(u**2+v**2)
+        r = clmath.sqrt(x_rel ** 2 + y_rel ** 2)
+        expterm = self.beta * clmath.exp(1 - r ** 2)
+        u = self.velocity[0] - expterm * y_rel / (2 * pi)
+        v = self.velocity[1] + expterm * x_rel / (2 * pi)
+        rho = (
+            1
+            - (self.gamma - 1)
+            / (16 * self.gamma * pi ** 2)
+            * expterm ** 2
+        ) ** (1 / (self.gamma - 1))
+        p = rho ** self.gamma
 
-        return join_fields(rho, e, rho*u, rho*v)
+        e = p / (self.gamma - 1) + rho / 2 * (u ** 2 + v ** 2)
+
+        return join_fields(rho, e, rho * u, rho * v)
 
 
 def _interior_trace_pair(discr, vec):
@@ -90,7 +99,7 @@ def _interior_trace_pair(discr, vec):
     return TracePair("int_faces", i, e)
 
 
-def _inviscid_flux(discr,q):
+def _inviscid_flux(discr, q):
 
     # q = [ rho rhoE rhoV ]
     ndim = discr.dim
@@ -99,7 +108,6 @@ def _inviscid_flux(discr,q):
     rhoE = q[1]
     rhoV = q[2:]
 
-    
     # --- EOS stuff TBD ---
     # gamma (ideal monatomic) = 1.4
     gamma = 1.4
@@ -110,25 +118,33 @@ def _inviscid_flux(discr,q):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
 
-    momFlux = make_obj_array( [ (rhoV[i]*rhoV[j]/rho + (p if i == j else 0))
-                                for i in range(ndim) for j in range(ndim) ] ) 
+    momFlux = make_obj_array(
+        [
+            (rhoV[i] * rhoV[j] / rho + (p if i == j else 0))
+            for i in range(ndim)
+            for j in range(ndim)
+        ]
+    )
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    flux = join_fields(scalevec(1.0,rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux,)
+    flux = join_fields(
+        scalevec(1.0, rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux,
+    )
 
     return flux
+
 
 def _facial_flux(discr, w_tpair):
 
     dim = discr.dim
-    
+
     rho = w_tpair[0]
     rhoE = w_tpair[1]
     rhoV = w_tpair[2:]
-    
+
     def scalevec(scalar, vec):
-    # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])        
+        # workaround for object array behavior
+        return make_obj_array([ni * scalar for ni in vec])
 
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
 
@@ -136,48 +152,60 @@ def _facial_flux(discr, w_tpair):
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
     qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
-    flux_int = _inviscid_flux(discr,qint)
-    flux_ext = _inviscid_flux(discr,qext)
+    flux_int = _inviscid_flux(discr, qint)
+    flux_ext = _inviscid_flux(discr, qext)
 
     # Lax/Friedrichs/Rusunov after JSH/TW Nodal DG Methods, p. 209
     #    flux_jump = scalevec(1.0,(flux_int - flux_ext))
-    flux_jump = scalevec(0.5,(flux_int + flux_ext))
+    flux_jump = scalevec(0.5, (flux_int + flux_ext))
 
     gamma = 1.4
     # p(ideal single gas) = (gamma - 1)*(rhoE - .5(rhoV*V))
-    pint,pext = [ ((gamma - 1.0) * (rhoe - 0.5*(np.dot(rhov,rhov)/lrho)))
-                  for rhoe,rhov,lrho in [ (rhoE.int,rhoV.int,rho.int),
-                                          (rhoE.ext,rhoV.ext,rho.ext) ] ]
-    v_int,v_ext = [scalevec(1.0/lrho,lrhov) for lrho,lrhov in
-                   [ (rho.int, rhoV.int), (rho.ext, rhoV.ext) ] ]
+    pint, pext = [
+        ((gamma - 1.0) * (rhoe - 0.5 * (np.dot(rhov, rhov) / lrho)))
+        for rhoe, rhov, lrho in [
+            (rhoE.int, rhoV.int, rho.int),
+            (rhoE.ext, rhoV.ext, rho.ext),
+        ]
+    ]
+    v_int, v_ext = [
+        scalevec(1.0 / lrho, lrhov)
+        for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
+    ]
 
-    c_int,c_ext = [clmath.sqrt(gamma*lp/lrho) for lp,lrho in
-                   [ (pint, rho.int), (pext, rho.ext) ] ]
-    
-    fspeed_int, fspeed_ext = [ (clmath.sqrt(np.dot(lv,lv)) + lc) for lv,lc
-                               in [ (v_int, c_int), (v_ext, c_ext) ] ]
-    
-    # - Gak!  What's the matter with this block?   (CL issues?) 
+    c_int, c_ext = [
+        clmath.sqrt(gamma * lp / lrho)
+        for lp, lrho in [(pint, rho.int), (pext, rho.ext)]
+    ]
+
+    fspeed_int, fspeed_ext = [
+        (clmath.sqrt(np.dot(lv, lv)) + lc)
+        for lv, lc in [(v_int, c_int), (v_ext, c_ext)]
+    ]
+
+    # - Gak!  What's the matter with this block?   (CL issues?)
     #    lam = np.max(fspeed_int.get(),fspeed_ext.get())
     lam = fspeed_int
     #    print('lam shape = ',lam.shape)
     #    print('qjump[0] shape = ',qjump[0].shape)
-    lfr = scalevec(0.5*lam,qjump)
-    
-    
+    lfr = scalevec(0.5 * lam, qjump)
+
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
     # (rhoE + p)V  .dot. normal
     # (rhoV.x.V)_1 .dot. normal
     # (rhoV.x.V)_2 .dot. normal
-    nflux = join_fields ([ np.dot(flux_jump[i*dim:(i+1)*dim],normal) for i
-              in range(dim + 2) ])
-    
+    nflux = join_fields(
+        [
+            np.dot(flux_jump[i * dim : (i + 1) * dim], normal)
+            for i in range(dim + 2)
+        ]
+    )
+
     # add Lax/Friedrichs term
     flux_weak = nflux + lfr
-    
-    return discr.interp(w_tpair.dd, "all_faces", flux_weak )
 
+    return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
 def inviscid_operator(discr, w):
@@ -200,29 +228,32 @@ def inviscid_operator(discr, w):
 
     # Quick fix for no BCs yet - OK for uniform flow tests
     dir_rho = discr.interp("vol", BTAG_ALL, rho)
-    dir_e = discr.interp("vol",BTAG_ALL, rhoE)
-    dir_mom = discr.interp("vol",BTAG_ALL, rhoV)
+    dir_e = discr.interp("vol", BTAG_ALL, rhoE)
+    dir_mom = discr.interp("vol", BTAG_ALL, rhoV)
     dir_bval = join_fields(dir_rho, dir_e, dir_mom)
-    dir_bc = join_fields(dir_rho,dir_e,dir_mom)
-
+    dir_bc = join_fields(dir_rho, dir_e, dir_mom)
 
     # vol_flux = [ rhoV, (rhoE + p)V, ((rhoV.x.V) + p*delta_ij) ]
     #        = [ (rho*u, rho*v), ( (rhoE+p)*u, (rhoE+p)*v ),
     #            ( (rhouu + p), rhouv ), ( (rhovu, (rhovv + p)) )
     #          ]
-    vol_flux = _inviscid_flux(discr,w)
+    vol_flux = _inviscid_flux(discr, w)
 
-    dflux = join_fields( discr.weak_div(vol_flux[0:ndim]),
-                         discr.weak_div(vol_flux[ndim:2*ndim]),
-                         discr.weak_div(vol_flux[2*ndim:3*ndim]),
-                         discr.weak_div(vol_flux[3*ndim:4*ndim]) )
+    dflux = join_fields(
+        discr.weak_div(vol_flux[0:ndim]),
+        discr.weak_div(vol_flux[ndim : 2 * ndim]),
+        discr.weak_div(vol_flux[2 * ndim : 3 * ndim]),
+        discr.weak_div(vol_flux[3 * ndim : 4 * ndim]),
+    )
 
-    interior_face_flux = _facial_flux(discr,w_tpair=_interior_trace_pair(discr,w))
-    
-    boundary_flux = _facial_flux(discr,w_tpair=TracePair(BTAG_ALL,dir_bval,dir_bc))
-    
+    interior_face_flux = _facial_flux(
+        discr, w_tpair=_interior_trace_pair(discr, w)
+    )
+
+    boundary_flux = _facial_flux(
+        discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
+    )
+
     return discr.inverse_mass(
-        dflux -
-        discr.face_mass( interior_face_flux + boundary_flux ))
-
-    
+        dflux - discr.face_mass(interior_face_flux + boundary_flux)
+    )
