@@ -26,6 +26,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
+import pyopencl.clmath
 from pytools.obj_array import (
     join_fields, make_obj_array,
     with_object_array_or_scalar)
@@ -40,6 +41,8 @@ from mirgecom.euler import _interior_trace_pair
 from mirgecom.euler import Vortex
 from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 # Tests go here
 
 
@@ -258,8 +261,10 @@ def test_uniform_flow():
     # next test lump propagation 
 
     
+# def test_isentropic_vortex(ctx_factory):
 def test_isentropic_vortex():
 
+#    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = 'test_isentropic_vortex: '
@@ -304,4 +309,13 @@ def test_isentropic_vortex():
         assert(False)
 
 
+    
+# PYOPENCL_TEST=port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])
     
