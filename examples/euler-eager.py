@@ -65,7 +65,7 @@ def main():
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
     )
 
     order = 3
@@ -84,8 +84,12 @@ def main():
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
 
-    #    initializer = Vortex2D()
-    initializer = Lump()
+    vel = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,))
+    vel[0] = 1.0
+    vel[1] = 1.0
+    initializer = Vortex2D(center=orig, velocity=vel)
+    #    initializer = Lump(velocity=vel)
     initializer.SetBoundaryTag(BTAG_ALL)
     boundaryboss = BoundaryBoss()
     boundaryboss.AddBoundary(initializer)
@@ -102,10 +106,10 @@ def main():
         )
 
     t = 0
-    t_final = 3
+    t_final = 5
     istep = 0
     while t < t_final:
-        fields = rk4_step(fields, t, dt, inviscid_operator)
+        fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
             print(istep, t, la.norm(fields[0].get()))

@@ -129,6 +129,9 @@ class Lump:
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
+        print('center shape = ',self._center.shape)
+        print('velocity shape = ',self._velocity.shape)
+        
         self._rho0 = rho0
         self._rhoamp = rhoamp
         self._dim = numdim
@@ -180,6 +183,11 @@ class Lump:
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
 
+        # The expected rhs is:
+        # rhorhs  = -2*rho*(r.dot.v)
+        # rhoerhs = -rho*v^2*(r.dot.v)
+        # rhovrhs = -2*rho*(r.dot.v)*v
+        
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
         rhoV = scalevec(rho, self._velocity)
