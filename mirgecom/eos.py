@@ -38,18 +38,17 @@ from grudge.symbolic.primitives import TracePair
 
 
 class IdealSingleGas:
-    def __init__(
-            self,gamma=1.4,R=287.1):
+    def __init__(self, gamma=1.4, R=287.1):
         self._gamma = gamma
         self._R = R
 
     def Gamma(self):
         return self._gamma
-    
+
     def R(self):
         return self._R
 
-    def InternalEnergy(self,w):
+    def InternalEnergy(self, w):
         queue = w[0].queue
         rho = w[0]
         rhoE = w[1]
@@ -59,10 +58,10 @@ class IdealSingleGas:
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
 
-        e = (rhoE - 0.5*np.dot(rhoV,rhoV)/rho)
+        e = rhoE - 0.5 * np.dot(rhoV, rhoV) / rho
         return e
-    
-    def Pressure(self,w):
+
+    def Pressure(self, w):
         queue = w[0].queue
         rho = w[0]
         rhoE = w[1]
@@ -72,10 +71,10 @@ class IdealSingleGas:
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
 
-        p = (self._gamma - 1.0)*self.InternalEnergy(w)
+        p = (self._gamma - 1.0) * self.InternalEnergy(w)
         return p
 
-    def Temperature(self,w):
+    def Temperature(self, w):
         queue = w[0].queue
         rho = w[0]
         rhoE = w[1]
@@ -84,10 +83,15 @@ class IdealSingleGas:
         def scalevec(scalar, vec):
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
-        T = ((self._gamma - 1.0)/self._R)*self.InternalEnergy(w) / rho
+
+        T = (
+            ((self._gamma - 1.0) / self._R)
+            * self.InternalEnergy(w)
+            / rho
+        )
         return T
-    
-    def __call__(self,w):
+
+    def __call__(self, w):
         queue = w[0].queue
         rho = w[0]
         rhoE = w[1]
@@ -97,5 +101,4 @@ class IdealSingleGas:
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
 
-        return join_fields ( self.Pressure(w), self.Temperature(w) )
-
+        return join_fields(self.Pressure(w), self.Temperature(w))

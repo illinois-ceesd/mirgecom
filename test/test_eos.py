@@ -49,6 +49,7 @@ from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 
+
 def test_idealsingle_lump():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
@@ -124,5 +125,3 @@ def test_idealsingle_vortex():
     print("pressure = ", p)
 
     assert errmax < 1e-15
-
-

@@ -37,10 +37,13 @@ from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 from mirgecom.eos import IdealSingleGas
 
+
 class Vortex2D:
     def __init__(
-            self, eos=IdealSingleGas(),
-            center=np.array([0, 0]), velocity=np.array([0, 0])
+        self,
+        eos=IdealSingleGas(),
+        center=np.array([0, 0]),
+        velocity=np.array([0, 0]),
     ):
         self._beta = 5
         self._eos = eos
@@ -48,7 +51,7 @@ class Vortex2D:
         self._center = center  # np.array([5, 0])
         self._velocity = velocity  # np.array([0, 0])
         self._boundary_tag = BTAG_ALL
-    
+
     def __call__(self, t, x_vec):
         vortex_loc = self._center + t * self._velocity
 
@@ -77,9 +80,9 @@ class Vortex2D:
 
         return join_fields(rho, e, rho * u, rho * v)
 
-    def SetEOS(self,eos):
+    def SetEOS(self, eos):
         self._eos = eos
-        
+
     def SetBoundaryTag(self, tag=BTAG_ALL):
         self._boundary_tag = tag
 
@@ -96,7 +99,8 @@ class Vortex2D:
         vortex_soln = self.__call__(t, nodes)
         dir_bc = discr.interp("vol", self._boundary_tag, vortex_soln)
         dir_soln = discr.interp("vol", self._boundary_tag, w)
-        from mirgecom.euler import _facial_flux # hrm
+        from mirgecom.euler import _facial_flux  # hrm
+
         return _facial_flux(
             discr,
             w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
@@ -105,8 +109,13 @@ class Vortex2D:
 
 class Lump:
     def __init__(
-            self, eos=IdealSingleGas(),rho0=1.0, rhoamp=1.0,
-            numdim=2, center=[0], velocity=[0]
+        self,
+        eos=IdealSingleGas(),
+        rho0=1.0,
+        rhoamp=1.0,
+        numdim=2,
+        center=[0],
+        velocity=[0],
     ):
         if len(center) == numdim:
             self._center = center
@@ -118,8 +127,8 @@ class Lump:
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
-        print('center shape = ',self._center.shape)
-        print('velocity shape = ',self._velocity.shape)
+        print("center shape = ", self._center.shape)
+        print("velocity shape = ", self._velocity.shape)
 
         self._eos = eos
         self._rho0 = rho0
@@ -152,7 +161,7 @@ class Lump:
 
         return join_fields(rho, rhoE, rhoV)
 
-    def SetEOS(self,eos):
+    def SetEOS(self, eos):
         self._eos = eos
 
     def ExpectedRHS(self, discr, w, t=0.0):
@@ -176,7 +185,7 @@ class Lump:
         # rhorhs  = -2*rho*(r.dot.v)
         # rhoerhs = -rho*v^2*(r.dot.v)
         # rhovrhs = -2*rho*(r.dot.v)*v
-        
+
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
         rhoV = scalevec(rho, self._velocity)
@@ -208,11 +217,10 @@ class Lump:
         nodes = discr.nodes().with_queue(queue)
         mysoln = self.__call__(t, nodes)
         dir_bc = discr.interp("vol", self._boundary_tag, mysoln)
-        dir_soln = discr.interp("vol", self._boundary_tag,w)
-        from mirgecom.euler import _facial_flux # hrm
+        dir_soln = discr.interp("vol", self._boundary_tag, w)
+        from mirgecom.euler import _facial_flux  # hrm
+
         return _facial_flux(
             discr,
             w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
         )
-
-

@@ -50,6 +50,7 @@ __doc__ = """
 # flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p)]
 #
 
+
 def _interior_trace_pair(discr, vec):
     i = discr.interp("vol", "int_faces", vec)
     e = with_object_array_or_scalar(

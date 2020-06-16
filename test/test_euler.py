@@ -117,6 +117,7 @@ def test_inviscid_flux():
     q = join_fields(rho, rhoE, rhoV)
 
     from mirgecom.euler import _inviscid_flux
+
     flux = _inviscid_flux(discr, q)
 
     rhoflux = flux[0:dim]
@@ -182,6 +183,7 @@ def test_facial_flux():
 
     from mirgecom.euler import _facial_flux
     from mirgecom.euler import _interior_trace_pair
+
     interior_face_flux = _facial_flux(
         discr, w_tpair=_interior_trace_pair(discr, fields)
     )
@@ -212,6 +214,7 @@ def test_facial_flux():
     dir_bc = join_fields(dir_rho, dir_e, dir_mom)
 
     from mirgecom.euler import _facial_flux
+
     boundary_flux = _facial_flux(
         discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
     )

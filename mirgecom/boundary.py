@@ -46,7 +46,8 @@ class DummyBoundary:
         ndim = discr.dim
         dir_soln = discr.interp("vol", self._boundary_tag, w)
 
-        from mirgecom.euler import _facial_flux # hrm
+        from mirgecom.euler import _facial_flux  # hrm
+
         return _facial_flux(
             discr,
             w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
@@ -89,5 +90,3 @@ class BoundaryBoss:
             boundary_flux = boundary_flux + this_boundary_flux
 
         return boundary_flux
-
-
