@@ -36,6 +36,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.initializers import Lump
 from mirgecom.initializers import Vortex2D
 from mirgecom.boundary import BoundaryBoss
+from mirgecom.eos import IdealSingleGas
 from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -77,7 +78,8 @@ def main():
     initializer.SetBoundaryTag(BTAG_ALL)
     boundaryboss = BoundaryBoss()
     boundaryboss.AddBoundary(initializer)
-
+    eos = IdealSingleGas()
+    
     fields = initializer(0, nodes)
 
     vis = make_visualizer(
@@ -97,12 +99,15 @@ def main():
 
         if istep % 10 == 0:
             print(istep, t, la.norm(fields[0].get()))
+            dv = eos(fields)
             vis.write_vtk_file(
                 "fld-euler-eager-%04d.vtu" % istep,
                 [
-                    ("rho", fields[0]),
-                    ("rhoe", fields[1]),
-                    ("rhov", fields[2:]),
+                    ("density", fields[0]),
+                    ("energy", fields[1]),
+                    ("momentum", fields[2:]),
+                    ("pressure",dv[0]),
+                    ("temperature",dv[1])
                 ],
             )
 
