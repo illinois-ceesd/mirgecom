@@ -89,7 +89,7 @@ def main():
     vel[0] = 1.0
     vel[1] = 1.0
     initializer = Vortex2D(center=orig, velocity=vel)
-    #    initializer = Lump(velocity=vel)
+    #    initializer = Lump(center=orig,velocity=vel)
     initializer.SetBoundaryTag(BTAG_ALL)
     boundaryboss = BoundaryBoss()
     boundaryboss.AddBoundary(initializer)
@@ -106,7 +106,7 @@ def main():
         )
 
     t = 0
-    t_final = 5
+    t_final = 6
     istep = 0
     while t < t_final:
         fields = rk4_step(fields, t, dt, rhs)

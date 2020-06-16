@@ -107,11 +107,11 @@ class Vortex2D:
         # help - how to make it just the boundary nodes?
         nodes = discr.nodes().with_queue(queue)
         vortex_soln = self.__call__(t, nodes)
-        dir_soln = discr.interp("vol", self._boundary_tag, vortex_soln)
-
+        dir_bc = discr.interp("vol", self._boundary_tag, vortex_soln)
+        dir_soln = discr.interp("vol", self._boundary_tag, w)
         return _facial_flux(
             discr,
-            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
+            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
         )
 
 
@@ -217,12 +217,12 @@ class Lump:
 
         # help - how to make it just the boundary nodes?
         nodes = discr.nodes().with_queue(queue)
-        vortex_soln = self.__call__(t, nodes)
-        dir_soln = discr.interp("vol", self._boundary_tag, vortex_soln)
-
+        mysoln = self.__call__(t, nodes)
+        dir_bc = discr.interp("vol", self._boundary_tag, mysoln)
+        dir_soln = discr.interp("vol", self._boundary_tag,w)
         return _facial_flux(
             discr,
-            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
+            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
         )
 
 
