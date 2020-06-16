@@ -50,17 +50,20 @@ __doc__ = """
 #
 
 
-class Vortex:
-    def __init__(self):
+class Vortex2D:
+    def __init__(
+        self, center=np.array([0, 0]), velocity=np.array([0, 0])
+    ):
         self.beta = 5
         self.gamma = 1.4
-        self.center = np.array([5, 0])
-        self.velocity = np.array([1, 0])
+        self.center = center  # np.array([5, 0])
+        self.velocity = velocity  # np.array([0, 0])
         self.final_time = 0.5
 
         self.mu = 0
         self.prandtl = 0.72
         self.spec_gas_const = 287.1
+        self._boundary_tag = BTAG_ALL
 
     def __call__(self, t, x_vec):
         vortex_loc = self.center + t * self.velocity
@@ -89,6 +92,183 @@ class Vortex:
         e = p / (self.gamma - 1) + rho / 2 * (u ** 2 + v ** 2)
 
         return join_fields(rho, e, rho * u, rho * v)
+
+    def SetBoundaryTag(self, tag=BTAG_ALL):
+        self._boundary_tag = tag
+
+    def GetBoundaryFlux(self, discr, w, t=0.0):
+        queue = w[0].queue
+        ndim = discr.dim
+
+        def scalevec(scalar, vec):
+            # workaround for object array behavior
+            return make_obj_array([ni * scalar for ni in vec])
+
+        # help - how to make it just the boundary nodes?
+        nodes = discr.nodes().with_queue(queue)
+        vortex_soln = self.__call__(t, nodes)
+        dir_soln = discr.interp("vol", self._boundary_tag, vortex_soln)
+
+        return _facial_flux(
+            discr,
+            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
+        )
+
+
+class Lump:
+    def __init__(
+        self, rho0=1.0, rhoamp=1.0, numdim=2, center=[0], velocity=[0]
+    ):
+        if len(center) == numdim:
+            self._center = center
+        else:
+            self._center = np.zeros(shape=(numdim,))
+
+        if len(velocity) == numdim:
+            self._velocity = velocity
+        else:
+            self._velocity = np.zeros(shape=(numdim,))
+
+        self._rho0 = rho0
+        self._rhoamp = rhoamp
+        self._dim = numdim
+        self._gamma = 1.4
+
+        self.mu = 0
+        self.prandtl = 0.72
+        self.spec_gas_const = 287.1
+        self._boundary_tag = BTAG_ALL
+
+    def __call__(self, t, x_vec):
+        lump_loc = self._center + t * self._velocity
+
+        # coordinates relative to lump center
+        rel_center = make_obj_array(
+            [x_vec[i] - lump_loc[i] for i in range(self._dim)]
+        )
+        r = clmath.sqrt(np.dot(rel_center, rel_center))
+
+        from math import pi
+
+        def scalevec(scalar, vec):
+            # workaround for object array behavior
+            return make_obj_array([ni * scalar for ni in vec])
+
+        expterm = self._rhoamp * clmath.exp(1 - r ** 2)
+        rho = expterm + self._rho0
+        rhoV = scalevec(rho, self._velocity)
+        rhoE = (1.0 / (self._gamma - 1.0)) + np.dot(rhoV, rhoV) / (
+            2.0 * rho
+        )
+
+        return join_fields(rho, rhoE, rhoV)
+
+    def ExpectedRHS(self, discr, w, t=0.0):
+        queue = w[0].queue
+        ndim = discr.dim
+        nodes = discr.nodes().with_queue(queue)
+        lump_loc = self._center + t * self._velocity
+        # coordinates relative to lump center
+        rel_center = make_obj_array(
+            [nodes[i] - lump_loc[i] for i in range(self._dim)]
+        )
+        r = clmath.sqrt(np.dot(rel_center, rel_center))
+
+        from math import pi
+
+        def scalevec(scalar, vec):
+            # workaround for object array behavior
+            return make_obj_array([ni * scalar for ni in vec])
+
+        expterm = self._rhoamp * clmath.exp(1 - r ** 2)
+        rho = expterm + self._rho0
+        rhoV = scalevec(rho, self._velocity)
+        rhoE = (1.0 / (self._gamma - 1.0)) + np.dot(rhoV, rhoV) / (
+            2.0 * rho
+        )
+
+        v = scalevec(1 / rho, rhoV)
+        v2 = np.dot(v, v)
+        rdotv = np.dot(rel_center, v)
+        rhorhs = -2 * rdotv * rho
+        rhoErhs = -v2 * rdotv * rho
+        rhoVrhs = scalevec(-2 * rho * rdotv, v)
+
+        return join_fields(rhorhs, rhoErhs, rhoVrhs)
+
+    def SetBoundaryTag(self, tag=BTAG_ALL):
+        self._boundary_tag = tag
+
+    def GetBoundaryFlux(self, discr, w, t=0.0):
+        queue = w[0].queue
+        ndim = discr.dim
+
+        def scalevec(scalar, vec):
+            # workaround for object array behavior
+            return make_obj_array([ni * scalar for ni in vec])
+
+        # help - how to make it just the boundary nodes?
+        nodes = discr.nodes().with_queue(queue)
+        vortex_soln = self.__call__(t, nodes)
+        dir_soln = discr.interp("vol", self._boundary_tag, vortex_soln)
+
+        return _facial_flux(
+            discr,
+            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
+        )
+
+
+class DummyBoundary:
+    def __init__(self, tag=BTAG_ALL):
+        self._boundary_tag = tag
+        # dummy
+
+    def GetBoundaryFlux(self, discr, w, t=0.0):
+        ndim = discr.dim
+        dir_soln = discr.interp("vol", self._boundary_tag, w)
+
+        return _facial_flux(
+            discr,
+            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
+        )
+
+
+class BoundaryBoss:
+    def __init__(self):
+        self._boundaries = {}
+
+    def AddBoundary(self, boundaryhandler):
+        numbnd = len(self._boundaries)
+        self._boundaries[numbnd] = boundaryhandler
+
+    def GetBoundaryFlux(self, discr, w, t=0.0):
+        queue = w[0].queue
+        numbnd = len(self._boundaries)
+        numsoln = len(w)
+
+        assert numsoln > 0
+
+        if numbnd == 0:
+            self.AddBoundary(DummyBoundary())
+            numbnd = 1
+
+        def scalevec(scalar, vec):
+            # workaround for object array behavior
+            return make_obj_array([ni * scalar for ni in vec])
+
+        # Gak!  need help here
+        boundary_flux = discr.interp("vol", "all_faces", w)
+        #        boundary_flux = join_fields( [discr.zeros(queue) for i in range(numsoln)] )
+        boundary_flux = scalevec(0.0, boundary_flux)
+
+        for bndindex in range(numbnd):
+            boundaryhandler = self._boundaries[bndindex]
+            this_boundary_flux = boundaryhandler.GetBoundaryFlux(
+                discr, w, t
+            )
+            boundary_flux = boundary_flux + this_boundary_flux
+
+        return boundary_flux
 
 
 def _interior_trace_pair(discr, vec):
@@ -125,7 +305,7 @@ def _inviscid_flux(discr, q):
             for j in range(ndim)
         ]
     )
-    
+
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     flux = join_fields(
@@ -134,6 +314,7 @@ def _inviscid_flux(discr, q):
 
     return flux
 
+
 def _get_wavespeeds(discr, w_tpair):
 
     dim = discr.dim
@@ -141,7 +322,7 @@ def _get_wavespeeds(discr, w_tpair):
     rho = w_tpair[0]
     rhoE = w_tpair[1]
     rhoV = w_tpair[2]
-    
+
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
@@ -155,7 +336,7 @@ def _get_wavespeeds(discr, w_tpair):
             (rhoE.ext, rhoV.ext, rho.ext),
         ]
     ]
-    
+
     v_int, v_ext = [
         scalevec(1.0 / lrho, lrhov)
         for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
@@ -224,7 +405,7 @@ def _facial_flux(discr, w_tpair):
         for lv, lc in [(v_int, c_int), (v_ext, c_ext)]
     ]
     # fspeed_int, fspeed_ext = _get_wavespeeds(discr, w_tpair)
-    
+
     # - Gak!  What's the matter with this next line?   (CL issues?)
     #    lam = np.max(fspeed_int.get(),fspeed_ext.get())
     lam = fspeed_int
@@ -250,7 +431,7 @@ def _facial_flux(discr, w_tpair):
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(discr, w):
+def inviscid_operator(discr, w, t=0.0, boundaries=BoundaryBoss()):
     """
     Returns the RHS of the Euler flow equations:
     :math: \partial_t Q = - \\nabla \\cdot F
@@ -268,24 +449,30 @@ def inviscid_operator(discr, w):
     # Spiegel (https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20150018403.pdf)
     # AK has this coded in "hedge" code: gas_dynamics_initials.py
 
-    # Quick fix for no BCs yet - OK for uniform flow tests
-    dir_rho = discr.interp("vol", BTAG_ALL, rho)
-    dir_e = discr.interp("vol", BTAG_ALL, rhoE)
-    dir_mom = discr.interp("vol", BTAG_ALL, rhoV)
-    dir_bval = join_fields(dir_rho, dir_e, dir_mom)
-    dir_bc = join_fields(dir_rho, dir_e, dir_mom)
+    # Quick fix for no BCs yet - OK for time-independent flow tests
+    #    dir_rho = discr.interp("vol", BTAG_ALL, rho)
+    #    dir_e = discr.interp("vol", BTAG_ALL, rhoE)
+    #    dir_mom = discr.interp("vol", BTAG_ALL, rhoV)
+    #    dir_bval = join_fields(dir_rho, dir_e, dir_mom)
+    #    dir_bc = join_fields(dir_rho, dir_e, dir_mom)
 
     vol_flux = _inviscid_flux(discr, w)
-    dflux = join_fields( [discr.weak_div(vol_flux[i*ndim:(i+1)*ndim])
-                          for i in range(ndim+2) ]  )
-    
+    dflux = join_fields(
+        [
+            discr.weak_div(vol_flux[i * ndim : (i + 1) * ndim])
+            for i in range(ndim + 2)
+        ]
+    )
+
     interior_face_flux = _facial_flux(
         discr, w_tpair=_interior_trace_pair(discr, w)
     )
 
-    boundary_flux = _facial_flux(
-        discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
-    )
+    boundary_flux = boundaries.GetBoundaryFlux(discr, w, t)
+
+    #    boundary_flux = _facial_flux(
+    #        discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
+    #    )
 
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + boundary_flux)
