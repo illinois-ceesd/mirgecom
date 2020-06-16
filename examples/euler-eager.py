@@ -32,28 +32,12 @@ from pytools.obj_array import join_fields
 # TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from mirgecom.wave import wave_operator
 from mirgecom.euler import inviscid_operator
-from mirgecom.euler import Lump
-from mirgecom.euler import Vortex2D
-from mirgecom.euler import BoundaryBoss
+from mirgecom.initializers import Lump
+from mirgecom.initializers import Vortex2D
+from mirgecom.boundary import BoundaryBoss
 from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-
-def bump(discr, queue, t=0):
-    source_center = np.array([0.2, 0.35, 0.1])[: discr.dim]
-    source_width = 0.05
-    source_omega = 3
-
-    nodes = discr.nodes().with_queue(queue)
-    center_dist = join_fields(
-        [nodes[i] - source_center[i] for i in range(discr.dim)]
-    )
-
-    return np.cos(source_omega * t) * clmath.exp(
-        -np.dot(center_dist, center_dist) / source_width ** 2
-    )
 
 
 def main():

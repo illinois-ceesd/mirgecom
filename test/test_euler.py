@@ -39,13 +39,10 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # TODO: Remove grudge dependence?
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
-from mirgecom.euler import _inviscid_flux
 from mirgecom.euler import inviscid_operator
-from mirgecom.euler import _facial_flux
-from mirgecom.euler import _interior_trace_pair
-from mirgecom.euler import Vortex2D
-from mirgecom.euler import Lump
-from mirgecom.euler import BoundaryBoss
+from mirgecom.initializers import Vortex2D
+from mirgecom.initializers import Lump
+from mirgecom.boundary import BoundaryBoss
 from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
@@ -119,6 +116,7 @@ def test_inviscid_flux():
 
     q = join_fields(rho, rhoE, rhoV)
 
+    from mirgecom.euler import _inviscid_flux
     flux = _inviscid_flux(discr, q)
 
     rhoflux = flux[0:dim]
@@ -182,6 +180,8 @@ def test_facial_flux():
 
     fields = join_fields(mass_input, energy_input, mom_input)
 
+    from mirgecom.euler import _facial_flux
+    from mirgecom.euler import _interior_trace_pair
     interior_face_flux = _facial_flux(
         discr, w_tpair=_interior_trace_pair(discr, fields)
     )
@@ -211,6 +211,7 @@ def test_facial_flux():
     dir_bval = join_fields(dir_rho, dir_e, dir_mom)
     dir_bc = join_fields(dir_rho, dir_e, dir_mom)
 
+    from mirgecom.euler import _facial_flux
     boundary_flux = _facial_flux(
         discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
     )
@@ -235,7 +236,7 @@ def test_facial_flux():
     # set random inputs
 
 
-def test_uniform_flow():
+def test_uniform_rhs():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_uniform_flow: "
@@ -313,80 +314,6 @@ def test_uniform_flow():
     assert la.norm(mom_resid[1].get()) < 1e-9
 
     # next test lump propagation
-
-
-def test_lump_init():
-    #    cl_ctx = ctx_factory()
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_lump_init: "
-    dim = 2
-    nel_1d = 4
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-
-    mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
-    )
-
-    order = 3
-    print(iotag + "%d elements" % mesh.nelements)
-
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
-
-    # Init soln with Vortex
-    lump = Lump(center=[5, 0], velocity=[1, 0])
-    lump_soln = lump(0, nodes)
-    gamma = 1.4
-    rho = lump_soln[0]
-    rhoE = lump_soln[1]
-    rhoV = lump_soln[2:]
-    p = 0.4 * (rhoE - 0.5 * np.dot(rhoV, rhoV) / rho)
-    exp_p = 1.0
-    errmax = np.max(np.abs(p - exp_p))
-
-    print("lump_soln = ", lump_soln)
-    print("pressure = ", p)
-
-    assert errmax < 1e-15
-
-
-def test_vortex_init():
-    #    cl_ctx = ctx_factory()
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_vortex_init: "
-    dim = 2
-    nel_1d = 4
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-
-    mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
-    )
-
-    order = 3
-    print(iotag + "%d elements" % mesh.nelements)
-
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
-
-    # Init soln with Vortex
-    vortex = Vortex2D()
-    vortex_soln = vortex(0, nodes)
-    gamma = 1.4
-    rho = vortex_soln[0]
-    rhoE = vortex_soln[1]
-    rhoV = vortex_soln[2:]
-    p = 0.4 * (rhoE - 0.5 * np.dot(rhoV, rhoV) / rho)
-    exp_p = rho ** gamma
-    errmax = np.max(np.abs(p - exp_p))
-
-    print("vortex_soln = ", vortex_soln)
-    print("pressure = ", p)
-
-    assert errmax < 1e-15
 
 
 # def test_isentropic_vortex(ctx_factory):
@@ -468,9 +395,6 @@ def test_lump_rhs():
     order = 4
 
     for order in [1, 2, 3]:
-        from pytools.convergence import EOCRecorder
-
-        eoc_rec = EOCRecorder()
 
         from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -487,7 +411,10 @@ def test_lump_rhs():
             nodes = discr.nodes().with_queue(queue)
 
             # Init soln with Vortex and expected RHS = 0
-            lump = Lump(center=[5, 0], velocity=[0, 0])
+            center = np.zeros(shape=(dim,))
+            velocity = np.zeros(shape=(dim,))
+            center[0] = 5
+            lump = Lump(center=center, velocity=velocity)
             lump.SetBoundaryTag(BTAG_ALL)
             lump_soln = lump(0, nodes)
             boundaryboss = BoundaryBoss()
@@ -528,13 +455,6 @@ def test_lump_rhs():
                 err_max = np.max(np.abs(err_rhs))
                 print(iotag + "err_max_" + str(nel_1d) + " = ", err_max)
                 assert err_max < 1e-10
-
-            eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-
-
-#        print(iotag+"Approxiation errors for order ("+str(order)+"):")
-#        print(eoc_rec)
-#        assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
 
 
 # PYOPENCL_TEST=port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'
