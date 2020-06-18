@@ -74,7 +74,7 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
-    
+
     # physical flux =
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
 
@@ -108,12 +108,12 @@ def _get_wavespeeds(w_tpair, eos=IdealSingleGas()):
         for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
     ]
 
-    qint = join_fields( rho.int, rhoE.int, rhoV.int)
-    qext = join_fields( rho.ext, rhoE.ext, rhoV.ext)
-    
-    pint, pext = [ eos.Pressure(qint), eos.Pressure(qext) ]
-    
-    c_int, c_ext = [ eos.SpeedOfSound(qint), eos.SpeedOfSound(qext) ]
+    qint = join_fields(rho.int, rhoE.int, rhoV.int)
+    qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
+
+    pint, pext = [eos.Pressure(qint), eos.Pressure(qext)]
+
+    c_int, c_ext = [eos.SpeedOfSound(qint), eos.SpeedOfSound(qext)]
 
     fspeed_int, fspeed_ext = [
         (clmath.sqrt(np.dot(lv, lv)) + lc)
@@ -140,7 +140,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
-    
+
     # - Figure out how to manage grudge branch dependencies
     #    qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
     qjump = qext - qint
@@ -152,14 +152,14 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_jump = scalevec(0.5, (flux_int + flux_ext))
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = _get_wavespeeds(w_tpair,eos)
-    
+    wavespeeds = _get_wavespeeds(w_tpair, eos)
+
     # - Gak!  What's the matter with this next line?   (CL issues?)
     #    lam = np.maximum(fspeed_int,fspeed_ext)
     # lam = 0.5*np.maximum(wavespeeds[0],wavespeeds[1])
     lam = wavespeeds[0]
-    lfr = scalevec(0.5*lam, qjump)
-    
+    lfr = scalevec(0.5 * lam, qjump)
+
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
     # (rhoE + p)V  .dot. normal
@@ -178,9 +178,9 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(discr, w, t=0.0,
-                      eos=IdealSingleGas(),
-                      boundaries=BoundaryBoss()):
+def inviscid_operator(
+    discr, w, t=0.0, eos=IdealSingleGas(), boundaries=BoundaryBoss()
+):
     """
     Returns the RHS of the Euler flow equations:
     :math: \partial_t Q = - \\nabla \\cdot F
@@ -203,8 +203,7 @@ def inviscid_operator(discr, w, t=0.0,
     )
 
     interior_face_flux = _facial_flux(
-        discr, w_tpair=_interior_trace_pair(discr, w),
-        eos=eos
+        discr, w_tpair=_interior_trace_pair(discr, w), eos=eos
     )
 
     boundary_flux = boundaries.GetBoundaryFlux(discr, w, t)

@@ -70,11 +70,10 @@ class IdealSingleGas:
         queue = w[0].queue
         rho = w[0]
         p = self.Pressure(w)
-        c2 = self._gamma/rho * p 
+        c2 = self._gamma / rho * p
         c = clmath.sqrt(c2)
         return c
-    
-        
+
     def Temperature(self, w):
         queue = w[0].queue
         rho = w[0]

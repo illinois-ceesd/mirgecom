@@ -44,8 +44,8 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = 'EagerEuler] '
-    
+    iotag = "EagerEuler] "
+
     dim = 2
     nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -56,15 +56,14 @@ def main():
 
     order = 3
 
-    dt = (1.0 - .25*(dim - 1)) / (nel_1d * order ** 2)
+    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     t = 0
     t_final = 1
     istep = 0
-    
-    print(iotag+'Num elements('+str(dim)+'d): ', mesh.nelements)
-    print(iotag+"Timestep:         ", dt)
-    print(iotag+"Final time:       ", t_final)
 
+    print(iotag + "Num elements(" + str(dim) + "d): ", mesh.nelements)
+    print(iotag + "Timestep:         ", dt)
+    print(iotag + "Final time:       ", t_final)
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
@@ -80,7 +79,7 @@ def main():
     boundaryboss.AddBoundary(initializer)
     eos = IdealSingleGas()
     initializer.SetEOS(eos)
-    
+
     fields = initializer(0, nodes)
 
     vis = make_visualizer(
@@ -95,32 +94,41 @@ def main():
     while t < t_final:
 
         if istep % 10 == 0:
-            expected_result = initializer(t,nodes)
+            expected_result = initializer(t, nodes)
             result_resid = fields - expected_result
-            maxerr = [ np.max(la.norm(result_resid[i].get()))
-                       for i in range(dim+2) ]        
+            maxerr = [
+                np.max(la.norm(result_resid[i].get()))
+                for i in range(dim + 2)
+            ]
             dv = eos(fields)
-            print(iotag+'Status: ', istep, t, la.norm(dv[0].get(),np.inf),
-                  la.norm(dv[1].get(),np.inf))
+            print(
+                iotag + "Status: ",
+                istep,
+                t,
+                la.norm(dv[0].get(), np.inf),
+                la.norm(dv[1].get(), np.inf),
+            )
             vis.write_vtk_file(
                 "fld-euler-eager-%04d.vtu" % istep,
                 [
                     ("density", fields[0]),
                     ("energy", fields[1]),
                     ("momentum", fields[2:]),
-                    ("pressure",dv[0]),
-                    ("temperature",dv[1]),
-                    ("expected_solution",expected_result),
-                    ("residual",result_resid)
+                    ("pressure", dv[0]),
+                    ("temperature", dv[1]),
+                    ("expected_solution", expected_result),
+                    ("residual", result_resid),
                 ],
             )
-            
+
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
         istep += 1
-        
-    print(iotag+'Absolute solution errors (density,energy,momentum): ',
-          maxerr)
+
+    print(
+        iotag + "Absolute solution errors (density,energy,momentum): ",
+        maxerr,
+    )
 
 
 if __name__ == "__main__":
