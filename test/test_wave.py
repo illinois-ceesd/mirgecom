@@ -26,6 +26,7 @@ import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
 from pytools.obj_array import join_fields
+import pymbolic as pmbl
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl
@@ -35,6 +36,63 @@ import pytest
 
 import logging
 logger = logging.getLogger(__name__)
+
+
+def sym_diff(var):
+    from pymbolic.mapper.differentiator import DifferentiationMapper
+    def func_map(arg_index, func, arg, allowed_nonsmoothness):
+        if func == pmbl.var("sin"):
+            return pmbl.var("cos")(*arg)
+        elif func == pmbl.var("cos"):
+            return -pmbl.var("sin")(*arg)
+        if func == pmbl.var("clsin"):
+            return pmbl.var("clcos")(*arg)
+        elif func == pmbl.var("clcos"):
+            return -pmbl.var("clsin")(*arg)
+        else:
+            raise ValueError("Unrecognized function")
+    return DifferentiationMapper(var, func_map=func_map)
+
+
+def sym_div(vector_func):
+    coord_names = ["x", "y", "z"]
+    div = 0
+    for i in range(len(vector_func)):
+        div = div + sym_diff(pmbl.var(coord_names[i]))(vector_func[i])
+    return div
+
+
+def sym_grad(dim, func):
+    coord_names = ["x", "y", "z"]
+    grad = []
+    for i in range(dim):
+        grad_i = sym_diff(pmbl.var(coord_names[i]))(func)
+        grad.append(grad_i)
+    return grad
+
+
+def sym_eval_with(expr, values):
+    from pymbolic.mapper.evaluator import EvaluationMapper
+    import pymbolic.primitives as prim
+    class mapper(EvaluationMapper):
+        def map_call(self, expr):
+            assert isinstance(expr.function, prim.Variable)
+            if expr.function.name == "sin":
+                par, = expr.parameters
+                return np.sin(self.rec(par))
+            elif expr.function.name == "cos":
+                par, = expr.parameters
+                return np.cos(self.rec(par))
+            if expr.function.name == "clsin":
+                par, = expr.parameters
+                return clmath.sin(self.rec(par))
+            elif expr.function.name == "clcos":
+                par, = expr.parameters
+                return clmath.cos(self.rec(par))
+            else:
+                raise ValueError("Unrecognized function '%s'" % expr.function)
+    return mapper(values)(expr)
+
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
@@ -61,68 +119,60 @@ def test_standing_wave(ctx_factory, dim, order):
 
         # 2D: phi(x,y,t) = cos(omega*t-pi/4)*cos(x)*cos(y)
         # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
-        # omega = sqrt(#dims)*c
+        # where omega = sqrt(#dims)*c
+        coord_names = ["x", "y", "z"]
+        sym_coords = [pmbl.var(name) for name in coord_names]
+        sym_t = pmbl.var("t")
+        sym_c = pmbl.var("c")
+        sym_omega = pmbl.var("omega")
+        sym_pi = pmbl.var("pi")
+        sym_cos = pmbl.var("cos")
+        sym_clcos = pmbl.var("clcos")
+        sym_phi = sym_cos(sym_omega*sym_t - sym_pi/4)
+        for i in range(dim):
+            sym_phi = sym_phi * sym_clcos(sym_coords[i])
+
+        # u = phi_t
+        sym_u = sym_diff(sym_t)(sym_phi)
+
+        # v_i = c*phi_{x_i}
+        sym_v = []
+        for i in range(dim):
+            sym_v_i = sym_c * sym_diff(sym_coords[i])(sym_phi)
+            sym_v.append(sym_v_i)
+
+        # rhs(u part) = c*div(v)
+        # Why negative sign?
+        # sym_rhs_u = sym_c * sym_div(sym_v)
+        sym_rhs_u = -sym_c * sym_div(sym_v)
+        # rhs(v part) = c*grad(u)
+        sym_grad_u = sym_grad(dim, sym_u)
+        # Why negative sign?
+        # sym_rhs_v = [sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs_v = [-sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs = [sym_rhs_u] + sym_rhs_v
 
         c = 2.
-        offset = np.pi/4.
-        omega = np.sqrt(dim) * c
 
-        # 2D: u = phi_t = -omega*sin(omega*t-pi/4)*cos(x)*cos(y)
-        # 3D: u = phi_t = -omega*sin(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
-        u = discr.empty(queue, dtype=np.float64)
-        u[:] = -omega * np.sin(-offset)
+        eval_values = dict()
         for i in range(dim):
-            u = u * clmath.cos(nodes[i])
+            eval_values[coord_names[i]] = nodes[i]
+        eval_values["t"] = 0.
+        eval_values["c"] = c
+        eval_values["omega"] = np.sqrt(dim)*c
+        eval_values["pi"] = np.pi
 
-        # 2D: v[0] = c*phi_x = -c*cos(omega*t-pi/4)*sin(x)*cos(y)
-        #     v[1] = c*phi_y = -c*cos(omega*t-pi/4)*cos(x)*sin(y)
-        # 3D: v[0] = c*phi_x = -c*cos(omega*t-pi/4)*sin(x)*cos(y)*cos(z)
-        #     v[1] = c*phi_y = -c*cos(omega*t-pi/4)*cos(x)*sin(y)*cos(z)
-        #     v[2] = c*phi_z = -c*cos(omega*t-pi/4)*cos(x)*cos(y)*sin(z)
-        v = []
-        for i in range(dim):
-            v_i = discr.empty(queue, dtype=np.float64)
-            v_i[:] = -c * np.cos(-offset)
-            for j in range(dim):
-                if i == j:
-                    v_i = v_i * clmath.sin(nodes[j])
-                else:
-                    v_i = v_i * clmath.cos(nodes[j])
-            v.append(v_i)
+        def sym_eval(expr):
+            return sym_eval_with(expr, eval_values)
+
+        u = sym_eval(sym_u)
+        v = [sym_eval(sym_v[i]) for i in range(dim)]
         fields = join_fields(u, v)
 
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        # rhs(u part) = c*div(v)
-        # 2D: rhs(u part) = -2*c^2*cos(omega*t-pi/4)*cos(x)*cos(y)
-        # 3D: rhs(u part) = -3*c^2*cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
-        expected_rhs_u = discr.empty(queue, dtype=np.float64)
-        # Why no negative sign?
-        # expected_rhs_u[:] = -omega**2 * np.cos(-offset)
-        expected_rhs_u[:] = omega**2 * np.cos(-offset)
-        for i in range(dim):
-            expected_rhs_u = expected_rhs_u * clmath.cos(nodes[i])
-
-        # rhs(v part) = c*grad(u)
-        # 2D: rhs(v part)[0] = omega*c*sin(omega*t-pi/4)*sin(x)*cos(y)
-        #     rhs(v part)[1] = omega*c*sin(omega*t-pi/4)*cos(x)*sin(y)
-        # 3D: rhs(v part)[0] = omega*c*sin(omega*t-pi/4)*sin(x)*cos(y)*cos(z)
-        #     rhs(v part)[1] = omega*c*sin(omega*t-pi/4)*cos(x)*sin(y)*cos(z)
-        #     rhs(v part)[2] = omega*c*sin(omega*t-pi/4)*cos(x)*cos(y)*sin(z)
-        expected_rhs_v = []
-        for i in range(dim):
-            rhs_v_i = discr.empty(queue, dtype=np.float64)
-            # Why negative sign?
-            # rhs_v_i[:] = omega*c * np.sin(-offset)
-            rhs_v_i[:] = -omega*c * np.sin(-offset)
-            for j in range(dim):
-                if i == j:
-                    rhs_v_i = rhs_v_i * clmath.sin(nodes[j])
-                else:
-                    rhs_v_i = rhs_v_i * clmath.cos(nodes[j])
-            expected_rhs_v.append(rhs_v_i)
-        expected_rhs = join_fields(expected_rhs_u, expected_rhs_v)
+        expected_rhs = [sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs]
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
@@ -172,97 +222,58 @@ def test_wave_manufactured(ctx_factory, dim, order):
         # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
         #                      *(z-1)^3*(z+1)^3
         # Not actual solutions, but we can still apply wave operator to them
+        coord_names = ["x", "y", "z"]
+        sym_coords = [pmbl.var(name) for name in coord_names]
+        sym_t = pmbl.var("t")
+        sym_c = pmbl.var("c")
+        sym_omega = pmbl.var("omega")
+        sym_pi = pmbl.var("pi")
+        sym_cos = pmbl.var("cos")
+        sym_phi = sym_cos(sym_omega*sym_t - sym_pi/4)
+        for i in range(dim):
+            sym_phi = sym_phi * (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
+
+        # u = phi_t
+        sym_u = sym_diff(sym_t)(sym_phi)
+
+        # v_i = c*phi_{x_i}
+        sym_v = []
+        for i in range(dim):
+            sym_v_i = sym_c * sym_diff(sym_coords[i])(sym_phi)
+            sym_v.append(sym_v_i)
+
+        # rhs(u part) = c*div(v)
+        # Why negative sign?
+        # sym_rhs_u = sym_c * sym_div(sym_v)
+        sym_rhs_u = -sym_c * sym_div(sym_v)
+        # rhs(v part) = c*grad(u)
+        sym_grad_u = sym_grad(dim, sym_u)
+        # Why negative sign?
+        # sym_rhs_v = [sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs_v = [-sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs = [sym_rhs_u] + sym_rhs_v
 
         c = 2.
-        offset = np.pi/4.
-        omega = 1.
 
-        # 2D: u = phi_t = -omega*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
-        # 3D: u = phi_t = -omega*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
-        #                   *(z-1)^3*(z+1)^3
-        u = discr.empty(queue, dtype=np.float64)
-        u[:] = -omega * np.sin(-offset)
+        eval_values = dict()
         for i in range(dim):
-            u = u * (nodes[i]-1.)**3 * (nodes[i]+1.)**3
+            eval_values[coord_names[i]] = nodes[i]
+        eval_values["t"] = 0.
+        eval_values["c"] = c
+        eval_values["omega"] = 1.
+        eval_values["pi"] = np.pi
 
-        # 2D: v[0] = c*phi_x = c*cos(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
-        #                        *(y-1)^3*(y+1)^3
-        #     v[1] = c*phi_y = c*cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
-        #                        + 3*(y-1)^3*(y+1)^2)
-        # 3D: v[0] = c*phi_x = c*cos(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
-        #                        *(y-1)^3*(y+1)^3*(z-1)^3*(z+1)^3
-        #     v[1] = c*phi_y = c*cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
-        #                        + 3*(y-1)^3*(y+1)^2)*(z-1)^3*(z+1)^3
-        #     v[2] = c*phi_z = c*cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
-        #                        *(3*(z-1)^2*(z+1)^3 + 3*(z-1)^3*(z+1)^2)
-        v = []
-        for i in range(dim):
-            v_i = discr.empty(queue, dtype=np.float64)
-            v_i[:] = c * np.cos(-offset)
-            for j in range(dim):
-                if i == j:
-                    v_i = v_i * (3. * (nodes[j]-1.)**2 * (nodes[j]+1.)**3
-                            + 3. * (nodes[j]-1.)**3 * (nodes[j]+1.)**2)
-                else:
-                    v_i = v_i * (nodes[j]-1.)**3 * (nodes[j]+1.)**3
-            v.append(v_i)
+        def sym_eval(expr):
+            return sym_eval_with(expr, eval_values)
+
+        u = sym_eval(sym_u)
+        v = [sym_eval(sym_v[i]) for i in range(dim)]
         fields = join_fields(u, v)
 
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        # rhs(u part) = c*div(v)
-        # 2D: rhs(u part) = c^2*cos(omega*t-pi/4)*((6*(x-1)*(x+1)^3 + 18*(x-1)^2*(x+1)^2
-        #                     + 6*(x-1)^3*(x+1))*(y-1)^3*(y+1)^3 + (x-1)^3*(x+1)^3
-        #                     * (6*(y-1)*(y+1)^3 + 18*(y-1)^2*(y+1)^2 + 6*(y-1)^3*(y+1)))
-        # 3D: rhs(u part) = c^2*cos(omega*t-pi/4)*((6*(x-1)*(x+1)^3 + 18*(x-1)^2*(x+1)^2
-        #                     + 6*(x-1)^3*(x+1))*(y-1)^3*(y+1)^3*(z-1)^3*(z+1)^3
-        #                     + (x-1)^3*(x+1)^3*(6*(y-1)*(y+1)^3 + 18*(y-1)^2*(y+1)^2
-        #                     + 6*(y-1)^3*(y+1))*(z-1)^3*(z+1)^3 + (x-1)^3*(x+1)^3*(y-1)^3
-        #                     * (y+1)^3*(6*(z-1)*(z-1)^3 + 18*(z-1)^2*(z+1)^2 + 6*(z-1)^3*(z+1)))
-        expected_rhs_u = discr.zeros(queue, dtype=np.float64)
-        for i in range(dim):
-            spatial_part_i = discr.empty(queue, dtype=np.float64)
-            spatial_part_i[:] = 1.
-            for j in range(dim):
-                if i == j:
-                    spatial_part_i = spatial_part_i * (
-                               6. * (nodes[j]-1.) * (nodes[j]+1.)**3
-                            + 18. * (nodes[j]-1.)**2 * (nodes[j]+1.)**2
-                            +  6. * (nodes[j]-1.)**3 * (nodes[j]+1.))
-                else:
-                    spatial_part_i = spatial_part_i * ((nodes[j]-1.)**3
-                            * (nodes[j]+1.)**3)
-            expected_rhs_u = expected_rhs_u + spatial_part_i
-        # Why negative sign?
-        # expected_rhs_u = expected_rhs_u * c**2 * np.cos(-offset)
-        expected_rhs_u = expected_rhs_u * -c**2 * np.cos(-offset)
-
-        # rhs(v part) = c*grad(u)
-        # 2D: rhs(v part)[0] = -omega*c*sin(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
-        #                        *(y-1)^3*(y+1)^3
-        #     rhs(v part)[1] = -omega*c*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
-        #                        + 3*(y-1)^3*(y+1)^2)
-        # 3D: rhs(v part)[0] = -omega*c*sin(omega*t-pi/4)*(3*(x-1)^2*(x+1)^3 + 3*(x-1)^3*(x+1)^2)
-        #                        *(y-1)^3*(y+1)^3*(z-1)^3*(z+1)^3
-        #     rhs(v part)[1] = -omega*c*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(3*(y-1)^2*(y+1)^3
-        #                        + 3*(y-1)^3*(y+1)^2)*(z-1)^3*(z+1)^3
-        #     rhs(v part)[2] = -omega*c*sin(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
-        #                        *(3*(z-1)^2*(z+1)^3 + 3*(z-1)^3*(z+1)^2)
-        expected_rhs_v = []
-        for i in range(dim):
-            rhs_v_i = discr.empty(queue, dtype=np.float64)
-            # Why no negative sign?
-            # rhs_v_i[:] = -omega*c * np.sin(-offset)
-            rhs_v_i[:] = omega*c * np.sin(-offset)
-            for j in range(dim):
-                if i == j:
-                    rhs_v_i = rhs_v_i * (3. * (nodes[j]-1.)**2 * (nodes[j]+1.)**3
-                            + 3. * (nodes[j]-1.)**3 * (nodes[j]+1.)**2)
-                else:
-                    rhs_v_i = rhs_v_i * (nodes[j]-1.)**3 * (nodes[j]+1.)**3
-            expected_rhs_v.append(rhs_v_i)
-        expected_rhs = join_fields(expected_rhs_u, expected_rhs_v)
+        expected_rhs = [sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs]
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))

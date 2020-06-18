@@ -23,9 +23,16 @@ jobs:
         - name: Install prerequisites
           shell: bash -l {0}
           run: |
-            conda install pocl islpy pyopencl pytest pip
+            conda install pocl islpy pyopencl pytest pip clinfo
             pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
             pip install -e .
         - name: Run tests
           shell: bash -l {0}
-          run: pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+          run: |
+            export OCL_ICD_VENDORS=/usr/share/miniconda/envs/test/etc/OpenCL/vendors
+            ls $CONDA_PKGS_DIR
+            echo ======
+            ls /usr/share/miniconda/envs/test/etc/OpenCL/vendors
+            echo %%%%%%%
+            clinfo
+            pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
