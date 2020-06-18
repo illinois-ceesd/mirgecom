@@ -58,16 +58,15 @@ class Vortex2D:
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
 
-        from math import pi
         gamma = eos.Gamma()
         r = clmath.sqrt(x_rel ** 2 + y_rel ** 2)
         expterm = self._beta * clmath.exp(1 - r ** 2)
-        u = self._velocity[0] - expterm * y_rel / (2 * pi)
-        v = self._velocity[1] + expterm * x_rel / (2 * pi)
+        u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
+        v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
         rho = (
             1
             - (gamma - 1)
-            / (16 * gamma * pi ** 2)
+            / (16 * gamma * np.pi ** 2)
             * expterm ** 2
         ) ** (1 / (gamma - 1))
         p = rho ** gamma
@@ -132,8 +131,6 @@ class Lump:
         )
         r = clmath.sqrt(np.dot(rel_center, rel_center))
 
-        from math import pi
-
         def scalevec(scalar, vec):
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
@@ -156,8 +153,6 @@ class Lump:
             [nodes[i] - lump_loc[i] for i in range(self._dim)]
         )
         r = clmath.sqrt(np.dot(rel_center, rel_center))
-
-        from math import pi
 
         def scalevec(scalar, vec):
             # workaround for object array behavior
