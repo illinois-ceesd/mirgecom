@@ -41,7 +41,6 @@ from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from mirgecom.boundary import BoundaryBoss
 from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
