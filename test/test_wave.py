@@ -61,7 +61,7 @@ def test_standing_wave(ctx_factory, dim, order):
 
         # 2D: phi(x,y,t) = cos(omega*t-pi/4)*cos(x)*cos(y)
         # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
-        # omega = sqrt(#dims)*c
+        # where omega = sqrt(#dims)*c
 
         c = 2.
         offset = np.pi/4.
