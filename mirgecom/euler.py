@@ -30,11 +30,11 @@ from pytools.obj_array import (
     with_object_array_or_scalar,
 )
 import pyopencl.clmath as clmath
+import pyopencl.array as clarray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
-# TODO: Remove grudge dependence?
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 
@@ -152,10 +152,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = _get_wavespeeds(w_tpair, eos)
 
-    # - Gak!  What's the matter with this next line?   (CL issues?)
-    #    lam = np.maximum(fspeed_int,fspeed_ext)
-    # lam = 0.5*np.maximum(wavespeeds[0],wavespeeds[1])
-    lam = wavespeeds[0]
+    lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
     lfr = scalevec(0.5 * lam, qjump)
 
     # Surface fluxes should be inviscid flux .dot. normal
