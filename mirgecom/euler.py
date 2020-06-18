@@ -93,33 +93,19 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     return flux
 
 
-def _get_wavespeeds(w_tpair, eos=IdealSingleGas()):
+def _get_wavespeed(w, eos=IdealSingleGas()):
 
-    rho = w_tpair[0]
-    rhoE = w_tpair[1]
-    rhoV = w_tpair[2:]
+    rho = w[0]
+    rhoV = w[2:]
 
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
 
-    v_int, v_ext = [
-        scalevec(1.0 / lrho, lrhov)
-        for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
-    ]
-
-    qint = join_fields(rho.int, rhoE.int, rhoV.int)
-    qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
-
-    c_int, c_ext = [eos.SpeedOfSound(qint), eos.SpeedOfSound(qext)]
-
-    fspeed_int, fspeed_ext = [
-        (clmath.sqrt(np.dot(lv, lv)) + lc)
-        for lv, lc in [(v_int, c_int), (v_ext, c_ext)]
-    ]
-
-    return join_fields(fspeed_int, fspeed_ext)
-
+    v = scalevec(1.0/rho,rhoV)
+    sos = eos.SpeedOfSound(w)
+    wavespeed = clmath.sqrt(np.dot(v,v)) + sos
+    return wavespeed
 
 def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
@@ -150,7 +136,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_jump = scalevec(0.5, (flux_int + flux_ext))
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = _get_wavespeeds(w_tpair, eos)
+    wavespeeds = [ _get_wavespeed(qint), _get_wavespeed(qext) ]
 
     lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
     lfr = scalevec(0.5 * lam, qjump)
