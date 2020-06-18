@@ -35,7 +35,6 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.initializers import Lump
 from mirgecom.initializers import Vortex2D
-from mirgecom.boundary import BoundaryBoss
 from mirgecom.eos import IdealSingleGas
 from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -74,11 +73,8 @@ def main():
     vel[1] = 1.0
     initializer = Vortex2D(center=orig, velocity=vel)
     #    initializer = Lump(center=orig,velocity=vel)
-    initializer.SetBoundaryTag(BTAG_ALL)
-    boundaryboss = BoundaryBoss()
-    boundaryboss.AddBoundary(initializer)
+    boundaries = { BTAG_ALL : initializer }
     eos = IdealSingleGas()
-    initializer.SetEOS(eos)
 
     fields = initializer(0, nodes)
 
@@ -88,7 +84,7 @@ def main():
 
     def rhs(t, w):
         return inviscid_operator(
-            discr, w=w, t=t, boundaries=boundaryboss
+            discr, w=w, t=t, boundaries=boundaries, eos=eos
         )
 
     while t < t_final:
