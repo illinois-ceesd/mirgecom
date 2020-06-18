@@ -31,6 +31,7 @@ from pytools.obj_array import (
 )
 import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from mirgecom.eos import IdealSingleGas
 
 # TODO: Remove grudge dependence?
 from grudge.eager import with_queue
@@ -38,55 +39,14 @@ from grudge.symbolic.primitives import TracePair
 
 
 class DummyBoundary:
-    def __init__(self, tag=BTAG_ALL):
-        self._boundary_tag = tag
-        # dummy
-
-    def GetBoundaryFlux(self, discr, w, t=0.0):
-        ndim = discr.dim
-        dir_soln = discr.interp("vol", self._boundary_tag, w)
+    def get_boundary_flux(self, discr, w, t=0.0, btag=BTAG_ALL,
+                          eos=IdealSingleGas()):
+        dir_soln = discr.interp("vol", btag, w)
 
         from mirgecom.euler import _facial_flux  # hrm
 
         return _facial_flux(
             discr,
-            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_soln),
+            w_tpair=TracePair(btag, dir_soln, dir_soln),
+            eos=eos
         )
-
-
-class BoundaryBoss:
-    def __init__(self):
-        self._boundaries = {}
-
-    def AddBoundary(self, boundaryhandler):
-        numbnd = len(self._boundaries)
-        self._boundaries[numbnd] = boundaryhandler
-
-    def GetBoundaryFlux(self, discr, w, t=0.0):
-        queue = w[0].queue
-        numbnd = len(self._boundaries)
-        numsoln = len(w)
-
-        assert numsoln > 0
-
-        if numbnd == 0:
-            self.AddBoundary(DummyBoundary())
-            numbnd = 1
-
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
-
-        # Gak!  need help here. how to just calculate on the boundary?
-        boundary_flux = discr.interp("vol", "all_faces", w)
-        #        boundary_flux = join_fields( [discr.zeros(queue) for i in range(numsoln)] )
-        boundary_flux = scalevec(0.0, boundary_flux)
-
-        for bndindex in range(numbnd):
-            boundaryhandler = self._boundaries[bndindex]
-            this_boundary_flux = boundaryhandler.GetBoundaryFlux(
-                discr, w, t
-            )
-            boundary_flux = boundary_flux + this_boundary_flux
-
-        return boundary_flux
