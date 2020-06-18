@@ -77,7 +77,7 @@ class BoundaryBoss:
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
 
-        # Gak!  need help here
+        # Gak!  need help here. how to just calculate on the boundary?
         boundary_flux = discr.interp("vol", "all_faces", w)
         #        boundary_flux = join_fields( [discr.zeros(queue) for i in range(numsoln)] )
         boundary_flux = scalevec(0.0, boundary_flux)

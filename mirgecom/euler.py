@@ -32,6 +32,7 @@ from pytools.obj_array import (
 import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.boundary import BoundaryBoss
+from mirgecom.eos import IdealSingleGas
 
 # TODO: Remove grudge dependence?
 from grudge.eager import with_queue
@@ -59,24 +60,23 @@ def _interior_trace_pair(discr, vec):
     return TracePair("int_faces", i, e)
 
 
-def _inviscid_flux(discr, q):
+def _inviscid_flux(discr, q, eos=IdealSingleGas()):
 
-    # q = [ rho rhoE rhoV ]
     ndim = discr.dim
 
+    # q = [ rho rhoE rhoV ]
     rho = q[0]
     rhoE = q[1]
     rhoV = q[2:]
 
-    # --- EOS stuff TBD ---
-    # gamma (ideal monatomic) = 1.4
-    gamma = 1.4
-    # p(ideal single gas) =
-    p = (gamma - 1.0) * (rhoE - 0.5 * (np.dot(rhoV, rhoV)) / rho)
+    p = eos.Pressure(q)
 
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
+    
+    # physical flux =
+    # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
 
     momFlux = make_obj_array(
         [
@@ -86,8 +86,6 @@ def _inviscid_flux(discr, q):
         ]
     )
 
-    # physical flux =
-    # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     flux = join_fields(
         scalevec(1.0, rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux,
     )
@@ -95,37 +93,27 @@ def _inviscid_flux(discr, q):
     return flux
 
 
-def _get_wavespeeds(discr, w_tpair):
-
-    dim = discr.dim
+def _get_wavespeeds(w_tpair, eos=IdealSingleGas()):
 
     rho = w_tpair[0]
     rhoE = w_tpair[1]
-    rhoV = w_tpair[2]
+    rhoV = w_tpair[2:]
 
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
-
-    gamma = 1.4
-
-    pint, pext = [
-        ((gamma - 1.0) * (rhoe - 0.5 * (np.dot(rhov, rhov) / lrho)))
-        for rhoe, rhov, lrho in [
-            (rhoE.int, rhoV.int, rho.int),
-            (rhoE.ext, rhoV.ext, rho.ext),
-        ]
-    ]
 
     v_int, v_ext = [
         scalevec(1.0 / lrho, lrhov)
         for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
     ]
 
-    c_int, c_ext = [
-        clmath.sqrt(gamma * lp / lrho)
-        for lp, lrho in [(pint, rho.int), (pext, rho.ext)]
-    ]
+    qint = join_fields( rho.int, rhoE.int, rhoV.int)
+    qext = join_fields( rho.ext, rhoE.ext, rhoV.ext)
+    
+    pint, pext = [ eos.Pressure(qint), eos.Pressure(qext) ]
+    
+    c_int, c_ext = [ eos.SpeedOfSound(qint), eos.SpeedOfSound(qext) ]
 
     fspeed_int, fspeed_ext = [
         (clmath.sqrt(np.dot(lv, lv)) + lc)
@@ -135,7 +123,7 @@ def _get_wavespeeds(discr, w_tpair):
     return join_fields(fspeed_int, fspeed_ext)
 
 
-def _facial_flux(discr, w_tpair):
+def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
     dim = discr.dim
 
@@ -152,47 +140,26 @@ def _facial_flux(discr, w_tpair):
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     qint = join_fields(rho.int, rhoE.int, rhoV.int)
     qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
+    
     # - Figure out how to manage grudge branch dependencies
     #    qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
     qjump = qext - qint
-    flux_int = _inviscid_flux(discr, qint)
-    flux_ext = _inviscid_flux(discr, qext)
+    flux_int = _inviscid_flux(discr, qint, eos)
+    flux_ext = _inviscid_flux(discr, qext, eos)
 
-    # Lax/Friedrichs/Rusunov after JSH/TW Nodal DG Methods, p. 209
+    # Lax/Friedrichs/Rusonov after JSH/TW Nodal DG Methods, p. 209
     #    flux_jump = scalevec(1.0,(flux_int - flux_ext))
     flux_jump = scalevec(0.5, (flux_int + flux_ext))
-    gamma = 1.4
-    # p(ideal single gas) = (gamma - 1)*(rhoE - .5(rhoV*V))
-    pint, pext = [
-        ((gamma - 1.0) * (rhoe - 0.5 * (np.dot(rhov, rhov) / lrho)))
-        for rhoe, rhov, lrho in [
-            (rhoE.int, rhoV.int, rho.int),
-            (rhoE.ext, rhoV.ext, rho.ext),
-        ]
-    ]
-    v_int, v_ext = [
-        scalevec(1.0 / lrho, lrhov)
-        for lrho, lrhov in [(rho.int, rhoV.int), (rho.ext, rhoV.ext)]
-    ]
 
-    c_int, c_ext = [
-        clmath.sqrt(gamma * lp / lrho)
-        for lp, lrho in [(pint, rho.int), (pext, rho.ext)]
-    ]
-
-    fspeed_int, fspeed_ext = [
-        (clmath.sqrt(np.dot(lv, lv)) + lc)
-        for lv, lc in [(v_int, c_int), (v_ext, c_ext)]
-    ]
-    # fspeed_int, fspeed_ext = _get_wavespeeds(discr, w_tpair)
-
+    # wavespeeds = [ wavespeed_int, wavespeed_ext ]
+    wavespeeds = _get_wavespeeds(w_tpair,eos)
+    
     # - Gak!  What's the matter with this next line?   (CL issues?)
-    #    lam = np.max(fspeed_int.get(),fspeed_ext.get())
-    lam = fspeed_int
-    #    print('lam shape = ',lam.shape)
-    #    print('qjump[0] shape = ',qjump[0].shape)
-    lfr = scalevec(0.5 * lam, qjump)
-
+    #    lam = np.maximum(fspeed_int,fspeed_ext)
+    # lam = 0.5*np.maximum(wavespeeds[0],wavespeeds[1])
+    lam = wavespeeds[0]
+    lfr = scalevec(0.5*lam, qjump)
+    
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
     # (rhoE + p)V  .dot. normal
@@ -211,7 +178,9 @@ def _facial_flux(discr, w_tpair):
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(discr, w, t=0.0, boundaries=BoundaryBoss()):
+def inviscid_operator(discr, w, t=0.0,
+                      eos=IdealSingleGas(),
+                      boundaries=BoundaryBoss()):
     """
     Returns the RHS of the Euler flow equations:
     :math: \partial_t Q = - \\nabla \\cdot F
@@ -225,18 +194,7 @@ def inviscid_operator(discr, w, t=0.0, boundaries=BoundaryBoss()):
     rhoE = w[1]
     rhoV = w[2:]
 
-    # We'll use exact soln of isentropic vortex for boundary/BC
-    # Spiegel (https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20150018403.pdf)
-    # AK has this coded in "hedge" code: gas_dynamics_initials.py
-
-    # Quick fix for no BCs yet - OK for time-independent flow tests
-    #    dir_rho = discr.interp("vol", BTAG_ALL, rho)
-    #    dir_e = discr.interp("vol", BTAG_ALL, rhoE)
-    #    dir_mom = discr.interp("vol", BTAG_ALL, rhoV)
-    #    dir_bval = join_fields(dir_rho, dir_e, dir_mom)
-    #    dir_bc = join_fields(dir_rho, dir_e, dir_mom)
-
-    vol_flux = _inviscid_flux(discr, w)
+    vol_flux = _inviscid_flux(discr, w, eos)
     dflux = join_fields(
         [
             discr.weak_div(vol_flux[i * ndim : (i + 1) * ndim])
@@ -245,14 +203,11 @@ def inviscid_operator(discr, w, t=0.0, boundaries=BoundaryBoss()):
     )
 
     interior_face_flux = _facial_flux(
-        discr, w_tpair=_interior_trace_pair(discr, w)
+        discr, w_tpair=_interior_trace_pair(discr, w),
+        eos=eos
     )
 
     boundary_flux = boundaries.GetBoundaryFlux(discr, w, t)
-
-    #    boundary_flux = _facial_flux(
-    #        discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
-    #    )
 
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + boundary_flux)

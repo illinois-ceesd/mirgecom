@@ -54,10 +54,6 @@ class IdealSingleGas:
         rhoE = w[1]
         rhoV = w[2:]
 
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
-
         e = rhoE - 0.5 * np.dot(rhoV, rhoV) / rho
         return e
 
@@ -67,22 +63,23 @@ class IdealSingleGas:
         rhoE = w[1]
         rhoV = w[2:]
 
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
-
         p = (self._gamma - 1.0) * self.InternalEnergy(w)
         return p
 
+    def SpeedOfSound(self, w):
+        queue = w[0].queue
+        rho = w[0]
+        p = self.Pressure(w)
+        c2 = self._gamma/rho * p 
+        c = clmath.sqrt(c2)
+        return c
+    
+        
     def Temperature(self, w):
         queue = w[0].queue
         rho = w[0]
         rhoE = w[1]
         rhoV = w[2:]
-
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
 
         T = (
             ((self._gamma - 1.0) / self._R)
@@ -96,9 +93,5 @@ class IdealSingleGas:
         rho = w[0]
         rhoE = w[1]
         rhoV = w[2:]
-
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
 
         return join_fields(self.Pressure(w), self.Temperature(w))

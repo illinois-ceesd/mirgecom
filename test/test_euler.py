@@ -43,6 +43,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.boundary import BoundaryBoss
+from mirgecom.eos import IdealSingleGas
 from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
@@ -56,7 +57,8 @@ def test_inviscid_flux():
 
     ctx = cl.create_some_context(interactive=False)
     queue = cl.CommandQueue(ctx)
-
+    iotag = 'test_inviscid_flux: '
+    
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
@@ -75,19 +77,14 @@ def test_inviscid_flux():
 
     order = 3
 
-    if dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.75 / (nel_1d * order ** 2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.45 / (nel_1d * order ** 2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
-
-    print("%d elements" % mesh.nelements)
+    dt = (1.0 - .25*(dim - 1)) / (nel_1d * order ** 2)
+    
+    print(iotag+"%d elements." % mesh.nelements)
+    print(iotag+"Timestep: ",dt)
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-
+    eos = IdealSingleGas()
+    
     rho = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
     rhoE = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
     rhoV = make_obj_array(
@@ -96,14 +93,12 @@ def test_inviscid_flux():
             for i in range(dim)
         ]
     )
-    scal1 = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
-    p = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
-    ke = 0.5 * np.dot(rhoV, rhoV) / rho
 
-    # ideal single spec
-    gamma = 1.4
-    p = (gamma - 1.0) * (rhoE - ke)
+    q = join_fields(rho, rhoE, rhoV)
+    p = eos.Pressure(q)
+    
     escale = (rhoE + p) / rho
+    
     expected_mass_flux = rhoV
     expected_energy_flux = scalevec(escale, rhoV)
     expected_mom_flux = make_obj_array(
@@ -113,38 +108,123 @@ def test_inviscid_flux():
             for j in range(dim)
         ]
     )
-
-    q = join_fields(rho, rhoE, rhoV)
+    expected_flux = join_fields( expected_mass_flux, expected_energy_flux,
+                                 expected_mom_flux )
 
     from mirgecom.euler import _inviscid_flux
 
-    flux = _inviscid_flux(discr, q)
+    flux = _inviscid_flux(discr, q, eos)
+    flux_resid = flux - expected_flux
+    
+    for i in range((dim+2)*dim):
+        assert(la.norm(flux_resid[i].get())) == 0.0
+        
+    class mydiscr:
+        def __init__(self,dim=1):
+            self.dim = dim
 
-    rhoflux = flux[0:dim]
-    rhoEflux = flux[dim : 2 * dim]
-    momflux = flux[2 * dim :]
+    p0 = 1.0
+    # === this next block tests 1,2,3 dimensions, single and multiple nodes
+    # === with V = 0, fixed P = p0    
+    for dim in [1, 2, 3]:
+        for ntestnodes in [1, 10, 100]:
+            fake_dis = mydiscr(dim)
+            rho = cl.clrandom.rand(queue,(ntestnodes,),dtype=np.float64)
+            rhoE = cl.clrandom.rand(queue,(ntestnodes,),dtype=np.float64)
+            rhoV = make_obj_array(
+                [
+                    cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
+                    for i in range(dim)
+                ]
+            )
+            p = cl.clrandom.rand(queue,(ntestnodes,),dtype=np.float64)
+            
+            for i in range(ntestnodes):
+                rho[i] = 1.0 + i
+                p[i] = p0
+                for j in range(dim):
+                    rhoV[j][i] = 0.0*rho[i]
+        
+            v = scalevec(1 / rho, rhoV)
+            rhoE = p / .4 + .5 * np.dot(rhoV,rhoV) / rho
+            q = join_fields( rho, rhoE, rhoV )
+            flux = _inviscid_flux(fake_dis, q, eos)
 
-    # these should be exact, right?
-    for i in range(dim):
-        assert (
-            la.norm(rhoflux[i].get() - expected_mass_flux[i].get())
-            == 0.0
-        )
-        assert (
-            la.norm(rhoEflux[i].get() - expected_energy_flux[i].get())
-            == 0.0
-        )
-    for i in range(dim * dim):
-        assert (
-            la.norm(momflux[i].get() - expected_mom_flux[i].get())
-            == 0.0
-        )
+            print(iotag+str(dim)+'d flux = ',flux)
+        
+            # for velocity zero, these components should be == zero
+            for i in range(2*dim):
+                for j in range(ntestnodes):
+                    assert(flux[i][j].get() == 0.0)
 
+            # The momentum diagonal should be p
+            for i in range(dim):
+                for j in range(dim):
+                    if i != j:
+                        pterm = np.zeros(shape=(ntestnodes,))
+                    else:
+                        pterm = p
+                    for n in range(ntestnodes):
+                        assert(np.abs(flux[(2+i)*dim+j][n].get() - pterm[n]) < 1e-15)
 
+        
+    # === this next block tests 1,2,3 dimensions, single and multiple nodes
+    # === with V = 1 (in some dimension), fixed P = p0
+    for dim in [1, 2, 3]:
+        for livedim in range(dim):
+            for ntestnodes in [1, 10, 100]:
+                fake_dis = mydiscr(dim)
+                rho = cl.clrandom.rand(queue,(ntestnodes,),dtype=np.float64)
+                rhoE = cl.clrandom.rand(queue,(ntestnodes,),dtype=np.float64)
+                rhoV = make_obj_array(
+                    [
+                        cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
+                        for i in range(dim)
+                    ]
+                )
+                p = cl.clrandom.rand(queue,(ntestnodes,),dtype=np.float64)
+                
+                for i in range(ntestnodes):
+                    rho[i] = 1.0 + i
+                    p[i] = p0
+                    for j in range(dim):
+                        rhoV[j][i] = 0.0*rho[i]
+                    rhoV[livedim][i] = rho[i]
+                    
+                v = scalevec(1 / rho, rhoV)
+                rhoE = p / .4 + .5 * np.dot(rhoV,rhoV) / rho
+                q = join_fields( rho, rhoE, rhoV )
+                flux = _inviscid_flux(fake_dis, q, eos)
+
+                print(iotag+str(dim)+'d flux = ',flux)
+        
+                # first two components should be nonzero in livedim only
+                expected_flux = scalevec(rho,v)
+                for i in range(dim):
+                    for j in range(ntestnodes):
+                        assert(np.abs(flux[i][j].get() -
+                                      expected_flux[i][j].get()) < 1e-13)
+                        
+                expected_flux = scalevec((rhoE + p), v )
+                for i in range(dim):
+                    for j in range(ntestnodes):
+                        assert(np.abs(flux[dim+i][j].get() -
+                                      expected_flux[i][j].get()) < 1e-13)
+                # The momentum diagonal should be p
+                for i in range(dim):
+                    expected_flux = scalevec(rho*v[i],v)
+                    expected_flux[i] = expected_flux[i] + p
+                    for j in range(dim):
+                        for k in range(ntestnodes):
+                            assert(np.abs(flux[2*dim+i*dim+j][k].get() -
+                                          expected_flux[j][k].get()) < 1e-13)
+
+                            
 def test_facial_flux():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-
+    iotag = 'test_facial_flux: '
+    
     dim = 2
     nel_1d = 16
 
@@ -156,16 +236,10 @@ def test_facial_flux():
 
     order = 3
 
-    if dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.75 / (nel_1d * order ** 2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.45 / (nel_1d * order ** 2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
-
-    print("%d elements" % mesh.nelements)
+    dt = (1.0 - .25*(dim - 1)) / (nel_1d * order ** 2)
+    
+    print(iotag+"%d elements." % mesh.nelements)
+    print(iotag+"Timestep: ",dt)
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
@@ -196,6 +270,7 @@ def test_facial_flux():
             ]
         )
     )
+    
     assert err < 1e-15
 
     # mom flux max should be p = 1 + (any interp error)
@@ -357,7 +432,8 @@ def test_vortex_rhs():
             boundaryboss.AddBoundary(vortex)
 
             inviscid_rhs = inviscid_operator(
-                discr, vortex_soln, 0, boundaryboss
+                discr, vortex_soln, t=0,
+                boundaries=boundaryboss
             )
 
             # - these are only used in viz
@@ -368,11 +444,16 @@ def test_vortex_rhs():
             # p = 0.4 * (rhoE - 0.5*np.dot(rhoV,rhoV)/rho)
             # exp_p = rho ** gamma
 
-            for i in range(dim + 2):
-                err_rhs = inviscid_rhs[i]
-                err_max = np.max(np.abs(err_rhs.get()))
-                print(iotag + "err_max_" + str(nel_1d) + " = ", err_max)
-
+            err_max = np.max(np.array([la.norm(inviscid_rhs[i].get(),np.inf)
+                                       for i in range(dim + 2)]))
+            
+            #        eoc_rec.add_data_point(1./n, err)
+            #            err_rhs = [ np.abs(inviscid_rhs[i].get()) for i in range(dim + 2) ]
+            #            for i in range(dim + 2):
+            #                err_rhs = inviscid_rhs[i]
+            #                err_max = np.max(np.abs(err_rhs.get()))
+            #                print(iotag + "err_max_" + str(nel_1d) + " = ", err_max)
+            
             eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
         print(
@@ -424,7 +505,8 @@ def test_lump_rhs():
             boundaryboss.AddBoundary(lump)
 
             inviscid_rhs = inviscid_operator(
-                discr, lump_soln, 0, boundaryboss
+                discr, lump_soln, t=0.0,
+                boundaries=boundaryboss
             )
 
             expected_rhs = lump.ExpectedRHS(discr, lump_soln, 0)

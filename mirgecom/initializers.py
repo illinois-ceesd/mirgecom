@@ -42,15 +42,15 @@ class Vortex2D:
     def __init__(
         self,
         eos=IdealSingleGas(),
-        center=np.array([0, 0]),
-        velocity=np.array([0, 0]),
+        center=np.zeros(shape=(2,)),
+        velocity=np.zeros(shape=(2,))
     ):
         self._beta = 5
-        self._eos = eos
-        self._gamma = self._eos.Gamma()
         self._center = center  # np.array([5, 0])
         self._velocity = velocity  # np.array([0, 0])
-        self._boundary_tag = BTAG_ALL
+        self.SetBoundaryTag(BTAG_ALL)
+        self.SetEOS(eos)
+
 
     def __call__(self, t, x_vec):
         vortex_loc = self._center + t * self._velocity
@@ -82,11 +82,12 @@ class Vortex2D:
 
     def SetEOS(self, eos):
         self._eos = eos
+        self._gamma = eos.Gamma()
 
     def SetBoundaryTag(self, tag=BTAG_ALL):
         self._boundary_tag = tag
 
-    def GetBoundaryFlux(self, discr, w, t=0.0):
+    def GetBoundaryFlux(self, discr, w, t=0):
         queue = w[0].queue
         ndim = discr.dim
 
@@ -104,18 +105,20 @@ class Vortex2D:
         return _facial_flux(
             discr,
             w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
+            eos=self._eos
         )
 
 
 class Lump:
     def __init__(
-        self,
-        eos=IdealSingleGas(),
-        rho0=1.0,
-        rhoamp=1.0,
-        numdim=2,
-        center=[0],
-        velocity=[0],
+            self,
+            eos=IdealSingleGas(),
+            rho0=1.0,
+            rhoamp=1.0,
+            numdim=2,
+            p0=1.0,
+            center=[0],
+            velocity=[0],
     ):
         if len(center) == numdim:
             self._center = center
@@ -127,10 +130,11 @@ class Lump:
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
-        print("center shape = ", self._center.shape)
-        print("velocity shape = ", self._velocity.shape)
+            #        print("center shape = ", self._center.shape)
+            #        print("velocity shape = ", self._velocity.shape)
 
         self._eos = eos
+        self._p0 = 1.0
         self._rho0 = rho0
         self._rhoamp = rhoamp
         self._dim = numdim
@@ -155,15 +159,14 @@ class Lump:
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
         rhoV = scalevec(rho, self._velocity)
-        rhoE = (1.0 / (self._gamma - 1.0)) + np.dot(rhoV, rhoV) / (
-            2.0 * rho
-        )
-
+        rhoE = (self._p0 / (self._gamma - 1.0)) + np.dot(rhoV, rhoV) / (2.0 * rho)
+        
         return join_fields(rho, rhoE, rhoV)
 
     def SetEOS(self, eos):
         self._eos = eos
-
+        self._gamma = eos.Gamma()
+        
     def ExpectedRHS(self, discr, w, t=0.0):
         queue = w[0].queue
         ndim = discr.dim
@@ -223,4 +226,5 @@ class Lump:
         return _facial_flux(
             discr,
             w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
+            eos=self._eos
         )
