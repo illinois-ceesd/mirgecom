@@ -32,7 +32,6 @@ from pytools.obj_array import (
 import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-# TODO: Remove grudge dependence?
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 
