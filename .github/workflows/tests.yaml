@@ -30,5 +30,6 @@ jobs:
           shell: bash -l {0}
           run: |
             export OCL_ICD_VENDORS=/usr/share/miniconda/envs/test/etc/OpenCL/vendors
+            ls $CONDA_PKGS_DIR
             clinfo
             pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
