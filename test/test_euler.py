@@ -49,9 +49,6 @@ from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 
-# Tests go here
-
-
 def test_inviscid_flux():
 
     ctx = cl.create_some_context(interactive=False)
