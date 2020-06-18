@@ -28,4 +28,6 @@ jobs:
             pip install -e .
         - name: Run tests
           shell: bash -l {0}
-          run: pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+          run: |
+            export OCL_ICD_VENDORS=/usr/share/miniconda/envs/test/etc/OpenCL/vendors
+            pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
