@@ -49,7 +49,7 @@ class IdealSingleGas:
         return self._R
 
     def InternalEnergy(self, w):
-        queue = w[0].queue
+
         rho = w[0]
         rhoE = w[1]
         rhoV = w[2:]
@@ -58,16 +58,10 @@ class IdealSingleGas:
         return e
 
     def Pressure(self, w):
-        queue = w[0].queue
-        rho = w[0]
-        rhoE = w[1]
-        rhoV = w[2:]
-
         p = (self._gamma - 1.0) * self.InternalEnergy(w)
         return p
 
     def SpeedOfSound(self, w):
-        queue = w[0].queue
         rho = w[0]
         p = self.Pressure(w)
         c2 = self._gamma / rho * p
@@ -75,11 +69,7 @@ class IdealSingleGas:
         return c
 
     def Temperature(self, w):
-        queue = w[0].queue
         rho = w[0]
-        rhoE = w[1]
-        rhoV = w[2:]
-
         T = (
             ((self._gamma - 1.0) / self._R)
             * self.InternalEnergy(w)
@@ -88,9 +78,4 @@ class IdealSingleGas:
         return T
 
     def __call__(self, w):
-        queue = w[0].queue
-        rho = w[0]
-        rhoE = w[1]
-        rhoV = w[2:]
-
         return join_fields(self.Pressure(w), self.Temperature(w))
