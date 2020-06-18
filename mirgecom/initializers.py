@@ -40,79 +40,64 @@ from mirgecom.eos import IdealSingleGas
 
 class Vortex2D:
     def __init__(
-        self,
-        eos=IdealSingleGas(),
-        center=np.zeros(shape=(2,)),
-        velocity=np.zeros(shape=(2,))
+            self,
+            beta=5,
+            center=np.zeros(shape=(2,)),
+            velocity=np.zeros(shape=(2,)),
     ):
-        self._beta = 5
+        self._beta = beta
         self._center = center  # np.array([5, 0])
         self._velocity = velocity  # np.array([0, 0])
-        self.SetBoundaryTag(BTAG_ALL)
-        self.SetEOS(eos)
 
-
-    def __call__(self, t, x_vec):
+    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        # Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
+        # also JSH/TW Nodal DG Methods, p. 209
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
 
-        # Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
-        # also JSH/TW Nodal DG Methods, p. 209
-
         from math import pi
-
+        gamma = eos.Gamma()
         r = clmath.sqrt(x_rel ** 2 + y_rel ** 2)
         expterm = self._beta * clmath.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * pi)
         v = self._velocity[1] + expterm * x_rel / (2 * pi)
         rho = (
             1
-            - (self._gamma - 1)
-            / (16 * self._gamma * pi ** 2)
+            - (gamma - 1)
+            / (16 * gamma * pi ** 2)
             * expterm ** 2
-        ) ** (1 / (self._gamma - 1))
-        p = rho ** self._gamma
+        ) ** (1 / (gamma - 1))
+        p = rho ** gamma
 
-        e = p / (self._gamma - 1) + rho / 2 * (u ** 2 + v ** 2)
+        e = p / (gamma - 1) + rho / 2 * (u ** 2 + v ** 2)
 
         return join_fields(rho, e, rho * u, rho * v)
 
-    def SetEOS(self, eos):
-        self._eos = eos
-        self._gamma = eos.Gamma()
-
-    def SetBoundaryTag(self, tag=BTAG_ALL):
-        self._boundary_tag = tag
-
-    def GetBoundaryFlux(self, discr, w, t=0):
+    def get_boundary_flux(self, discr, w, t=0, btag=BTAG_ALL,
+                          eos=IdealSingleGas()):
         queue = w[0].queue
         ndim = discr.dim
-
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
 
         # help - how to make it just the boundary nodes?
         nodes = discr.nodes().with_queue(queue)
         vortex_soln = self.__call__(t, nodes)
-        dir_bc = discr.interp("vol", self._boundary_tag, vortex_soln)
-        dir_soln = discr.interp("vol", self._boundary_tag, w)
+        dir_bc = discr.interp("vol", btag, vortex_soln)
+        dir_soln = discr.interp("vol", btag, w)
         from mirgecom.euler import _facial_flux  # hrm
 
         return _facial_flux(
             discr,
-            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
-            eos=self._eos
+            w_tpair=TracePair(btag, dir_soln, dir_bc),
+            eos=eos,
         )
 
 
 class Lump:
     def __init__(
             self,
-            eos=IdealSingleGas(),
             rho0=1.0,
             rhoamp=1.0,
             numdim=2,
@@ -133,15 +118,12 @@ class Lump:
             #        print("center shape = ", self._center.shape)
             #        print("velocity shape = ", self._velocity.shape)
 
-        self._eos = eos
-        self._p0 = 1.0
+        self._p0 = p0
         self._rho0 = rho0
         self._rhoamp = rhoamp
         self._dim = numdim
-        self._gamma = eos.Gamma()
-        self._boundary_tag = BTAG_ALL
 
-    def __call__(self, t, x_vec):
+    def __call__(self, t, x_vec, eos=IdealSingleGas()):
         lump_loc = self._center + t * self._velocity
 
         # coordinates relative to lump center
@@ -155,21 +137,18 @@ class Lump:
         def scalevec(scalar, vec):
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
-
+        gamma = eos.Gamma()
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
         rhoV = scalevec(rho, self._velocity)
-        rhoE = (self._p0 / (self._gamma - 1.0)) + np.dot(rhoV, rhoV) / (2.0 * rho)
-        
+        rhoE = (self._p0 / (gamma - 1.0)) + np.dot(rhoV, rhoV) / (
+            2.0 * rho
+        )
+
         return join_fields(rho, rhoE, rhoV)
 
-    def SetEOS(self, eos):
-        self._eos = eos
-        self._gamma = eos.Gamma()
-        
     def ExpectedRHS(self, discr, w, t=0.0):
         queue = w[0].queue
-        ndim = discr.dim
         nodes = discr.nodes().with_queue(queue)
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
@@ -192,9 +171,6 @@ class Lump:
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
         rhoV = scalevec(rho, self._velocity)
-        rhoE = (1.0 / (self._gamma - 1.0)) + np.dot(rhoV, rhoV) / (
-            2.0 * rho
-        )
 
         v = scalevec(1 / rho, rhoV)
         v2 = np.dot(v, v)
@@ -205,26 +181,19 @@ class Lump:
 
         return join_fields(rhorhs, rhoErhs, rhoVrhs)
 
-    def SetBoundaryTag(self, tag=BTAG_ALL):
-        self._boundary_tag = tag
-
-    def GetBoundaryFlux(self, discr, w, t=0.0):
+    def get_boundary_flux(self, discr, w, t=0.0, btag=BTAG_ALL,
+                          eos=IdealSingleGas()):
         queue = w[0].queue
-        ndim = discr.dim
-
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
 
         # help - how to make it just the boundary nodes?
         nodes = discr.nodes().with_queue(queue)
         mysoln = self.__call__(t, nodes)
-        dir_bc = discr.interp("vol", self._boundary_tag, mysoln)
-        dir_soln = discr.interp("vol", self._boundary_tag, w)
+        dir_bc = discr.interp("vol", btag, mysoln)
+        dir_soln = discr.interp("vol", btag, w)
         from mirgecom.euler import _facial_flux  # hrm
 
         return _facial_flux(
             discr,
-            w_tpair=TracePair(self._boundary_tag, dir_soln, dir_bc),
-            eos=self._eos
+            w_tpair=TracePair(btag, dir_soln, dir_bc),
+            eos=eos,
         )
