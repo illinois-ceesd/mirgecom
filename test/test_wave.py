@@ -25,7 +25,7 @@ import numpy.linalg as la
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
-from pytools.obj_array import join_fields
+from pytools.obj_array import join_fields, make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
@@ -164,7 +164,7 @@ def test_standing_wave(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = [sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs]
+        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
@@ -258,7 +258,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = [sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs]
+        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
