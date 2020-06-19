@@ -81,10 +81,10 @@ def wave_operator(discr, c, w):
     return (
             discr.inverse_mass(
                 join_fields(
-                    c*discr.weak_div(v),
-                    c*discr.weak_grad(u)
+                    -c*discr.weak_div(v),
+                    -c*discr.weak_grad(u)
                     )
-                -  # noqa: W504
+                +  # noqa: W504
                 discr.face_mass(
                     _flux(discr, c=c, w_tpair=_interior_trace_pair(discr, w))
                     + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
