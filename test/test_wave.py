@@ -47,10 +47,6 @@ def sym_diff(var):
             return pmbl.var("cos")(*arg)
         elif func == pmbl.var("cos"):
             return -pmbl.var("sin")(*arg)
-        if func == pmbl.var("clsin"):
-            return pmbl.var("clcos")(*arg)
-        elif func == pmbl.var("clcos"):
-            return -pmbl.var("clsin")(*arg)
         else:
             raise ValueError("Unrecognized function")
     return DifferentiationMapper(var, func_map=func_map)
@@ -78,18 +74,24 @@ class EvaluationMapper(ev.EvaluationMapper):
         assert isinstance(expr.function, prim.Variable)
         if expr.function.name == "sin":
             par, = expr.parameters
-            return np.sin(self.rec(par))
+            return self._sin(self.rec(par))
         elif expr.function.name == "cos":
             par, = expr.parameters
-            return np.cos(self.rec(par))
-        elif expr.function.name == "clsin":
-            par, = expr.parameters
-            return clmath.sin(self.rec(par))
-        elif expr.function.name == "clcos":
-            par, = expr.parameters
-            return clmath.cos(self.rec(par))
+            return self._cos(self.rec(par))
         else:
             raise ValueError("Unrecognized function '%s'" % expr.function)
+    def _sin(self, val):
+        from numbers import Number
+        if isinstance(val, Number):
+            return np.sin(val)
+        else:
+            return clmath.sin(val)
+    def _cos(self, val):
+        from numbers import Number
+        if isinstance(val, Number):
+            return np.cos(val)
+        else:
+            return clmath.cos(val)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -125,10 +127,9 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_omega = pmbl.var("omega")
         sym_pi = pmbl.var("pi")
         sym_cos = pmbl.var("cos")
-        sym_clcos = pmbl.var("clcos")
         sym_phi = sym_cos(sym_omega*sym_t - sym_pi/4)
         for i in range(dim):
-            sym_phi = sym_phi * sym_clcos(sym_coords[i])
+            sym_phi = sym_phi * sym_cos(sym_coords[i])
 
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
