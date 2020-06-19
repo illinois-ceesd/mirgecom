@@ -27,6 +27,8 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
 from pytools.obj_array import join_fields
 import pymbolic as pmbl
+import pymbolic.primitives as prim
+import pymbolic.mapper.evaluator as ev
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl
@@ -71,27 +73,23 @@ def sym_grad(dim, func):
     return grad
 
 
-def sym_eval_with(expr, values):
-    from pymbolic.mapper.evaluator import EvaluationMapper
-    import pymbolic.primitives as prim
-    class mapper(EvaluationMapper):
-        def map_call(self, expr):
-            assert isinstance(expr.function, prim.Variable)
-            if expr.function.name == "sin":
-                par, = expr.parameters
-                return np.sin(self.rec(par))
-            elif expr.function.name == "cos":
-                par, = expr.parameters
-                return np.cos(self.rec(par))
-            if expr.function.name == "clsin":
-                par, = expr.parameters
-                return clmath.sin(self.rec(par))
-            elif expr.function.name == "clcos":
-                par, = expr.parameters
-                return clmath.cos(self.rec(par))
-            else:
-                raise ValueError("Unrecognized function '%s'" % expr.function)
-    return mapper(values)(expr)
+class EvaluationMapper(ev.EvaluationMapper):
+    def map_call(self, expr):
+        assert isinstance(expr.function, prim.Variable)
+        if expr.function.name == "sin":
+            par, = expr.parameters
+            return np.sin(self.rec(par))
+        elif expr.function.name == "cos":
+            par, = expr.parameters
+            return np.cos(self.rec(par))
+        elif expr.function.name == "clsin":
+            par, = expr.parameters
+            return clmath.sin(self.rec(par))
+        elif expr.function.name == "clcos":
+            par, = expr.parameters
+            return clmath.cos(self.rec(par))
+        else:
+            raise ValueError("Unrecognized function '%s'" % expr.function)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -156,7 +154,7 @@ def test_standing_wave(ctx_factory, dim, order):
         eval_values["pi"] = np.pi
 
         def sym_eval(expr):
-            return sym_eval_with(expr, eval_values)
+            return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u)
         v = [sym_eval(sym_v[i]) for i in range(dim)]
@@ -250,7 +248,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
         eval_values["pi"] = np.pi
 
         def sym_eval(expr):
-            return sym_eval_with(expr, eval_values)
+            return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u)
         v = [sym_eval(sym_v[i]) for i in range(dim)]
