@@ -142,14 +142,10 @@ def test_standing_wave(ctx_factory, dim, order):
             sym_v.append(sym_v_i)
 
         # rhs(u part) = c*div(v)
-        # Why negative sign?
-        # sym_rhs_u = sym_c * sym_div(sym_v)
-        sym_rhs_u = -sym_c * sym_div(sym_v)
+        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
         sym_grad_u = sym_grad(dim, sym_u)
-        # Why negative sign?
-        # sym_rhs_v = [sym_c*sym_grad_u[i] for i in range(dim)]
-        sym_rhs_v = [-sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
         sym_rhs = [sym_rhs_u] + sym_rhs_v
 
         c = 2.
@@ -243,14 +239,10 @@ def test_wave_manufactured(ctx_factory, dim, order):
             sym_v.append(sym_v_i)
 
         # rhs(u part) = c*div(v)
-        # Why negative sign?
-        # sym_rhs_u = sym_c * sym_div(sym_v)
-        sym_rhs_u = -sym_c * sym_div(sym_v)
+        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
         sym_grad_u = sym_grad(dim, sym_u)
-        # Why negative sign?
-        # sym_rhs_v = [sym_c*sym_grad_u[i] for i in range(dim)]
-        sym_rhs_v = [-sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
         sym_rhs = [sym_rhs_u] + sym_rhs_v
 
         c = 2.
