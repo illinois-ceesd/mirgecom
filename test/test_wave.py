@@ -136,10 +136,7 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v_i = c*phi_{x_i}
-        sym_v = []
-        for i in range(dim):
-            sym_v_i = sym_c * sym_diff(sym_coords[i])(sym_phi)
-            sym_v.append(sym_v_i)
+        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
         sym_rhs_u = sym_c * sym_div(sym_v)
@@ -233,10 +230,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v_i = c*phi_{x_i}
-        sym_v = []
-        for i in range(dim):
-            sym_v_i = sym_c * sym_diff(sym_coords[i])(sym_phi)
-            sym_v.append(sym_v_i)
+        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
         sym_rhs_u = sym_c * sym_div(sym_v)
