@@ -43,7 +43,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "EagerEuler] "
+    iotag = "EaEu] "
 
     dim = 2
     nel_1d = 16
@@ -59,10 +59,6 @@ def main():
     t = 0
     t_final = 1
     istep = 0
-
-    print(iotag + "Num elements(" + str(dim) + "d): ", mesh.nelements)
-    print(iotag + "Timestep:         ", dt)
-    print(iotag + "Final time:       ", t_final)
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
@@ -82,49 +78,64 @@ def main():
         discr, discr.order + 3 if dim == 2 else discr.order
     )
 
+    def write_soln():
+        expected_result = initializer(t, nodes)
+        result_resid = fields - expected_result
+        maxerr = [
+            np.max(la.norm(result_resid[i].get()))
+            for i in range(dim + 2)
+        ]
+        dv = eos(fields)
+        mindv = [ np.min(dvfld.get()) for dvfld in dv ]
+        maxdv = [ np.max(dvfld.get()) for dvfld in dv ]
+        
+        statusmsg = (
+            f"{iotag}Status: Step({istep}) Time({t})\n"
+            f"{iotag}------   P({mindv[0]},{maxdv[0]})\n"
+            f"{iotag}------   T({mindv[1]},{maxdv[1]})"
+        )
+        print(statusmsg)
+        vis.write_vtk_file(
+            "fld-euler-eager-%04d.vtu" % istep,
+            [
+                ("density", fields[0]),
+                ("energy", fields[1]),
+                ("momentum", fields[2:]),
+                ("pressure", dv[0]),
+                ("temperature", dv[1]),
+                ("expected_solution", expected_result),
+                ("residual", result_resid),
+            ],
+        )
+        
     def rhs(t, w):
         return inviscid_operator(
             discr, w=w, t=t, boundaries=boundaries, eos=eos
         )
+    
+    initname = initializer.__class__.__name__
+    message = (
+        f"{iotag}Num {dim}d elements: {mesh.nelements}\n"
+        f"{iotag}Timestep:        {dt}\n"
+        f"{iotag}Final time:      {t_final}\n"
+        f"{iotag}Initialization:  {initname}"
+        )
+
+    print(message)
 
     while t < t_final:
 
         if istep % 10 == 0:
-            expected_result = initializer(t, nodes)
-            result_resid = fields - expected_result
-            maxerr = [
-                np.max(la.norm(result_resid[i].get()))
-                for i in range(dim + 2)
-            ]
-            dv = eos(fields)
-            print(
-                iotag + "Status: ",
-                istep,
-                t,
-                la.norm(dv[0].get(), np.inf),
-                la.norm(dv[1].get(), np.inf),
-            )
-            vis.write_vtk_file(
-                "fld-euler-eager-%04d.vtu" % istep,
-                [
-                    ("density", fields[0]),
-                    ("energy", fields[1]),
-                    ("momentum", fields[2:]),
-                    ("pressure", dv[0]),
-                    ("temperature", dv[1]),
-                    ("expected_solution", expected_result),
-                    ("residual", result_resid),
-                ],
-            )
+            write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
         istep += 1
 
-    print(
-        iotag + "Absolute solution errors (density,energy,momentum): ",
-        maxerr,
-    )
+    print(f"{iotag}Writing final dump.")
+    write_soln()
+    
+    print(f"{iotag}Goodbye!")
 
 
 if __name__ == "__main__":
