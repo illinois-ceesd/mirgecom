@@ -24,11 +24,11 @@ jobs:
           shell: bash -l {0}
           run: |
             conda install pocl islpy pytest pip clinfo
+            pip install git+https://gitlab.tiker.net/inducer/{pyopencl,loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
+            pip install -e .
         - name: Run tests
           shell: bash -l {0}
           run: |
-            pip install git+https://gitlab.tiker.net/inducer/{pyopencl,loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
-            pip install -e .
             export OCL_ICD_VENDORS=/usr/share/miniconda/envs/test/etc/OpenCL/vendors
             ls $CONDA_PKGS_DIR
             echo ======
