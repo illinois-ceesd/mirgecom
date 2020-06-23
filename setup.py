@@ -41,6 +41,8 @@ def main():
 
           packages=find_packages(),
 
+          python_requires='~=3.6',
+
           install_requires=[
               "pytest>=2.3",
               "pytools>=2018.5.2",
