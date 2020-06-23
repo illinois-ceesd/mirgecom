@@ -1,6 +1,6 @@
-__copyright__ = (
-    "Copyright (C) 2020 University of Illinois Board of Trustees"
-)
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -97,25 +97,35 @@ class Vortex2D:
 class Lump:
     def __init__(
             self,
+            numdim=1,
             rho0=1.0,
             rhoamp=1.0,
-            numdim=2,
             p0=1.0,
             center=[0],
             velocity=[0],
     ):
         if len(center) == numdim:
             self._center = center
+        elif len(center) > numdim:
+            numdim = len(center)
+            self._center = center
         else:
             self._center = np.zeros(shape=(numdim,))
 
         if len(velocity) == numdim:
             self._velocity = velocity
+        elif len(velocity) > numdim:
+            numdim = len(velocity)
+            self._velocity = velocity
+            new_center = np.zeros(shape=(numdim,))
+            for i in range(len(self._center)):
+                new_center[i] = self._center[i]
+            self._center = new_center
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
-            #        print("center shape = ", self._center.shape)
-            #        print("velocity shape = ", self._velocity.shape)
+        assert(len(self._velocity) == numdim)
+        assert(len(self._center) == numdim)
 
         self._p0 = p0
         self._rho0 = rho0
@@ -124,7 +134,7 @@ class Lump:
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         lump_loc = self._center + t * self._velocity
-
+        assert(len(x_vec) == self._dim)
         # coordinates relative to lump center
         rel_center = make_obj_array(
             [x_vec[i] - lump_loc[i] for i in range(self._dim)]
