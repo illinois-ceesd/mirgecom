@@ -1,6 +1,11 @@
-__copyright__ = (
-    "Copyright (C) 2020 University of Illinois Board of Trustees"
-)
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
+
+__author__ = """
+Center for Exascale-Enabled Scramjet Design
+University of Illinois, Urbana, IL 61801
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,7 +42,10 @@ from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
-
+from grudge.dt_finding import (
+    dt_geometric_factor,
+    dt_non_geometric_factor,
+)
 
 __doc__ = """
 .. autofunction:: inviscid_operator
@@ -197,3 +205,20 @@ def inviscid_operator(discr, w, t=0.0, eos=IdealSingleGas(),
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + boundary_flux)
     )
+
+def get_inviscid_timestep(discr,w,c=1.0,eos=IdealSingleGas()):
+
+    dim = discr.dim
+    mesh = discr.mesh
+    order = discr.order
+
+    nelements = mesh.nelements
+    nel_1d = nelements**(1.0/(1.0*dim))
+    
+    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
+    return(c*dt)
+#    dt_ngf = dt_non_geometric_factor(discr.mesh)
+#    dt_gf  = dt_geometric_factor(discr.mesh)
+#    wavespeeds = _get_wavespeed(w,eos=eos)
+#    max_v = clmath.max(wavespeeds)
+#    return c*dt_ngf*dt_gf/max_v
