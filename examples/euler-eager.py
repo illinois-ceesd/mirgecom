@@ -1,6 +1,11 @@
-__copyright__ = (
-    "Copyright (C) 2020 University of Illinos Board of Trustees"
-)
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
+
+__author__ = """
+Center for Exascale-Enabled Scramjet Design
+University of Illinois, Urbana, IL 61801
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,6 +37,7 @@ from pytools.obj_array import join_fields
 # TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+from mirgecom.euler import get_inviscid_timestep
 from mirgecom.euler import inviscid_operator
 from mirgecom.initializers import Lump
 from mirgecom.initializers import Vortex2D
@@ -46,7 +52,7 @@ def main():
     iotag = "EaEu] "
 
     dim = 2
-    nel_1d = 16
+    nel_1d = 64
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
@@ -55,9 +61,8 @@ def main():
 
     order = 3
 
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     t = 0
-    t_final = 1
+    t_final = .1
     istep = 0
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
@@ -74,6 +79,24 @@ def main():
 
     fields = initializer(0, nodes)
 
+    cfl = 1.0
+    sdt = get_inviscid_timestep(discr,fields,eos=eos)
+    constantcfl = False
+    dt = .001
+    nstep_status = 10
+    
+    initname = initializer.__class__.__name__
+    eosname = eos.__class__.__name__
+    message = (
+        f"{iotag}Num {dim}d elements: {mesh.nelements}\n"
+        f"{iotag}Timestep:        {dt}\n"
+        f"{iotag}Final time:      {t_final}\n"
+        f"{iotag}Status freq:     {nstep_status}\n"
+        f"{iotag}Initialization:  {initname}\n"
+        f"{iotag}EOS:             {eosname}"
+        )
+
+    print(message)
     vis = make_visualizer(
         discr, discr.order + 3 if dim == 2 else discr.order
     )
@@ -82,7 +105,7 @@ def main():
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
         maxerr = [
-            np.max(la.norm(result_resid[i].get()))
+            np.max(np.abs(result_resid[i].get()))
             for i in range(dim + 2)
         ]
         dv = eos(fields)
@@ -92,7 +115,9 @@ def main():
         statusmsg = (
             f"{iotag}Status: Step({istep}) Time({t})\n"
             f"{iotag}------   P({mindv[0]},{maxdv[0]})\n"
-            f"{iotag}------   T({mindv[1]},{maxdv[1]})"
+            f"{iotag}------   T({mindv[1]},{maxdv[1]})\n"
+            f"{iotag}------   dt,cfl = ({dt},{cfl})\n"
+            f"{iotag}------   Err({maxerr})"
         )
         print(statusmsg)
         vis.write_vtk_file(
@@ -113,25 +138,23 @@ def main():
             discr, w=w, t=t, boundaries=boundaries, eos=eos
         )
     
-    initname = initializer.__class__.__name__
-    message = (
-        f"{iotag}Num {dim}d elements: {mesh.nelements}\n"
-        f"{iotag}Timestep:        {dt}\n"
-        f"{iotag}Final time:      {t_final}\n"
-        f"{iotag}Initialization:  {initname}"
-        )
-
-    print(message)
 
     while t < t_final:
 
-        if istep % 10 == 0:
+        if constantcfl is True:
+            dt = sdt
+        else:
+            cfl = dt/sdt
+        
+        if istep % nstep_status == 0:
             write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
         istep += 1
-
+        
+        sdt = get_inviscid_timestep(discr,fields,c=cfl,eos=eos)
+        
     print(f"{iotag}Writing final dump.")
     write_soln()
     
