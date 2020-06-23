@@ -1,6 +1,6 @@
-__copyright__ = (
-    "Copyright (C) 2020 University of Illinois Board of Trustees"
-)
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -39,6 +39,10 @@ from grudge.symbolic.primitives import TracePair
 
 
 class DummyBoundary:
+"""Simple example boundary condition that sets the 
+volume solution on both "sides" of a boundary 
+face.
+"""
     def get_boundary_flux(self, discr, w, t=0.0, btag=BTAG_ALL,
                           eos=IdealSingleGas()):
         dir_soln = discr.interp("vol", btag, w)
