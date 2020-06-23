@@ -52,11 +52,12 @@ class Vortex2D:
     by providing the "get_boundary_flux" routine to 
     prescribe exact field values on the given boundary. 
     """
+
     def __init__(
-            self,
-            beta=5,
-            center=np.zeros(shape=(2,)),
-            velocity=np.zeros(shape=(2,)),
+        self,
+        beta=5,
+        center=np.zeros(shape=(2,)),
+        velocity=np.zeros(shape=(2,)),
     ):
         self._beta = beta
         self._center = center  # np.array([5, 0])
@@ -77,10 +78,7 @@ class Vortex2D:
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
         rho = (
-            1
-            - (gamma - 1)
-            / (16 * gamma * np.pi ** 2)
-            * expterm ** 2
+            1 - (gamma - 1) / (16 * gamma * np.pi ** 2) * expterm ** 2
         ) ** (1 / (gamma - 1))
         p = rho ** gamma
 
@@ -88,8 +86,9 @@ class Vortex2D:
 
         return join_fields(rho, e, rho * u, rho * v)
 
-    def get_boundary_flux(self, discr, w, t=0, btag=BTAG_ALL,
-                          eos=IdealSingleGas()):
+    def get_boundary_flux(
+        self, discr, w, t=0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
         queue = w[0].queue
         ndim = discr.dim
 
@@ -101,9 +100,7 @@ class Vortex2D:
         from mirgecom.euler import _facial_flux  # hrm
 
         return _facial_flux(
-            discr,
-            w_tpair=TracePair(btag, dir_soln, dir_bc),
-            eos=eos,
+            discr, w_tpair=TracePair(btag, dir_soln, dir_bc), eos=eos,
         )
 
 
@@ -125,14 +122,15 @@ class Lump:
     terms from the analytic expression in the 
     "expected_rhs" method.
     """
+
     def __init__(
-            self,
-            numdim=1,
-            rho0=1.0,
-            rhoamp=1.0,
-            p0=1.0,
-            center=[0],
-            velocity=[0],
+        self,
+        numdim=1,
+        rho0=1.0,
+        rhoamp=1.0,
+        p0=1.0,
+        center=[0],
+        velocity=[0],
     ):
         if len(center) == numdim:
             self._center = center
@@ -154,8 +152,8 @@ class Lump:
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
-        assert(len(self._velocity) == numdim)
-        assert(len(self._center) == numdim)
+        assert len(self._velocity) == numdim
+        assert len(self._center) == numdim
 
         self._p0 = p0
         self._rho0 = rho0
@@ -164,7 +162,7 @@ class Lump:
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         lump_loc = self._center + t * self._velocity
-        assert(len(x_vec) == self._dim)
+        assert len(x_vec) == self._dim
         # coordinates relative to lump center
         rel_center = make_obj_array(
             [x_vec[i] - lump_loc[i] for i in range(self._dim)]
@@ -174,6 +172,7 @@ class Lump:
         def scalevec(scalar, vec):
             # workaround for object array behavior
             return make_obj_array([ni * scalar for ni in vec])
+
         gamma = eos.Gamma()
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
@@ -216,8 +215,9 @@ class Lump:
 
         return join_fields(rhorhs, rhoErhs, rhoVrhs)
 
-    def get_boundary_flux(self, discr, w, t=0.0, btag=BTAG_ALL,
-                          eos=IdealSingleGas()):
+    def get_boundary_flux(
+        self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
         queue = w[0].queue
 
         # help - how to make it just the boundary nodes?
@@ -228,7 +228,5 @@ class Lump:
         from mirgecom.euler import _facial_flux  # hrm
 
         return _facial_flux(
-            discr,
-            w_tpair=TracePair(btag, dir_soln, dir_bc),
-            eos=eos,
+            discr, w_tpair=TracePair(btag, dir_soln, dir_bc), eos=eos,
         )

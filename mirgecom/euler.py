@@ -110,10 +110,11 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
 
-    v = scalevec(1.0/rho,rhoV)
+    v = scalevec(1.0 / rho, rhoV)
     sos = eos.SpeedOfSound(w)
-    wavespeed = clmath.sqrt(np.dot(v,v)) + sos
+    wavespeed = clmath.sqrt(np.dot(v, v)) + sos
     return wavespeed
+
 
 def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
@@ -144,7 +145,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_jump = scalevec(0.5, (flux_int + flux_ext))
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = [ _get_wavespeed(qint), _get_wavespeed(qext) ]
+    wavespeeds = [_get_wavespeed(qint), _get_wavespeed(qext)]
 
     lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
     lfr = scalevec(0.5 * lam, qjump)
@@ -156,7 +157,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     # (rhoV.x.V)_2 .dot. normal
     nflux = join_fields(
         [
-            np.dot(flux_jump[(i * dim): ((i + 1) * dim)], normal)
+            np.dot(flux_jump[(i * dim) : ((i + 1) * dim)], normal)
             for i in range(dim + 2)
         ]
     )
@@ -167,8 +168,13 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     return discr.interp(w_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(discr, w, t=0.0, eos=IdealSingleGas(),
-                      boundaries={BTAG_ALL: DummyBoundary()}):
+def inviscid_operator(
+    discr,
+    w,
+    t=0.0,
+    eos=IdealSingleGas(),
+    boundaries={BTAG_ALL: DummyBoundary()},
+):
     """
     Returns the RHS of the Euler flow equations:
     :math: \partial_t Q = - \\nabla \\cdot F
@@ -181,7 +187,7 @@ def inviscid_operator(discr, w, t=0.0, eos=IdealSingleGas(),
     vol_flux = _inviscid_flux(discr, w, eos)
     dflux = join_fields(
         [
-            discr.weak_div(vol_flux[(i * ndim): (i + 1) * ndim])
+            discr.weak_div(vol_flux[(i * ndim) : (i + 1) * ndim])
             for i in range(ndim + 2)
         ]
     )
@@ -193,30 +199,35 @@ def inviscid_operator(discr, w, t=0.0, eos=IdealSingleGas(),
     def scalevec(scalar, vec):
         # workaround for object array behavior
         return make_obj_array([ni * scalar for ni in vec])
+
     # Ack! how to avoid this?
     # boundary_flux = join_fields( [discr.zeros(queue) for i in range(numsoln)] )
     boundary_flux = discr.interp("vol", "all_faces", w)
     boundary_flux = scalevec(0.0, boundary_flux)
     for btag in boundaries:
         bndhnd = boundaries[btag]
-        boundary_flux += bndhnd.get_boundary_flux(discr, w, t=t,
-                                                  btag=btag,eos=eos)
+        boundary_flux += bndhnd.get_boundary_flux(
+            discr, w, t=t, btag=btag, eos=eos
+        )
 
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + boundary_flux)
     )
 
-def get_inviscid_timestep(discr,w,c=1.0,eos=IdealSingleGas()):
+
+def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 
     dim = discr.dim
     mesh = discr.mesh
     order = discr.order
 
     nelements = mesh.nelements
-    nel_1d = nelements**(1.0/(1.0*dim))
-    
+    nel_1d = nelements ** (1.0 / (1.0 * dim))
+
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return(c*dt)
+    return c * dt
+
+
 #    dt_ngf = dt_non_geometric_factor(discr.mesh)
 #    dt_gf  = dt_geometric_factor(discr.mesh)
 #    wavespeeds = _get_wavespeed(w,eos=eos)

@@ -43,14 +43,14 @@ class DummyBoundary:
     volume solution on both "sides" of a boundary 
     face.
     """
-    def get_boundary_flux(self, discr, w, t=0.0, btag=BTAG_ALL,
-                          eos=IdealSingleGas()):
+
+    def get_boundary_flux(
+        self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
         dir_soln = discr.interp("vol", btag, w)
 
         from mirgecom.euler import _facial_flux  # hrm
 
         return _facial_flux(
-            discr,
-            w_tpair=TracePair(btag, dir_soln, dir_soln),
-            eos=eos
+            discr, w_tpair=TracePair(btag, dir_soln, dir_soln), eos=eos
         )

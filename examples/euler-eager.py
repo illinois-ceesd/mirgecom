@@ -62,7 +62,7 @@ def main():
     order = 3
 
     t = 0
-    t_final = .1
+    t_final = 0.1
     istep = 0
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
@@ -74,17 +74,17 @@ def main():
     vel[1] = 1.0
     initializer = Vortex2D(center=orig, velocity=vel)
     #    initializer = Lump(center=orig,velocity=vel)
-    boundaries = { BTAG_ALL : initializer }
+    boundaries = {BTAG_ALL: initializer}
     eos = IdealSingleGas()
 
     fields = initializer(0, nodes)
 
     cfl = 1.0
-    sdt = get_inviscid_timestep(discr,fields,c=cfl,eos=eos)
+    sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
     constantcfl = False
-    dt = .001
+    dt = 0.001
     nstep_status = 10
-    
+
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     message = (
@@ -94,7 +94,7 @@ def main():
         f"{iotag}Status freq:     {nstep_status}\n"
         f"{iotag}Initialization:  {initname}\n"
         f"{iotag}EOS:             {eosname}"
-        )
+    )
 
     print(message)
     vis = make_visualizer(
@@ -108,11 +108,11 @@ def main():
             np.max(np.abs(result_resid[i].get()))
             for i in range(dim + 2)
         ]
-        
+
         dv = eos(fields)
-        mindv = [ np.min(dvfld.get()) for dvfld in dv ]
-        maxdv = [ np.max(dvfld.get()) for dvfld in dv ]
-        
+        mindv = [np.min(dvfld.get()) for dvfld in dv]
+        maxdv = [np.max(dvfld.get()) for dvfld in dv]
+
         statusmsg = (
             f"{iotag}Status: Step({istep}) Time({t})\n"
             f"{iotag}------   P({mindv[0]},{maxdv[0]})\n"
@@ -121,7 +121,7 @@ def main():
             f"{iotag}------   Err({maxerr})"
         )
         print(statusmsg)
-        
+
         vis.write_vtk_file(
             "fld-euler-eager-%04d.vtu" % istep,
             [
@@ -134,32 +134,31 @@ def main():
                 ("residual", result_resid),
             ],
         )
-        
+
     def rhs(t, w):
         return inviscid_operator(
             discr, w=w, t=t, boundaries=boundaries, eos=eos
         )
-    
 
     while t < t_final:
 
         if constantcfl is True:
             dt = sdt
         else:
-            cfl = dt/sdt
-        
+            cfl = dt / sdt
+
         if istep % nstep_status == 0:
             write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
         istep += 1
-        
-        sdt = get_inviscid_timestep(discr,fields,c=cfl,eos=eos)
-        
+
+        sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
+
     print(f"{iotag}Writing final dump.")
     write_soln()
-    
+
     print(f"{iotag}Goodbye!")
 
 
