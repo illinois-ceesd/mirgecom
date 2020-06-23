@@ -1,6 +1,6 @@
-__copyright__ = (
-    "Copyright (C) 2020 University of Illinois Board of Trustees"
-)
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,6 +37,9 @@ from grudge.symbolic.primitives import TracePair
 
 
 class IdealSingleGas:
+""" Implements the ideal gas law (p = rhoRT)
+for a single monatomic gas.
+"""
     def __init__(self, gamma=1.4, R=287.1):
         self._gamma = gamma
         self._R = R
