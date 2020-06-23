@@ -1,4 +1,11 @@
-__copyright__ = "Copyright (C) 2020 CEESD Developers"
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
+
+__author__ = """
+Center for Exascale-Enabled Scramjet Design
+University of Illinois, Urbana, IL 61801
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
