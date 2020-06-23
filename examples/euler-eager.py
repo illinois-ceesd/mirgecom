@@ -52,7 +52,7 @@ def main():
     iotag = "EaEu] "
 
     dim = 2
-    nel_1d = 64
+    nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
@@ -80,7 +80,7 @@ def main():
     fields = initializer(0, nodes)
 
     cfl = 1.0
-    sdt = get_inviscid_timestep(discr,fields,eos=eos)
+    sdt = get_inviscid_timestep(discr,fields,c=cfl,eos=eos)
     constantcfl = False
     dt = .001
     nstep_status = 10
@@ -108,6 +108,7 @@ def main():
             np.max(np.abs(result_resid[i].get()))
             for i in range(dim + 2)
         ]
+        
         dv = eos(fields)
         mindv = [ np.min(dvfld.get()) for dvfld in dv ]
         maxdv = [ np.max(dvfld.get()) for dvfld in dv ]
@@ -120,6 +121,7 @@ def main():
             f"{iotag}------   Err({maxerr})"
         )
         print(statusmsg)
+        
         vis.write_vtk_file(
             "fld-euler-eager-%04d.vtu" % istep,
             [

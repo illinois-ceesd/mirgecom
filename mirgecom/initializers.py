@@ -39,19 +39,19 @@ from mirgecom.eos import IdealSingleGas
 
 
 class Vortex2D:
-"""Implements the isentropic vortex after 
-     - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
-     - JSH/TW Nodal DG Methods, p. 209
+    """Implements the isentropic vortex after 
+        - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
+        - JSH/TW Nodal DG Methods, p. 209
 
-A call to this object after creation/init creates
-the isentropic vortex solution at a given time (t)
-relative to the configured origin (center) and 
-background flow velocity (velocity).
+    A call to this object after creation/init creates
+    the isentropic vortex solution at a given time (t)
+    relative to the configured origin (center) and 
+    background flow velocity (velocity).
 
-This object also functions as a boundary condition
-by providing the "get_boundary_flux" routine to 
-prescribe exact field values on the given boundary. 
-"""
+    This object also functions as a boundary condition
+    by providing the "get_boundary_flux" routine to 
+    prescribe exact field values on the given boundary. 
+    """
     def __init__(
             self,
             beta=5,
@@ -108,23 +108,23 @@ prescribe exact field values on the given boundary.
 
 
 class Lump:
-"""Implements a 1,2,3-dimensional Gaussian lump of mass:
+    """Implements a 1,2,3-dimensional Gaussian lump of mass:
 
-rho(r) = rho0 + rhoamp*e(1-r*r)
+    rho(r) = rho0 + rhoamp*e(1-r*r)
 
-A call to this object after creation/init creates
-the lump solution at a given time (t)
-relative to the configured origin (center) and 
-background flow velocity (velocity).
+    A call to this object after creation/init creates
+    the lump solution at a given time (t)
+    relative to the configured origin (center) and 
+    background flow velocity (velocity).
 
-This object also functions as a boundary condition
-by providing the "get_boundary_flux" method to 
-prescribe exact field values on the given boundary.
+    This object also functions as a boundary condition
+    by providing the "get_boundary_flux" method to 
+    prescribe exact field values on the given boundary.
 
-This object also supplies the exact expected RHS
-terms from the analytic expression in the 
-"expected_rhs" method.
-"""
+    This object also supplies the exact expected RHS
+    terms from the analytic expression in the 
+    "expected_rhs" method.
+    """
     def __init__(
             self,
             numdim=1,

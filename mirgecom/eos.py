@@ -37,9 +37,9 @@ from grudge.symbolic.primitives import TracePair
 
 
 class IdealSingleGas:
-""" Implements the ideal gas law (p = rhoRT)
-for a single monatomic gas.
-"""
+    """ Implements the ideal gas law (p = rhoRT)
+    for a single monatomic gas.
+    """
     def __init__(self, gamma=1.4, R=287.1):
         self._gamma = gamma
         self._R = R

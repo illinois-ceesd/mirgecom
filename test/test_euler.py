@@ -53,25 +53,25 @@ from pyopencl.tools import (  # noqa
 
 
 def test_inviscid_flux():
-"""Checks that the Euler-internal inviscid flux
-routine (_inviscid_flux) returns exactly the
-expected result. The test checks flux for 1,
-2, and 3 spatial dimensions.
-
-The test is in 3 parts:
-
- - Exact expression: Checks the returned flux 
-   against the exact expressions:
-   F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
- - Prescribed p, V = 0:  Checks that only 
-   diagonal terms of the momentum flux
-   [ rho(V.x.V) + pI ] are non-zero and return
-   the correctly calculated p.
- - Prescribed p, V != 0: Checks that the 
-   flux terms are returned in the proper
-   order by running only 1 non-zero velocity
-   component at-a-time.
-"""
+    """Checks that the Euler-internal inviscid flux
+    routine (_inviscid_flux) returns exactly the
+    expected result. The test checks flux for 1,
+    2, and 3 spatial dimensions.
+    
+    The test is in 3 parts:
+    
+    - Exact expression: Checks the returned flux 
+      against the exact expressions:
+      F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
+    - Prescribed p, V = 0:  Checks that only 
+      diagonal terms of the momentum flux
+      [ rho(V.x.V) + pI ] are non-zero and return
+      the correctly calculated p.
+    - Prescribed p, V != 0: Checks that the 
+      flux terms are returned in the proper
+      order by running only 1 non-zero velocity
+      component at-a-time.
+    """
     ctx = cl.create_some_context(interactive=False)
     queue = cl.CommandQueue(ctx)
     iotag = "test_inviscid_flux: "
@@ -293,16 +293,16 @@ The test is in 3 parts:
                             assert(la.norm(flux[fluxindex+j].get()) == 0.0)
 
 def test_facial_flux():
-"""Check the flux across element faces by
-prescribing states (q) with known fluxes. Only
-uniform states are tested currently - ensuring
-that the Lax-Friedrichs flux terms which are 
-proportional to jumps in state data vanish.
-
-Since the returned fluxes use state data which
-has been interpolated to-and-from the element
-faces, this test is grid-dependent.
-"""
+    """Check the flux across element faces by
+    prescribing states (q) with known fluxes. Only
+    uniform states are tested currently - ensuring
+    that the Lax-Friedrichs flux terms which are 
+    proportional to jumps in state data vanish.
+    
+    Since the returned fluxes use state data which
+    has been interpolated to-and-from the element
+    faces, this test is grid-dependent.
+    """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_facial_flux: "
@@ -408,11 +408,11 @@ faces, this test is grid-dependent.
 
             
 def test_uniform_rhs():
-"""Tests the inviscid rhs using a trivial 
-constant/uniform state which should
-yield rhs = 0.  The test is performed
-for 1, 2, and 3 dimensions. 
-"""
+    """Tests the inviscid rhs using a trivial 
+    constant/uniform state which should
+    yield rhs = 0.  The test is performed
+    for 1, 2, and 3 dimensions. 
+    """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_uniform_flow: "
@@ -521,12 +521,12 @@ for 1, 2, and 3 dimensions.
 
 # def test_isentropic_vortex(ctx_factory):
 def test_vortex_rhs():
-"""Tests the inviscid rhs using the non-trivial
-2D isentropic vortex case configured to yield
-rhs = 0. Checks several different orders
-and refinement levels to check error
-behavior.
-"""
+    """Tests the inviscid rhs using the non-trivial
+    2D isentropic vortex case configured to yield
+    rhs = 0. Checks several different orders
+    and refinement levels to check error
+    behavior.
+    """
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -594,11 +594,11 @@ behavior.
         
 
 def test_lump_rhs():
-"""Tests the inviscid rhs using the non-trivial
-1, 2, and 3D mass lump case against the analytic
-expressions of the RHS. Checks several different 
-orders and refinement levels to check error behavior.
-"""
+    """Tests the inviscid rhs using the non-trivial
+    1, 2, and 3D mass lump case against the analytic
+    expressions of the RHS. Checks several different 
+    orders and refinement levels to check error behavior.
+    """
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -658,15 +658,15 @@ orders and refinement levels to check error behavior.
 
 
 def test_isentropic_vortex():
-"""Advance the 2D isentropic vortex case in 
-time with non-zero velocities using an RK4
-timestepping scheme. Check the advanced field
-values against the exact/analytic expressions.
+    """Advance the 2D isentropic vortex case in 
+    time with non-zero velocities using an RK4
+    timestepping scheme. Check the advanced field
+    values against the exact/analytic expressions.
 
-This tests all parts of the Euler module working
-together, with results converging at the expected
-rates vs. the order. 
-"""
+    This tests all parts of the Euler module working
+    together, with results converging at the expected
+    rates vs. the order. 
+    """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_isentropic_vortex: "
