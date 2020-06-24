@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 def sym_diff(var):
     from pymbolic.mapper.differentiator import DifferentiationMapper
+
     def func_map(arg_index, func, arg, allowed_nonsmoothness):
         if func == pmbl.var("sin"):
             return pmbl.var("cos")(*arg)
@@ -49,6 +50,7 @@ def sym_diff(var):
             return -pmbl.var("sin")(*arg)
         else:
             raise ValueError("Unrecognized function")
+
     return DifferentiationMapper(var, func_map=func_map)
 
 
@@ -80,12 +82,14 @@ class EvaluationMapper(ev.EvaluationMapper):
             return self._cos(self.rec(par))
         else:
             raise ValueError("Unrecognized function '%s'" % expr.function)
+
     def _sin(self, val):
         from numbers import Number
         if isinstance(val, Number):
             return np.sin(val)
         else:
             return clmath.sin(val)
+
     def _cos(self, val):
         from numbers import Number
         if isinstance(val, Number):
@@ -109,8 +113,6 @@ def test_standing_wave(ctx_factory, dim, order):
                 a=(-0.5*np.pi,)*dim,
                 b=(0.5*np.pi,)*dim,
                 n=(n,)*dim)
-
-        from meshmode.discretization import Discretization
 
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
@@ -202,8 +204,6 @@ def test_wave_manufactured(ctx_factory, dim, order):
                 a=(-1.,)*dim,
                 b=(1.,)*dim,
                 n=(n,)*dim)
-
-        from meshmode.discretization import Discretization
 
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
