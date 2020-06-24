@@ -25,7 +25,7 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
-    join_fields,
+    flat_obj_array,
     make_obj_array,
     with_object_array_or_scalar,
 )
@@ -81,4 +81,4 @@ class IdealSingleGas:
         return T
 
     def __call__(self, w):
-        return join_fields(self.Pressure(w), self.Temperature(w))
+        return flat_obj_array(self.Pressure(w), self.Temperature(w))

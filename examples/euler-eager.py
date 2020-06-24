@@ -32,7 +32,6 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
-from pytools.obj_array import join_fields
 
 # TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization

@@ -25,7 +25,7 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
-    join_fields,
+    flat_obj_array,
     make_obj_array,
     with_object_array_or_scalar,
 )
@@ -84,7 +84,7 @@ class Vortex2D:
 
         e = p / (gamma - 1) + rho / 2 * (u ** 2 + v ** 2)
 
-        return join_fields(rho, e, rho * u, rho * v)
+        return flat_obj_array(rho, e, rho * u, rho * v)
 
     def get_boundary_flux(
         self, discr, w, t=0, btag=BTAG_ALL, eos=IdealSingleGas()
@@ -181,7 +181,7 @@ class Lump:
             2.0 * rho
         )
 
-        return join_fields(rho, rhoE, rhoV)
+        return flat_obj_array(rho, rhoE, rhoV)
 
     def ExpectedRHS(self, discr, w, t=0.0):
         queue = w[0].queue
@@ -213,7 +213,7 @@ class Lump:
         rhoErhs = -v2 * rdotv * rho
         rhoVrhs = scalevec(-2 * rho * rdotv, v)
 
-        return join_fields(rhorhs, rhoErhs, rhoVrhs)
+        return flat_obj_array(rhorhs, rhoErhs, rhoVrhs)
 
     def get_boundary_flux(
         self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()

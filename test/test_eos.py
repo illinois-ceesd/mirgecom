@@ -30,7 +30,6 @@ import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
 from pytools.obj_array import (
-    join_fields,
     make_obj_array,
     with_object_array_or_scalar,
 )

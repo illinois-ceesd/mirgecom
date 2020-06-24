@@ -30,7 +30,7 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
-    join_fields,
+    flat_obj_array,
     make_obj_array,
     with_object_array_or_scalar,
 )
@@ -94,7 +94,7 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
         ]
     )
 
-    flux = join_fields(
+    flux = flat_obj_array(
         scalevec(1.0, rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux,
     )
 
@@ -131,11 +131,11 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    qint = join_fields(rho.int, rhoE.int, rhoV.int)
-    qext = join_fields(rho.ext, rhoE.ext, rhoV.ext)
+    qint = flat_obj_array(rho.int, rhoE.int, rhoV.int)
+    qext = flat_obj_array(rho.ext, rhoE.ext, rhoV.ext)
 
     # - Figure out how to manage grudge branch dependencies
-    #    qjump = join_fields(rho.jump, rhoE.jump, rhoV.jump)
+    #    qjump = flat_obj_array(rho.jump, rhoE.jump, rhoV.jump)
     qjump = qext - qint
     flux_int = _inviscid_flux(discr, qint, eos)
     flux_ext = _inviscid_flux(discr, qext, eos)
@@ -155,7 +155,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     # (rhoE + p)V  .dot. normal
     # (rhoV.x.V)_1 .dot. normal
     # (rhoV.x.V)_2 .dot. normal
-    nflux = join_fields(
+    nflux = flat_obj_array(
         [
             np.dot(flux_jump[(i * dim) : ((i + 1) * dim)], normal)
             for i in range(dim + 2)
@@ -185,7 +185,7 @@ def inviscid_operator(
     ndim = discr.dim
 
     vol_flux = _inviscid_flux(discr, w, eos)
-    dflux = join_fields(
+    dflux = flat_obj_array(
         [
             discr.weak_div(vol_flux[(i * ndim) : (i + 1) * ndim])
             for i in range(ndim + 2)
@@ -201,7 +201,7 @@ def inviscid_operator(
         return make_obj_array([ni * scalar for ni in vec])
 
     # Ack! how to avoid this?
-    # boundary_flux = join_fields( [discr.zeros(queue) for i in range(numsoln)] )
+    # boundary_flux = flat_obj_array( [discr.zeros(queue) for i in range(numsoln)] )
     boundary_flux = discr.interp("vol", "all_faces", w)
     boundary_flux = scalevec(0.0, boundary_flux)
     for btag in boundaries:

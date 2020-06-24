@@ -30,7 +30,7 @@ import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
 from pytools.obj_array import (
-    join_fields,
+    flat_obj_array,
     make_obj_array,
     with_object_array_or_scalar,
 )
@@ -108,7 +108,7 @@ def test_inviscid_flux():
             ]
         )
         
-        q = join_fields(rho, rhoE, rhoV)
+        q = flat_obj_array(rho, rhoE, rhoV)
         
         # Create the expected result
         p = eos.Pressure(q)
@@ -122,7 +122,7 @@ def test_inviscid_flux():
                 for j in range(dim)
             ]
         )
-        expected_flux = join_fields(
+        expected_flux = flat_obj_array(
             expected_mass_flux, expected_energy_flux, expected_mom_flux
         )
 
@@ -173,7 +173,7 @@ def test_inviscid_flux():
                     rhoV[j][i] = 0.0 * rho[i]
             rhoE = p / 0.4 + 0.5 * np.dot(rhoV, rhoV) / rho
             #            v = scalevec(1 / rho, rhoV)
-            q = join_fields(rho, rhoE, rhoV)
+            q = flat_obj_array(rho, rhoE, rhoV)
             p = eos.Pressure(q)
             flux = _inviscid_flux(fake_dis, q, eos)
             
@@ -242,7 +242,7 @@ def test_inviscid_flux():
 
                 v = scalevec(1 / rho, rhoV)
                 rhoE = p / (eos.Gamma() - 1.0) + 0.5 * np.dot(rhoV, rhoV) / rho
-                q = join_fields(rho, rhoE, rhoV)
+                q = flat_obj_array(rho, rhoE, rhoV)
                 p = eos.Pressure(q)
                 flux = _inviscid_flux(fake_dis, q, eos)
 
@@ -330,7 +330,7 @@ def test_facial_flux():
 
             mass_input = discr.zeros(queue)
             energy_input = discr.zeros(queue)
-            mom_input = join_fields(
+            mom_input = flat_obj_array(
                 [discr.zeros(queue) for i in range(discr.dim)]
             )
 
@@ -338,7 +338,7 @@ def test_facial_flux():
             mass_input[:] = 1.0
             energy_input[:] = 2.5
 
-            fields = join_fields(mass_input, energy_input, mom_input)
+            fields = flat_obj_array(mass_input, energy_input, mom_input)
             p = eos.Pressure(fields)
             
             from mirgecom.euler import _facial_flux
@@ -375,8 +375,8 @@ def test_facial_flux():
             dir_e = discr.interp("vol", BTAG_ALL, energy_input)
             dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
                 
-            dir_bval = join_fields(dir_rho, dir_e, dir_mom)
-            dir_bc = join_fields(dir_rho, dir_e, dir_mom)
+            dir_bval = flat_obj_array(dir_rho, dir_e, dir_mom)
+            dir_bc = flat_obj_array(dir_rho, dir_e, dir_mom)
 
             from mirgecom.euler import _facial_flux
 
@@ -446,12 +446,12 @@ def test_uniform_rhs():
                 mass_input[:] = 1.0
                 energy_input[:] = 2.5
 
-                mom_input = join_fields(
+                mom_input = flat_obj_array(
                     [discr.zeros(queue) for i in range(discr.dim)]
                 )
-                fields = join_fields(mass_input, energy_input, mom_input)
+                fields = flat_obj_array(mass_input, energy_input, mom_input)
                 
-                expected_rhs = join_fields(
+                expected_rhs = flat_obj_array(
                     [discr.zeros(queue) for i in range(discr.dim + 2)]
                 )
                 
