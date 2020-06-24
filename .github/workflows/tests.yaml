@@ -28,6 +28,7 @@ jobs:
             pip install -e .
             pip install flake8 pep8-naming
         - name: Flake8
+          if: ${{ github.runner.os == 'Linux' }}
           shell: bash -l {0}
           run: |
             python -m flake8
