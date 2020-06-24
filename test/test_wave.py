@@ -25,8 +25,11 @@ import numpy.linalg as la
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
-from pytools.obj_array import join_fields
+
+from pytools.obj_array import join_fields, make_obj_array
 import pymbolic as pmbl
+import pymbolic.primitives as prim
+import pymbolic.mapper.evaluator as ev
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl
@@ -45,12 +48,9 @@ def sym_diff(var):
             return pmbl.var("cos")(*arg)
         elif func == pmbl.var("cos"):
             return -pmbl.var("sin")(*arg)
-        if func == pmbl.var("clsin"):
-            return pmbl.var("clcos")(*arg)
-        elif func == pmbl.var("clcos"):
-            return -pmbl.var("clsin")(*arg)
         else:
             raise ValueError("Unrecognized function")
+
     return DifferentiationMapper(var, func_map=func_map)
 
 
@@ -71,27 +71,31 @@ def sym_grad(dim, func):
     return grad
 
 
-def sym_eval_with(expr, values):
-    from pymbolic.mapper.evaluator import EvaluationMapper
-    import pymbolic.primitives as prim
-    class mapper(EvaluationMapper):
-        def map_call(self, expr):
-            assert isinstance(expr.function, prim.Variable)
-            if expr.function.name == "sin":
-                par, = expr.parameters
-                return np.sin(self.rec(par))
-            elif expr.function.name == "cos":
-                par, = expr.parameters
-                return np.cos(self.rec(par))
-            if expr.function.name == "clsin":
-                par, = expr.parameters
-                return clmath.sin(self.rec(par))
-            elif expr.function.name == "clcos":
-                par, = expr.parameters
-                return clmath.cos(self.rec(par))
-            else:
-                raise ValueError("Unrecognized function '%s'" % expr.function)
-    return mapper(values)(expr)
+class EvaluationMapper(ev.EvaluationMapper):
+    def map_call(self, expr):
+        assert isinstance(expr.function, prim.Variable)
+        if expr.function.name == "sin":
+            par, = expr.parameters
+            return self._sin(self.rec(par))
+        elif expr.function.name == "cos":
+            par, = expr.parameters
+            return self._cos(self.rec(par))
+        else:
+            raise ValueError("Unrecognized function '%s'" % expr.function)
+
+    def _sin(self, val):
+        from numbers import Number
+        if isinstance(val, Number):
+            return np.sin(val)
+        else:
+            return clmath.sin(val)
+
+    def _cos(self, val):
+        from numbers import Number
+        if isinstance(val, Number):
+            return np.cos(val)
+        else:
+            return clmath.cos(val)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -110,8 +114,6 @@ def test_standing_wave(ctx_factory, dim, order):
                 b=(0.5*np.pi,)*dim,
                 n=(n,)*dim)
 
-        from meshmode.discretization import Discretization
-
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
@@ -127,29 +129,22 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_omega = pmbl.var("omega")
         sym_pi = pmbl.var("pi")
         sym_cos = pmbl.var("cos")
-        sym_clcos = pmbl.var("clcos")
         sym_phi = sym_cos(sym_omega*sym_t - sym_pi/4)
         for i in range(dim):
-            sym_phi = sym_phi * sym_clcos(sym_coords[i])
+            sym_phi = sym_phi * sym_cos(sym_coords[i])
 
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v_i = c*phi_{x_i}
-        sym_v = []
-        for i in range(dim):
-            sym_v_i = sym_c * sym_diff(sym_coords[i])(sym_phi)
-            sym_v.append(sym_v_i)
+        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
-        # Why negative sign?
-        # sym_rhs_u = sym_c * sym_div(sym_v)
-        sym_rhs_u = -sym_c * sym_div(sym_v)
+        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
         sym_grad_u = sym_grad(dim, sym_u)
-        # Why negative sign?
-        # sym_rhs_v = [sym_c*sym_grad_u[i] for i in range(dim)]
-        sym_rhs_v = [-sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
+
         sym_rhs = [sym_rhs_u] + sym_rhs_v
 
         c = 2.
@@ -163,7 +158,7 @@ def test_standing_wave(ctx_factory, dim, order):
         eval_values["pi"] = np.pi
 
         def sym_eval(expr):
-            return sym_eval_with(expr, eval_values)
+            return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u)
         v = [sym_eval(sym_v[i]) for i in range(dim)]
@@ -172,7 +167,7 @@ def test_standing_wave(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = [sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs]
+        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
@@ -211,8 +206,6 @@ def test_wave_manufactured(ctx_factory, dim, order):
                 b=(1.,)*dim,
                 n=(n,)*dim)
 
-        from meshmode.discretization import Discretization
-
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
@@ -237,20 +230,14 @@ def test_wave_manufactured(ctx_factory, dim, order):
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v_i = c*phi_{x_i}
-        sym_v = []
-        for i in range(dim):
-            sym_v_i = sym_c * sym_diff(sym_coords[i])(sym_phi)
-            sym_v.append(sym_v_i)
+        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
-        # Why negative sign?
-        # sym_rhs_u = sym_c * sym_div(sym_v)
-        sym_rhs_u = -sym_c * sym_div(sym_v)
+        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
         sym_grad_u = sym_grad(dim, sym_u)
-        # Why negative sign?
-        # sym_rhs_v = [sym_c*sym_grad_u[i] for i in range(dim)]
-        sym_rhs_v = [-sym_c*sym_grad_u[i] for i in range(dim)]
+        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
+
         sym_rhs = [sym_rhs_u] + sym_rhs_v
 
         c = 2.
@@ -264,7 +251,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
         eval_values["pi"] = np.pi
 
         def sym_eval(expr):
-            return sym_eval_with(expr, eval_values)
+            return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u)
         v = [sym_eval(sym_v[i]) for i in range(dim)]
@@ -273,7 +260,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = [sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs]
+        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
