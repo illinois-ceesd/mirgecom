@@ -140,11 +140,10 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
-        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
-        sym_grad_u = sym_grad(dim, sym_u)
-        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
-        sym_rhs = [sym_rhs_u] + sym_rhs_v
+        sym_rhs = flat_obj_array(
+                    sym_c * sym_div(sym_v),
+                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
 
         c = 2.
 
@@ -166,7 +165,7 @@ def test_standing_wave(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
+        expected_rhs = sym_eval(sym_rhs)
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
@@ -232,11 +231,10 @@ def test_wave_manufactured(ctx_factory, dim, order):
         sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
-        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
-        sym_grad_u = sym_grad(dim, sym_u)
-        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
-        sym_rhs = [sym_rhs_u] + sym_rhs_v
+        sym_rhs = flat_obj_array(
+                    sym_c * sym_div(sym_v),
+                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
 
         c = 2.
 
@@ -258,7 +256,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
+        expected_rhs = sym_eval(sym_rhs)
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
