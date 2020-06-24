@@ -30,7 +30,7 @@ jobs:
           shell: bash -l {0}
           run: |
             pip install flake8 pep8-naming
-            flake8
+            python -m flake8
         - name: Run tests
           shell: bash -l {0}
           run: |
