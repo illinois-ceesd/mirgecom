@@ -20,16 +20,17 @@ jobs:
           with:
             auto-update-conda: true
             channels: conda-forge, nodefaults
-        - name: Flake8
-          run: |
-            pip install flake8 pep8-naming
-            flake8
         - name: Install prerequisites
           shell: bash -l {0}
           run: |
             conda install pocl islpy pyopencl pytest pip clinfo
             pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
             pip install -e .
+        - name: Flake8
+          shell: bash -l {0}
+          run: |
+            pip install flake8 pep8-naming
+            flake8
         - name: Run tests
           shell: bash -l {0}
           run: |
