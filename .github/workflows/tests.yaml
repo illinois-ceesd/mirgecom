@@ -29,11 +29,8 @@ jobs:
         - name: Run tests
           shell: bash -l {0}
           run: |
-            export OCL_ICD_VENDORS=/usr/share/miniconda/envs/test/etc/OpenCL/vendors
-            echo @@@@@@@@@
-            conda info
-            echo ======
-            ls /usr/share/miniconda/envs/test/etc/OpenCL/vendors
-            echo %%%%%%%
+            [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
+            export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
+            ls $OCL_ICD_VENDORS
             clinfo
             pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
