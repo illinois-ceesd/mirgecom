@@ -26,6 +26,11 @@ jobs:
             conda install pocl islpy pyopencl pytest pip clinfo
             pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
             pip install -e .
+            pip install flake8 pep8-naming
+        - name: Flake8
+          shell: bash -l {0}
+          run: |
+            python -m flake8
         - name: Run tests
           shell: bash -l {0}
           run: |
