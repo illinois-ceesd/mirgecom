@@ -185,18 +185,17 @@ def inviscid_operator(
         discr, w_tpair=_interior_trace_pair(discr, w), eos=eos
     )
 
-    # Ack! how to avoid this?
-    # boundary_flux = flat_obj_array( [discr.zeros(queue) for i in range(numsoln)] )
-    boundary_flux = discr.interp("vol", "all_faces", w)
-    boundary_flux = boundary_flux * make_obj_array( [ 0.0 ] ) 
-    for btag in boundaries:
-        bndhnd = boundaries[btag]
-        boundary_flux += bndhnd.get_boundary_flux(
-            discr, w, t=t, btag=btag, eos=eos
+    # Domain boundaries
+    domain_boundary_flux = sum(
+        boundaries[btag].get_boundary_flux(
+            discr,w,t=t,btag=btag,eos=eos
+            ) for btag in boundaries
         )
 
+    # Partition boundaries here
+    
     return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + boundary_flux)
+        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux)
     )
 
 
