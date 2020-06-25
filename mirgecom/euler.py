@@ -40,7 +40,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
-from grudge.eager import with_queue
+from grudge.eager import (
+    with_queue,
+    interior_trace_pair,
+    cross_rank_trace_pairs
+)
 from grudge.symbolic.primitives import TracePair
 from grudge.dt_finding import (
     dt_geometric_factor,
@@ -60,16 +64,7 @@ __doc__ = """
 #
 
 
-def _interior_trace_pair(discr, vec):
-    i = discr.interp("vol", "int_faces", vec)
-    e = with_object_array_or_scalar(
-        lambda el: discr.opposite_face_connection()(el.queue, el), i
-    )
-    return TracePair("int_faces", i, e)
-
-
 def _inviscid_flux(discr, q, eos=IdealSingleGas()):
-
     ndim = discr.dim
 
     # q = [ rho rhoE rhoV ]
@@ -182,20 +177,26 @@ def inviscid_operator(
     )
 
     interior_face_flux = _facial_flux(
-        discr, w_tpair=_interior_trace_pair(discr, w), eos=eos
+        discr, w_tpair=interior_trace_pair(discr, w), eos=eos
     )
 
-    # Domain boundaries
+    # Flux through domain boundaries
     domain_boundary_flux = sum(
         boundaries[btag].get_boundary_flux(
             discr,w,t=t,btag=btag,eos=eos
             ) for btag in boundaries
         )
 
-    # Partition boundaries here
+    # Flux across partition boundaries
+    partition_boundary_flux = sum(
+        _facial_flux(discr, w_tpair=part_pair, eos=eos)
+        for part_pair in cross_rank_trace_pairs(discr, w)
+    )
     
     return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux)
+        dflux - discr.face_mass(interior_face_flux
+                                + domain_boundary_flux
+                                + partition_boundary_flux)
     )
 
 
