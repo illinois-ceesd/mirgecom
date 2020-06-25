@@ -30,10 +30,7 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath
 from mpi4py import MPI
-# TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
@@ -43,6 +40,8 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 
 mirge_params = { 'iotag': 'EaEu] ', 'numdim': 2,
@@ -55,6 +54,8 @@ mirge_params = { 'iotag': 'EaEu] ', 'numdim': 2,
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    atx = PyOpenCLArrayContext(queue)
+    
 
     iotag = mirge_params['iotag']
     dim = mirge_params['numdim']
@@ -97,9 +98,9 @@ def main():
         local_mesh = mesh_dist.receive_mesh_part()
     
 
-    discr = EagerDGDiscretization(cl_ctx, local_mesh, order=order,
+    discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
-    nodes = discr.nodes().with_queue(queue)
+    nodes = thaw(actx,discr.nodes())
 
     t = 0
     istep = 0

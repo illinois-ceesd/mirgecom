@@ -35,6 +35,8 @@ from pytools.obj_array import (
     with_object_array_or_scalar,
 )
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 # TODO: Remove grudge dependence?
 from grudge.eager import with_queue
@@ -72,12 +74,14 @@ def test_inviscid_flux():
       order by running only 1 non-zero velocity
       component at-a-time.
     """
-    ctx = cl.create_some_context(interactive=False)
-    queue = cl.CommandQueue(ctx)
+    #    ctx = cl.create_some_context(interactive=False)
+    #    queue = cl.CommandQueue(ctx)
+
     iotag = "test_inviscid_flux: "
 
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
     nel_1d = 16
@@ -299,6 +303,8 @@ def test_facial_flux():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_facial_flux: "
 
     dim = 2
@@ -324,12 +330,12 @@ def test_facial_flux():
 
                 print(f"{iotag}Number of elements: {mesh.nelements}")
 
-                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+                discr = EagerDGDiscretization(actx, mesh, order=order)
 
-                mass_input = discr.zeros(queue)
-                energy_input = discr.zeros(queue)
+                mass_input = discr.zeros(actx)
+                energy_input = discr.zeros(actx)
                 mom_input = flat_obj_array(
-                    [discr.zeros(queue) for i in range(discr.dim)]
+                    [discr.zeros(actx) for i in range(discr.dim)]
                 )
 
                 # This sets p = 1
@@ -433,6 +439,8 @@ def test_uniform_rhs():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_uniform_flow: "
 
     tolerance = 1e-4
@@ -455,22 +463,22 @@ def test_uniform_rhs():
 
                 print(f"{iotag}Number of {dim}d elements: {mesh.nelements}")
 
-                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+                discr = EagerDGDiscretization(actx, mesh, order=order)
         
-                mass_input = discr.zeros(queue)
-                energy_input = discr.zeros(queue)
+                mass_input = discr.zeros(actx)
+                energy_input = discr.zeros(actx)
             
                 # this sets p = p0 = 1.0
                 mass_input[:] = 1.0
                 energy_input[:] = 2.5
 
                 mom_input = flat_obj_array(
-                    [discr.zeros(queue) for i in range(discr.dim)]
+                    [discr.zeros(actx) for i in range(discr.dim)]
                 )
                 fields = flat_obj_array(mass_input, energy_input, mom_input)
                 
                 expected_rhs = flat_obj_array(
-                    [discr.zeros(queue) for i in range(discr.dim + 2)]
+                    [discr.zeros(actx) for i in range(discr.dim + 2)]
                 )
                 
                 inviscid_rhs = inviscid_operator(discr, fields)
@@ -548,6 +556,8 @@ def test_vortex_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_vortex_rhs: "
     dim = 2
     nel_1d = 16
@@ -569,8 +579,8 @@ def test_vortex_rhs():
             
             print(f"{iotag}Number of {dim}d elements:  {mesh.nelements}")
             
-            discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-            nodes = discr.nodes().with_queue(queue)
+            discr = EagerDGDiscretization(actx, mesh, order=order)
+            nodes = thaw(actx,discr.nodes())
         
             # Init soln with Vortex and expected RHS = 0
             vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -620,6 +630,8 @@ def test_lump_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_lump_rhs: "
     dim = 2
     nel_1d = 16
@@ -638,8 +650,8 @@ def test_lump_rhs():
 
                 print(iotag + "%d elements" % mesh.nelements)
 
-                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-                nodes = discr.nodes().with_queue(queue)
+                discr = EagerDGDiscretization(actx, mesh, order=order)
+                nodes = thaw(actx,discr.nodes())
 
                 # Init soln with Lump and expected RHS = 0
                 center = np.zeros(shape=(dim,))
@@ -687,6 +699,8 @@ def test_isentropic_vortex():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_isentropic_vortex: "
 
     dim = 2
@@ -706,8 +720,8 @@ def test_isentropic_vortex():
             t_final = .01
             istep = 0
 
-            discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-            nodes = discr.nodes().with_queue(queue)
+            discr = EagerDGDiscretization(actx, mesh, order=order)
+            nodes = thaw(actx,discr.nodes())
 
             vel = np.zeros(shape=(dim,))
             orig = np.zeros(shape=(dim,))

@@ -34,9 +34,10 @@ from pytools.obj_array import (
     with_object_array_or_scalar,
 )
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 # TODO: Remove grudge dependence?
-from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 from mirgecom.eos import IdealSingleGas
 from mirgecom.initializers import Vortex2D
@@ -52,6 +53,8 @@ def test_idealsingle_lump():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+    
     iotag = "test_idealsingle_lump: "
     dim = 2
     nel_1d = 4
@@ -65,8 +68,8 @@ def test_idealsingle_lump():
     order = 3
     print(iotag + "%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx,discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -94,6 +97,8 @@ def test_idealsingle_vortex():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_idealsingle_vortex: "
     dim = 2
     nel_1d = 4
@@ -107,8 +112,8 @@ def test_idealsingle_vortex():
     order = 3
     print(iotag + "%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx,discr.nodes())
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()

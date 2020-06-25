@@ -37,6 +37,8 @@ from pytools.obj_array import (
 import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
@@ -97,11 +99,12 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
 
     rho = w[0]
     rhoV = w[2:]
-
+    actx = rho.array_context
+    
     v = rhoV * make_obj_array( [ 1.0/rho ] )
     
     sos = eos.SpeedOfSound(w)
-    wavespeed = clmath.sqrt(np.dot(v, v)) + sos
+    wavespeed = actx.np.sqrt(np.dot(v, v)) + sos
     return wavespeed
 
 
@@ -113,7 +116,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     rhoE = w_tpair[1]
     rhoV = w_tpair[2:]
 
-    normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
+    normal = thaw(rho.int.array_context, discr.normal(w_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
     qint = flat_obj_array(rho.int, rhoE.int, rhoV.int)

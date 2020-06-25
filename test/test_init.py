@@ -34,6 +34,8 @@ from pytools.obj_array import (
     with_object_array_or_scalar,
 )
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 # TODO: Remove grudge dependence?
 from grudge.eager import with_queue
@@ -51,6 +53,8 @@ def test_lump_init():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+    
     iotag = "test_lump_init: "
     dim = 2
     nel_1d = 4
@@ -64,8 +68,8 @@ def test_lump_init():
     order = 3
     print(iotag + "%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx,discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -92,6 +96,8 @@ def test_vortex_init():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_vortex_init: "
     dim = 2
     nel_1d = 4
@@ -105,8 +111,8 @@ def test_vortex_init():
     order = 3
     print(iotag + "%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx,discr.nodes())
 
     # Init soln with Vortex
     vortex = Vortex2D()
