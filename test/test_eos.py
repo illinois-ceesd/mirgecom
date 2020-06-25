@@ -1,8 +1,6 @@
 from __future__ import division, absolute_import, print_function
 
-__copyright__ = (
-    """Copyright (C) 2020 University of Illinois Board of Trustees"""
-)
+__copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,6 +28,8 @@ import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 from mirgecom.eos import IdealSingleGas
 from mirgecom.initializers import Vortex2D
@@ -44,6 +44,8 @@ def test_idealsingle_lump():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_idealsingle_lump: "
     dim = 2
     nel_1d = 4
@@ -57,8 +59,8 @@ def test_idealsingle_lump():
     order = 3
     print(iotag + "%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -83,6 +85,8 @@ def test_idealsingle_vortex():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_idealsingle_vortex: "
     dim = 2
     nel_1d = 4
@@ -96,8 +100,8 @@ def test_idealsingle_vortex():
     order = 3
     print(iotag + "%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()

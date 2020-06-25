@@ -1,8 +1,6 @@
 from __future__ import division, absolute_import, print_function
 
-__copyright__ = (
-    """Copyright (C) 2020 University of Illinois Board of Trustees"""
-)
+__copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,6 +33,8 @@ from pytools.obj_array import (
     make_obj_array,
 )
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import inviscid_operator
@@ -70,11 +70,10 @@ def test_inviscid_flux():
       order by running only 1 non-zero velocity
       component at-a-time.
     """
-    ctx = cl.create_some_context(interactive=False)
-    queue = cl.CommandQueue(ctx)
 
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
     nel_1d = 16
@@ -87,22 +86,16 @@ def test_inviscid_flux():
         )
 
         order = 3
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
         eos = IdealSingleGas()
 
         logging.info(f"Number of {dim}d elems: {mesh.nelements}")
 
-        mass = cl.clrandom.rand(
-            queue, (mesh.nelements,), dtype=np.float64
-        )
-        energy = cl.clrandom.rand(
-            queue, (mesh.nelements,), dtype=np.float64
-        )
+        mass = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
+        energy = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
         mom = make_obj_array(
             [
-                cl.clrandom.rand(
-                    queue, (mesh.nelements,), dtype=np.float64
-                )
+                cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
                 for i in range(dim)
             ]
         )
@@ -149,17 +142,11 @@ def test_inviscid_flux():
     for dim in [1, 2, 3]:
         for ntestnodes in [1, 10, 100]:
             fake_dis = MyDiscr(dim)
-            mass = cl.clrandom.rand(
-                queue, (ntestnodes,), dtype=np.float64
-            )
-            energy = cl.clrandom.rand(
-                queue, (ntestnodes,), dtype=np.float64
-            )
+            mass = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
+            energy = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
             mom = make_obj_array(
                 [
-                    cl.clrandom.rand(
-                        queue, (ntestnodes,), dtype=np.float64
-                    )
+                    cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
                     for i in range(dim)
                 ]
             )
@@ -189,19 +176,12 @@ def test_inviscid_flux():
                     print(f"(i,j) = ({i},{j})")
                     if i != j:
                         for n in range(ntestnodes):
-                            assert (
-                                flux[(2 + i) * dim + j][n].get() == 0.0
-                            )
+                            assert flux[(2 + i) * dim + j][n].get() == 0.0
                     else:
                         for n in range(ntestnodes):
+                            assert flux[(2 + i) * dim + j][n].get() == p[n]
                             assert (
-                                flux[(2 + i) * dim + j][n].get() == p[n]
-                            )
-                            assert (
-                                np.abs(
-                                    flux[(2 + i) * dim + j][n].get()
-                                    - p0
-                                )
+                                np.abs(flux[(2 + i) * dim + j][n].get() - p0)
                                 < tolerance
                             )
 
@@ -218,23 +198,15 @@ def test_inviscid_flux():
         for livedim in range(dim):
             for ntestnodes in [1, 10, 100]:
                 fake_dis = MyDiscr(dim)
-                mass = cl.clrandom.rand(
-                    queue, (ntestnodes,), dtype=np.float64
-                )
-                energy = cl.clrandom.rand(
-                    queue, (ntestnodes,), dtype=np.float64
-                )
+                mass = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
+                energy = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
                 mom = make_obj_array(
                     [
-                        cl.clrandom.rand(
-                            queue, (ntestnodes,), dtype=np.float64
-                        )
+                        cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
                         for i in range(dim)
                     ]
                 )
-                p = cl.clrandom.rand(
-                    queue, (ntestnodes,), dtype=np.float64
-                )
+                p = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
 
                 for i in range(ntestnodes):
                     mass[i] = 1.0 + i
@@ -242,10 +214,7 @@ def test_inviscid_flux():
                     for j in range(dim):
                         mom[j][i] = 0.0 * mass[i]
                     mom[livedim][i] = mass[i]
-                energy = (
-                    p / (eos.gamma() - 1.0)
-                    + 0.5 * np.dot(mom, mom) / mass
-                )
+                energy = p / (eos.gamma() - 1.0) + 0.5 * np.dot(mom, mom) / mass
                 q = flat_obj_array(mass, energy, mom)
                 p = eos.pressure(q)
                 flux = _inviscid_flux(fake_dis, q, eos)
@@ -256,26 +225,16 @@ def test_inviscid_flux():
                 expected_flux = mom
                 logging.info("Testing continuity")
                 for i in range(dim):
-                    assert (
-                        la.norm((flux[i] - expected_flux[i]).get())
-                        == 0.0
-                    )
+                    assert la.norm((flux[i] - expected_flux[i]).get()) == 0.0
                     if i != livedim:
                         assert la.norm(flux[i].get()) == 0.0
                     else:
                         assert la.norm(flux[i].get()) > 0.0
 
                 logging.info("Testing energy")
-                expected_flux = mom * make_obj_array(
-                    [(energy + p) / mass]
-                )
+                expected_flux = mom * make_obj_array([(energy + p) / mass])
                 for i in range(dim):
-                    assert (
-                        la.norm(
-                            (flux[dim + i] - expected_flux[i]).get()
-                        )
-                        == 0.0
-                    )
+                    assert la.norm((flux[dim + i] - expected_flux[i]).get()) == 0.0
                     if i != livedim:
                         assert la.norm(flux[dim + i].get()) == 0.0
                     else:
@@ -294,35 +253,22 @@ def test_inviscid_flux():
                     fluxindex = (2 + i) * dim
                     for j in range(dim):
                         assert (
-                            la.norm(
-                                (
-                                    flux[fluxindex + j]
-                                    - expected_flux[j]
-                                ).get()
-                            )
+                            la.norm((flux[fluxindex + j] - expected_flux[j]).get())
                             == 0
                         )
                         if i == j:
                             if i == livedim:
-                                assert (
-                                    la.norm(flux[fluxindex + j].get())
-                                    > 0.0
-                                )
+                                assert la.norm(flux[fluxindex + j].get()) > 0.0
                             else:
                                 # just for sanity - make sure the flux recovered the
                                 # prescribed value of p0 (within fp tol)
                                 for k in range(ntestnodes):
                                     assert (
-                                        np.abs(
-                                            flux[fluxindex + j][k] - p0
-                                        )
+                                        np.abs(flux[fluxindex + j][k] - p0)
                                         < tolerance
                                     )
                         else:
-                            assert (
-                                la.norm(flux[fluxindex + j].get())
-                                == 0.0
-                            )
+                            assert la.norm(flux[fluxindex + j].get()) == 0.0
 
 
 def test_facial_flux():
@@ -338,6 +284,7 @@ def test_facial_flux():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     tolerance = 1e-14
     p0 = 1.0
@@ -360,21 +307,19 @@ def test_facial_flux():
 
                 logging.info(f"Number of elements: {mesh.nelements}")
 
-                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+                discr = EagerDGDiscretization(actx, mesh, order=order)
 
-                mass_input = discr.zeros(queue)
-                energy_input = discr.zeros(queue)
+                mass_input = discr.zeros(actx)
+                energy_input = discr.zeros(actx)
                 mom_input = flat_obj_array(
-                    [discr.zeros(queue) for i in range(discr.dim)]
+                    [discr.zeros(actx) for i in range(discr.dim)]
                 )
 
                 # This sets p = 1
                 mass_input[:] = 1.0
                 energy_input[:] = 2.5
 
-                fields = flat_obj_array(
-                    mass_input, energy_input, mom_input
-                )
+                fields = flat_obj_array(mass_input, energy_input, mom_input)
 
                 from mirgecom.euler import _facial_flux
                 from mirgecom.euler import _interior_trace_pair
@@ -399,13 +344,7 @@ def test_facial_flux():
                 maxmomerr = 0.0
                 for i in range(2, 2 + discr.dim):
                     err = np.max(
-                        np.array(
-                            [
-                                la.norm(
-                                    interior_face_flux[i].get(), np.inf
-                                )
-                            ]
-                        )
+                        np.array([la.norm(interior_face_flux[i].get(), np.inf)])
                     )
                     err = np.abs(err - p0)
                     if err > maxmomerr:
@@ -442,9 +381,7 @@ def test_facial_flux():
                 maxmomerr = 0.0
                 for i in range(2, 2 + discr.dim):
                     err = np.max(
-                        np.array(
-                            [la.norm(boundary_flux[i].get(), np.inf)]
-                        )
+                        np.array([la.norm(boundary_flux[i].get(), np.inf)])
                     )
                     err = np.abs(err - p0)
                     assert err < tolerance
@@ -454,8 +391,7 @@ def test_facial_flux():
                 eoc_rec1.add_data_point(1.0 / nel_1d, errrec)
 
             message = (
-                f"standalone Errors:\n{eoc_rec0}"
-                f"boundary Errors:\n{eoc_rec1}"
+                f"standalone Errors:\n{eoc_rec0}" f"boundary Errors:\n{eoc_rec1}"
             )
             logging.info(message)
             assert (
@@ -476,6 +412,7 @@ def test_uniform_rhs():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     tolerance = 1e-9
     maxxerr = 0.0
@@ -494,28 +431,24 @@ def test_uniform_rhs():
                     a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
                 )
 
-                logging.info(
-                    f"Number of {dim}d elements: {mesh.nelements}"
-                )
+                logging.info(f"Number of {dim}d elements: {mesh.nelements}")
 
-                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+                discr = EagerDGDiscretization(actx, mesh, order=order)
 
-                mass_input = discr.zeros(queue)
-                energy_input = discr.zeros(queue)
+                mass_input = discr.zeros(actx)
+                energy_input = discr.zeros(actx)
 
                 # this sets p = p0 = 1.0
                 mass_input[:] = 1.0
                 energy_input[:] = 2.5
 
                 mom_input = flat_obj_array(
-                    [discr.zeros(queue) for i in range(discr.dim)]
+                    [discr.zeros(actx) for i in range(discr.dim)]
                 )
-                fields = flat_obj_array(
-                    mass_input, energy_input, mom_input
-                )
+                fields = flat_obj_array(mass_input, energy_input, mom_input)
 
                 expected_rhs = flat_obj_array(
-                    [discr.zeros(queue) for i in range(discr.dim + 2)]
+                    [discr.zeros(actx) for i in range(discr.dim + 2)]
                 )
 
                 inviscid_rhs = inviscid_operator(discr, fields)
@@ -539,13 +472,11 @@ def test_uniform_rhs():
                 assert np.max(np.abs(rho_resid.get())) < tolerance
                 assert np.max(np.abs(rhoe_resid.get())) < tolerance
                 for i in range(dim):
-                    assert (
-                        np.max(np.abs(mom_resid[i].get())) < tolerance
-                    )
+                    assert np.max(np.abs(mom_resid[i].get())) < tolerance
 
                 err_max = np.max(np.abs(rhs_resid[i].get()))
                 #                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
-                assert(err_max < tolerance)
+                assert err_max < tolerance
                 if err_max > maxxerr:
                     maxxerr = err_max
                 # set a non-zero, but uniform velocity component
@@ -569,7 +500,7 @@ def test_uniform_rhs():
 
                 err_max = np.max(np.abs(rhs_resid[i].get()))
                 #                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
-                assert(err_max < tolerance)
+                assert err_max < tolerance
                 if err_max > maxxerr:
                     maxxerr = err_max
             #            message = (
@@ -598,6 +529,7 @@ def test_vortex_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
 
@@ -615,12 +547,10 @@ def test_vortex_rhs():
                 a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
             )
 
-            logging.info(
-                f"Number of {dim}d elements:  {mesh.nelements}"
-            )
+            logging.info(f"Number of {dim}d elements:  {mesh.nelements}")
 
-            discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-            nodes = discr.nodes().with_queue(queue)
+            discr = EagerDGDiscretization(actx, mesh, order=order)
+            nodes = thaw(actx, discr.nodes())
 
             # Init soln with Vortex and expected RHS = 0
             vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -641,24 +571,17 @@ def test_vortex_rhs():
 
             err_max = np.max(
                 np.array(
-                    [
-                        la.norm(inviscid_rhs[i].get(), np.inf)
-                        for i in range(dim + 2)
-                    ]
+                    [la.norm(inviscid_rhs[i].get(), np.inf) for i in range(dim + 2)]
                 )
             )
 
             eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
-        message = (
-            f"Error for (dim,order) = ({dim},{order}):\n"
-            f"{eoc_rec}"
-        )
+        message = f"Error for (dim,order) = ({dim},{order}):\n" f"{eoc_rec}"
         logging.info(message)
 
         assert (
-            eoc_rec.order_estimate() >= order - 0.5
-            or eoc_rec.max_error() < 1e-11
+            eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11
         )
 
 
@@ -671,6 +594,7 @@ def test_lump_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     tolerance = 1e-10
     maxxerr = 0.0
@@ -682,9 +606,7 @@ def test_lump_rhs():
             eoc_rec = EOCRecorder()
 
             for nel_1d in [4, 8, 12]:
-                from meshmode.mesh.generation import (
-                    generate_regular_rect_mesh,
-                )
+                from meshmode.mesh.generation import generate_regular_rect_mesh
 
                 mesh = generate_regular_rect_mesh(
                     a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
@@ -692,8 +614,8 @@ def test_lump_rhs():
 
                 logging.info(f"Number of elements: {mesh.nelements}")
 
-                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-                nodes = discr.nodes().with_queue(queue)
+                discr = EagerDGDiscretization(actx, mesh, order=order)
+                nodes = thaw(actx, discr.nodes())
 
                 # Init soln with Lump and expected RHS = 0
                 center = np.zeros(shape=(dim,))
@@ -710,10 +632,7 @@ def test_lump_rhs():
                     np.array(
                         [
                             la.norm(
-                                (
-                                    inviscid_rhs[i] - expected_rhs[i]
-                                ).get(),
-                                np.inf,
+                                (inviscid_rhs[i] - expected_rhs[i]).get(), np.inf,
                             )
                             for i in range(dim + 2)
                         ]
@@ -724,10 +643,7 @@ def test_lump_rhs():
 
                 eoc_rec.add_data_point(1.0 / nel_1d, err_max)
             logging.info(f"Max error: {maxxerr}")
-            message = (
-                f"Error for (dim,order) = ({dim},{order}):\n"
-                f"{eoc_rec}"
-            )
+            message = f"Error for (dim,order) = ({dim},{order}):\n" f"{eoc_rec}"
             logging.info(message)
             assert (
                 eoc_rec.order_estimate() >= order - 0.5
@@ -747,6 +663,7 @@ def test_isentropic_vortex():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
 
@@ -756,9 +673,7 @@ def test_isentropic_vortex():
         eoc_rec = EOCRecorder()
 
         for nel_1d in [16, 32, 64]:
-            from meshmode.mesh.generation import (
-                generate_regular_rect_mesh,
-            )
+            from meshmode.mesh.generation import generate_regular_rect_mesh
 
             mesh = generate_regular_rect_mesh(
                 a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
@@ -768,8 +683,8 @@ def test_isentropic_vortex():
             t_final = 0.01
             istep = 0
 
-            discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-            nodes = discr.nodes().with_queue(queue)
+            discr = EagerDGDiscretization(actx, mesh, order=order)
+            nodes = thaw(actx, discr.nodes())
 
             vel = np.zeros(shape=(dim,))
             orig = np.zeros(shape=(dim,))
@@ -804,8 +719,7 @@ def test_isentropic_vortex():
                 expected_result = initializer(t, nodes)
                 result_resid = fields - expected_result
                 maxerr = [
-                    np.max(np.abs(result_resid[i].get()))
-                    for i in range(dim + 2)
+                    np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)
                 ]
                 dv = eos(fields)
                 mindv = [np.min(dvfld.get()) for dvfld in dv]
@@ -840,22 +754,16 @@ def test_isentropic_vortex():
                 t += dt
                 istep += 1
 
-                sdt = get_inviscid_timestep(
-                    discr, fields, c=cfl, eos=eos
-                )
+                sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
 
             logging.info("Writing final dump.")
             maxerr = write_soln()
             eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
-        message = (
-            f"Error for (dim,order) = ({dim},{order}):\n"
-            f"{eoc_rec}"
-        )
+        message = f"Error for (dim,order) = ({dim},{order}):\n" f"{eoc_rec}"
         logging.info(message)
         assert (
-            eoc_rec.order_estimate() >= order - 0.5
-            or eoc_rec.max_error() < 1e-11
+            eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11
         )
 
 
