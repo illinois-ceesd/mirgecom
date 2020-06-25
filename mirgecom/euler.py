@@ -79,13 +79,8 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
 
     p = eos.Pressure(q)
 
-    def scalevec(scalar, vec):
-        # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])
-
-    # physical flux =
+    # Fluxes:
     # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-
     momFlux = make_obj_array(
         [
             (rhoV[i] * rhoV[j] / rho + (p if i == j else 0))
@@ -93,9 +88,11 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
             for j in range(ndim)
         ]
     )
-
+    massFlux = rhoV * make_obj_array([ 1.0 ])
+    energyFlux = rhoV * make_obj_array([ (rhoE + p) / rho ])
+    
     flux = flat_obj_array(
-        scalevec(1.0, rhoV), scalevec((rhoE + p) / rho, rhoV), momFlux,
+        massFlux, energyFlux, momFlux,
     )
 
     return flux
@@ -106,11 +103,8 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
     rho = w[0]
     rhoV = w[2:]
 
-    def scalevec(scalar, vec):
-        # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])
-
-    v = scalevec(1.0 / rho, rhoV)
+    v = rhoV * make_obj_array( [ 1.0/rho ] )
+    
     sos = eos.SpeedOfSound(w)
     wavespeed = clmath.sqrt(np.dot(v, v)) + sos
     return wavespeed
@@ -123,10 +117,6 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     rho = w_tpair[0]
     rhoE = w_tpair[1]
     rhoV = w_tpair[2:]
-
-    def scalevec(scalar, vec):
-        # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])
 
     normal = with_queue(rho.int.queue, discr.normal(w_tpair.dd))
 
@@ -141,14 +131,13 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_ext = _inviscid_flux(discr, qext, eos)
 
     # Lax/Friedrichs/Rusonov after JSH/TW Nodal DG Methods, p. 209
-    #    flux_jump = scalevec(1.0,(flux_int - flux_ext))
-    flux_jump = scalevec(0.5, (flux_int + flux_ext))
+    flux_jump = (flux_int + flux_ext) * make_obj_array([ 0.5 ])
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = [_get_wavespeed(qint), _get_wavespeed(qext)]
 
     lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
-    lfr = scalevec(0.5 * lam, qjump)
+    lfr = qjump * make_obj_array( [ 0.5 * lam ] )
 
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
@@ -196,14 +185,10 @@ def inviscid_operator(
         discr, w_tpair=_interior_trace_pair(discr, w), eos=eos
     )
 
-    def scalevec(scalar, vec):
-        # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])
-
     # Ack! how to avoid this?
     # boundary_flux = flat_obj_array( [discr.zeros(queue) for i in range(numsoln)] )
     boundary_flux = discr.interp("vol", "all_faces", w)
-    boundary_flux = scalevec(0.0, boundary_flux)
+    boundary_flux = boundary_flux * make_obj_array( [ 0.0 ] ) 
     for btag in boundaries:
         bndhnd = boundaries[btag]
         boundary_flux += bndhnd.get_boundary_flux(

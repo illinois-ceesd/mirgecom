@@ -76,10 +76,6 @@ def test_inviscid_flux():
     queue = cl.CommandQueue(ctx)
     iotag = "test_inviscid_flux: "
 
-    def scalevec(scalar, vec):
-        # workaround for object array behavior
-        return make_obj_array([ni * scalar for ni in vec])
-
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -114,7 +110,7 @@ def test_inviscid_flux():
         p = eos.Pressure(q)
         escale = (rhoE + p) / rho
         expected_mass_flux = rhoV
-        expected_energy_flux = scalevec(escale, rhoV)
+        expected_energy_flux = rhoV * make_obj_array( [ escale ] )
         expected_mom_flux = make_obj_array(
             [
                 (rhoV[i] * rhoV[j] / rho + (p if i == j else 0))
@@ -172,7 +168,6 @@ def test_inviscid_flux():
                 for j in range(dim):
                     rhoV[j][i] = 0.0 * rho[i]
             rhoE = p / 0.4 + 0.5 * np.dot(rhoV, rhoV) / rho
-            #            v = scalevec(1 / rho, rhoV)
             q = flat_obj_array(rho, rhoE, rhoV)
             p = eos.Pressure(q)
             flux = _inviscid_flux(fake_dis, q, eos)
@@ -239,8 +234,7 @@ def test_inviscid_flux():
                     for j in range(dim):
                         rhoV[j][i] = 0.0 * rho[i]
                     rhoV[livedim][i] = rho[i]
-
-                v = scalevec(1 / rho, rhoV)
+                v = rhoV * make_obj_array( [ 1.0/rho ] )
                 rhoE = p / (eos.Gamma() - 1.0) + 0.5 * np.dot(rhoV, rhoV) / rho
                 q = flat_obj_array(rho, rhoE, rhoV)
                 p = eos.Pressure(q)
@@ -259,7 +253,7 @@ def test_inviscid_flux():
                         assert(la.norm(flux[i].get()) > 0.0)
 
                 print(f"{iotag}Testing energy")
-                expected_flux = scalevec((rhoE + p)/rho, rhoV)
+                expected_flux = rhoV * make_obj_array( [ (rhoE + p)/rho ] )
                 for i in range(dim):
                     assert(la.norm((flux[dim+i]-expected_flux[i]).get()) == 0.0)
                     if i != livedim:
@@ -315,98 +309,122 @@ def test_facial_flux():
     
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    for dim in [1, 2, 3]:
-        for nel_1d in [4, 8, 16]:
+    for order in [1, 2, 3]:
+        for dim in [1, 2, 3]:
+            from pytools.convergence import EOCRecorder    
+            eoc_rec0 = EOCRecorder()
+            eoc_rec1 = EOCRecorder()
+            for nel_1d in [4, 8, 16]:
             
-            mesh = generate_regular_rect_mesh(
-                a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
-            )
-
-            order = 3
-
-            print(f"{iotag}Number of elements: {mesh.nelements}")
-
-            discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-
-            mass_input = discr.zeros(queue)
-            energy_input = discr.zeros(queue)
-            mom_input = flat_obj_array(
-                [discr.zeros(queue) for i in range(discr.dim)]
-            )
-
-            # This sets p = 1
-            mass_input[:] = 1.0
-            energy_input[:] = 2.5
-
-            fields = flat_obj_array(mass_input, energy_input, mom_input)
-            p = eos.Pressure(fields)
-            
-            from mirgecom.euler import _facial_flux
-            from mirgecom.euler import _interior_trace_pair
-
-            interior_face_flux = _facial_flux(
-                discr, w_tpair=_interior_trace_pair(discr, fields)
-            )
-
-            err = np.max(
-                np.array(
-                    [
-                        la.norm(interior_face_flux[i].get(), np.inf)
-                        for i in range(0, 2)
-                    ]
+                mesh = generate_regular_rect_mesh(
+                    a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
                 )
-            )
 
-            assert err < tolerance
+                #                order = 3
 
-            # mom flux max should be p = 1 + (any interp error)
-            maxmomerr = 0.0
-            for i in range(2, 2 + discr.dim):
-                err = np.max(
-                    np.array([la.norm(interior_face_flux[i].get(), np.inf)])
+                print(f"{iotag}Number of elements: {mesh.nelements}")
+
+                discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+
+                mass_input = discr.zeros(queue)
+                energy_input = discr.zeros(queue)
+                mom_input = flat_obj_array(
+                    [discr.zeros(queue) for i in range(discr.dim)]
                 )
-                if err > maxmomerr:
-                    maxmomerr = err
-                assert np.abs(err - p0) < tolerance
-            err = np.maximum(err,maxmomerr)
 
-            # Check the boundary facial fluxes as called on a boundary
-            dir_rho = discr.interp("vol", BTAG_ALL, mass_input)
-            dir_e = discr.interp("vol", BTAG_ALL, energy_input)
-            dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
+                # This sets p = 1
+                mass_input[:] = 1.0
+                energy_input[:] = 2.5
                 
-            dir_bval = flat_obj_array(dir_rho, dir_e, dir_mom)
-            dir_bc = flat_obj_array(dir_rho, dir_e, dir_mom)
-
-            from mirgecom.euler import _facial_flux
-
-            boundary_flux = _facial_flux(
-                discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
-            )
-
-            err = np.max(
-                np.array(
-                    [
-                        la.norm(boundary_flux[i].get(), np.inf)
-                        for i in range(0, 2)
-                    ]
-                )
-            )
+                fields = flat_obj_array(mass_input, energy_input, mom_input)
+                p = eos.Pressure(fields)
             
-            assert err < tolerance
+                from mirgecom.euler import _facial_flux
+                from mirgecom.euler import _interior_trace_pair
 
-            # mom flux should be  == p ~= p0
-            maxmomerr = 0.0
-            for i in range(2, 2 + discr.dim):
+                interior_face_flux = _facial_flux(
+                    discr, w_tpair=_interior_trace_pair(discr, fields)
+                )
+
                 err = np.max(
-                    np.array([la.norm(boundary_flux[i].get(), np.inf)])
+                    np.array(
+                        [
+                            la.norm(interior_face_flux[i].get(), np.inf)
+                            for i in range(0, 2)
+                        ]
+                    )
                 )
-                assert (err - p0) < tolerance
-                if err > maxmomerr:
-                    maxmomerr = err
-            err = np.maximum(err,maxmomerr)
 
+                assert err < tolerance
+
+                err1 = err
+                # mom flux max should be p = 1 + (any interp error)
+                maxmomerr = 0.0
+                for i in range(2, 2 + discr.dim):
+                    err = np.max(
+                        np.array([la.norm(interior_face_flux[i].get(), np.inf)])
+                    )
+                    err = np.abs(err - p0)
+                    if err > maxmomerr:
+                        maxmomerr = err
+                    assert err < tolerance
+                errrec = np.maximum(err1,maxmomerr)
+                eoc_rec0.add_data_point(1.0 / nel_1d, errrec)
+                
+                # Check the boundary facial fluxes as called on a boundary
+                dir_rho = discr.interp("vol", BTAG_ALL, mass_input)
+                dir_e = discr.interp("vol", BTAG_ALL, energy_input)
+                dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
+                
+                dir_bval = flat_obj_array(dir_rho, dir_e, dir_mom)
+                dir_bc = flat_obj_array(dir_rho, dir_e, dir_mom)
+
+                from mirgecom.euler import _facial_flux
+
+                boundary_flux = _facial_flux(
+                    discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
+                )
+
+                err = np.max(
+                    np.array(
+                        [
+                            la.norm(boundary_flux[i].get(), np.inf)
+                            for i in range(0, 2)
+                        ]
+                    )
+                )
             
+                assert err < tolerance
+                err1 = err
+                
+                # mom flux should be  == p ~= p0
+                maxmomerr = 0.0
+                for i in range(2, 2 + discr.dim):
+                    err = np.max(
+                        np.array([la.norm(boundary_flux[i].get(), np.inf)])
+                    )
+                    err = np.abs(err - p0)
+                    assert err < tolerance
+                    if err > maxmomerr:
+                        maxmomerr = err
+                errrec = np.maximum(err1,maxmomerr)
+                eoc_rec1.add_data_point(1.0 / nel_1d, errrec)
+            
+            message = (
+                f"{iotag}standalone Errors:\n{eoc_rec0}"
+                f"{iotag}boundary Errors:\n{eoc_rec1}"
+            )
+            print(message)
+            assert (
+                eoc_rec0.order_estimate() >= order - 0.5
+                or eoc_rec0.max_error() < 1e-9
+            )
+            assert (
+                eoc_rec1.order_estimate() >= order - 0.5
+                or eoc_rec1.max_error() < 1e-9
+            )
+
+
 def test_uniform_rhs():
     """Tests the inviscid rhs using a trivial 
     constant/uniform state which should
@@ -632,7 +650,7 @@ def test_lump_rhs():
                 inviscid_rhs = inviscid_operator(
                     discr, lump_soln, t=0.0, boundaries=boundaries
                 )
-                expected_rhs = lump.ExpectedRHS(discr, lump_soln, 0)
+                expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
 
                 err_max = np.max(
                     np.array(

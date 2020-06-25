@@ -169,21 +169,17 @@ class Lump:
         )
         r = clmath.sqrt(np.dot(rel_center, rel_center))
 
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
-
         gamma = eos.Gamma()
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
-        rhoV = scalevec(rho, self._velocity)
+        rhoV = self._velocity * make_obj_array( [ rho ] )
         rhoE = (self._p0 / (gamma - 1.0)) + np.dot(rhoV, rhoV) / (
             2.0 * rho
         )
 
         return flat_obj_array(rho, rhoE, rhoV)
 
-    def ExpectedRHS(self, discr, w, t=0.0):
+    def exact_rhs(self, discr, w, t=0.0):
         queue = w[0].queue
         nodes = discr.nodes().with_queue(queue)
         lump_loc = self._center + t * self._velocity
@@ -193,25 +189,19 @@ class Lump:
         )
         r = clmath.sqrt(np.dot(rel_center, rel_center))
 
-        def scalevec(scalar, vec):
-            # workaround for object array behavior
-            return make_obj_array([ni * scalar for ni in vec])
-
         # The expected rhs is:
         # rhorhs  = -2*rho*(r.dot.v)
         # rhoerhs = -rho*v^2*(r.dot.v)
         # rhovrhs = -2*rho*(r.dot.v)*v
-
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
-        rhoV = scalevec(rho, self._velocity)
-
-        v = scalevec(1 / rho, rhoV)
+        rhoV = self._velocity * make_obj_array( [ rho ] )
+        v = self._velocity * make_obj_array( [ 1.0/rho ] )
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
         rhorhs = -2 * rdotv * rho
         rhoErhs = -v2 * rdotv * rho
-        rhoVrhs = scalevec(-2 * rho * rdotv, v)
+        rhoVrhs = v * make_obj_array( [ -2 * rho * rdotv ] )
 
         return flat_obj_array(rhorhs, rhoErhs, rhoVrhs)
 
