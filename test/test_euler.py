@@ -537,7 +537,7 @@ def test_uniform_rhs():
             )
 
 
-# def test_isentropic_vortex(ctx_factory):
+# def test_vortex_rhs(ctx_factory):
 def test_vortex_rhs():
     """Tests the inviscid rhs using the non-trivial
     2D isentropic vortex case configured to yield
