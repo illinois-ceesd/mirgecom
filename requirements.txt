@@ -7,5 +7,5 @@ git+https://gitlab.tiker.net/inducer/dagrt.git
 git+https://gitlab.tiker.net/inducer/leap.git
 git+https://github.com/inducer/meshpy.git
 git+https://github.com/inducer/modepy.git
-git+https://github.com/inducer/meshmode.git
-git+https://github.com/inducer/grudge.git
+git+https://gitlab.tiker.net/inducer/meshmode.git@array-context
+git+https://gitlab.tiker.net/inducer/grudge.git@array-context
