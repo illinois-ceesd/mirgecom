@@ -339,8 +339,6 @@ def test_facial_flux():
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_facial_flux: "
 
-    dim = 2
-    nel_1d = 16
 
     tolerance = 1e-14
     p0 = 1.0
@@ -353,7 +351,7 @@ def test_facial_flux():
 
             eoc_rec0 = EOCRecorder()
             eoc_rec1 = EOCRecorder()
-            for nel_1d in [4, 8, 16]:
+            for nel_1d in [4, 8, 12]:
 
                 mesh = generate_regular_rect_mesh(
                     a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
@@ -492,7 +490,7 @@ def test_uniform_rhs():
             #            eoc_rec0 = EOCRecorder()
             #            eoc_rec1 = EOCRecorder()
 
-            for nel_1d in [8, 16, 32]:
+            for nel_1d in [4, 8, 12]:
 
                 mesh = generate_regular_rect_mesh(
                     a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
@@ -604,8 +602,6 @@ def test_vortex_rhs():
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_vortex_rhs: "
     dim = 2
-    nel_1d = 16
-    order = 4
 
     for order in [1, 2, 3]:
 
@@ -686,7 +682,7 @@ def test_lump_rhs():
 
             eoc_rec = EOCRecorder()
 
-            for nel_1d in [4, 8, 16]:
+            for nel_1d in [4, 8, 12]:
                 from meshmode.mesh.generation import (
                     generate_regular_rect_mesh,
                 )
