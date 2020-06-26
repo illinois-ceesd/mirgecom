@@ -25,8 +25,8 @@ import numpy.linalg as la
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
+from pytools.obj_array import flat_obj_array, make_obj_array
 
-from pytools.obj_array import join_fields, make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 def sym_diff(var):
     from pymbolic.mapper.differentiator import DifferentiationMapper
+
     def func_map(arg_index, func, arg, allowed_nonsmoothness):
         if func == pmbl.var("sin"):
             return pmbl.var("cos")(*arg)
@@ -136,38 +137,36 @@ def test_standing_wave(ctx_factory, dim, order):
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
 
-        # v_i = c*phi_{x_i}
+        # v = c*grad(phi)
         sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
-        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
-        sym_grad_u = sym_grad(dim, sym_u)
-        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
-
-        sym_rhs = [sym_rhs_u] + sym_rhs_v
+        sym_rhs = flat_obj_array(
+                    sym_c * sym_div(sym_v),
+                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
 
         c = 2.
 
-        eval_values = dict()
-        for i in range(dim):
-            eval_values[coord_names[i]] = nodes[i]
-        eval_values["t"] = 0.
-        eval_values["c"] = c
-        eval_values["omega"] = np.sqrt(dim)*c
-        eval_values["pi"] = np.pi
+        eval_values = {
+            "t": 0.,
+            "c": c,
+            "omega": np.sqrt(dim)*c,
+            "pi": np.pi
+        }
+        eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
 
         def sym_eval(expr):
             return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u)
-        v = [sym_eval(sym_v[i]) for i in range(dim)]
-        fields = join_fields(u, v)
+        v = sym_eval(sym_v)
+        fields = flat_obj_array(u, v)
 
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
+        expected_rhs = sym_eval(sym_rhs)
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
@@ -229,38 +228,36 @@ def test_wave_manufactured(ctx_factory, dim, order):
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
 
-        # v_i = c*phi_{x_i}
+        # v = c*grad(phi)
         sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
-        sym_rhs_u = sym_c * sym_div(sym_v)
         # rhs(v part) = c*grad(u)
-        sym_grad_u = sym_grad(dim, sym_u)
-        sym_rhs_v = [sym_c * sym_grad_u[i] for i in range(dim)]
-
-        sym_rhs = [sym_rhs_u] + sym_rhs_v
+        sym_rhs = flat_obj_array(
+                    sym_c * sym_div(sym_v),
+                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
 
         c = 2.
 
-        eval_values = dict()
-        for i in range(dim):
-            eval_values[coord_names[i]] = nodes[i]
-        eval_values["t"] = 0.
-        eval_values["c"] = c
-        eval_values["omega"] = 1.
-        eval_values["pi"] = np.pi
+        eval_values = {
+            "t": 0.,
+            "c": c,
+            "omega": 1.,
+            "pi": np.pi
+        }
+        eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
 
         def sym_eval(expr):
             return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u)
-        v = [sym_eval(sym_v[i]) for i in range(dim)]
-        fields = join_fields(u, v)
+        v = sym_eval(sym_v)
+        fields = flat_obj_array(u, v)
 
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
 
-        expected_rhs = make_obj_array([sym_eval(sym_rhs_i) for sym_rhs_i in sym_rhs])
+        expected_rhs = sym_eval(sym_rhs)
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))

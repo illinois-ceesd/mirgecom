@@ -26,7 +26,6 @@ import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
 from pytools.obj_array import join_fields
-# TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
