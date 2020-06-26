@@ -25,7 +25,6 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
-import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
@@ -59,9 +58,10 @@ class IdealSingleGas:
 
     def sound_speed(self, w):
         mass = w[0]
+        actx = mass.array_context
         p = self.pressure(w)
         c2 = self._gamma / mass * p
-        c = clmath.sqrt(c2)
+        c = actx.np.sqrt(c2)
         return c
 
     def temperature(self, w):

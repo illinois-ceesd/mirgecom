@@ -30,6 +30,8 @@ import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
@@ -43,6 +45,8 @@ def test_lump_init():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_lump_init: "
     dim = 2
     nel_1d = 4
@@ -56,8 +60,8 @@ def test_lump_init():
     order = 3
     print(f"{iotag}Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -84,6 +88,8 @@ def test_vortex_init():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     iotag = "test_vortex_init: "
     dim = 2
     nel_1d = 4
@@ -97,8 +103,8 @@ def test_vortex_init():
     order = 3
     print(f"{iotag}Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -108,6 +114,7 @@ def test_vortex_init():
     energy = vortex_soln[1]
     mom = vortex_soln[2:]
     p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
+
     exp_p = mass ** gamma
     errmax = np.max(np.abs(p - exp_p))
 

@@ -32,16 +32,18 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
-    with_object_array_or_scalar,
 )
-import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.dof_array import thaw
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
-from grudge.eager import with_queue
-from grudge.symbolic.primitives import TracePair
+from grudge.eager import (
+    interior_trace_pair,
+    cross_rank_trace_pairs,
+)
+
 #from grudge.dt_finding import (
 #    dt_geometric_factor,
 #    dt_non_geometric_factor,
@@ -60,21 +62,12 @@ __doc__ = """
 #
 
 
-def _interior_trace_pair(discr, vec):
-    i = discr.interp("vol", "int_faces", vec)
-    e = with_object_array_or_scalar(
-        lambda el: discr.opposite_face_connection()(el.queue, el), i
-    )
-    return TracePair("int_faces", i, e)
-
-
 def _inviscid_flux(discr, q, eos=IdealSingleGas()):
-
     ndim = discr.dim
 
     # q = [ rho rhoE rhoV ]
     mass = q[0]
-    energy = q[1]
+    ener = q[1]
     mom = q[2:]
 
     p = eos.pressure(q)
@@ -89,9 +82,9 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
         ]
     )
     massflux = mom * make_obj_array([1.0])
-    energyflux = mom * make_obj_array([(energy + p) / mass])
+    enerflux = mom * make_obj_array([(ener + p) / mass])
 
-    flux = flat_obj_array(massflux, energyflux, momflux,)
+    flux = flat_obj_array(massflux, enerflux, momflux,)
 
     return flux
 
@@ -100,11 +93,12 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
 
     mass = w[0]
     mom = w[2:]
+    actx = mass.array_context
 
     v = mom * make_obj_array([1.0 / mass])
 
     sos = eos.sound_speed(w)
-    wavespeed = clmath.sqrt(np.dot(v, v)) + sos
+    wavespeed = actx.np.sqrt(np.dot(v, v)) + sos
     return wavespeed
 
 
@@ -113,14 +107,14 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     dim = discr.dim
 
     mass = w_tpair[0]
-    energy = w_tpair[1]
+    ener = w_tpair[1]
     mom = w_tpair[2:]
 
-    normal = with_queue(mass.int.queue, discr.normal(w_tpair.dd))
+    normal = thaw(mass.int.array_context, discr.normal(w_tpair.dd))
 
-    # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    qint = flat_obj_array(mass.int, energy.int, mom.int)
-    qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
+    # Get inviscid fluxes [rhoV (ener + p)V (rhoV.x.V + p*I) ]
+    qint = flat_obj_array(mass.int, ener.int, mom.int)
+    qext = flat_obj_array(mass.ext, ener.ext, mom.ext)
 
     # - Figure out how to manage grudge branch dependencies
     #    qjump = flat_obj_array(rho.jump, rhoE.jump, rhoV.jump)
@@ -182,10 +176,10 @@ def inviscid_operator(
     )
 
     interior_face_flux = _facial_flux(
-        discr, w_tpair=_interior_trace_pair(discr, w), eos=eos
+        discr, w_tpair=interior_trace_pair(discr, w), eos=eos
     )
 
-    # Domain boundaries
+    # Flux through domain boundaries
     domain_boundary_flux = sum(
         boundaries[btag].get_boundary_flux(
             discr, w, t=t, btag=btag, eos=eos
@@ -193,11 +187,20 @@ def inviscid_operator(
         for btag in boundaries
     )
 
-    # Partition boundaries here
+    # Flux across partition boundaries
+    partition_boundary_flux = sum(
+        _facial_flux(discr, w_tpair=part_pair, eos=eos)
+        for part_pair in cross_rank_trace_pairs(discr, w)
+    )
 
     return discr.inverse_mass(
         dflux
-        - discr.face_mass(interior_face_flux + domain_boundary_flux)
+        - discr.face_mass(
+            interior_face_flux
+            + domain_boundary_flux
+            + partition_boundary_flux
+        )
+
     )
 
 
@@ -212,8 +215,6 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     return c * dt
-
-
 #    dt_ngf = dt_non_geometric_factor(discr.mesh)
 #    dt_gf  = dt_geometric_factor(discr.mesh)
 #    wavespeeds = _get_wavespeed(w,eos=eos)
