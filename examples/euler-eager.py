@@ -32,7 +32,6 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 
-# TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
