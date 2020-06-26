@@ -339,7 +339,6 @@ def test_facial_flux():
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_facial_flux: "
 
-
     tolerance = 1e-14
     p0 = 1.0
 
@@ -675,7 +674,7 @@ def test_lump_rhs():
     iotag = "test_lump_rhs: "
     tolerance = 1e-10
     maxxerr = 0.0
-    
+
     for dim in [1, 2, 3]:
         for order in [1, 2, 3]:
             from pytools.convergence import EOCRecorder
@@ -722,7 +721,7 @@ def test_lump_rhs():
                 )
                 if err_max > maxxerr:
                     maxxerr = err_max
-                
+
                 eoc_rec.add_data_point(1.0 / nel_1d, err_max)
             print(f"{iotag}Max error: {maxxerr}")
             message = (
@@ -734,6 +733,7 @@ def test_lump_rhs():
                 eoc_rec.order_estimate() >= order - 0.5
                 or eoc_rec.max_error() < tolerance
             )
+
 
 def test_isentropic_vortex():
     """Advance the 2D isentropic vortex case in
