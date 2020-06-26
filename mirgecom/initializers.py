@@ -178,7 +178,6 @@ class Lump:
 
         return flat_obj_array(mass, energy, mom)
 
-    
     def exact_rhs(self, discr, w, t=0.0):
         actx = w[0].array_context
         nodes = thaw(actx, discr.nodes())
@@ -207,7 +206,6 @@ class Lump:
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
-    
     def get_boundary_flux(
         self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):

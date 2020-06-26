@@ -558,7 +558,7 @@ def test_uniform_rhs():
                 assert(err_max < tolerance)
                 if err_max > maxxerr:
                     maxxerr = err_max
-                    
+
                 # set a non-zero, but uniform velocity component
                 i = 0
 
