@@ -81,7 +81,6 @@ class Vortex2D:
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
 
-
         gamma = eos.gamma()
         r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
         expterm = self._beta * actx.np.exp(1 - r ** 2)
@@ -94,7 +93,6 @@ class Vortex2D:
         p = mass ** gamma
 
         e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
-
         return flat_obj_array(mass, e, mass * u, mass * v)
 
 class Lump:
@@ -220,3 +218,4 @@ class Lump:
         momrhs = v * make_obj_array([-2 * mass * rdotv])
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
+

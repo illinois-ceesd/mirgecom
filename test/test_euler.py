@@ -93,7 +93,6 @@ def test_inviscid_flux():
         mass = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
         energy = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
         mom = make_obj_array(
-
             [
                 cl.clrandom.rand(
                     queue, (mesh.nelements,), dtype=np.float64
@@ -101,7 +100,6 @@ def test_inviscid_flux():
                 for i in range(dim)
             ]
         )
-
 
         q = flat_obj_array(mass, energy, mom)
 
@@ -113,8 +111,6 @@ def test_inviscid_flux():
         expected_mom_flux = make_obj_array(
             [
                 (mom[i] * mom[j] / mass + (p if i == j else 0))
-                for i in range(dim)
-                for j in range(dim)
             ]
         )
         expected_flux = flat_obj_array(
@@ -466,8 +462,8 @@ def test_uniform_rhs():
                 inviscid_rhs = inviscid_operator(discr, fields)
                 rhs_resid = inviscid_rhs - expected_rhs
 
-                rho_resid = rhs_resid[0]
-                rhoe_resid = rhs_resid[1]
+                mass_resid = rhs_resid[0]
+                masse_resid = rhs_resid[1]
                 mom_resid = rhs_resid[2:]
 
                 rho_rhs = inviscid_rhs[0]
@@ -575,9 +571,9 @@ def test_vortex_rhs():
             # - these are only used in viz
             # gamma = 1.4
             # rho = vortex_soln[0]
-            # rhoE = vortex_soln[1]
-            # rhoV = vortex_soln[2:]
-            # p = 0.4 * (rhoE - 0.5*np.dot(rhoV,rhoV)/rho)
+            # energy = vortex_soln[1]
+            # momentum = vortex_soln[2:]
+            # p = 0.4 * (energy - 0.5*np.dot(momentum,momentum)/rho)
             # exp_p = rho ** gamma
 
             err_max = np.max(

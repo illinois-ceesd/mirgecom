@@ -64,7 +64,6 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
 
     # q = [ rho rhoE rhoV ]
     mass = q[0]
-    energy = q[1]
     mom = q[2:]
 
     p = eos.pressure(q)
