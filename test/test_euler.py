@@ -95,13 +95,13 @@ def test_inviscid_flux():
 
         print(f"{iotag}Number of {dim}d elems: {mesh.nelements}")
 
-        rho = cl.clrandom.rand(
+        mass = cl.clrandom.rand(
             queue, (mesh.nelements,), dtype=np.float64
         )
-        rhoE = cl.clrandom.rand(
+        energy = cl.clrandom.rand(
             queue, (mesh.nelements,), dtype=np.float64
         )
-        rhoV = make_obj_array(
+        momentum = make_obj_array(
             [
                 cl.clrandom.rand(
                     queue, (mesh.nelements,), dtype=np.float64
@@ -110,16 +110,16 @@ def test_inviscid_flux():
             ]
         )
 
-        q = flat_obj_array(rho, rhoE, rhoV)
+        q = flat_obj_array(mass, energy, momentum)
 
         # Create the expected result
-        p = eos.Pressure(q)
-        escale = (rhoE + p) / rho
-        expected_mass_flux = rhoV
-        expected_energy_flux = rhoV * make_obj_array([escale])
+        p = eos.pressure(q)
+        escale = (energy + p) / mass
+        expected_mass_flux = momentum
+        expected_energy_flux = momentum * make_obj_array([escale])
         expected_mom_flux = make_obj_array(
             [
-                (rhoV[i] * rhoV[j] / rho + (p if i == j else 0))
+                (momentum[i] * momentum[j] / mass + (p if i == j else 0))
                 for i in range(dim)
                 for j in range(dim)
             ]
@@ -136,7 +136,7 @@ def test_inviscid_flux():
         for i in range((dim + 2) * dim):
             assert (la.norm(flux_resid[i].get())) == 0.0
 
-    class mydiscr:
+    class MyDiscr:
         def __init__(self, dim=1):
             self.dim = dim
 
@@ -151,14 +151,14 @@ def test_inviscid_flux():
     tolerance = 1e-15
     for dim in [1, 2, 3]:
         for ntestnodes in [1, 10, 100]:
-            fake_dis = mydiscr(dim)
-            rho = cl.clrandom.rand(
+            fake_dis = MyDiscr(dim)
+            mass = cl.clrandom.rand(
                 queue, (ntestnodes,), dtype=np.float64
             )
-            rhoE = cl.clrandom.rand(
+            energy = cl.clrandom.rand(
                 queue, (ntestnodes,), dtype=np.float64
             )
-            rhoV = make_obj_array(
+            momentum = make_obj_array(
                 [
                     cl.clrandom.rand(
                         queue, (ntestnodes,), dtype=np.float64
@@ -169,13 +169,13 @@ def test_inviscid_flux():
             p = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
 
             for i in range(ntestnodes):
-                rho[i] = 1.0 + i
+                mass[i] = 1.0 + i
                 p[i] = p0
                 for j in range(dim):
-                    rhoV[j][i] = 0.0 * rho[i]
-            rhoE = p / 0.4 + 0.5 * np.dot(rhoV, rhoV) / rho
-            q = flat_obj_array(rho, rhoE, rhoV)
-            p = eos.Pressure(q)
+                    momentum[j][i] = 0.0 * mass[i]
+            energy = p / 0.4 + 0.5 * np.dot(momentum, momentum) / mass
+            q = flat_obj_array(mass, energy, momentum)
+            p = eos.pressure(q)
             flux = _inviscid_flux(fake_dis, q, eos)
 
             print(f"{iotag}{dim}d flux = {flux}")
@@ -221,13 +221,13 @@ def test_inviscid_flux():
         for livedim in range(dim):
             for ntestnodes in [1, 10, 100]:
                 fake_dis = mydiscr(dim)
-                rho = cl.clrandom.rand(
+                mass = cl.clrandom.rand(
                     queue, (ntestnodes,), dtype=np.float64
                 )
-                rhoE = cl.clrandom.rand(
+                energy = cl.clrandom.rand(
                     queue, (ntestnodes,), dtype=np.float64
                 )
-                rhoV = make_obj_array(
+                momentum = make_obj_array(
                     [
                         cl.clrandom.rand(
                             queue, (ntestnodes,), dtype=np.float64
@@ -240,24 +240,24 @@ def test_inviscid_flux():
                 )
 
                 for i in range(ntestnodes):
-                    rho[i] = 1.0 + i
+                    mass[i] = 1.0 + i
                     p[i] = p0
                     for j in range(dim):
-                        rhoV[j][i] = 0.0 * rho[i]
-                    rhoV[livedim][i] = rho[i]
+                        momentum[j][i] = 0.0 * mass[i]
+                    momentum[livedim][i] = mass[i]
 
-                rhoE = (
-                    p / (eos.Gamma() - 1.0)
-                    + 0.5 * np.dot(rhoV, rhoV) / rho
+                energy = (
+                    p / (eos.gamma() - 1.0)
+                    + 0.5 * np.dot(momentum, momentum) / mass
                 )
-                q = flat_obj_array(rho, rhoE, rhoV)
-                p = eos.Pressure(q)
+                q = flat_obj_array(mass, energy, momentum)
+                p = eos.pressure(q)
                 flux = _inviscid_flux(fake_dis, q, eos)
 
                 print(f"{iotag}{dim}d flux = {flux}")
 
                 # first two components should be nonzero in livedim only
-                expected_flux = rhoV
+                expected_flux = momentum
                 print(f"{iotag}Testing continuity")
                 for i in range(dim):
                     assert (
@@ -270,8 +270,8 @@ def test_inviscid_flux():
                         assert la.norm(flux[i].get()) > 0.0
 
                 print(f"{iotag}Testing energy")
-                expected_flux = rhoV * make_obj_array(
-                    [(rhoE + p) / rho]
+                expected_flux = momentum * make_obj_array(
+                    [(energy + p) / mass]
                 )
                 for i in range(dim):
                     assert (
@@ -288,7 +288,7 @@ def test_inviscid_flux():
                 print(f"{iotag}Testing momentum")
                 xpmomflux = make_obj_array(
                     [
-                        (rhoV[i] * rhoV[j] / rho + (p if i == j else 0))
+                        (momentum[i] * momentum[j] / mass + (p if i == j else 0))
                         for i in range(dim)
                         for j in range(dim)
                     ]
@@ -425,12 +425,12 @@ def test_facial_flux():
                 eoc_rec0.add_data_point(1.0 / nel_1d, errrec)
 
                 # Check the boundary facial fluxes as called on a boundary
-                dir_rho = discr.interp("vol", BTAG_ALL, mass_input)
+                dir_mass = discr.interp("vol", BTAG_ALL, mass_input)
                 dir_e = discr.interp("vol", BTAG_ALL, energy_input)
                 dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
 
-                dir_bval = flat_obj_array(dir_rho, dir_e, dir_mom)
-                dir_bc = flat_obj_array(dir_rho, dir_e, dir_mom)
+                dir_bval = flat_obj_array(dir_mass, dir_e, dir_mom)
+                dir_bc = flat_obj_array(dir_mass, dir_e, dir_mom)
 
                 boundary_flux = _facial_flux(
                     discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
@@ -534,8 +534,8 @@ def test_uniform_rhs():
                 inviscid_rhs = inviscid_operator(discr, fields)
                 rhs_resid = inviscid_rhs - expected_rhs
 
-                rho_resid = rhs_resid[0]
-                rhoe_resid = rhs_resid[1]
+                mass_resid = rhs_resid[0]
+                masse_resid = rhs_resid[1]
                 mom_resid = rhs_resid[2:]
 
                 rho_rhs = inviscid_rhs[0]
@@ -647,9 +647,9 @@ def test_vortex_rhs():
             # - these are only used in viz
             # gamma = 1.4
             # rho = vortex_soln[0]
-            # rhoE = vortex_soln[1]
-            # rhoV = vortex_soln[2:]
-            # p = 0.4 * (rhoE - 0.5*np.dot(rhoV,rhoV)/rho)
+            # energy = vortex_soln[1]
+            # momentum = vortex_soln[2:]
+            # p = 0.4 * (energy - 0.5*np.dot(momentum,momentum)/rho)
             # exp_p = rho ** gamma
 
             err_max = np.max(

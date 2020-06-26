@@ -43,10 +43,10 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs,
 )
-from grudge.dt_finding import (
-    dt_geometric_factor,
-    dt_non_geometric_factor,
-)
+#from grudge.dt_finding import (
+#    dt_geometric_factor,
+#    dt_non_geometric_factor,
+#)
 
 __doc__ = """
 .. autofunction:: inviscid_operator
@@ -57,7 +57,7 @@ __doc__ = """
 # Euler flow eqns:
 # d_t(q) + nabla .dot. f = 0 (no sources atm)
 # state vector q: [rho rhoE rhoV]
-# flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p)]
+# flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + p*I)]
 #
 
 
@@ -65,38 +65,38 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     ndim = discr.dim
 
     # q = [ rho rhoE rhoV ]
-    rho = q[0]
-    rhoE = q[1]
-    rhoV = q[2:]
+    mass = q[0]
+    ener = q[1]
+    mom = q[2:]
 
-    p = eos.Pressure(q)
+    p = eos.pressure(q)
 
     # Fluxes:
-    # [ rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    momFlux = make_obj_array(
+    # [ rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
+    momflux = make_obj_array(
         [
-            (rhoV[i] * rhoV[j] / rho + (p if i == j else 0))
+            (mom[i] * mom[j] / mass + (p if i == j else 0))
             for i in range(ndim)
             for j in range(ndim)
         ]
     )
-    massFlux = rhoV * make_obj_array([1.0])
-    energyFlux = rhoV * make_obj_array([(rhoE + p) / rho])
+    massflux = mom * make_obj_array([1.0])
+    enerflux = mom * make_obj_array([(ener + p) / mass])
 
-    flux = flat_obj_array(massFlux, energyFlux, momFlux,)
+    flux = flat_obj_array(massflux, enerflux, momflux,)
 
     return flux
 
 
 def _get_wavespeed(w, eos=IdealSingleGas()):
 
-    rho = w[0]
-    rhoV = w[2:]
-    actx = rho.array_context
+    mass = w[0]
+    mom = w[2:]
+    actx = mass.array_context
 
-    v = rhoV * make_obj_array([1.0 / rho])
+    v = mom * make_obj_array([1.0 / mass])
 
-    sos = eos.SpeedOfSound(w)
+    sos = eos.sound_speed(w)
     wavespeed = actx.np.sqrt(np.dot(v, v)) + sos
     return wavespeed
 
@@ -105,15 +105,15 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
     dim = discr.dim
 
-    rho = w_tpair[0]
-    rhoE = w_tpair[1]
-    rhoV = w_tpair[2:]
+    mass = w_tpair[0]
+    ener = w_tpair[1]
+    mom = w_tpair[2:]
 
-    normal = thaw(rho.int.array_context, discr.normal(w_tpair.dd))
+    normal = thaw(mass.int.array_context, discr.normal(w_tpair.dd))
 
-    # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + delta_ij*p) ]
-    qint = flat_obj_array(rho.int, rhoE.int, rhoV.int)
-    qext = flat_obj_array(rho.ext, rhoE.ext, rhoV.ext)
+    # Get inviscid fluxes [rhoV (ener + p)V (rhoV.x.V + p*I) ]
+    qint = flat_obj_array(mass.int, ener.int, mom.int)
+    qext = flat_obj_array(mass.ext, ener.ext, mom.ext)
 
     # - Figure out how to manage grudge branch dependencies
     #    qjump = flat_obj_array(rho.jump, rhoE.jump, rhoV.jump)
@@ -159,7 +159,7 @@ def inviscid_operator(
     Returns the RHS of the Euler flow equations:
     :math: \partial_t Q = - \\nabla \\cdot F
     where Q = [ rho rhoE rhoV ]
-          F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*delta_ij) ]
+          F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*I) ]
     """
 
     ndim = discr.dim

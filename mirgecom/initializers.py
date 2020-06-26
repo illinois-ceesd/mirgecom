@@ -71,19 +71,19 @@ class Vortex2D:
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
 
-        gamma = eos.Gamma()
+        gamma = eos.gamma()
         r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
         expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
-        rho = (
+        mass = (
             1 - (gamma - 1) / (16 * gamma * np.pi ** 2) * expterm ** 2
         ) ** (1 / (gamma - 1))
-        p = rho ** gamma
+        p = mass ** gamma
 
-        e = p / (gamma - 1) + rho / 2 * (u ** 2 + v ** 2)
+        e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return flat_obj_array(rho, e, rho * u, rho * v)
+        return flat_obj_array(mass, e, mass * u, mass * v)
 
     def get_boundary_flux(
         self, discr, w, t=0, btag=BTAG_ALL, eos=IdealSingleGas()
@@ -168,15 +168,15 @@ class Lump:
         )
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
-        gamma = eos.Gamma()
+        gamma = eos.gamma()
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
-        rho = expterm + self._rho0
-        rhoV = self._velocity * make_obj_array([rho])
-        rhoE = (self._p0 / (gamma - 1.0)) + np.dot(rhoV, rhoV) / (
-            2.0 * rho
+        mass = expterm + self._rho0
+        mom = self._velocity * make_obj_array([mass])
+        ener = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (
+            2.0 * mass
         )
 
-        return flat_obj_array(rho, rhoE, rhoV)
+        return flat_obj_array(mass, ener, mom)
 
     def exact_rhs(self, discr, w, t=0.0):
         actx = w[0].array_context
@@ -194,16 +194,16 @@ class Lump:
         # rhoerhs = -rho*v^2*(r.dot.v)
         # rhovrhs = -2*rho*(r.dot.v)*v
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
-        rho = expterm + self._rho0
+        mass = expterm + self._rho0
 
-        v = self._velocity * make_obj_array([1.0 / rho])
+        v = self._velocity * make_obj_array([1.0 / mass])
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
-        rhorhs = -2 * rdotv * rho
-        rhoErhs = -v2 * rdotv * rho
-        rhoVrhs = v * make_obj_array([-2 * rho * rdotv])
+        massrhs = -2 * rdotv * mass
+        enerrhs = -v2 * rdotv * mass
+        momrhs = v * make_obj_array([-2 * mass * rdotv])
 
-        return flat_obj_array(rhorhs, rhoErhs, rhoVrhs)
+        return flat_obj_array(massrhs, enerrhs, momrhs)
 
     def get_boundary_flux(
         self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()

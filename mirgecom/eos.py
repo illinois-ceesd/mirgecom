@@ -33,45 +33,43 @@ class IdealSingleGas:
     for a single monatomic gas.
     """
 
-    def __init__(self, gamma=1.4, R=287.1):
+    def __init__(self, gamma=1.4, r=287.1):
         self._gamma = gamma
-        self._R = R
+        self._gas_const = r
 
-    def Gamma(self):
+    def gamma(self):
         return self._gamma
 
-    def R(self):
-        return self._R
+    def gas_const(self):
+        return self._gas_const
 
-    def InternalEnergy(self, w):
+    def internal_energy(self, w):
 
-        rho = w[0]
-        rhoE = w[1]
-        rhoV = w[2:]
+        mass = w[0]
+        ener = w[1]
+        mom = w[2:]
 
-        e = rhoE - 0.5 * np.dot(rhoV, rhoV) / rho
+        e = ener - 0.5 * np.dot(mom, mom) / mass
         return e
 
-    def Pressure(self, w):
-        p = (self._gamma - 1.0) * self.InternalEnergy(w)
+    def pressure(self, w):
+        p = (self._gamma - 1.0) * self.internal_energy(w)
         return p
 
-    def SpeedOfSound(self, w):
-        rho = w[0]
-        actx = rho.array_context
-        p = self.Pressure(w)
+    def sound_speed(self, w):
+        mass = w[0]
+        actx = mass.array_context
+        p = self.pressure(w)
         c2 = self._gamma / rho * p
         c = actx.np.sqrt(c2)
         return c
 
-    def Temperature(self, w):
-        rho = w[0]
-        T = (
-            ((self._gamma - 1.0) / self._R)
-            * self.InternalEnergy(w)
-            / rho
-        )
-        return T
+    def temperature(self, w):
+        mass = w[0]
+        temper = (
+            ((self._gamma - 1.0) / self._gas_const)
+            * self.internal_energy(w) / mass )
+        return temper
 
     def __call__(self, w):
-        return flat_obj_array(self.Pressure(w), self.Temperature(w))
+        return flat_obj_array(self.pressure(w), self.temperature(w))

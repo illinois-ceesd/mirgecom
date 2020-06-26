@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 def sym_diff(var):
     from pymbolic.mapper.differentiator import DifferentiationMapper
+
     def func_map(arg_index, func, arg, allowed_nonsmoothness):
         if func == pmbl.var("sin"):
             return pmbl.var("cos")(*arg)
