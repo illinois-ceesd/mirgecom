@@ -60,7 +60,7 @@ class IdealSingleGas:
         mass = w[0]
         actx = mass.array_context
         p = self.pressure(w)
-        c2 = self._gamma / rho * p
+        c2 = self._gamma / mass * p
         c = actx.np.sqrt(c2)
         return c
 
@@ -68,7 +68,7 @@ class IdealSingleGas:
         mass = w[0]
         temper = (
             ((self._gamma - 1.0) / self._gas_const)
-            * self.internal_energy(w) / mass )
+            * self.internal_energy(w) / mass)
         return temper
 
     def __call__(self, w):

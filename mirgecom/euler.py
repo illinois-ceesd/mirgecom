@@ -157,9 +157,10 @@ def inviscid_operator(
 ):
     """
     Returns the RHS of the Euler flow equations:
-    :math: \partial_t Q = - \\nabla \\cdot F
+    d/dt(Q) = -nabla .dot. F + S
     where Q = [ rho rhoE rhoV ]
           F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*I) ]
+          S = sources [ mass_src ener_src mom_src]
     """
 
     ndim = discr.dim

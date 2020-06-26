@@ -220,7 +220,7 @@ def test_inviscid_flux():
     for dim in [1, 2, 3]:
         for livedim in range(dim):
             for ntestnodes in [1, 10, 100]:
-                fake_dis = mydiscr(dim)
+                fake_dis = MyDiscr(dim)
                 mass = cl.clrandom.rand(
                     queue, (ntestnodes,), dtype=np.float64
                 )
@@ -549,8 +549,8 @@ def test_uniform_rhs():
                 )
                 print(message)
 
-                assert np.max(np.abs(rho_resid.get())) < tolerance
-                assert np.max(np.abs(rhoe_resid.get())) < tolerance
+                assert np.max(np.abs(mass_resid.get())) < tolerance
+                assert np.max(np.abs(masse_resid.get())) < tolerance
                 for i in range(dim):
                     assert (
                         np.max(np.abs(mom_resid[i].get())) < tolerance
