@@ -54,7 +54,7 @@ def test_lump_init():
     )
 
     order = 3
-    print(iotag + "%d elements" % mesh.nelements)
+    print(f"{iotag}Number of elements: {mesh.nelements}")
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
@@ -67,10 +67,10 @@ def test_lump_init():
     lump = Lump(center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
-    rho = lump_soln[0]
-    rhoE = lump_soln[1]
-    rhoV = lump_soln[2:]
-    p = 0.4 * (rhoE - 0.5 * np.dot(rhoV, rhoV) / rho)
+    mass = lump_soln[0]
+    energy = lump_soln[1]
+    mom = lump_soln[2:]
+    p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
     exp_p = 1.0
     errmax = np.max(np.abs(p - exp_p))
 
@@ -95,7 +95,7 @@ def test_vortex_init():
     )
 
     order = 3
-    print(iotag + "%d elements" % mesh.nelements)
+    print(f"{iotag}Number of elements: {mesh.nelements}")
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
@@ -104,11 +104,11 @@ def test_vortex_init():
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     gamma = 1.4
-    rho = vortex_soln[0]
-    rhoE = vortex_soln[1]
-    rhoV = vortex_soln[2:]
-    p = 0.4 * (rhoE - 0.5 * np.dot(rhoV, rhoV) / rho)
-    exp_p = rho ** gamma
+    mass = vortex_soln[0]
+    energy = vortex_soln[1]
+    mom = vortex_soln[2:]
+    p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
+    exp_p = mass ** gamma
     errmax = np.max(np.abs(p - exp_p))
 
     print("vortex_soln = ", vortex_soln)

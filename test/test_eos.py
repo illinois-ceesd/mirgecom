@@ -69,7 +69,7 @@ def test_idealsingle_lump():
     eos = IdealSingleGas()
     lump_soln = lump(0, nodes)
 
-    p = eos.Pressure(lump_soln)
+    p = eos.pressure(lump_soln)
     exp_p = 1.0
     errmax = np.max(np.abs(p - exp_p))
 
@@ -103,8 +103,8 @@ def test_idealsingle_vortex():
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     rho = vortex_soln[0]
-    gamma = eos.Gamma()
-    p = eos.Pressure(vortex_soln)
+    gamma = eos.gamma()
+    p = eos.pressure(vortex_soln)
     exp_p = rho ** gamma
     errmax = np.max(np.abs(p - exp_p))
 
