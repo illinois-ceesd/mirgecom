@@ -677,10 +677,9 @@ def test_lump_rhs():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_lump_rhs: "
-    dim = 2
-    nel_1d = 16
-    order = 4
-
+    tolerance = 1e-10
+    maxxerr = 0.0
+    
     for dim in [1, 2, 3]:
         for order in [1, 2, 3]:
             from pytools.convergence import EOCRecorder
@@ -696,7 +695,7 @@ def test_lump_rhs():
                     a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
                 )
 
-                print(iotag + "%d elements" % mesh.nelements)
+                print(f"{iotag}Number of elements: {mesh.nelements}")
 
                 discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
                 nodes = discr.nodes().with_queue(queue)
@@ -725,9 +724,11 @@ def test_lump_rhs():
                         ]
                     )
                 )
-
+                if err_max > maxxerr:
+                    maxxerr = err_max
+                
                 eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-
+            print(f"{iotag}Max error: {maxxerr}")
             message = (
                 f"{iotag}Error for (dim,order) = ({dim},{order}):\n"
                 f"{eoc_rec}"
@@ -735,9 +736,8 @@ def test_lump_rhs():
             print(message)
             assert (
                 eoc_rec.order_estimate() >= order - 0.5
-                or eoc_rec.max_error() < 1e-11
+                or eoc_rec.max_error() < tolerance
             )
-
 
 def test_isentropic_vortex():
     """Advance the 2D isentropic vortex case in
