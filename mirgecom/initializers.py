@@ -29,7 +29,6 @@ from pytools.obj_array import (
     make_obj_array,
 )
 import pyopencl.clmath as clmath
-
 from mirgecom.eos import IdealSingleGas
 
 
@@ -97,8 +96,6 @@ class Vortex2D:
         e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
         return flat_obj_array(mass, e, mass * u, mass * v)
-
-
 
 class Lump:
     r"""Implements an N-dimensional Gaussian lump of mass.
@@ -198,8 +195,8 @@ class Lump:
 
     def exact_rhs(self, discr, w, t=0.0):
         actx = w[0].array_context
-        nodes = thaw(actx,discr.nodes())
-        
+        nodes = thaw(actx, discr.nodes())
+
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(

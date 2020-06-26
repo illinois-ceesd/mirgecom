@@ -27,20 +27,16 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
-    with_object_array_or_scalar,
 )
-import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import (
-    with_queue,
     interior_trace_pair,
-    cross_rank_trace_pairs
+    cross_rank_trace_pairs,
 )
 from grudge.symbolic.primitives import TracePair
 
@@ -48,6 +44,7 @@ from grudge.symbolic.primitives import TracePair
 #    dt_geometric_factor,
 #    dt_non_geometric_factor,
 # )
+
 
 __doc__ = """
 .. autofunction:: inviscid_operator
@@ -198,11 +195,14 @@ def inviscid_operator(
         _facial_flux(discr, w_tpair=part_pair, eos=eos)
         for part_pair in cross_rank_trace_pairs(discr, w)
     )
-    
+
     return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux
-                                + domain_boundary_flux
-                                + partition_boundary_flux)
+        dflux
+        - discr.face_mass(
+            interior_face_flux
+            + domain_boundary_flux
+            + partition_boundary_flux
+        )
     )
 
 

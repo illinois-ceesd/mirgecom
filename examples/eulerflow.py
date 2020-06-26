@@ -42,6 +42,7 @@ from meshmode.dof_array import thaw
 
 
 mirge_params = {
+
     "numdim": 2,
     "nel_1d": 16,
     "box_lower_left": -5,
@@ -99,7 +100,9 @@ def main():
 
         part_per_element = get_partition_by_pymetis(mesh, num_parts)
 
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+        local_mesh = mesh_dist.send_mesh_parts(
+            mesh, part_per_element, num_parts
+        )
         del mesh
 
     else:
@@ -124,7 +127,6 @@ def main():
         orig[j] = origi
         j += 1
 
-    casename = "Vortex"
     if casename == "Vortex":
         initializer = Vortex2D(center=orig, velocity=vel)
     elif casename == "Lump":
@@ -181,7 +183,7 @@ def main():
         if rank == 0:  # todo: need parallel status
             logging.info(statusmsg)
 
-        # todo: post-processing stitching together multiple ranks viz
+
         visfilename = visfileroot + "-{iorank:04d}-{iostep:04d}.vtu"
         visfilename.Format(iorank=rank, iostep=istep)
 

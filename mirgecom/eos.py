@@ -166,9 +166,10 @@ class IdealSingleGas:
 
     def sound_speed(self, w):
         mass = w[0]
+        actx = mass.array_context
         p = self.pressure(w)
         c2 = self._gamma / mass * p
-        c = clmath.sqrt(c2)
+        c = actx.np.sqrt(c2)
         return c
 
     def temperature(self, w):
