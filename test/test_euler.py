@@ -474,23 +474,23 @@ def test_facial_flux():
 def test_uniform_rhs():
     """Tests the inviscid rhs using a trivial
     constant/uniform state which should
-    yield rhs = 0.  The test is performed
+    yield rhs = 0 to FP.  The test is performed
     for 1, 2, and 3 dimensions.
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     iotag = "test_uniform_flow: "
 
-    tolerance = 1e-4
-
+    tolerance = 1e-9
+    maxxerr = 0.0
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     for dim in [1, 2, 3]:
         for order in [1, 2, 3]:
-            from pytools.convergence import EOCRecorder
+            #            from pytools.convergence import EOCRecorder
 
-            eoc_rec0 = EOCRecorder()
-            eoc_rec1 = EOCRecorder()
+            #            eoc_rec0 = EOCRecorder()
+            #            eoc_rec1 = EOCRecorder()
 
             for nel_1d in [8, 16, 32]:
 
@@ -548,8 +548,10 @@ def test_uniform_rhs():
                     )
 
                 err_max = np.max(np.abs(rhs_resid[i].get()))
-                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
-
+                #                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
+                assert(err_max < tolerance)
+                if err_max > maxxerr:
+                    maxxerr = err_max
                 # set a non-zero, but uniform velocity component
                 i = 0
 
@@ -564,27 +566,29 @@ def test_uniform_rhs():
                 rhoe_resid = rhs_resid[1]
                 mom_resid = rhs_resid[2:]
 
-                assert la.norm(rho_resid.get()) < tolerance
-                assert la.norm(rhoe_resid.get()) < tolerance
+                assert np.max(np.abs(rho_resid.get())) < tolerance
+                assert np.max(np.abs(rhoe_resid.get())) < tolerance
                 for i in range(dim):
-                    assert la.norm(mom_resid[i].get()) < tolerance
+                    assert np.max(np.abs(mom_resid[i].get())) < tolerance
 
                 err_max = np.max(np.abs(rhs_resid[i].get()))
-                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
-
-            message = (
-                f"{iotag}V == 0 Errors:\n{eoc_rec0}"
-                f"{iotag}V != 0 Errors:\n{eoc_rec1}"
-            )
-            print(message)
-            assert (
-                eoc_rec0.order_estimate() >= order - 0.5
-                or eoc_rec0.max_error() < 1e-9
-            )
-            assert (
-                eoc_rec1.order_estimate() >= order - 0.5
-                or eoc_rec1.max_error() < 1e-9
-            )
+                #                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
+                assert(err_max < tolerance)
+                if err_max > maxxerr:
+                    maxxerr = err_max
+            #            message = (
+            #                f"{iotag}V == 0 Errors:\n{eoc_rec0}"
+            #                f"{iotag}V != 0 Errors:\n{eoc_rec1}"
+            #            )
+            #            print(message)
+            #            assert (
+            #                eoc_rec0.order_estimate() >= order - 0.5
+            #                or eoc_rec0.max_error() < 1e-9
+            #            )
+            #            assert (
+            #                eoc_rec1.order_estimate() >= order - 0.5
+            #                or eoc_rec1.max_error() < 1e-9
+            #            )
 
 
 # def test_vortex_rhs(ctx_factory):
