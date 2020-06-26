@@ -172,7 +172,7 @@ class Lump:
         gamma = eos.Gamma()
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
-        rhoV = self._velocity * make_obj_array( [ rho ] )
+        rhoV = self._velocity * make_obj_array([rho])
         rhoE = (self._p0 / (gamma - 1.0)) + np.dot(rhoV, rhoV) / (
             2.0 * rho
         )
@@ -195,13 +195,13 @@ class Lump:
         # rhovrhs = -2*rho*(r.dot.v)*v
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
-        rhoV = self._velocity * make_obj_array( [ rho ] )
-        v = self._velocity * make_obj_array( [ 1.0/rho ] )
+        rhoV = self._velocity * make_obj_array([rho])
+        v = self._velocity * make_obj_array([1.0 / rho])
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
         rhorhs = -2 * rdotv * rho
         rhoErhs = -v2 * rdotv * rho
-        rhoVrhs = v * make_obj_array( [ -2 * rho * rdotv ] )
+        rhoVrhs = v * make_obj_array([-2 * rho * rdotv])
 
         return flat_obj_array(rhorhs, rhoErhs, rhoVrhs)
 

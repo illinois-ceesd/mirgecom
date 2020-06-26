@@ -1,4 +1,6 @@
-__copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
+__copyright__ = (
+    "Copyright (C) 2020 University of Illinos Board of Trustees"
+)
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,21 +35,18 @@ from mirgecom.integrators import rk4_step
 
 
 def bump(discr, queue, t=0):
-    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
+    source_center = np.array([0.2, 0.35, 0.1])[: discr.dim]
     source_width = 0.05
     source_omega = 3
 
     nodes = discr.nodes().with_queue(queue)
-    center_dist = join_fields([
-        nodes[i] - source_center[i]
-        for i in range(discr.dim)
-        ])
+    center_dist = join_fields(
+        [nodes[i] - source_center[i] for i in range(discr.dim)]
+    )
 
-    return (
-        np.cos(source_omega*t)
-        * clmath.exp(
-            -np.dot(center_dist, center_dist)
-            / source_width**2))
+    return np.cos(source_omega * t) * clmath.exp(
+        -np.dot(center_dist, center_dist) / source_width ** 2
+    )
 
 
 def main():
@@ -57,19 +56,19 @@ def main():
     dim = 2
     nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
+
     mesh = generate_regular_rect_mesh(
-            a=(-0.5,)*dim,
-            b=(0.5,)*dim,
-            n=(nel_1d,)*dim)
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+    )
 
     order = 3
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
-        dt = 0.75/(nel_1d*order**2)
+        dt = 0.75 / (nel_1d * order ** 2)
     elif dim == 3:
         # no deep meaning here, just a fudge factor
-        dt = 0.45/(nel_1d*order**2)
+        dt = 0.45 / (nel_1d * order ** 2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
@@ -78,11 +77,13 @@ def main():
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
     fields = join_fields(
-            bump(discr, queue),
-            [discr.zeros(queue) for i in range(discr.dim)]
-            )
+        bump(discr, queue),
+        [discr.zeros(queue) for i in range(discr.dim)],
+    )
 
-    vis = make_visualizer(discr, discr.order+3 if dim == 2 else discr.order)
+    vis = make_visualizer(
+        discr, discr.order + 3 if dim == 2 else discr.order
+    )
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
@@ -95,11 +96,10 @@ def main():
 
         if istep % 10 == 0:
             print(istep, t, la.norm(fields[0].get()))
-            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
+            vis.write_vtk_file(
+                "fld-wave-eager-%04d.vtu" % istep,
+                [("u", fields[0]), ("v", fields[1:]),],
+            )
 
         t += dt
         istep += 1

@@ -32,12 +32,13 @@ import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
 
 from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl
-        as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
 
 import pytest
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,16 +77,19 @@ class EvaluationMapper(ev.EvaluationMapper):
     def map_call(self, expr):
         assert isinstance(expr.function, prim.Variable)
         if expr.function.name == "sin":
-            par, = expr.parameters
+            (par,) = expr.parameters
             return self._sin(self.rec(par))
         elif expr.function.name == "cos":
-            par, = expr.parameters
+            (par,) = expr.parameters
             return self._cos(self.rec(par))
         else:
-            raise ValueError("Unrecognized function '%s'" % expr.function)
+            raise ValueError(
+                "Unrecognized function '%s'" % expr.function
+            )
 
     def _sin(self, val):
         from numbers import Number
+
         if isinstance(val, Number):
             return np.sin(val)
         else:
@@ -93,6 +97,7 @@ class EvaluationMapper(ev.EvaluationMapper):
 
     def _cos(self, val):
         from numbers import Number
+
         if isinstance(val, Number):
             return np.cos(val)
         else:
@@ -106,16 +111,20 @@ def test_standing_wave(ctx_factory, dim, order):
     queue = cl.CommandQueue(cl_ctx)
 
     from pytools.convergence import EOCRecorder
+
     eoc_rec = EOCRecorder()
 
     for n in [4, 8, 16]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
+
         mesh = generate_regular_rect_mesh(
-                a=(-0.5*np.pi,)*dim,
-                b=(0.5*np.pi,)*dim,
-                n=(n,)*dim)
+            a=(-0.5 * np.pi,) * dim,
+            b=(0.5 * np.pi,) * dim,
+            n=(n,) * dim,
+        )
 
         from grudge.eager import EagerDGDiscretization
+
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
         nodes = discr.nodes().with_queue(queue)
@@ -130,7 +139,7 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_omega = pmbl.var("omega")
         sym_pi = pmbl.var("pi")
         sym_cos = pmbl.var("cos")
-        sym_phi = sym_cos(sym_omega*sym_t - sym_pi/4)
+        sym_phi = sym_cos(sym_omega * sym_t - sym_pi / 4)
         for i in range(dim):
             sym_phi = sym_phi * sym_cos(sym_coords[i])
 
@@ -138,23 +147,28 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v = c*grad(phi)
-        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
+        sym_v = [
+            sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)
+        ]
 
         # rhs(u part) = c*div(v)
         # rhs(v part) = c*grad(u)
         sym_rhs = flat_obj_array(
-                    sym_c * sym_div(sym_v),
-                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
+            sym_c * sym_div(sym_v),
+            make_obj_array([sym_c]) * sym_grad(dim, sym_u),
+        )
 
-        c = 2.
+        c = 2.0
 
         eval_values = {
-            "t": 0.,
+            "t": 0.0,
             "c": c,
-            "omega": np.sqrt(dim)*c,
-            "pi": np.pi
+            "omega": np.sqrt(dim) * c,
+            "pi": np.pi,
         }
-        eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
+        eval_values.update(
+            {coord_names[i]: nodes[i] for i in range(dim)}
+        )
 
         def sym_eval(expr):
             return EvaluationMapper(eval_values)(expr)
@@ -164,13 +178,20 @@ def test_standing_wave(ctx_factory, dim, order):
         fields = flat_obj_array(u, v)
 
         from mirgecom.wave import wave_operator
+
         rhs = wave_operator(discr, c=c, w=fields)
 
         expected_rhs = sym_eval(sym_rhs)
 
-        err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
-                for i in range(dim+1)]))
-        eoc_rec.add_data_point(1./n, err)
+        err = np.max(
+            np.array(
+                [
+                    la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
+                    for i in range(dim + 1)
+                ]
+            )
+        )
+        eoc_rec.add_data_point(1.0 / n, err)
 
         # from grudge.shortcuts import make_visualizer
         # vis = make_visualizer(discr, discr.order)
@@ -186,7 +207,10 @@ def test_standing_wave(ctx_factory, dim, order):
 
     print("Approximation error:")
     print(eoc_rec)
-    assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
+    assert (
+        eoc_rec.order_estimate() >= order - 0.5
+        or eoc_rec.max_error() < 1e-11
+    )
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -196,16 +220,18 @@ def test_wave_manufactured(ctx_factory, dim, order):
     queue = cl.CommandQueue(cl_ctx)
 
     from pytools.convergence import EOCRecorder
+
     eoc_rec = EOCRecorder()
 
     for n in [4, 8, 16]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
+
         mesh = generate_regular_rect_mesh(
-                a=(-1.,)*dim,
-                b=(1.,)*dim,
-                n=(n,)*dim)
+            a=(-1.0,) * dim, b=(1.0,) * dim, n=(n,) * dim
+        )
 
         from grudge.eager import EagerDGDiscretization
+
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
         nodes = discr.nodes().with_queue(queue)
@@ -221,31 +247,35 @@ def test_wave_manufactured(ctx_factory, dim, order):
         sym_omega = pmbl.var("omega")
         sym_pi = pmbl.var("pi")
         sym_cos = pmbl.var("cos")
-        sym_phi = sym_cos(sym_omega*sym_t - sym_pi/4)
+        sym_phi = sym_cos(sym_omega * sym_t - sym_pi / 4)
         for i in range(dim):
-            sym_phi = sym_phi * (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
+            sym_phi = (
+                sym_phi
+                * (sym_coords[i] - 1) ** 3
+                * (sym_coords[i] + 1) ** 3
+            )
 
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v = c*grad(phi)
-        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
+        sym_v = [
+            sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)
+        ]
 
         # rhs(u part) = c*div(v)
         # rhs(v part) = c*grad(u)
         sym_rhs = flat_obj_array(
-                    sym_c * sym_div(sym_v),
-                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
+            sym_c * sym_div(sym_v),
+            make_obj_array([sym_c]) * sym_grad(dim, sym_u),
+        )
 
-        c = 2.
+        c = 2.0
 
-        eval_values = {
-            "t": 0.,
-            "c": c,
-            "omega": 1.,
-            "pi": np.pi
-        }
-        eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
+        eval_values = {"t": 0.0, "c": c, "omega": 1.0, "pi": np.pi}
+        eval_values.update(
+            {coord_names[i]: nodes[i] for i in range(dim)}
+        )
 
         def sym_eval(expr):
             return EvaluationMapper(eval_values)(expr)
@@ -255,13 +285,20 @@ def test_wave_manufactured(ctx_factory, dim, order):
         fields = flat_obj_array(u, v)
 
         from mirgecom.wave import wave_operator
+
         rhs = wave_operator(discr, c=c, w=fields)
 
         expected_rhs = sym_eval(sym_rhs)
 
-        err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
-                for i in range(dim+1)]))
-        eoc_rec.add_data_point(1./n, err)
+        err = np.max(
+            np.array(
+                [
+                    la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
+                    for i in range(dim + 1)
+                ]
+            )
+        )
+        eoc_rec.add_data_point(1.0 / n, err)
 
         # from grudge.shortcuts import make_visualizer
         # vis = make_visualizer(discr, discr.order)
@@ -277,4 +314,7 @@ def test_wave_manufactured(ctx_factory, dim, order):
 
     print("Approximation error:")
     print(eoc_rec)
-    assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
+    assert (
+        eoc_rec.order_estimate() >= order - 0.5
+        or eoc_rec.max_error() < 1e-11
+    )
