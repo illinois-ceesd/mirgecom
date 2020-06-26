@@ -24,16 +24,8 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-    with_object_array_or_scalar,
-)
-import pyopencl.clmath as clmath
+from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from grudge.eager import with_queue
-from grudge.symbolic.primitives import TracePair
 
 
 class IdealSingleGas:
@@ -66,9 +58,10 @@ class IdealSingleGas:
 
     def SpeedOfSound(self, w):
         rho = w[0]
+        actx = rho.array_context
         p = self.Pressure(w)
         c2 = self._gamma / rho * p
-        c = clmath.sqrt(c2)
+        c = actx.np.sqrt(c2)
         return c
 
     def Temperature(self, w):

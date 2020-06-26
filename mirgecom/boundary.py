@@ -28,8 +28,8 @@ from grudge.symbolic.primitives import TracePair
 
 
 class DummyBoundary:
-    """Simple example boundary condition that sets the 
-    volume solution on both "sides" of a boundary 
+    """Simple example boundary condition that sets the
+    volume solution on both "sides" of a boundary
     face.
     """
 

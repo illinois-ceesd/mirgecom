@@ -32,22 +32,17 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
-    with_object_array_or_scalar,
 )
-import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import (
-    with_queue,
     interior_trace_pair,
-    cross_rank_trace_pairs
+    cross_rank_trace_pairs,
 )
-from grudge.symbolic.primitives import TracePair
 from grudge.dt_finding import (
     dt_geometric_factor,
     dt_non_geometric_factor,
@@ -85,12 +80,10 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
             for j in range(ndim)
         ]
     )
-    massFlux = rhoV * make_obj_array([ 1.0 ])
-    energyFlux = rhoV * make_obj_array([ (rhoE + p) / rho ])
-    
-    flux = flat_obj_array(
-        massFlux, energyFlux, momFlux,
-    )
+    massFlux = rhoV * make_obj_array([1.0])
+    energyFlux = rhoV * make_obj_array([(rhoE + p) / rho])
+
+    flux = flat_obj_array(massFlux, energyFlux, momFlux,)
 
     return flux
 
@@ -100,9 +93,9 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
     rho = w[0]
     rhoV = w[2:]
     actx = rho.array_context
-    
-    v = rhoV * make_obj_array( [ 1.0/rho ] )
-    
+
+    v = rhoV * make_obj_array([1.0 / rho])
+
     sos = eos.SpeedOfSound(w)
     wavespeed = actx.np.sqrt(np.dot(v, v)) + sos
     return wavespeed
@@ -129,13 +122,13 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_ext = _inviscid_flux(discr, qext, eos)
 
     # Lax/Friedrichs/Rusonov after JSH/TW Nodal DG Methods, p. 209
-    flux_jump = (flux_int + flux_ext) * make_obj_array([ 0.5 ])
+    flux_jump = (flux_int + flux_ext) * make_obj_array([0.5])
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = [_get_wavespeed(qint), _get_wavespeed(qext)]
 
     lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
-    lfr = qjump * make_obj_array( [ 0.5 * lam ] )
+    lfr = qjump * make_obj_array([0.5 * lam])
 
     # Surface fluxes should be inviscid flux .dot. normal
     # rhoV .dot. normal
@@ -144,7 +137,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     # (rhoV.x.V)_2 .dot. normal
     nflux = flat_obj_array(
         [
-            np.dot(flux_jump[(i * dim) : ((i + 1) * dim)], normal)
+            np.dot(flux_jump[(i * dim): ((i + 1) * dim)], normal)
             for i in range(dim + 2)
         ]
     )
@@ -174,7 +167,7 @@ def inviscid_operator(
     vol_flux = _inviscid_flux(discr, w, eos)
     dflux = flat_obj_array(
         [
-            discr.weak_div(vol_flux[(i * ndim) : (i + 1) * ndim])
+            discr.weak_div(vol_flux[(i * ndim): (i + 1) * ndim])
             for i in range(ndim + 2)
         ]
     )
@@ -186,20 +179,24 @@ def inviscid_operator(
     # Flux through domain boundaries
     domain_boundary_flux = sum(
         boundaries[btag].get_boundary_flux(
-            discr,w,t=t,btag=btag,eos=eos
-            ) for btag in boundaries
+            discr, w, t=t, btag=btag, eos=eos
         )
+        for btag in boundaries
+    )
 
     # Flux across partition boundaries
     partition_boundary_flux = sum(
         _facial_flux(discr, w_tpair=part_pair, eos=eos)
         for part_pair in cross_rank_trace_pairs(discr, w)
     )
-    
+
     return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux
-                                + domain_boundary_flux
-                                + partition_boundary_flux)
+        dflux
+        - discr.face_mass(
+            interior_face_flux
+            + domain_boundary_flux
+            + partition_boundary_flux
+        )
     )
 
 

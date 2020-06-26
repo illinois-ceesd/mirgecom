@@ -27,31 +27,29 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
-    with_object_array_or_scalar,
 )
 import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 
 # TODO: Remove grudge dependence?
-from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 from mirgecom.eos import IdealSingleGas
 
 
 class Vortex2D:
-    """Implements the isentropic vortex after 
+    """Implements the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
         - JSH/TW Nodal DG Methods, p. 209
 
     A call to this object after creation/init creates
     the isentropic vortex solution at a given time (t)
-    relative to the configured origin (center) and 
+    relative to the configured origin (center) and
     background flow velocity (velocity).
 
     This object also functions as a boundary condition
-    by providing the "get_boundary_flux" routine to 
-    prescribe exact field values on the given boundary. 
+    by providing the "get_boundary_flux" routine to
+    prescribe exact field values on the given boundary.
     """
 
     def __init__(
@@ -91,10 +89,9 @@ class Vortex2D:
         self, discr, w, t=0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
         actx = w[0].array_context
-        ndim = discr.dim
 
         # help - how to make it just the boundary nodes?
-        nodes = thaw(actx,discr.nodes())
+        nodes = thaw(actx, discr.nodes())
         vortex_soln = self.__call__(t, nodes)
         dir_bc = discr.interp("vol", btag, vortex_soln)
         dir_soln = discr.interp("vol", btag, w)
@@ -112,15 +109,15 @@ class Lump:
 
     A call to this object after creation/init creates
     the lump solution at a given time (t)
-    relative to the configured origin (center) and 
+    relative to the configured origin (center) and
     background flow velocity (velocity).
 
     This object also functions as a boundary condition
-    by providing the "get_boundary_flux" method to 
+    by providing the "get_boundary_flux" method to
     prescribe exact field values on the given boundary.
 
     This object also supplies the exact expected RHS
-    terms from the analytic expression in the 
+    terms from the analytic expression in the
     "expected_rhs" method.
     """
 
@@ -174,7 +171,7 @@ class Lump:
         gamma = eos.Gamma()
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         rho = expterm + self._rho0
-        rhoV = self._velocity * make_obj_array( [ rho ] )
+        rhoV = self._velocity * make_obj_array([rho])
         rhoE = (self._p0 / (gamma - 1.0)) + np.dot(rhoV, rhoV) / (
             2.0 * rho
         )
@@ -183,8 +180,8 @@ class Lump:
 
     def exact_rhs(self, discr, w, t=0.0):
         actx = w[0].array_context
-        nodes = thaw(actx,discr.nodes())
-        
+        nodes = thaw(actx, discr.nodes())
+
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -198,13 +195,13 @@ class Lump:
         # rhovrhs = -2*rho*(r.dot.v)*v
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         rho = expterm + self._rho0
-        rhoV = self._velocity * make_obj_array( [ rho ] )
-        v = self._velocity * make_obj_array( [ 1.0/rho ] )
+
+        v = self._velocity * make_obj_array([1.0 / rho])
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
         rhorhs = -2 * rdotv * rho
         rhoErhs = -v2 * rdotv * rho
-        rhoVrhs = v * make_obj_array( [ -2 * rho * rdotv ] )
+        rhoVrhs = v * make_obj_array([-2 * rho * rdotv])
 
         return flat_obj_array(rhorhs, rhoErhs, rhoVrhs)
 
@@ -214,7 +211,7 @@ class Lump:
         actx = w[0].array_context
 
         # help - how to make it just the boundary nodes?
-        nodes = thaw(actx,discr.nodes())
+        nodes = thaw(actx, discr.nodes())
         mysoln = self.__call__(t, nodes)
         dir_bc = discr.interp("vol", btag, mysoln)
         dir_soln = discr.interp("vol", btag, w)

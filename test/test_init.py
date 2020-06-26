@@ -29,20 +29,12 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
-from pytools.obj_array import (
-    make_obj_array,
-    with_object_array_or_scalar,
-)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
-# TODO: Remove grudge dependence?
-from grudge.eager import with_queue
-from grudge.symbolic.primitives import TracePair
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -54,7 +46,7 @@ def test_lump_init():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
-    
+
     iotag = "test_lump_init: "
     dim = 2
     nel_1d = 4
@@ -69,7 +61,7 @@ def test_lump_init():
     print(iotag + "%d elements" % mesh.nelements)
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx,discr.nodes())
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -78,7 +70,7 @@ def test_lump_init():
     velocity[0] = 1
     lump = Lump(center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
-    gamma = 1.4
+
     rho = lump_soln[0]
     rhoE = lump_soln[1]
     rhoV = lump_soln[2:]
@@ -112,7 +104,7 @@ def test_vortex_init():
     print(iotag + "%d elements" % mesh.nelements)
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx,discr.nodes())
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     vortex = Vortex2D()
