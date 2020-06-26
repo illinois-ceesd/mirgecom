@@ -117,6 +117,7 @@ def main():
     istep = 0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
+    
     j = 0
     for veli in mirge_params["velocity"]:
         vel[j] = veli
