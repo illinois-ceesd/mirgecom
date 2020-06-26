@@ -29,19 +29,11 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
-from pytools.obj_array import (
-    make_obj_array,
-    with_object_array_or_scalar,
-)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-# TODO: Remove grudge dependence?
-from grudge.eager import with_queue
-from grudge.symbolic.primitives import TracePair
 from mirgecom.eos import IdealSingleGas
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -76,10 +68,7 @@ def test_idealsingle_lump():
     lump = Lump(center=center, velocity=velocity)
     eos = IdealSingleGas()
     lump_soln = lump(0, nodes)
-    gamma = 1.4
-    rho = lump_soln[0]
-    rhoE = lump_soln[1]
-    rhoV = lump_soln[2:]
+
     p = eos.Pressure(lump_soln)
     exp_p = 1.0
     errmax = np.max(np.abs(p - exp_p))

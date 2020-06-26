@@ -98,7 +98,7 @@ def main():
             print(istep, t, la.norm(fields[0].get()))
             vis.write_vtk_file(
                 "fld-wave-eager-%04d.vtu" % istep,
-                [("u", fields[0]), ("v", fields[1:]),],
+                [("u", fields[0]), ("v", fields[1:]), ],
             )
 
         t += dt

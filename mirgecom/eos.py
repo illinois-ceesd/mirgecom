@@ -24,16 +24,9 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-    with_object_array_or_scalar,
-)
+from pytools.obj_array import flat_obj_array
 import pyopencl.clmath as clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from grudge.eager import with_queue
-from grudge.symbolic.primitives import TracePair
 
 
 class IdealSingleGas:

@@ -42,10 +42,10 @@ from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
-from grudge.dt_finding import (
-    dt_geometric_factor,
-    dt_non_geometric_factor,
-)
+#from grudge.dt_finding import (
+#    dt_geometric_factor,
+#    dt_non_geometric_factor,
+#)
 
 __doc__ = """
 .. autofunction:: inviscid_operator
@@ -164,10 +164,12 @@ def inviscid_operator(
 ):
     """
     Returns the RHS of the Euler flow equations:
-    :math: \partial_t Q = - \\nabla \\cdot F
-    where Q = [ rho rhoE rhoV ]
-          F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*delta_ij) ]
+    d/dt(Q) = - nabla .dot. F + S
+    where state Q = [ rho rhoE rhoV ]
+          flux F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*delta_ij) ]
+          sources S = [mass_src energy_src momentum_src]
     """
+#    :math: \partial_t Q = - \\nabla \\cdot F
 
     ndim = discr.dim
 

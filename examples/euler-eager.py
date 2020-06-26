@@ -31,7 +31,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath
 
 # TODO: Remove grudge dependence?
 from grudge.eager import EagerDGDiscretization
@@ -71,8 +70,16 @@ def main():
     orig = np.zeros(shape=(dim,))
     vel[0] = 1.0
     vel[1] = 1.0
-    initializer = Vortex2D(center=orig, velocity=vel)
-    #    initializer = Lump(center=orig,velocity=vel)
+
+    casename = 'Vortex'
+    if casename == 'Vortex':
+        initializer = Vortex2D(center=orig, velocity=vel)
+    elif casename == 'Lump':
+        initializer = Lump(center=orig, velocity=vel)
+    else:
+        print(f"{iotag}Error: Unknown init case ({casename})")
+        assert(False)
+
     boundaries = {BTAG_ALL: initializer}
     eos = IdealSingleGas()
 

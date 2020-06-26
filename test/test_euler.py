@@ -32,12 +32,9 @@ import pyopencl.clmath
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
-    with_object_array_or_scalar,
 )
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-# TODO: Remove grudge dependence?
-from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import inviscid_operator
 from mirgecom.euler import get_inviscid_timestep
@@ -45,7 +42,6 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 from mirgecom.integrators import rk4_step
-from meshmode.discretization import Discretization
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -57,17 +53,17 @@ def test_inviscid_flux():
     routine (_inviscid_flux) returns exactly the
     expected result. The test checks flux for 1,
     2, and 3 spatial dimensions.
-    
+
     The test is in 3 parts:
-    
-    - Exact expression: Checks the returned flux 
+
+    - Exact expression: Checks the returned flux
       against the exact expressions:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
-    - Prescribed p, V = 0:  Checks that only 
+    - Prescribed p, V = 0:  Checks that only
       diagonal terms of the momentum flux
       [ rho(V.x.V) + pI ] are non-zero and return
       the correctly calculated p.
-    - Prescribed p, V != 0: Checks that the 
+    - Prescribed p, V != 0: Checks that the
       flux terms are returned in the proper
       order by running only 1 non-zero velocity
       component at-a-time.
@@ -245,7 +241,6 @@ def test_inviscid_flux():
                     for j in range(dim):
                         rhoV[j][i] = 0.0 * rho[i]
                     rhoV[livedim][i] = rho[i]
-                v = rhoV * make_obj_array([1.0 / rho])
                 rhoE = (
                     p / (eos.Gamma() - 1.0)
                     + 0.5 * np.dot(rhoV, rhoV) / rho
@@ -294,7 +289,7 @@ def test_inviscid_flux():
                     ]
                 )
                 for i in range(dim):
-                    expected_flux = xpmomflux[i * dim : (i + 1) * dim]
+                    expected_flux = xpmomflux[i * dim: (i + 1) * dim]
                     fluxindex = (2 + i) * dim
                     for j in range(dim):
                         assert (
@@ -333,9 +328,9 @@ def test_facial_flux():
     """Check the flux across element faces by
     prescribing states (q) with known fluxes. Only
     uniform states are tested currently - ensuring
-    that the Lax-Friedrichs flux terms which are 
+    that the Lax-Friedrichs flux terms which are
     proportional to jumps in state data vanish.
-    
+
     Since the returned fluxes use state data which
     has been interpolated to-and-from the element
     faces, this test is grid-dependent.
@@ -346,7 +341,7 @@ def test_facial_flux():
 
     dim = 2
     nel_1d = 16
-    eos = IdealSingleGas()
+
     tolerance = 1e-14
     p0 = 1.0
 
@@ -383,7 +378,6 @@ def test_facial_flux():
                 fields = flat_obj_array(
                     mass_input, energy_input, mom_input
                 )
-                p = eos.Pressure(fields)
 
                 from mirgecom.euler import _facial_flux
                 from mirgecom.euler import _interior_trace_pair
@@ -430,8 +424,6 @@ def test_facial_flux():
 
                 dir_bval = flat_obj_array(dir_rho, dir_e, dir_mom)
                 dir_bc = flat_obj_array(dir_rho, dir_e, dir_mom)
-
-                from mirgecom.euler import _facial_flux
 
                 boundary_flux = _facial_flux(
                     discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
@@ -480,10 +472,10 @@ def test_facial_flux():
 
 
 def test_uniform_rhs():
-    """Tests the inviscid rhs using a trivial 
+    """Tests the inviscid rhs using a trivial
     constant/uniform state which should
     yield rhs = 0.  The test is performed
-    for 1, 2, and 3 dimensions. 
+    for 1, 2, and 3 dimensions.
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -491,7 +483,6 @@ def test_uniform_rhs():
 
     tolerance = 1e-4
 
-    eos = IdealSingleGas()
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     for dim in [1, 2, 3]:
@@ -675,7 +666,7 @@ def test_vortex_rhs():
 def test_lump_rhs():
     """Tests the inviscid rhs using the non-trivial
     1, 2, and 3D mass lump case against the analytic
-    expressions of the RHS. Checks several different 
+    expressions of the RHS. Checks several different
     orders and refinement levels to check error behavior.
     """
     #    cl_ctx = ctx_factory()
@@ -745,14 +736,14 @@ def test_lump_rhs():
 
 
 def test_isentropic_vortex():
-    """Advance the 2D isentropic vortex case in 
+    """Advance the 2D isentropic vortex case in
     time with non-zero velocities using an RK4
     timestepping scheme. Check the advanced field
     values against the exact/analytic expressions.
 
     This tests all parts of the Euler module working
     together, with results converging at the expected
-    rates vs. the order. 
+    rates vs. the order.
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
