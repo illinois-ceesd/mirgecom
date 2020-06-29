@@ -29,6 +29,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+import logging
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
@@ -40,6 +41,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.euler import get_inviscid_timestep
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
+from mirgecom.boundary import PrescribedBoundary
 from mirgecom.eos import IdealSingleGas
 from mirgecom.integrators import rk4_step
 from grudge.eager import EagerDGDiscretization
@@ -70,7 +72,6 @@ def test_inviscid_flux():
     """
     ctx = cl.create_some_context(interactive=False)
     queue = cl.CommandQueue(ctx)
-    iotag = "test_inviscid_flux: "
 
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -89,7 +90,7 @@ def test_inviscid_flux():
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
         eos = IdealSingleGas()
 
-        print(f"{iotag}Number of {dim}d elems: {mesh.nelements}")
+        logging.info(f"Number of {dim}d elems: {mesh.nelements}")
 
         mass = cl.clrandom.rand(
             queue, (mesh.nelements,), dtype=np.float64
@@ -174,7 +175,7 @@ def test_inviscid_flux():
             p = eos.pressure(q)
             flux = _inviscid_flux(fake_dis, q, eos)
 
-            print(f"{iotag}{dim}d flux = {flux}")
+            logging.info(f"{dim}d flux = {flux}")
 
             # for velocity zero, these components should be == zero
             for i in range(2 * dim):
@@ -249,11 +250,11 @@ def test_inviscid_flux():
                 p = eos.pressure(q)
                 flux = _inviscid_flux(fake_dis, q, eos)
 
-                print(f"{iotag}{dim}d flux = {flux}")
+                logging.info(f"{dim}d flux = {flux}")
 
                 # first two components should be nonzero in livedim only
                 expected_flux = mom
-                print(f"{iotag}Testing continuity")
+                logging.info("Testing continuity")
                 for i in range(dim):
                     assert (
                         la.norm((flux[i] - expected_flux[i]).get())
@@ -264,7 +265,7 @@ def test_inviscid_flux():
                     else:
                         assert la.norm(flux[i].get()) > 0.0
 
-                print(f"{iotag}Testing energy")
+                logging.info("Testing energy")
                 expected_flux = mom * make_obj_array(
                     [(energy + p) / mass]
                 )
@@ -280,7 +281,7 @@ def test_inviscid_flux():
                     else:
                         assert la.norm(flux[dim + i].get()) > 0.0
 
-                print(f"{iotag}Testing momentum")
+                logging.info("Testing momentum")
                 xpmomflux = make_obj_array(
                     [
                         (mom[i] * mom[j] / mass + (p if i == j else 0))
@@ -337,7 +338,6 @@ def test_facial_flux():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_facial_flux: "
 
     tolerance = 1e-14
     p0 = 1.0
@@ -358,7 +358,7 @@ def test_facial_flux():
 
                 #                order = 3
 
-                print(f"{iotag}Number of elements: {mesh.nelements}")
+                logging.info(f"Number of elements: {mesh.nelements}")
 
                 discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
@@ -454,10 +454,10 @@ def test_facial_flux():
                 eoc_rec1.add_data_point(1.0 / nel_1d, errrec)
 
             message = (
-                f"{iotag}standalone Errors:\n{eoc_rec0}"
-                f"{iotag}boundary Errors:\n{eoc_rec1}"
+                f"standalone Errors:\n{eoc_rec0}"
+                f"boundary Errors:\n{eoc_rec1}"
             )
-            print(message)
+            logging.info(message)
             assert (
                 eoc_rec0.order_estimate() >= order - 0.5
                 or eoc_rec0.max_error() < 1e-9
@@ -476,7 +476,6 @@ def test_uniform_rhs():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_uniform_flow: "
 
     tolerance = 1e-9
     maxxerr = 0.0
@@ -495,8 +494,8 @@ def test_uniform_rhs():
                     a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
                 )
 
-                print(
-                    f"{iotag}Number of {dim}d elements: {mesh.nelements}"
+                logging.info(
+                    f"Number of {dim}d elements: {mesh.nelements}"
                 )
 
                 discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
@@ -531,11 +530,11 @@ def test_uniform_rhs():
                 rhov_rhs = inviscid_rhs[2:]
 
                 message = (
-                    f"{iotag}rho_rhs  = {rho_rhs}\n"
-                    f"{iotag}rhoe_rhs = {rhoe_rhs}\n"
-                    f"{iotag}rhov_rhs = {rhov_rhs}"
+                    f"rho_rhs  = {rho_rhs}\n"
+                    f"rhoe_rhs = {rhoe_rhs}\n"
+                    f"rhov_rhs = {rhov_rhs}"
                 )
-                print(message)
+                logging.info(message)
 
                 assert np.max(np.abs(rho_resid.get())) < tolerance
                 assert np.max(np.abs(rhoe_resid.get())) < tolerance
@@ -599,7 +598,7 @@ def test_vortex_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_vortex_rhs: "
+
     dim = 2
 
     for order in [1, 2, 3]:
@@ -616,8 +615,8 @@ def test_vortex_rhs():
                 a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
             )
 
-            print(
-                f"{iotag}Number of {dim}d elements:  {mesh.nelements}"
+            logging.info(
+                f"Number of {dim}d elements:  {mesh.nelements}"
             )
 
             discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
@@ -626,7 +625,7 @@ def test_vortex_rhs():
             # Init soln with Vortex and expected RHS = 0
             vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
             vortex_soln = vortex(0, nodes)
-            boundaries = {BTAG_ALL: vortex}
+            boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
 
             inviscid_rhs = inviscid_operator(
                 discr, vortex_soln, t=0, boundaries=boundaries
@@ -652,10 +651,11 @@ def test_vortex_rhs():
             eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
         message = (
-            f"{iotag}Error for (dim,order) = ({dim},{order}):\n"
+            f"Error for (dim,order) = ({dim},{order}):\n"
             f"{eoc_rec}"
         )
-        print(message)
+        logging.info(message)
+
         assert (
             eoc_rec.order_estimate() >= order - 0.5
             or eoc_rec.max_error() < 1e-11
@@ -671,7 +671,7 @@ def test_lump_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_lump_rhs: "
+
     tolerance = 1e-10
     maxxerr = 0.0
 
@@ -690,7 +690,7 @@ def test_lump_rhs():
                     a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
                 )
 
-                print(f"{iotag}Number of elements: {mesh.nelements}")
+                logging.info(f"Number of elements: {mesh.nelements}")
 
                 discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
                 nodes = discr.nodes().with_queue(queue)
@@ -700,7 +700,7 @@ def test_lump_rhs():
                 velocity = np.zeros(shape=(dim,))
                 lump = Lump(center=center, velocity=velocity)
                 lump_soln = lump(0, nodes)
-                boundaries = {BTAG_ALL: lump}
+                boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
                 inviscid_rhs = inviscid_operator(
                     discr, lump_soln, t=0.0, boundaries=boundaries
                 )
@@ -723,12 +723,12 @@ def test_lump_rhs():
                     maxxerr = err_max
 
                 eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-            print(f"{iotag}Max error: {maxxerr}")
+            logging.info(f"Max error: {maxxerr}")
             message = (
-                f"{iotag}Error for (dim,order) = ({dim},{order}):\n"
+                f"Error for (dim,order) = ({dim},{order}):\n"
                 f"{eoc_rec}"
             )
-            print(message)
+            logging.info(message)
             assert (
                 eoc_rec.order_estimate() >= order - 0.5
                 or eoc_rec.max_error() < tolerance
@@ -747,7 +747,6 @@ def test_isentropic_vortex():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_isentropic_vortex: "
 
     dim = 2
 
@@ -778,7 +777,7 @@ def test_isentropic_vortex():
             vel[1] = 1.0
             initializer = Vortex2D(center=orig, velocity=vel)
             #    initializer = Lump(center=orig,velocity=vel)
-            boundaries = {BTAG_ALL: initializer}
+            boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
             eos = IdealSingleGas()
 
             fields = initializer(0, nodes)
@@ -792,14 +791,14 @@ def test_isentropic_vortex():
             initname = initializer.__class__.__name__
             eosname = eos.__class__.__name__
             message = (
-                f"{iotag}Num {dim}d elements: {mesh.nelements}\n"
-                f"{iotag}Timestep:        {dt}\n"
-                f"{iotag}Final time:      {t_final}\n"
-                f"{iotag}Status freq:     {nstep_status}\n"
-                f"{iotag}Initialization:  {initname}\n"
-                f"{iotag}EOS:             {eosname}"
+                f"Num {dim}d elements: {mesh.nelements}\n"
+                f"Timestep:        {dt}\n"
+                f"Final time:      {t_final}\n"
+                f"Status freq:     {nstep_status}\n"
+                f"Initialization:  {initname}\n"
+                f"EOS:             {eosname}"
             )
-            print(message)
+            logging.info(message)
 
             def write_soln():
                 expected_result = initializer(t, nodes)
@@ -813,11 +812,11 @@ def test_isentropic_vortex():
                 maxdv = [np.max(dvfld.get()) for dvfld in dv]
 
                 statusmsg = (
-                    f"{iotag}Status: Step({istep}) Time({t})\n"
-                    f"{iotag}------   P({mindv[0]},{maxdv[0]})\n"
-                    f"{iotag}------   T({mindv[1]},{maxdv[1]})\n"
-                    f"{iotag}------   dt,cfl = ({dt},{cfl})\n"
-                    f"{iotag}------   Err({maxerr})"
+                    f"Status: Step({istep}) Time({t})\n"
+                    f"------   P({mindv[0]},{maxdv[0]})\n"
+                    f"------   T({mindv[1]},{maxdv[1]})\n"
+                    f"------   dt,cfl = ({dt},{cfl})\n"
+                    f"------   Err({maxerr})"
                 )
                 print(statusmsg)
                 return np.max(maxerr)
@@ -845,15 +844,15 @@ def test_isentropic_vortex():
                     discr, fields, c=cfl, eos=eos
                 )
 
-            print(f"{iotag}Writing final dump.")
+            logging.info("Writing final dump.")
             maxerr = write_soln()
             eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
         message = (
-            f"{iotag}Error for (dim,order) = ({dim},{order}):\n"
+            f"Error for (dim,order) = ({dim},{order}):\n"
             f"{eoc_rec}"
         )
-        print(message)
+        logging.info(message)
         assert (
             eoc_rec.order_estimate() >= order - 0.5
             or eoc_rec.max_error() < 1e-11
