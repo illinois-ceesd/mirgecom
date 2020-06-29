@@ -23,7 +23,7 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
-        join_fields, make_obj_array,
+        flat_obj_array, make_obj_array,
         with_object_array_or_scalar)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import with_queue
@@ -53,14 +53,14 @@ def _flux(discr, c, w_tpair):
         # workaround for object array behavior
         return make_obj_array([ni*scalar for ni in normal])
 
-    flux_weak = join_fields(
+    flux_weak = flat_obj_array(
             np.dot(v.avg, normal),
             normal_times(u.avg),
             )
 
     # upwind
     v_jump = np.dot(normal, v.int-v.ext)
-    flux_weak -= join_fields(
+    flux_weak -= flat_obj_array(
             0.5*(u.int-u.ext),
             0.5*normal_times(v_jump),
             )
@@ -74,12 +74,12 @@ def wave_operator(discr, c, w):
 
     dir_u = discr.interp("vol", BTAG_ALL, u)
     dir_v = discr.interp("vol", BTAG_ALL, v)
-    dir_bval = join_fields(dir_u, dir_v)
-    dir_bc = join_fields(-dir_u, dir_v)
+    dir_bval = flat_obj_array(dir_u, dir_v)
+    dir_bc = flat_obj_array(-dir_u, dir_v)
 
     return (
             discr.inverse_mass(
-                join_fields(
+                flat_obj_array(
                     -c*discr.weak_div(v),
                     -c*discr.weak_grad(u)
                     )
