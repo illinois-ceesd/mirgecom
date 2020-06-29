@@ -29,6 +29,7 @@ from pytools.obj_array import (
     make_obj_array,
 )
 import pyopencl.clmath as clmath
+from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 
 
@@ -95,9 +96,9 @@ class Vortex2D:
         e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
         return flat_obj_array(mass, e, mass * u, mass * v)
 
+
 class Lump:
     r"""Implements an N-dimensional Gaussian lump of mass.
->>>>>>> fixmybranch
 
     The Gaussian lump is defined by:
 
@@ -209,7 +210,7 @@ class Lump:
         # rhovrhs = -2*rho*(r.dot.v)*v
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
-        v = self._velocity * make_obj_array( [ 1.0/rho ] )
+        v = self._velocity * make_obj_array([1.0/mass])
 
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
@@ -219,4 +220,3 @@ class Lump:
         momrhs = v * make_obj_array([-2 * mass * rdotv])
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
-

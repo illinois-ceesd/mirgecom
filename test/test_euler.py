@@ -72,6 +72,7 @@ def test_inviscid_flux():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
     nel_1d = 16
@@ -93,9 +94,7 @@ def test_inviscid_flux():
         energy = cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
         mom = make_obj_array(
             [
-                cl.clrandom.rand(
-                    queue, (mesh.nelements,), dtype=np.float64
-                )
+                cl.clrandom.rand(queue, (mesh.nelements,), dtype=np.float64)
                 for i in range(dim)
             ]
         )
@@ -111,6 +110,8 @@ def test_inviscid_flux():
         expected_mom_flux = make_obj_array(
             [
                 (mom[i] * mom[j] / mass + (p if i == j else 0))
+                for i in range(dim)
+                for j in range(dim)
             ]
         )
         expected_flux = flat_obj_array(
@@ -344,13 +345,7 @@ def test_facial_flux():
                 maxmomerr = 0.0
                 for i in range(2, 2 + discr.dim):
                     err = np.max(
-                        np.array(
-                            [
-                                la.norm(
-                                    interior_face_flux[i].get(), np.inf
-                                )
-                            ]
-                        )
+                        np.array([la.norm(interior_face_flux[i].get(), np.inf)])
                     )
                     err = np.abs(err - p0)
                     if err > maxmomerr:
@@ -387,9 +382,7 @@ def test_facial_flux():
                 maxmomerr = 0.0
                 for i in range(2, 2 + discr.dim):
                     err = np.max(
-                        np.array(
-                            [la.norm(boundary_flux[i].get(), np.inf)]
-                        )
+                        np.array([la.norm(boundary_flux[i].get(), np.inf)])
                     )
                     err = np.abs(err - p0)
                     assert err < tolerance
@@ -455,9 +448,7 @@ def test_uniform_rhs():
                 mom_input = flat_obj_array(
                     [discr.zeros(actx) for i in range(discr.dim)]
                 )
-                fields = flat_obj_array(
-                    mass_input, energy_input, mom_input
-                )
+                fields = flat_obj_array(mass_input, energy_input, mom_input)
                 expected_rhs = flat_obj_array(
                     [discr.zeros(actx) for i in range(discr.dim + 2)]
                 )
@@ -465,8 +456,8 @@ def test_uniform_rhs():
                 inviscid_rhs = inviscid_operator(discr, fields)
                 rhs_resid = inviscid_rhs - expected_rhs
 
-                mass_resid = rhs_resid[0]
-                masse_resid = rhs_resid[1]
+                rho_resid = rhs_resid[0]
+                rhoe_resid = rhs_resid[1]
                 mom_resid = rhs_resid[2:]
 
                 rho_rhs = inviscid_rhs[0]
@@ -651,7 +642,7 @@ def test_lump_rhs():
                 )
                 if err_max > maxxerr:
                     maxxerr = err_max
-                    
+
                 eoc_rec.add_data_point(1.0 / nel_1d, err_max)
             logging.info(f"Max error: {maxxerr}")
             message = f"Error for (dim,order) = ({dim},{order}):\n" f"{eoc_rec}"
@@ -684,9 +675,7 @@ def test_isentropic_vortex():
         eoc_rec = EOCRecorder()
 
         for nel_1d in [16, 32, 64]:
-            from meshmode.mesh.generation import (
-                generate_regular_rect_mesh,
-            )
+            from meshmode.mesh.generation import generate_regular_rect_mesh
 
             mesh = generate_regular_rect_mesh(
                 a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim

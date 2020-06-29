@@ -38,7 +38,6 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs,
 )
-from grudge.symbolic.primitives import TracePair
 
 # from grudge.dt_finding import (
 #    dt_geometric_factor,
@@ -88,8 +87,6 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
 
 
 def _get_wavespeed(w, eos=IdealSingleGas()):
-
-
     mass = w[0]
     mom = w[2:]
     actx = mass.array_context
