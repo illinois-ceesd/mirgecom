@@ -162,7 +162,7 @@ def inviscid_operator(
     eos=IdealSingleGas(),
     boundaries={BTAG_ALL: DummyBoundary()},
 ):
-    """
+    r"""
     Returns the RHS of the Euler flow equations:
     d/dt(Q) = - nabla .dot. F + S
     where state Q = [ rho rhoE rhoV ]
