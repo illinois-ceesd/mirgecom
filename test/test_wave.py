@@ -58,7 +58,7 @@ def sym_div(vector_func):
     coord_names = ["x", "y", "z"]
     div = 0
     for i in range(len(vector_func)):
-        div = div + sym_diff(pmbl.var(coord_names[i]))(vector_func[i])
+        div += sym_diff(pmbl.var(coord_names[i]))(vector_func[i])
     return div
 
 
@@ -114,7 +114,7 @@ def get_standing_wave(dim):
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
     for i in range(dim):
-        sym_phi = sym_phi * sym_cos(sym_coords[i])
+        sym_phi *= sym_cos(sym_coords[i])
     return (dim, c, mesh_factory, sym_phi)
 
 
@@ -135,7 +135,7 @@ def get_manufactured_cubic(dim):
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(sym_t - np.pi/4)
     for i in range(dim):
-        sym_phi = sym_phi * (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
+        sym_phi *= (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
     return (dim, 2., mesh_factory, sym_phi)
 
 
