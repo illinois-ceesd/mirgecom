@@ -30,7 +30,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
 class IdealSingleGas:
-    """ Implements the ideal gas law (p = rhoRT)
+    r""" Implements the ideal gas law (:math:`p = \rho{R}{T}`)
     for a single monatomic gas.
     """
 
@@ -75,3 +75,9 @@ class IdealSingleGas:
 
     def __call__(self, w):
         return flat_obj_array(self.pressure(w), self.temperature(w))
+
+    def split_fields(self, ndim, dv):
+        retlist = [('pressure', dv[0]),
+                   ('temperature', dv[1]), ]
+
+        return retlist
