@@ -2,11 +2,6 @@ __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
 
-__author__ = """
-Center for Exascale-Enabled Scramjet Design
-University of Illinois, Urbana, IL 61801
-"""
-
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -42,10 +37,11 @@ from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
-#from grudge.dt_finding import (
+
+# from grudge.dt_finding import (
 #    dt_geometric_factor,
 #    dt_non_geometric_factor,
-#)
+# )
 
 __doc__ = """
 .. autofunction:: inviscid_operator
@@ -156,20 +152,18 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
 
 def inviscid_operator(
-    discr,
-    w,
-    t=0.0,
-    eos=IdealSingleGas(),
-    boundaries={BTAG_ALL: DummyBoundary()},
+    discr, w, t=0.0, eos=IdealSingleGas(), boundaries={BTAG_ALL: DummyBoundary()},
 ):
-    """
+    r"""
     Returns the RHS of the Euler flow equations:
-    d/dt(Q) = - nabla .dot. F + S
+
+    .. :math::
+    \partial_t Q = - \nabla\cdot{\mathbf{F}} + \mathbf{S}
+
     where state Q = [ rho rhoE rhoV ]
           flux F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*I) ]
           sources S = [mass_src energy_src momentum_src]
     """
-#    :math: \partial_t Q = - \\nabla \\cdot F
 
     ndim = discr.dim
 
@@ -187,17 +181,12 @@ def inviscid_operator(
 
     # Domain boundaries
     domain_boundary_flux = sum(
-        boundaries[btag].get_boundary_flux(
-            discr, w, t=t, btag=btag, eos=eos
-        )
+        boundaries[btag].get_boundary_flux(discr, w, t=t, btag=btag, eos=eos)
         for btag in boundaries
     )
 
-    # Partition boundaries here
-
     return discr.inverse_mass(
-        dflux
-        - discr.face_mass(interior_face_flux + domain_boundary_flux)
+        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux)
     )
 
 
@@ -205,11 +194,11 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 
     dim = discr.dim
     mesh = discr.mesh
-    order = discr.order
-
+    order = min([grp.order for grp in discr._volume_discr.groups])
     nelements = mesh.nelements
     nel_1d = nelements ** (1.0 / (1.0 * dim))
 
+    # This roughly reproduces the timestep AK used in wave toy
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     return c * dt
 
@@ -219,3 +208,21 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 #    wavespeeds = _get_wavespeed(w,eos=eos)
 #    max_v = clmath.max(wavespeeds)
 #    return c*dt_ngf*dt_gf/max_v
+
+
+def number_of_scalars(ndim, w):
+    return len(w) - (ndim + 2)
+
+
+def split_fields(ndim, w):
+    retlist = [
+        ("mass", w[0]),
+        ("energy", w[1]),
+        ("momentum", w[2: (ndim + 2)]),
+    ]
+    nscalar = number_of_scalars(ndim, w)
+    if nscalar > 0:
+        selem = ndim + 2
+        retlist.append(("massfraction", w[selem: selem + nscalar]))
+
+    return retlist
