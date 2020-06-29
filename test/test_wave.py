@@ -108,14 +108,14 @@ def get_standing_wave(dim):
                 a=(-0.5*np.pi,)*dim,
                 b=(0.5*np.pi,)*dim,
                 n=(n,)*dim)
+    c = 2.
     sym_coords = [pmbl.var(name) for name in ["x", "y", "z"]]
     sym_t = pmbl.var("t")
-    sym_c = pmbl.var("c")
     sym_cos = pmbl.var("cos")
-    sym_phi = sym_cos(np.sqrt(dim)*sym_c*sym_t - np.pi/4)
+    sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
     for i in range(dim):
         sym_phi = sym_phi * sym_cos(sym_coords[i])
-    return (dim, mesh_factory, sym_phi)
+    return (dim, c, mesh_factory, sym_phi)
 
 
 def get_manufactured_cubic(dim):
@@ -136,10 +136,10 @@ def get_manufactured_cubic(dim):
     sym_phi = sym_cos(sym_t - np.pi/4)
     for i in range(dim):
         sym_phi = sym_phi * (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
-    return (dim, mesh_factory, sym_phi)
+    return (dim, 2., mesh_factory, sym_phi)
 
 
-@pytest.mark.parametrize(("dim", "mesh_factory", "sym_phi"),
+@pytest.mark.parametrize(("dim", "c", "mesh_factory", "sym_phi"),
     [
         get_standing_wave(2),
         get_standing_wave(3),
@@ -147,7 +147,7 @@ def get_manufactured_cubic(dim):
         get_manufactured_cubic(3)
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave(ctx_factory, dim, order, mesh_factory, sym_phi):
+def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -164,33 +164,27 @@ def test_wave(ctx_factory, dim, order, mesh_factory, sym_phi):
 
         sym_coords = [pmbl.var(name) for name in ["x", "y", "z"]]
         sym_t = pmbl.var("t")
-        sym_c = pmbl.var("c")
 
         # f = phi_tt - c^2 * div(grad(phi))
-        sym_f = sym_diff(sym_t)(sym_diff(sym_t)(sym_phi)) - sym_c**2\
+        sym_f = sym_diff(sym_t)(sym_diff(sym_t)(sym_phi)) - c**2\
                     * sym_div(sym_grad(dim, sym_phi))
 
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v = c*grad(phi)
-        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
+        sym_v = [c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v) + f
         # rhs(v part) = c*grad(u)
         sym_rhs = flat_obj_array(
-                    sym_c * sym_div(sym_v) + sym_f,
-                    make_obj_array([sym_c]) * sym_grad(dim, sym_u))
-
-        c = 2.
+                    c * sym_div(sym_v) + sym_f,
+                    make_obj_array([c]) * sym_grad(dim, sym_u))
 
         def sym_eval(expr, t):
-            eval_values = {
-                "t": t,
-                "c": c
-            }
             coord_names = ["x", "y", "z"]
-            eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
+            eval_values = {coord_names[i]: nodes[i] for i in range(dim)}
+            eval_values["t"] = t
             return EvaluationMapper(eval_values)(expr)
 
         u = sym_eval(sym_u, 0.)
