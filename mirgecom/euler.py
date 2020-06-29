@@ -154,15 +154,22 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 def inviscid_operator(
     discr, w, t=0.0, eos=IdealSingleGas(), boundaries={BTAG_ALL: DummyBoundary()},
 ):
-    r"""
-    Returns the RHS of the Euler flow equations:
+    r"""RHS of the Euler flow equations
+
+    The Euler flow equations are:
 
     .. :math::
-    \partial_t Q = - \nabla\cdot{\mathbf{F}} + \mathbf{S}
+    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
+    (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
 
-    where state Q = [ rho rhoE rhoV ]
-          flux F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*I) ]
-          sources S = [mass_src energy_src momentum_src]
+    where state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+          flux :math:`\mathbf{F} =
+    [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+          domain boundary :math:`\partial_{\Omega}`,
+          and sources :math:`mathbf{S} =
+    [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+    {(\partial_t{\rho\vec{V}})}_s]`
     """
 
     ndim = discr.dim
