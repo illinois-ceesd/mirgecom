@@ -83,9 +83,7 @@ class EvaluationMapper(ev.EvaluationMapper):
             (par,) = expr.parameters
             return self._cos(self.rec(par))
         else:
-            raise ValueError(
-                "Unrecognized function '%s'" % expr.function
-            )
+            raise ValueError("Unrecognized function '%s'" % expr.function)
 
     def _sin(self, val):
         from numbers import Number
@@ -118,9 +116,7 @@ def test_standing_wave(ctx_factory, dim, order):
         from meshmode.mesh.generation import generate_regular_rect_mesh
 
         mesh = generate_regular_rect_mesh(
-            a=(-0.5 * np.pi,) * dim,
-            b=(0.5 * np.pi,) * dim,
-            n=(n,) * dim,
+            a=(-0.5 * np.pi,) * dim, b=(0.5 * np.pi,) * dim, n=(n,) * dim,
         )
 
         from grudge.eager import EagerDGDiscretization
@@ -147,15 +143,12 @@ def test_standing_wave(ctx_factory, dim, order):
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v = c*grad(phi)
-        sym_v = [
-            sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)
-        ]
+        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
         # rhs(v part) = c*grad(u)
         sym_rhs = flat_obj_array(
-            sym_c * sym_div(sym_v),
-            make_obj_array([sym_c]) * sym_grad(dim, sym_u),
+            sym_c * sym_div(sym_v), make_obj_array([sym_c]) * sym_grad(dim, sym_u),
         )
 
         c = 2.0
@@ -166,9 +159,7 @@ def test_standing_wave(ctx_factory, dim, order):
             "omega": np.sqrt(dim) * c,
             "pi": np.pi,
         }
-        eval_values.update(
-            {coord_names[i]: nodes[i] for i in range(dim)}
-        )
+        eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
 
         def sym_eval(expr):
             return EvaluationMapper(eval_values)(expr)
@@ -207,10 +198,7 @@ def test_standing_wave(ctx_factory, dim, order):
 
     print("Approximation error:")
     print(eoc_rec)
-    assert (
-        eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < 1e-11
-    )
+    assert eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -249,33 +237,24 @@ def test_wave_manufactured(ctx_factory, dim, order):
         sym_cos = pmbl.var("cos")
         sym_phi = sym_cos(sym_omega * sym_t - sym_pi / 4)
         for i in range(dim):
-            sym_phi = (
-                sym_phi
-                * (sym_coords[i] - 1) ** 3
-                * (sym_coords[i] + 1) ** 3
-            )
+            sym_phi = sym_phi * (sym_coords[i] - 1) ** 3 * (sym_coords[i] + 1) ** 3
 
         # u = phi_t
         sym_u = sym_diff(sym_t)(sym_phi)
 
         # v = c*grad(phi)
-        sym_v = [
-            sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)
-        ]
+        sym_v = [sym_c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v)
         # rhs(v part) = c*grad(u)
         sym_rhs = flat_obj_array(
-            sym_c * sym_div(sym_v),
-            make_obj_array([sym_c]) * sym_grad(dim, sym_u),
+            sym_c * sym_div(sym_v), make_obj_array([sym_c]) * sym_grad(dim, sym_u),
         )
 
         c = 2.0
 
         eval_values = {"t": 0.0, "c": c, "omega": 1.0, "pi": np.pi}
-        eval_values.update(
-            {coord_names[i]: nodes[i] for i in range(dim)}
-        )
+        eval_values.update({coord_names[i]: nodes[i] for i in range(dim)})
 
         def sym_eval(expr):
             return EvaluationMapper(eval_values)(expr)
@@ -314,7 +293,4 @@ def test_wave_manufactured(ctx_factory, dim, order):
 
     print("Approximation error:")
     print(eoc_rec)
-    assert (
-        eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < 1e-11
-    )
+    assert eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11

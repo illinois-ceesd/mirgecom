@@ -2,11 +2,6 @@ __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
 
-__author__ = """
-Center for Exascale-Enabled Scramjet Design
-University of Illinois, Urbana, IL 61801
-"""
-
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+import logging
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
@@ -35,6 +30,8 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
 from mirgecom.euler import inviscid_operator
+from mirgecom.euler import split_fields
+from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Lump
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
@@ -45,7 +42,7 @@ from meshmode.dof_array import thaw
 
 
 mirge_params = {
-    "iotag": "EaEu] ",
+
     "numdim": 2,
     "nel_1d": 16,
     "box_lower_left": -5,
@@ -58,7 +55,7 @@ mirge_params = {
     "dt": 0.001,
     "nstatus": 10,
     "constantcfl": False,
-    "casename": "Vortex2D",
+    "casename": "Vortex",
 }
 
 
@@ -67,7 +64,6 @@ def main():
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    iotag = mirge_params["iotag"]
     dim = mirge_params["numdim"]
     nel_1d = mirge_params["nel_1d"]
     box_ll = mirge_params["box_lower_left"]
@@ -100,7 +96,7 @@ def main():
             a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
         )
 
-        print(f"{iotag}Total {dim}d elements: {mesh.nelements}")
+        logging.info(f"Total {dim}d elements: {mesh.nelements}")
 
         part_per_element = get_partition_by_pymetis(mesh, num_parts)
 
@@ -121,7 +117,7 @@ def main():
     istep = 0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-
+    
     j = 0
     for veli in mirge_params["velocity"]:
         vel[j] = veli
@@ -137,10 +133,10 @@ def main():
     elif casename == "Lump":
         initializer = Lump(center=orig, velocity=vel)
     else:
-        print(f"{iotag}Error: Unrecognized init casename ({casename})")
-        assert(False)
+        logging.error(f"Error: Unknown init case ({casename})")
+        assert False
 
-    boundaries = {BTAG_ALL: initializer}
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     eos = IdealSingleGas()
 
     fields = initializer(0, nodes)
@@ -153,64 +149,53 @@ def main():
 
     # todo: should report min/max num elements / partition over procs
     message = (
-        f"{iotag}Num partitions: {nproc}\n"
-        f"{iotag}Num {dim}d elements: {local_mesh.nelements}\n"
-        f"{iotag}Timestep:        {dt}\n"
-        f"{iotag}Final time:      {t_final}\n"
-        f"{iotag}Status freq:     {nstepstatus}\n"
-        f"{iotag}Initialization:  {initname}\n"
-        f"{iotag}EOS:             {eosname}"
+        f"Num partitions:      {nproc}\n"
+        f"Num {dim}d elements: {local_mesh.nelements}\n"
+        f"Timestep:            {dt}\n"
+        f"Final time:          {t_final}\n"
+        f"Status freq:         {nstepstatus}\n"
+        f"Initialization:      {initname}\n"
+        f"EOS:                 {eosname}"
     )
     comm.Barrier()
-    if rank == 0:
-        print(message)
 
-    vis = make_visualizer(
-        discr, discr.order + 3 if dim == 2 else discr.order
-    )
+    if rank == 0:
+        logging.info(message)
+
+    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
     def write_soln():
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
-        maxerr = [
-            np.max(np.abs(result_resid[i].get()))
-            for i in range(dim + 2)
-        ]
+        maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
 
         dv = eos(fields)
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
 
         statusmsg = (
-            f"{iotag}Status: Step({istep}) Time({t})\n"
-            f"{iotag}------   P({mindv[0]},{maxdv[0]})\n"
-            f"{iotag}------   T({mindv[1]},{maxdv[1]})\n"
-            f"{iotag}------   dt,cfl = ({dt},{cfl})\n"
-            f"{iotag}------   Err({maxerr})"
+            f"Status: Step({istep}) Time({t})\n"
+            f"------   P({mindv[0]},{maxdv[0]})\n"
+            f"------   T({mindv[1]},{maxdv[1]})\n"
+            f"------   dt,cfl = ({dt},{cfl})\n"
+            f"------   Err({maxerr})"
         )
+
         if rank == 0:  # todo: need parallel status
-            print(statusmsg)
+            logging.info(statusmsg)
+
 
         visfilename = visfileroot + "-{iorank:04d}-{iostep:04d}.vtu"
         visfilename.Format(iorank=rank, iostep=istep)
-        # todo: post-processing stitching together multiple ranks viz
-        vis.write_vtk_file(
-            visfilename,
-            [
-                ("density", fields[0]),
-                ("energy", fields[1]),
-                ("momentum", fields[2:]),
-                ("pressure", dv[0]),
-                ("temperature", dv[1]),
-                ("expected_solution", expected_result),
-                ("residual", result_resid),
-            ],
-        )
+
+        io_fields = split_fields(dim, fields)
+        io_fields += eos.split_fields(dim, dv)
+        io_fields.append(("exact_soln", expected_result))
+        io_fields.append(("residual", result_resid))
+        vis.write_vtk_file("fld-euler-eager-%04d.vtu" % istep, io_fields)
 
     def rhs(t, w):
-        return inviscid_operator(
-            discr, w=w, t=t, boundaries=boundaries, eos=eos
-        )
+        return inviscid_operator(discr, w=w, t=t, boundaries=boundaries, eos=eos)
 
     while t < t_final:
 
@@ -232,16 +217,17 @@ def main():
         comm.Barrier()
 
     if rank == 0:
-        print(f"{iotag}Writing final dump.")
+        logging.info("Writing final dump.")
     write_soln()
 
     comm.Barrier()
 
     if rank == 0:
-        print(f"{iotag}Goodbye!")
+        logging.info("Goodbye!")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
     main()
 
 # vim: foldmethod=marker

@@ -27,12 +27,35 @@ from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 
 
+class PrescribedBoundary:
+    """Boundary condition assigns the boundary solution with a
+    user-specified function
+    """
+    def __init__(self, userfunc):
+        self._userfunc = userfunc
+
+    def get_boundary_flux(
+            self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        queue = w[0].queue
+
+        # help - how to make it just the boundary nodes?
+        nodes = discr.nodes().with_queue(queue)
+        prescribed_soln = self._userfunc(t, nodes)
+        ext_soln = discr.interp("vol", btag, prescribed_soln)
+        int_soln = discr.interp("vol", btag, w)
+        from mirgecom.euler import _facial_flux  # hrm
+
+        return _facial_flux(
+            discr, w_tpair=TracePair(btag, int_soln, ext_soln), eos=eos,
+        )
+
+
 class DummyBoundary:
-    """Simple example boundary condition that sets the
-    volume solution on both "sides" of a boundary
+    """Simple example boundary condition that interpolates the
+    boundary-adjacent volume solution to both sides of a boundary
     face.
     """
-
     def get_boundary_flux(
         self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):

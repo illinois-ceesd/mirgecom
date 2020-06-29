@@ -2,11 +2,6 @@ __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
 
-__author__ = """
-Center for Exascale-Enabled Scramjet Design
-University of Illinois, Urbana, IL 61801
-"""
-
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -43,11 +38,13 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs,
 )
+from grudge.symbolic.primitives import TracePair
 
-#from grudge.dt_finding import (
+# from grudge.dt_finding import (
 #    dt_geometric_factor,
 #    dt_non_geometric_factor,
-#)
+# )
+
 
 __doc__ = """
 .. autofunction:: inviscid_operator
@@ -68,6 +65,7 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     # q = [ rho rhoE rhoV ]
     mass = q[0]
     ener = q[1]
+
     mom = q[2:]
 
     p = eos.pressure(q)
@@ -91,10 +89,10 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
 
 def _get_wavespeed(w, eos=IdealSingleGas()):
 
+
     mass = w[0]
     mom = w[2:]
     actx = mass.array_context
-
     v = mom * make_obj_array([1.0 / mass])
 
     sos = eos.sound_speed(w)
@@ -109,8 +107,9 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     mass = w_tpair[0]
     ener = w_tpair[1]
     mom = w_tpair[2:]
+    actx = mass.array_context
 
-    normal = thaw(mass.int.array_context, discr.normal(w_tpair.dd))
+    normal = thaw(actx, discr.normal(w_tpair.dd))
 
     # Get inviscid fluxes [rhoV (ener + p)V (rhoV.x.V + p*I) ]
     qint = flat_obj_array(mass.int, ener.int, mom.int)
@@ -150,20 +149,25 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
 
 def inviscid_operator(
-    discr,
-    w,
-    t=0.0,
-    eos=IdealSingleGas(),
-    boundaries={BTAG_ALL: DummyBoundary()},
+    discr, w, t=0.0, eos=IdealSingleGas(), boundaries={BTAG_ALL: DummyBoundary()},
 ):
+    r"""RHS of the Euler flow equations
+
+    The Euler flow equations are:
+
+    .. :math::
+    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
+    (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
+
+    where state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+          flux :math:`\mathbf{F} =
+    [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+          domain boundary :math:`\partial_{\Omega}`,
+          and sources :math:`mathbf{S} =
+    [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+    {(\partial_t{\rho\vec{V}})}_s]`
     """
-    Returns the RHS of the Euler flow equations:
-    d/dt(Q) = - nabla .dot. F + S
-    where state Q = [ rho rhoE rhoV ]
-          flux F = [ rhoV (rhoE + p)V (rho(V.x.V) + p*I) ]
-          sources S = [mass_src energy_src momentum_src]
-    """
-#    :math: \partial_t Q = - \\nabla \\cdot F
 
     ndim = discr.dim
 
@@ -181,9 +185,7 @@ def inviscid_operator(
 
     # Flux through domain boundaries
     domain_boundary_flux = sum(
-        boundaries[btag].get_boundary_flux(
-            discr, w, t=t, btag=btag, eos=eos
-        )
+        boundaries[btag].get_boundary_flux(discr, w, t=t, btag=btag, eos=eos)
         for btag in boundaries
     )
 
@@ -200,7 +202,6 @@ def inviscid_operator(
             + domain_boundary_flux
             + partition_boundary_flux
         )
-
     )
 
 
@@ -208,11 +209,11 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 
     dim = discr.dim
     mesh = discr.mesh
-    order = discr.order
-
+    order = min([grp.order for grp in discr._volume_discr.groups])
     nelements = mesh.nelements
     nel_1d = nelements ** (1.0 / (1.0 * dim))
 
+    # This roughly reproduces the timestep AK used in wave toy
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     return c * dt
 #    dt_ngf = dt_non_geometric_factor(discr.mesh)
@@ -220,3 +221,21 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 #    wavespeeds = _get_wavespeed(w,eos=eos)
 #    max_v = clmath.max(wavespeeds)
 #    return c*dt_ngf*dt_gf/max_v
+
+
+def number_of_scalars(ndim, w):
+    return len(w) - (ndim + 2)
+
+
+def split_fields(ndim, w):
+    retlist = [
+        ("mass", w[0]),
+        ("energy", w[1]),
+        ("momentum", w[2: (ndim + 2)]),
+    ]
+    nscalar = number_of_scalars(ndim, w)
+    if nscalar > 0:
+        selem = ndim + 2
+        retlist.append(("massfraction", w[selem: selem + nscalar]))
+
+    return retlist
