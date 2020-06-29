@@ -1,6 +1,4 @@
-__copyright__ = (
-    "Copyright (C) 2020 University of Illinos Board of Trustees"
-)
+__copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,7 +25,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath
-from pytools.obj_array import join_fields
+from pytools.obj_array import flat_obj_array
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
@@ -40,7 +38,7 @@ def bump(discr, queue, t=0):
     source_omega = 3
 
     nodes = discr.nodes().with_queue(queue)
-    center_dist = join_fields(
+    center_dist = flat_obj_array(
         [nodes[i] - source_center[i] for i in range(discr.dim)]
     )
 
@@ -76,14 +74,11 @@ def main():
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
-    fields = join_fields(
-        bump(discr, queue),
-        [discr.zeros(queue) for i in range(discr.dim)],
+    fields = flat_obj_array(
+        bump(discr, queue), [discr.zeros(queue) for i in range(discr.dim)],
     )
 
-    vis = make_visualizer(
-        discr, discr.order + 3 if dim == 2 else discr.order
-    )
+    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
