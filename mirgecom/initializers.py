@@ -29,40 +29,52 @@ from pytools.obj_array import (
     make_obj_array,
 )
 import pyopencl.clmath as clmath
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from grudge.symbolic.primitives import TracePair
 from mirgecom.eos import IdealSingleGas
 
 
 class Vortex2D:
-    """Implements the isentropic vortex after
+    r"""Implements the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
+          (https://doi.org/10.1016/S0021-9991(03)00206-7)
         - JSH/TW Nodal DG Methods, p. 209
+
+    The isentropic vortex is defined by:
+
+    .. :math::
+
+    u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
+    v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
+    \rho =
+    ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
+    \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
+    p = \rho^{\gamma}
 
     A call to this object after creation/init creates
     the isentropic vortex solution at a given time (t)
     relative to the configured origin (center) and
     background flow velocity (velocity).
-
-    This object also functions as a boundary condition
-    by providing the "get_boundary_flux" routine to
-    prescribe exact field values on the given boundary.
     """
 
     def __init__(
-        self,
-        beta=5,
-        center=np.zeros(shape=(2,)),
-        velocity=np.zeros(shape=(2,)),
+        self, beta=5, center=[0, 0], velocity=[0, 0],
     ):
+        """Initialize vortex parameters
+
+        Parameters
+        ----------
+        beta : float
+        vortex amplitude
+        center : 2-dimensional float array
+        center of vortex
+        velocity : 2-dimensional float array
+        fixed flow velocity used for exact solution at t != 0
+        """
+
         self._beta = beta
-        self._center = center  # np.array([5, 0])
-        self._velocity = velocity  # np.array([0, 0])
+        self._center = np.array(center)
+        self._velocity = np.array(velocity)
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        # Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
-        # also JSH/TW Nodal DG Methods, p. 209
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
@@ -74,36 +86,30 @@ class Vortex2D:
         expterm = self._beta * clmath.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
-        mass = (
-            1 - (gamma - 1) / (16 * gamma * np.pi ** 2) * expterm ** 2
-        ) ** (1 / (gamma - 1))
+        mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2) * expterm ** 2) ** (
+            1 / (gamma - 1)
+        )
         p = mass ** gamma
 
         e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
         return flat_obj_array(mass, e, mass * u, mass * v)
 
-    def get_boundary_flux(
-        self, discr, w, t=0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        queue = w[0].queue
-
-        # help - how to make it just the boundary nodes?
-        nodes = discr.nodes().with_queue(queue)
-        vortex_soln = self.__call__(t, nodes)
-        dir_bc = discr.interp("vol", btag, vortex_soln)
-        dir_soln = discr.interp("vol", btag, w)
-        from mirgecom.euler import _facial_flux  # hrm
-
-        return _facial_flux(
-            discr, w_tpair=TracePair(btag, dir_soln, dir_bc), eos=eos,
-        )
-
 
 class Lump:
-    """Implements a 1,2,3-dimensional Gaussian lump of mass:
+    r"""Implements an N-dimensional Gaussian lump of mass.
 
-    rho(r) = rho0 + rhoamp*e(1-r*r)
+    The Gaussian lump is defined by:
+
+    .. :math::
+
+    {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+    {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
+    {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+
+    Where :math:`V_0` is the fixed velocity specified
+    by the user at init time, and :math:`\gamma` is taken
+    from the equation-of-state object (eos).
 
     A call to this object after creation/init creates
     the lump solution at a given time (t)
@@ -120,14 +126,26 @@ class Lump:
     """
 
     def __init__(
-        self,
-        numdim=1,
-        rho0=1.0,
-        rhoamp=1.0,
-        p0=1.0,
-        center=[0],
-        velocity=[0],
+        self, numdim=1, rho0=1.0, rhoamp=1.0, p0=1.0, center=[0], velocity=[0],
     ):
+        r"""Initialize Lump parameters
+
+        Parameters
+        ----------
+        numdim : integer
+        specify the number of dimensions for the lump
+        rho0 : float
+        specifies the value of :math:`\rho_0`
+        rhoamp : float
+        specifies the value of :math:`\rho_a`
+        p0 : float
+        specifies the value of :math:`p_0`
+        center : 2-dimensional float array
+        center of lump
+        velocity : 2-dimensional float array
+        fixed flow velocity used for exact solution at t != 0
+        """
+
         if len(center) == numdim:
             self._center = center
         elif len(center) > numdim:
@@ -169,9 +187,7 @@ class Lump:
         expterm = self._rhoamp * clmath.exp(1 - r ** 2)
         mass = expterm + self._rho0
         mom = self._velocity * make_obj_array([mass])
-        energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (
-            2.0 * mass
-        )
+        energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         return flat_obj_array(mass, energy, mom)
 
@@ -200,19 +216,3 @@ class Lump:
         momrhs = v * make_obj_array([-2 * mass * rdotv])
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
-
-    def get_boundary_flux(
-        self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        queue = w[0].queue
-
-        # help - how to make it just the boundary nodes?
-        nodes = discr.nodes().with_queue(queue)
-        mysoln = self.__call__(t, nodes)
-        dir_bc = discr.interp("vol", btag, mysoln)
-        dir_soln = discr.interp("vol", btag, w)
-        from mirgecom.euler import _facial_flux  # hrm
-
-        return _facial_flux(
-            discr, w_tpair=TracePair(btag, dir_soln, dir_bc), eos=eos,
-        )
