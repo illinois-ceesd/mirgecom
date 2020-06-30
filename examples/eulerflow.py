@@ -26,6 +26,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
+from pytools.obj_array import make_obj_array
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -35,6 +36,7 @@ from mirgecom.euler import split_fields
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Lump
 from mirgecom.initializers import Vortex2D
+from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -46,10 +48,25 @@ def main():
 
     dim = 2
     nel_1d = 16
+    al = -5.0
+    ar = 5.0
+    casename = "Sod"
+    if casename == "Vortex":
+        initializer = Vortex2D(center=orig, velocity=vel)
+    elif casename == "Lump":
+        initializer = Lump(center=orig, velocity=vel)
+    elif casename == "Sod":
+        initializer = SodShock1D()
+        al = 0
+        ar = 1.0
+    else:
+        logging.error(f"Error: Unknown init case ({casename})")
+        assert False
+        
     from meshmode.mesh.generation import generate_regular_rect_mesh
-
+        
     mesh = generate_regular_rect_mesh(
-        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+        a=(al,) * dim, b=(ar,) * dim, n=(nel_1d,) * dim
     )
 
     order = 3
@@ -65,15 +82,6 @@ def main():
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     vel[:] = 1.0
-
-    casename = "Lump"
-    if casename == "Vortex":
-        initializer = Vortex2D(center=orig, velocity=vel)
-    elif casename == "Lump":
-        initializer = Lump(center=orig, velocity=vel)
-    else:
-        logging.error(f"Error: Unknown init case ({casename})")
-        assert False
 
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     eos = IdealSingleGas()
@@ -102,7 +110,7 @@ def main():
 
     def write_soln():
         expected_result = initializer(t, nodes)
-        result_resid = fields - expected_result
+        result_resid = make_obj_array([fields - expected_result])
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
 
         dv = eos(fields)

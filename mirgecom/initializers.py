@@ -32,6 +32,7 @@ import pyopencl.clmath as clmath
 from mirgecom.eos import IdealSingleGas
 
 
+
 class Vortex2D:
     r"""Implements the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
@@ -95,6 +96,66 @@ class Vortex2D:
 
         return flat_obj_array(mass, e, mass * u, mass * v)
 
+
+class SodShock1D:
+    r"""Implements a 1D Sod Shock
+        - JSH/TW Nodal DG Methods, p. 209
+
+    The Sod Shock setup is defined by:
+
+    .. :math::
+
+    {\rho}(x < x_0, 0) = \rho_l\\
+    {\rho}(x > x_0, 0) = \rho_r\\
+    {\rho}{V_x}(x, 0) = 0
+    {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
+    {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1} 
+
+    A call to this object after creation/init creates
+    Sod's shock solution at a given time (t)
+    relative to the configured origin (center) and
+    background flow velocity (velocity).
+    """
+
+    def __init__(
+            self, x0=.5,rhol=1.0, rhor=.1,energyl=1.0,energyr=.1,
+    ):
+        """Initialize shock parameters
+        
+        Parameters
+        ----------
+        x0: float
+        location of shock
+        rhol: float
+        density to left of shock
+        rhor: float
+        density to right of shock
+        energyl: float
+        energy to left of shock
+        energyr: float
+        energy to right of shock        
+        """
+
+        self._x0 = x0
+        self._rhol = rhol
+        self._rhor = rhor
+        self._energyl = energyl
+        self._energyr = energyr
+
+    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+
+        # coordinates relative to vortex center
+        x_rel = x_vec[0]
+        
+        gamma = eos.gamma()
+        mass = make_obj_array([self._rhol if x_pos < self._x0 else self._rhor
+                for x_pos in x_vec[0]])
+        energy = make_obj_array([self._energyl if x_pos < self._x0
+                                 else self._energyr for x_pos in x_vec[0]])
+        p = make_obj_array([(gamma - 1.0)*energy])
+        rhou = make_obj_array([0.0*mass])
+        
+        return flat_obj_array(mass, energy, rhou, rhou)
 
 class Lump:
     r"""Implements an N-dimensional Gaussian lump of mass.
