@@ -23,8 +23,7 @@ jobs:
         - name: Install prerequisites
           shell: bash -l {0}
           run: |
-            conda install pocl islpy pyopencl pytest pip clinfo openmpi
-            pip install mpi4py
+            conda install pocl islpy pyopencl pytest pip clinfo mpi4py
             pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
             pip install -e .
         - name: Run tests
