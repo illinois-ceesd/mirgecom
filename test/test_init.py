@@ -128,7 +128,7 @@ def test_vortex_init(ctx_factory):
     assert errmax < 1e-15
 
 
-def test_shock_init():
+def test_shock_init(ctx_factory):
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
