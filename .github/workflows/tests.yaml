@@ -22,9 +22,9 @@ jobs:
             channels: conda-forge, nodefaults
         - name: Install prerequisites
           shell: bash -l {0}
-          run: |
+          run: | 
             conda install pocl islpy pyopencl pytest pip clinfo mpi4py
-            pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
+            if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
             pip install -e .
         - name: Run tests
           shell: bash -l {0}
