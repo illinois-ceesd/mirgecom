@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 rm -f examples/*.vtu
 printf "Running examples...\n"
