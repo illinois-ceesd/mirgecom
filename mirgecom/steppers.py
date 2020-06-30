@@ -71,7 +71,6 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
     fields = initializer(0, nodes)
-
     sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
 
     initname = initializer.__class__.__name__

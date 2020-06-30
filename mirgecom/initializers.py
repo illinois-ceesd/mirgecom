@@ -143,19 +143,17 @@ class SodShock1D:
         self._energyr = energyr
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-
-        # coordinates relative to vortex center
+        gm1 = eos.gamma() - 1.0
+        gmn1 = 1.0/gm1
         x_rel = x_vec[0]
-        
-        gamma = eos.gamma()
-        mass = make_obj_array([self._rhol if x_pos < self._x0 else self._rhor
-                for x_pos in x_vec[0]])
-        energy = make_obj_array([self._energyl if x_pos < self._x0
-                                 else self._energyr for x_pos in x_vec[0]])
-        p = make_obj_array([(gamma - 1.0)*energy])
-        rhou = make_obj_array([0.0*mass])
-        
-        return flat_obj_array(mass, energy, rhou, rhou)
+        mass = clmath.sqrt(x_rel)
+        energy = clmath.sqrt(x_rel)
+        for i in range(len(mass)):
+            mass[i] = self._rhol if x_rel[i] < self._x0 else self._rhor
+            energy[i] = gmn1*self._energyl if x_rel[i] < self._x0 else gmn1*self._energyr        
+        rhou = 0.0*energy
+        rhov = 0.0*energy
+        return flat_obj_array(mass, energy, rhou, rhov)
 
 class Lump:
     r"""Implements an N-dimensional Gaussian lump of mass.
