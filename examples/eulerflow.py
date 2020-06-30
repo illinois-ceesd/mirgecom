@@ -26,6 +26,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
+import sys
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -53,7 +54,8 @@ def main():
     )
 
     order = 3
-
+    
+    exittol = 2e-2
     t = 0
     t_final = 0.1
     istep = 0
@@ -65,7 +67,7 @@ def main():
     orig = np.zeros(shape=(dim,))
     vel[:] = 1.0
 
-    casename = "Vortex"
+    casename = "Lump"
     if casename == "Vortex":
         initializer = Vortex2D(center=orig, velocity=vel)
     elif casename == "Lump":
@@ -122,7 +124,8 @@ def main():
         io_fields.append(("exact_soln", expected_result))
         io_fields.append(("residual", result_resid))
         vis.write_vtk_file("fld-euler-eager-%04d.vtu" % istep, io_fields)
-
+        return maxerr
+    
     def rhs(t, w):
         return inviscid_operator(discr, w=w, t=t, boundaries=boundaries, eos=eos)
 
@@ -134,7 +137,7 @@ def main():
             cfl = dt / sdt
 
         if istep % nstep_status == 0:
-            write_soln()
+            steperr = write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
@@ -143,10 +146,15 @@ def main():
         sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
 
     logging.info("Writing final dump.")
-    write_soln()
-
+    maxerr = max(write_soln())
+    
+    
+    if maxerr > exittol:
+        logging.error("Run failed to follow expected result.")
+        test_succeeded = False
+        assert(test_succeeded)
+        
     logging.info("Goodbye!")
-
 
 if __name__ == "__main__":
     logging.basicConfig(format='%(message)s', level=logging.INFO)
