@@ -47,5 +47,10 @@ jobs:
             export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
             ls $OCL_ICD_VENDORS
             clinfo
+            export PYOPENCL_CTX=''
+            if [ ${uname} == "Darwin" ]
+            then
+            export PYOPENCL_CTX=':'
+            fi
             . ./examples/run_examples.sh
  
