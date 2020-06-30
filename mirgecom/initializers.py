@@ -32,7 +32,6 @@ import pyopencl.clmath as clmath
 from mirgecom.eos import IdealSingleGas
 
 
-
 class Vortex2D:
     r"""Implements the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
@@ -109,7 +108,7 @@ class SodShock1D:
     {\rho}(x > x_0, 0) = \rho_r\\
     {\rho}{V_x}(x, 0) = 0
     {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
-    {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1} 
+    {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
 
     A call to this object after creation/init creates
     Sod's shock solution at a given time (t)
@@ -118,10 +117,10 @@ class SodShock1D:
     """
 
     def __init__(
-            self, x0=.5,rhol=1.0, rhor=.1,energyl=1.0,energyr=.1,
+            self, x0=.5, rhol=1.0, rhor=.1, energyl=1.0, energyr=.1,
     ):
         """Initialize shock parameters
-        
+
         Parameters
         ----------
         x0: float
@@ -133,7 +132,7 @@ class SodShock1D:
         energyl: float
         energy to left of shock
         energyr: float
-        energy to right of shock        
+        energy to right of shock
         """
 
         self._x0 = x0
@@ -150,10 +149,12 @@ class SodShock1D:
         energy = clmath.sqrt(x_rel)
         for i in range(len(mass)):
             mass[i] = self._rhol if x_rel[i] < self._x0 else self._rhor
-            energy[i] = gmn1*self._energyl if x_rel[i] < self._x0 else gmn1*self._energyr        
-        rhou = 0.0*energy
+            energy[i] = gmn1*self._energyl if x_rel[i] < self._x0 \
+                else gmn1*self._energyr
+        rhou = 0.0*energy  # gets the right shape of zeros
         rhov = 0.0*energy
         return flat_obj_array(mass, energy, rhou, rhov)
+
 
 class Lump:
     r"""Implements an N-dimensional Gaussian lump of mass.

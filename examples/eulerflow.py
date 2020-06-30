@@ -26,7 +26,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-from pytools.obj_array import make_obj_array
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -48,10 +47,12 @@ def main():
 
     dim = 2
     nel_x = 16
-    nel_y = 4
+#    nel_y = 4
     al = -5.0
     ar = 5.0
-    n = (nel_x, nel_y)
+
+    vel = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,))
     casename = "Sod"
     if casename == "Vortex":
         initializer = Vortex2D(center=orig, velocity=vel)
@@ -66,9 +67,9 @@ def main():
     else:
         logging.error(f"Error: Unknown init case ({casename})")
         assert False
-        
+
     from meshmode.mesh.generation import generate_regular_rect_mesh
-        
+
     mesh = generate_regular_rect_mesh(
         a=[(al,), (bl,)], b=[(ar,), (br,)], n=(nel_x,)*dim
     )
@@ -83,15 +84,11 @@ def main():
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
 
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    vel[:] = 1.0
-
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     eos = IdealSingleGas()
 
     fields = initializer(0, nodes)
-    
+
     cfl = 1.0
     sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
     constantcfl = False
@@ -110,7 +107,7 @@ def main():
     )
 
     logging.info(message)
-    vis = make_visualizer(discr, discr.order) # + 3 if dim == 2 else discr.order)
+    vis = make_visualizer(discr, discr.order)  # + 3 if dim == 2 else discr.order)
 
     def write_soln():
         expected_result = initializer(t, nodes)
