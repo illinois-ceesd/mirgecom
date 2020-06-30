@@ -30,7 +30,8 @@ from pytools.obj_array import flat_obj_array, make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
-
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
@@ -107,6 +108,7 @@ class EvaluationMapper(ev.EvaluationMapper):
 def test_standing_wave(ctx_factory, dim, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     from pytools.convergence import EOCRecorder
 
@@ -121,9 +123,9 @@ def test_standing_wave(ctx_factory, dim, order):
 
         from grudge.eager import EagerDGDiscretization
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        nodes = discr.nodes().with_queue(queue)
+        nodes = thaw(actx, discr.nodes())
 
         # 2D: phi(x,y,t) = cos(omega*t-pi/4)*cos(x)*cos(y)
         # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*cos(x)*cos(y)*cos(z)
@@ -206,6 +208,7 @@ def test_standing_wave(ctx_factory, dim, order):
 def test_wave_manufactured(ctx_factory, dim, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     from pytools.convergence import EOCRecorder
 
@@ -220,9 +223,9 @@ def test_wave_manufactured(ctx_factory, dim, order):
 
         from grudge.eager import EagerDGDiscretization
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        nodes = discr.nodes().with_queue(queue)
+        nodes = thaw(actx, discr.nodes())
 
         # 2D: phi(x,y,t) = cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3
         # 3D: phi(x,y,z,t) = cos(omega*t-pi/4)*(x-1)^3*(x+1)^3*(y-1)^3*(y+1)^3

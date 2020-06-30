@@ -26,7 +26,7 @@ from pytools.obj_array import (
         flat_obj_array, make_obj_array,
         with_object_array_or_scalar)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import with_queue
+from meshmode.dof_array import thaw
 from grudge.symbolic.primitives import TracePair
 
 
@@ -46,8 +46,8 @@ def _interior_trace_pair(discr, vec):
 def _flux(discr, c, w_tpair):
     u = w_tpair[0]
     v = w_tpair[1:]
-
-    normal = with_queue(u.int.queue, discr.normal(w_tpair.dd))
+    actx = u.array_context
+    normal = thaw(actx, discr.normal(w_tpair.dd))
 
     def normal_times(scalar):
         # workaround for object array behavior
