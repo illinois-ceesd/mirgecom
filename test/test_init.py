@@ -1,8 +1,6 @@
 from __future__ import division, absolute_import, print_function
 
-__copyright__ = (
-    """Copyright (C) 2020 University of Illinois Board of Trustees"""
-)
+__copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,10 +31,50 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
+from mirgecom.initializers import SodShock1D
+from mirgecom.eos import IdealSingleGas
+
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+
+
+def test_shock_init():
+    cl_ctx = cl.create_some_context()
+    queue = cl.CommandQueue(cl_ctx)
+
+    nel_1d = 10
+    dim = 2
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], n=(nel_1d,) * dim
+    )
+
+    order = 3
+    print(f"Number of elements: {mesh.nelements}")
+
+    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    nodes = discr.nodes().with_queue(queue)
+
+    initr = SodShock1D()
+    initsoln = initr(t=0.0, x_vec=nodes)
+    print("Sod Soln:", initsoln)
+    xpl = 1.0
+    xpr = 0.1
+    tol = 1e-15
+    nodes_x = nodes[0]
+    eos = IdealSingleGas()
+    p = eos.pressure(initsoln)
+    nel = len(p)
+    # Check them all individually
+    for i in range(nel):
+        if nodes_x[i] < 0.5:
+            assert np.abs(p[i] - xpl) < tol
+        else:
+            assert np.abs(p[i] - xpr) < tol
 
 
 def test_lump_init():
