@@ -48,7 +48,7 @@ jobs:
             ls $OCL_ICD_VENDORS
             clinfo
             export PYOPENCL_CTX=''
-            if [ ${uname} == "Darwin" ]
+            if [[ $(uname) == "Darwin" ]]
             then
             export PYOPENCL_CTX=':'
             fi
