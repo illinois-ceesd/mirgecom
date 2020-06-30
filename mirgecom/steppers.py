@@ -26,6 +26,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
+from pytools.obj_array import make_obj_array
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -42,6 +43,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     logger = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     def write_soln():
         dv = eos(fields)
         expected_result = initializer(t, nodes)
-        result_resid = fields - expected_result
+        result_resid = make_obj_array([fields - expected_result])
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
