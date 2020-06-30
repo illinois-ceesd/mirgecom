@@ -47,9 +47,11 @@ def main():
     queue = cl.CommandQueue(cl_ctx)
 
     dim = 2
-    nel_1d = 16
+    nel_x = 16
+    nel_y = 4
     al = -5.0
     ar = 5.0
+    n = (nel_x, nel_y)
     casename = "Sod"
     if casename == "Vortex":
         initializer = Vortex2D(center=orig, velocity=vel)
@@ -59,6 +61,8 @@ def main():
         initializer = SodShock1D()
         al = 0
         ar = 1.0
+        bl = -0.5
+        br = 0.5
     else:
         logging.error(f"Error: Unknown init case ({casename})")
         assert False
@@ -66,14 +70,14 @@ def main():
     from meshmode.mesh.generation import generate_regular_rect_mesh
         
     mesh = generate_regular_rect_mesh(
-        a=(al,) * dim, b=(ar,) * dim, n=(nel_1d,) * dim
+        a=[(al,), (bl,)], b=[(ar,), (br,)], n=(nel_x,)*dim
     )
 
     order = 3
 
     exittol = 2e-2
     t = 0
-    t_final = 0.1
+    t_final = 0.01
     istep = 0
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
@@ -87,11 +91,11 @@ def main():
     eos = IdealSingleGas()
 
     fields = initializer(0, nodes)
-
+    
     cfl = 1.0
     sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
     constantcfl = False
-    dt = 0.001
+    dt = 0.0001
     nstep_status = 10
 
     initname = initializer.__class__.__name__
@@ -106,13 +110,13 @@ def main():
     )
 
     logging.info(message)
-    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
+    vis = make_visualizer(discr, discr.order) # + 3 if dim == 2 else discr.order)
 
     def write_soln():
         expected_result = initializer(t, nodes)
-        result_resid = make_obj_array([fields - expected_result])
-        maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
-
+#        result_resid = make_obj_array([fields - expected_result])
+#        maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
+        maxerr = [0.0, 0.0, 0.0, 0.0, 0.0]
         dv = eos(fields)
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -129,7 +133,7 @@ def main():
         io_fields = split_fields(dim, fields)
         io_fields += eos.split_fields(dim, dv)
         io_fields.append(("exact_soln", expected_result))
-        io_fields.append(("residual", result_resid))
+#        io_fields.append(("residual", result_resid))
         vis.write_vtk_file("fld-euler-eager-%04d.vtu" % istep, io_fields)
         return maxerr
 
