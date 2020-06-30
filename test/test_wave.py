@@ -24,11 +24,11 @@ import numpy as np
 import numpy.linalg as la
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath
+import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import flat_obj_array, make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
-import pymbolic.mapper.evaluator as ev
+import mirgecom.symbolic as sym
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl
@@ -38,64 +38,6 @@ import pytest
 
 import logging
 logger = logging.getLogger(__name__)
-
-
-def sym_diff(var):
-    from pymbolic.mapper.differentiator import DifferentiationMapper
-
-    def func_map(arg_index, func, arg, allowed_nonsmoothness):
-        if func == pmbl.var("sin"):
-            return pmbl.var("cos")(*arg)
-        elif func == pmbl.var("cos"):
-            return -pmbl.var("sin")(*arg)
-        else:
-            raise ValueError("Unrecognized function")
-
-    return DifferentiationMapper(var, func_map=func_map)
-
-
-def sym_div(vector_func):
-    coord_names = ["x", "y", "z"]
-    div = 0
-    for i in range(len(vector_func)):
-        div += sym_diff(pmbl.var(coord_names[i]))(vector_func[i])
-    return div
-
-
-def sym_grad(dim, func):
-    coord_names = ["x", "y", "z"]
-    grad = []
-    for i in range(dim):
-        grad_i = sym_diff(pmbl.var(coord_names[i]))(func)
-        grad.append(grad_i)
-    return grad
-
-
-class EvaluationMapper(ev.EvaluationMapper):
-    def map_call(self, expr):
-        assert isinstance(expr.function, prim.Variable)
-        if expr.function.name == "sin":
-            par, = expr.parameters
-            return self._sin(self.rec(par))
-        elif expr.function.name == "cos":
-            par, = expr.parameters
-            return self._cos(self.rec(par))
-        else:
-            raise ValueError("Unrecognized function '%s'" % expr.function)
-
-    def _sin(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.sin(val)
-        else:
-            return clmath.sin(val)
-
-    def _cos(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.cos(val)
-        else:
-            return clmath.cos(val)
 
 
 def get_standing_wave(dim):
@@ -109,7 +51,7 @@ def get_standing_wave(dim):
                 b=(0.5*np.pi,)*dim,
                 n=(n,)*dim)
     c = 2.
-    sym_coords = [pmbl.var(name) for name in ["x", "y", "z"]]
+    sym_coords = prim.make_sym_vector('x', dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
@@ -130,7 +72,7 @@ def get_manufactured_cubic(dim):
                 a=(-1.,)*dim,
                 b=(1.,)*dim,
                 n=(n,)*dim)
-    sym_coords = [pmbl.var(name) for name in ["x", "y", "z"]]
+    sym_coords = prim.make_sym_vector('x', dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(sym_t - np.pi/4)
@@ -147,7 +89,7 @@ def get_manufactured_cubic(dim):
         get_manufactured_cubic(3)
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi):
+def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -162,30 +104,27 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi):
 
         nodes = discr.nodes().with_queue(queue)
 
-        sym_coords = [pmbl.var(name) for name in ["x", "y", "z"]]
+        sym_coords = prim.make_sym_vector('x', dim)
         sym_t = pmbl.var("t")
 
         # f = phi_tt - c^2 * div(grad(phi))
-        sym_f = sym_diff(sym_t)(sym_diff(sym_t)(sym_phi)) - c**2\
-                    * sym_div(sym_grad(dim, sym_phi))
+        sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - c**2\
+                    * sym.div(sym.grad(dim, sym_phi))
 
         # u = phi_t
-        sym_u = sym_diff(sym_t)(sym_phi)
+        sym_u = sym.diff(sym_t)(sym_phi)
 
         # v = c*grad(phi)
-        sym_v = [c * sym_diff(sym_coords[i])(sym_phi) for i in range(dim)]
+        sym_v = [c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
 
         # rhs(u part) = c*div(v) + f
         # rhs(v part) = c*grad(u)
         sym_rhs = flat_obj_array(
-                    c * sym_div(sym_v) + sym_f,
-                    make_obj_array([c]) * sym_grad(dim, sym_u))
+                    c * sym.div(sym_v) + sym_f,
+                    make_obj_array([c]) * sym.grad(dim, sym_u))
 
         def sym_eval(expr, t):
-            coord_names = ["x", "y", "z"]
-            eval_values = {coord_names[i]: nodes[i] for i in range(dim)}
-            eval_values["t"] = t
-            return EvaluationMapper(eval_values)(expr)
+            return sym.evaluate(expr, x=nodes, t=t)
 
         u = sym_eval(sym_u, 0.)
         v = sym_eval(sym_v, 0.)
@@ -201,17 +140,18 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi):
                 for i in range(dim+1)]))
         eoc_rec.add_data_point(1./n, err)
 
-        # from grudge.shortcuts import make_visualizer
-        # vis = make_visualizer(discr, discr.order)
-        # vis.write_vtk_file("result_{n}.vtu".format(n=n),
-        #         [
-        #             ("u", u),
-        #             ("v", v),
-        #             ("rhs_u_actual", rhs[0]),
-        #             ("rhs_v_actual", rhs[1:]),
-        #             ("rhs_u_expected", expected_rhs[0]),
-        #             ("rhs_v_expected", expected_rhs[1:]),
-        #             ])
+        if visualize:
+            from grudge.shortcuts import make_visualizer
+            vis = make_visualizer(discr, discr.order)
+            vis.write_vtk_file("result_{n}.vtu".format(n=n),
+                    [
+                        ("u", u),
+                        ("v", v),
+                        ("rhs_u_actual", rhs[0]),
+                        ("rhs_v_actual", rhs[1:]),
+                        ("rhs_u_expected", expected_rhs[0]),
+                        ("rhs_v_expected", expected_rhs[1:]),
+                        ])
 
     print("Approximation error:")
     print(eoc_rec)
