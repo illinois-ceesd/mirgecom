@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
@@ -37,10 +37,10 @@ class PrescribedBoundary:
     def get_boundary_flux(
             self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
-        queue = w[0].queue
+        actx = w[0].array_context
 
         # help - how to make it just the boundary nodes?
-        nodes = discr.nodes().with_queue(queue)
+        nodes = thaw(actx,discr.nodes())
         prescribed_soln = self._userfunc(t, nodes)
         ext_soln = discr.interp("vol", btag, prescribed_soln)
         int_soln = discr.interp("vol", btag, w)
