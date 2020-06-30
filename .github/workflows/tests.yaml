@@ -50,7 +50,7 @@ jobs:
             export PYOPENCL_CTX=''
             if [[ $(uname) == "Darwin" ]]
             then
-            export PYOPENCL_CTX=':'
+            export PYOPENCL_CTX=''
             fi
             . ./examples/run_examples.sh
  
