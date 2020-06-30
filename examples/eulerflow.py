@@ -26,7 +26,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-import sys
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -54,7 +53,7 @@ def main():
     )
 
     order = 3
-    
+
     exittol = 2e-2
     t = 0
     t_final = 0.1
@@ -125,7 +124,7 @@ def main():
         io_fields.append(("residual", result_resid))
         vis.write_vtk_file("fld-euler-eager-%04d.vtu" % istep, io_fields)
         return maxerr
-    
+
     def rhs(t, w):
         return inviscid_operator(discr, w=w, t=t, boundaries=boundaries, eos=eos)
 
@@ -137,7 +136,7 @@ def main():
             cfl = dt / sdt
 
         if istep % nstep_status == 0:
-            steperr = write_soln()
+            write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
@@ -147,17 +146,17 @@ def main():
 
     logging.info("Writing final dump.")
     maxerr = max(write_soln())
-    
-    
+
     if maxerr > exittol:
         logging.error("Run failed to follow expected result.")
         test_succeeded = False
-        assert(test_succeeded)
-        
+        assert test_succeeded
+
     logging.info("Goodbye!")
 
+
 if __name__ == "__main__":
-    logging.basicConfig(format='%(message)s', level=logging.INFO)
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
     main()
 
 # vim: foldmethod=marker
