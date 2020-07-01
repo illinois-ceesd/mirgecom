@@ -78,7 +78,7 @@ def main():
 
     exittol = 2e-2
     t = 0
-    t_final = 0.01
+    t_final = 0.005
     istep = 0
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
