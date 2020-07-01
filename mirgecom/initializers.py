@@ -28,6 +28,7 @@ from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
+import pyopencl.array as clarray
 import pyopencl.clmath as clmath
 from mirgecom.eos import IdealSingleGas
 
@@ -86,9 +87,8 @@ class Vortex2D:
         expterm = self._beta * clmath.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
-        mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2) * expterm ** 2) ** (
-            1 / (gamma - 1)
-        )
+        mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
+                * expterm ** 2) ** (1 / (gamma - 1))
         p = mass ** gamma
 
         e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
@@ -117,7 +117,7 @@ class SodShock1D:
     """
 
     def __init__(
-            self, x0=.5, rhol=1.0, rhor=.1, energyl=1.0, energyr=.1,
+        self, x0=0.5, rhol=1.0, rhor=0.1, energyl=1.0, energyr=0.1,
     ):
         """Initialize shock parameters
 
@@ -143,16 +143,22 @@ class SodShock1D:
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         gm1 = eos.gamma() - 1.0
-        gmn1 = 1.0/gm1
+        gmn1 = 1.0 / gm1
         x_rel = x_vec[0]
-        mass = clmath.sqrt(x_rel)
-        energy = clmath.sqrt(x_rel)
-        for i in range(len(mass)):
-            mass[i] = self._rhol if x_rel[i] < self._x0 else self._rhor
-            energy[i] = gmn1*self._energyl if x_rel[i] < self._x0 \
-                else gmn1*self._energyr
-        rhou = 0.0*energy  # gets the right shape of zeros
-        rhov = 0.0*energy
+        queue = x_rel.queue
+
+        zeros = clarray.zeros(queue, shape=x_rel.shape, dtype=np.float64)
+
+        rhor = zeros + self._rhor
+        rhol = zeros + self._rhol
+        energyl = zeros + gmn1 * self._energyl
+        energyr = zeros + gmn1 * self._energyr
+        mass = clarray.if_positive((x_rel - self._x0), rhor, rhol)
+        energy = clarray.if_positive((x_rel - self._x0), energyr, energyl)
+        # gets the right shape of zeros
+        rhou = 1.0 * zeros
+        rhov = 1.0 * zeros
+
         return flat_obj_array(mass, energy, rhou, rhov)
 
 
@@ -186,7 +192,8 @@ class Lump:
     """
 
     def __init__(
-        self, numdim=1, rho0=1.0, rhoamp=1.0, p0=1.0, center=[0], velocity=[0],
+            self, numdim=1, rho0=1.0, rhoamp=1.0,
+            p0=1.0, center=[0], velocity=[0]
     ):
         r"""Initialize Lump parameters
 
