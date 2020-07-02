@@ -101,6 +101,9 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
+    # Note: In order to support manufactured solutions, we modify the wave equation
+    # to add a source term (f). If the solution is exact, this term should be 0.
+
     for n in [4, 8, 16]:
         mesh = mesh_factory(n)
 
