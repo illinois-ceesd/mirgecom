@@ -1,8 +1,6 @@
-from __future__ import division, absolute_import, print_function
-
-__copyright__ = (
-    """Copyright (C) 2020 University of Illinois Board of Trustees"""
-)
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -76,6 +74,7 @@ def test_inviscid_flux():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
+    logger = logging.Logger(__name__)
     dim = 2
     nel_1d = 16
 
@@ -90,7 +89,7 @@ def test_inviscid_flux():
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
         eos = IdealSingleGas()
 
-        logging.info(f"Number of {dim}d elems: {mesh.nelements}")
+        logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
         mass = cl.clrandom.rand(
             queue, (mesh.nelements,), dtype=np.float64
@@ -175,7 +174,7 @@ def test_inviscid_flux():
             p = eos.pressure(q)
             flux = _inviscid_flux(fake_dis, q, eos)
 
-            logging.info(f"{dim}d flux = {flux}")
+            logger.info(f"{dim}d flux = {flux}")
 
             # for velocity zero, these components should be == zero
             for i in range(2 * dim):
@@ -250,11 +249,11 @@ def test_inviscid_flux():
                 p = eos.pressure(q)
                 flux = _inviscid_flux(fake_dis, q, eos)
 
-                logging.info(f"{dim}d flux = {flux}")
+                logger.info(f"{dim}d flux = {flux}")
 
                 # first two components should be nonzero in livedim only
                 expected_flux = mom
-                logging.info("Testing continuity")
+                logger.info("Testing continuity")
                 for i in range(dim):
                     assert (
                         la.norm((flux[i] - expected_flux[i]).get())
@@ -265,7 +264,7 @@ def test_inviscid_flux():
                     else:
                         assert la.norm(flux[i].get()) > 0.0
 
-                logging.info("Testing energy")
+                logger.info("Testing energy")
                 expected_flux = mom * make_obj_array(
                     [(energy + p) / mass]
                 )
@@ -281,7 +280,7 @@ def test_inviscid_flux():
                     else:
                         assert la.norm(flux[dim + i].get()) > 0.0
 
-                logging.info("Testing momentum")
+                logger.info("Testing momentum")
                 xpmomflux = make_obj_array(
                     [
                         (mom[i] * mom[j] / mass + (p if i == j else 0))
@@ -338,6 +337,7 @@ def test_facial_flux():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    logger = logging.Logger(__name__)
 
     tolerance = 1e-14
     p0 = 1.0
@@ -358,7 +358,7 @@ def test_facial_flux():
 
                 #                order = 3
 
-                logging.info(f"Number of elements: {mesh.nelements}")
+                logger.info(f"Number of elements: {mesh.nelements}")
 
                 discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
@@ -457,7 +457,7 @@ def test_facial_flux():
                 f"standalone Errors:\n{eoc_rec0}"
                 f"boundary Errors:\n{eoc_rec1}"
             )
-            logging.info(message)
+            logger.info(message)
             assert (
                 eoc_rec0.order_estimate() >= order - 0.5
                 or eoc_rec0.max_error() < 1e-9
@@ -476,6 +476,7 @@ def test_uniform_rhs():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    logger = logging.Logger(__name__)
 
     tolerance = 1e-9
     maxxerr = 0.0
@@ -494,7 +495,7 @@ def test_uniform_rhs():
                     a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
                 )
 
-                logging.info(
+                logger.info(
                     f"Number of {dim}d elements: {mesh.nelements}"
                 )
 
@@ -534,7 +535,7 @@ def test_uniform_rhs():
                     f"rhoe_rhs = {rhoe_rhs}\n"
                     f"rhov_rhs = {rhov_rhs}"
                 )
-                logging.info(message)
+                logger.info(message)
 
                 assert np.max(np.abs(rho_resid.get())) < tolerance
                 assert np.max(np.abs(rhoe_resid.get())) < tolerance
@@ -587,8 +588,8 @@ def test_uniform_rhs():
             #            )
 
 
-# def test_vortex_rhs(ctx_factory):
 def test_vortex_rhs():
+    #def test_vortex_rhs(ctx_factory)
     """Tests the inviscid rhs using the non-trivial
     2D isentropic vortex case configured to yield
     rhs = 0. Checks several different orders
@@ -598,6 +599,7 @@ def test_vortex_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    logger = logging.Logger(__name__)
 
     dim = 2
 
@@ -615,7 +617,7 @@ def test_vortex_rhs():
                 a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
             )
 
-            logging.info(
+            logger.info(
                 f"Number of {dim}d elements:  {mesh.nelements}"
             )
 
@@ -654,7 +656,7 @@ def test_vortex_rhs():
             f"Error for (dim,order) = ({dim},{order}):\n"
             f"{eoc_rec}"
         )
-        logging.info(message)
+        logger.info(message)
 
         assert (
             eoc_rec.order_estimate() >= order - 0.5
@@ -671,6 +673,7 @@ def test_lump_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    logger = logging.Logger(__name__)
 
     tolerance = 1e-10
     maxxerr = 0.0
@@ -690,7 +693,7 @@ def test_lump_rhs():
                     a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
                 )
 
-                logging.info(f"Number of elements: {mesh.nelements}")
+                logger.info(f"Number of elements: {mesh.nelements}")
 
                 discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
                 nodes = discr.nodes().with_queue(queue)
@@ -723,12 +726,12 @@ def test_lump_rhs():
                     maxxerr = err_max
 
                 eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-            logging.info(f"Max error: {maxxerr}")
+            logger.info(f"Max error: {maxxerr}")
             message = (
                 f"Error for (dim,order) = ({dim},{order}):\n"
                 f"{eoc_rec}"
             )
-            logging.info(message)
+            logger.info(message)
             assert (
                 eoc_rec.order_estimate() >= order - 0.5
                 or eoc_rec.max_error() < tolerance
@@ -747,6 +750,7 @@ def test_isentropic_vortex():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    logger = logging.Logger(__name__)
 
     dim = 2
 
@@ -798,7 +802,7 @@ def test_isentropic_vortex():
                 f"Initialization:  {initname}\n"
                 f"EOS:             {eosname}"
             )
-            logging.info(message)
+            logger.info(message)
 
             def write_soln():
                 expected_result = initializer(t, nodes)
@@ -844,7 +848,7 @@ def test_isentropic_vortex():
                     discr, fields, c=cfl, eos=eos
                 )
 
-            logging.info("Writing final dump.")
+            logger.info("Writing final dump.")
             maxerr = write_soln()
             eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
@@ -852,17 +856,14 @@ def test_isentropic_vortex():
             f"Error for (dim,order) = ({dim},{order}):\n"
             f"{eoc_rec}"
         )
-        logging.info(message)
+        logger.info(message)
         assert (
             eoc_rec.order_estimate() >= order - 0.5
             or eoc_rec.max_error() < 1e-11
         )
 
 
-# vim: foldmethod=marker
-
-
-# PYOPENCL_TEST=port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'
+PYOPENCL_TEST = "port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'"
 if __name__ == "__main__":
     import sys
 

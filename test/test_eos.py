@@ -1,8 +1,7 @@
-from __future__ import division, absolute_import, print_function
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
 
-__copyright__ = (
-    """Copyright (C) 2020 University of Illinois Board of Trustees"""
-)
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
@@ -41,10 +41,16 @@ from pyopencl.tools import (  # noqa
 
 
 def test_idealsingle_lump():
+    """
+    Tests that the IdealSingleGas EOS returns
+    the correct (uniform) pressure for the Lump
+    solution field.
+    """
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_idealsingle_lump: "
+    logger = logging.Logger(__name__)
+
     dim = 2
     nel_1d = 4
 
@@ -55,7 +61,7 @@ def test_idealsingle_lump():
     )
 
     order = 3
-    print(iotag + "%d elements" % mesh.nelements)
+    logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
@@ -73,17 +79,23 @@ def test_idealsingle_lump():
     exp_p = 1.0
     errmax = np.max(np.abs(p - exp_p))
 
-    print("lump_soln = ", lump_soln)
-    print("pressure = ", p)
+    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
 
 
 def test_idealsingle_vortex():
+    r"""
+    Tests that the IdealSingleGas EOS returns
+    the correct pressure (p) for the Vortex2D solution
+    field (i.e. :math:'p = \rho^{\gamma}').
+    """
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    iotag = "test_idealsingle_vortex: "
+    logger = logging.Logger(__name__)
+
     dim = 2
     nel_1d = 4
 
@@ -94,7 +106,7 @@ def test_idealsingle_vortex():
     )
 
     order = 3
-    print(iotag + "%d elements" % mesh.nelements)
+    logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
@@ -108,7 +120,7 @@ def test_idealsingle_vortex():
     exp_p = rho ** gamma
     errmax = np.max(np.abs(p - exp_p))
 
-    print("vortex_soln = ", vortex_soln)
-    print("pressure = ", p)
+    logger.info(f"vortex_soln = {vortex_soln}")
+    logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
