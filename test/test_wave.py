@@ -90,6 +90,11 @@ def get_manufactured_cubic(dim):
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False):
+    """Given a domain and an expected solution (exact or manufactured) in symbolic
+    form, computes symbolic and numerical wave equation RHSs for several different
+    mesh resolutions and checks order of convergence.
+    """
+
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
