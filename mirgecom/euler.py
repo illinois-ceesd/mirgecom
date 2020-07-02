@@ -199,7 +199,7 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 
     dim = discr.dim
     mesh = discr.mesh
-    order = min([grp.order for grp in discr._volume_discr.groups])
+    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
     nelements = mesh.nelements
     nel_1d = nelements ** (1.0 / (1.0 * dim))
 
