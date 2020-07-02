@@ -33,6 +33,12 @@ class GasEOS:
     r"""Implements an object designed to provide methods
     for implementing and computing relations between
     fluid or gas state variables.
+
+    .. automethod :: pressure
+    .. automethod :: temperature
+    .. automethod :: sound_speed
+    .. automethod :: internal_energy
+    .. automethod :: gas_const
     """
 
     def __init__(self, parameters=None):
@@ -40,8 +46,7 @@ class GasEOS:
         parameters expected to remain constant throughout
         the simulation.
         """
-        eos_is_implemented = False
-        assert eos_is_implemented
+        raise NotImplementedError()
 
     def __call__(self, w=None):
         r"""Call to object
@@ -49,10 +54,10 @@ class GasEOS:
         Parameters
         ----------
         w
-        State array which expects at least
-        the canonical conserved quantities:
-        :math:`w=[\rho,\rho{E},\rho\vec{V}]`
-        for the fluid at each point
+            State array which expects at least
+            the canonical conserved quantities:
+            :math:`w=[\rho,\rho{E},\rho\vec{V}]`
+            for the fluid at each point
 
         Returns
         ----------
@@ -60,7 +65,7 @@ class GasEOS:
         EOS-specific dependent variables.
         (e.g. [ pressure, temperature ] for an ideal gas)
         """
-        assert False
+        raise NotImplementedError()
 
     def pressure(self, w=None):
         r"""Gas pressure
@@ -68,17 +73,17 @@ class GasEOS:
         Parameters
         ----------
         w
-        State array which expects at least
-        the canonical conserved quantities:
-        :math:`w=[\rho,\rho{E},\rho\vec{V}]`
-        for the fluid at each point
+            State array which expects at least
+            the canonical conserved quantities:
+            :math:`w=[\rho,\rho{E},\rho\vec{V}]`
+            for the fluid at each point
 
         Returns
         ----------
         floating point array with the thermodynamic
         pressure at each point
         """
-        assert False
+        raise NotImplementedError()
 
     def temperature(self, w=None):
         r"""Gas temperature
@@ -86,17 +91,17 @@ class GasEOS:
         Parameters
         ----------
         w
-        State array which expects at least
-        the canonical conserved quantities:
-        :math:`w=[\rho,\rho{E},\rho\vec{V}]`
-        for the fluid at each point
+            State array which expects at least
+            the canonical conserved quantities:
+            :math:`w=[\rho,\rho{E},\rho\vec{V}]`
+            for the fluid at each point
 
         Returns
         ----------
         floating point array with the thermodynamic
         temperature at each point
         """
-        assert False
+        raise NotImplementedError()
 
     def sound_speed(self, w=None):
         r"""Speed of sound
@@ -104,17 +109,17 @@ class GasEOS:
         Parameters
         ----------
         w
-        State array which expects at least
-        the canonical conserved quantities:
-        :math:`w=[\rho,\rho{E},\rho\vec{V}]`
-        for the fluid at each point
+            State array which expects at least
+            the canonical conserved quantities:
+            :math:`w=[\rho,\rho{E},\rho\vec{V}]`
+            for the fluid at each point
 
         Returns
         ----------
         floating point number or array with the speed of sound
         for each point
         """
-        assert False
+        raise NotImplementedError()
 
     def gas_const(self, w=None):
         r"""Specific gas constant (R)
@@ -122,10 +127,10 @@ class GasEOS:
         Parameters
         ----------
         w
-        State array which expects at least
-        the canonical conserved quantities:
-        :math:`w=[\rho,\rho{E},\rho\vec{V}]`
-        for the fluid at each point
+            State array which expects at least
+            the canonical conserved quantities:
+            :math:`w=[\rho,\rho{E},\rho\vec{V}]`
+            for the fluid at each point
 
         Returns
         ----------
@@ -133,7 +138,25 @@ class GasEOS:
         gas constant for the domain, or at each point for
         mixture-type EOS.
         """
-        assert False
+        raise NotImplementedError()
+
+    def internal_energy(self, w=None):
+        r"""Internal energy
+
+        Parameters
+        ----------
+        w
+            State array which expects at least
+            the canonical conserved quantities:
+            :math:`w=[\rho,\rho{E},\rho\vec{V}]`
+            for the fluid at each point
+
+        Returns
+        ----------
+        floating point array with the internal
+        energy at each point.
+        """
+        raise NotImplementedError()
 
 
 class IdealSingleGas:
@@ -152,39 +175,66 @@ class IdealSingleGas:
         return self._gas_const
 
     def internal_energy(self, w):
+        r"""Internal energy
 
+        The internal energy (e) is calculated as:
+        .. :math::
+
+            e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
         mass = w[0]
         energy = w[1]
         mom = w[2:]
 
-        e = energy - 0.5 * np.dot(mom, mom) / mass
-        return e
+        return (energy - 0.5 * np.dot(mom, mom) / mass)
 
     def pressure(self, w):
-        p = (self._gamma - 1.0) * self.internal_energy(w)
-        return p
+        r"""Gas pressure
+
+        The thermodynmic pressure (p) is calculated from
+        the internal energy (e) as:
+
+        .. :math::
+
+            p = (\gamma - 1)e
+        """
+        return (self._gamma - 1.0) * self.internal_energy(w)
 
     def sound_speed(self, w):
+        r"""Speed of sound
+
+        The speed of sound (c) is calculated as:
+
+        .. :math::
+
+            c = \sqrt{\frac{\gamma{p}}{\rho}}
+        """
         mass = w[0]
         p = self.pressure(w)
         c2 = self._gamma / mass * p
-        c = clmath.sqrt(c2)
-        return c
+        return clmath.sqrt(c2)
 
     def temperature(self, w):
+        r"""Gas temperature
+
+        The thermodynmic temperature (T) is calculated from
+        the internal energy (e) and specific gas constant (R)
+        as:
+
+        .. :math::
+
+            T = \frac{(\gamma - 1)e}{R\rho}
+        """
         mass = w[0]
-        temper = (
+        return (
             ((self._gamma - 1.0) / self._gas_const) * self.internal_energy(w) / mass
         )
-        return temper
 
     def __call__(self, w):
         return flat_obj_array(self.pressure(w), self.temperature(w))
 
     def split_fields(self, ndim, dv):
-        retlist = [
+        return [
             ("pressure", dv[0]),
             ("temperature", dv[1]),
         ]
-
-        return retlist
