@@ -42,12 +42,12 @@ class Vortex2D:
 
     .. :math::
 
-    u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
-    v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
-    \rho =
-    ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
-    \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
-    p = \rho^{\gamma}
+        u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
+        v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
+        \rho =
+        ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
+        \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
+        p = \rho^{\gamma}
 
     A call to this object after creation/init creates
     the isentropic vortex solution at a given time (t)
@@ -63,11 +63,11 @@ class Vortex2D:
         Parameters
         ----------
         beta : float
-        vortex amplitude
+            vortex amplitude
         center : 2-dimensional float array
-        center of vortex
+            center of vortex
         velocity : 2-dimensional float array
-        fixed flow velocity used for exact solution at t != 0
+            fixed flow velocity used for exact solution at t != 0
         """
 
         self._beta = beta
@@ -103,9 +103,9 @@ class Lump:
 
     .. :math::
 
-    {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-    {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
-    {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+        {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+        {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
+        {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
     Where :math:`V_0` is the fixed velocity specified
     by the user at init time, and :math:`\gamma` is taken
@@ -133,17 +133,17 @@ class Lump:
         Parameters
         ----------
         numdim : integer
-        specify the number of dimensions for the lump
+            specify the number of dimensions for the lump
         rho0 : float
-        specifies the value of :math:`\rho_0`
+            specifies the value of :math:`\rho_0`
         rhoamp : float
-        specifies the value of :math:`\rho_a`
+            specifies the value of :math:`\rho_a`
         p0 : float
-        specifies the value of :math:`p_0`
+            specifies the value of :math:`p_0`
         center : 2-dimensional float array
-        center of lump
+            center of lump
         velocity : 2-dimensional float array
-        fixed flow velocity used for exact solution at t != 0
+            fixed flow velocity used for exact solution at t != 0
         """
 
         if len(center) == numdim:
