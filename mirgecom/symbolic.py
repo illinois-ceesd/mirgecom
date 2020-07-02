@@ -35,7 +35,8 @@ __doc__ = """
 .. autofunction:: diff
 .. autofunction:: div
 .. autofunction:: grad
-.. autofunction:: evaluate
+
+.. autoclass:: EvaluationMapper
 """
 
 
@@ -71,6 +72,8 @@ def grad(dim, func):
 
 
 class EvaluationMapper(ev.EvaluationMapper):
+    """Evaluates symbolic expressions given a mapping from variables to values"""
+
     def map_call(self, expr):
         assert isinstance(expr.function, prim.Variable)
         if expr.function.name == "sin":
@@ -95,10 +98,3 @@ class EvaluationMapper(ev.EvaluationMapper):
             return np.cos(val)
         else:
             return clmath.cos(val)
-
-
-def evaluate(expr, **kwargs):
-    """Return the value of a symbolic expression by substituting in keyword
-    argument values.
-    """
-    return EvaluationMapper(kwargs)(expr)

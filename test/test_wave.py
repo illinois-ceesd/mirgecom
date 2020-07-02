@@ -124,7 +124,7 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
                     make_obj_array([c]) * sym.grad(dim, sym_u))
 
         def sym_eval(expr, t):
-            return sym.evaluate(expr, x=nodes, t=t)
+            return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
         u = sym_eval(sym_u, 0.)
         v = sym_eval(sym_v, 0.)
