@@ -87,9 +87,7 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     massflux = mom * make_obj_array([1.0])
     energyflux = mom * make_obj_array([(energy + p) / mass])
 
-    flux = flat_obj_array(massflux, energyflux, momflux,)
-
-    return flux
+    return flat_obj_array(massflux, energyflux, momflux,)
 
 
 def _get_wavespeed(w, eos=IdealSingleGas()):
@@ -100,8 +98,7 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
     v = mom * make_obj_array([1.0 / mass])
 
     sos = eos.sound_speed(w)
-    wavespeed = clmath.sqrt(np.dot(v, v)) + sos
-    return wavespeed
+    return clmath.sqrt(np.dot(v, v)) + sos
 
 
 def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
@@ -124,8 +121,8 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_int = _inviscid_flux(discr, qint, eos)
     flux_ext = _inviscid_flux(discr, qext, eos)
 
-    # Lax/Friedrichs/Rusonov after JSH/TW Nodal DG Methods, p. 209
-    flux_jump = (flux_int + flux_ext) * make_obj_array([0.5])
+    # Lax/Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
+    flux_jump = (flux_int + flux_ext) * 0.5
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = [_get_wavespeed(qint), _get_wavespeed(qext)]
@@ -159,8 +156,9 @@ def inviscid_operator(
     The Euler flow equations are:
 
     .. :math::
-    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
+
+          \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
+          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
 
     where state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
           flux :math:`\mathbf{F} =
