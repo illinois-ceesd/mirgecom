@@ -39,4 +39,5 @@ jobs:
             export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
             ls $OCL_ICD_VENDORS
             clinfo
+            cd test
             pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
