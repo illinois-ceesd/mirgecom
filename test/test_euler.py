@@ -36,12 +36,12 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import inviscid_operator
-from mirgecom.euler import get_inviscid_timestep
+from mirgecom.euler import split_conserved
+from mirgecom.steppers import euler_flow_stepper
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.eos import IdealSingleGas
-from mirgecom.integrators import rk4_step
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -74,7 +74,7 @@ def test_inviscid_flux():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
     dim = 2
     nel_1d = 16
 
@@ -337,7 +337,7 @@ def test_facial_flux():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     tolerance = 1e-14
     p0 = 1.0
@@ -476,7 +476,7 @@ def test_uniform_rhs():
     """
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     tolerance = 1e-9
     maxxerr = 0.0
@@ -522,13 +522,13 @@ def test_uniform_rhs():
                 inviscid_rhs = inviscid_operator(discr, fields)
                 rhs_resid = inviscid_rhs - expected_rhs
 
-                rho_resid = rhs_resid[0]
-                rhoe_resid = rhs_resid[1]
-                mom_resid = rhs_resid[2:]
+                rho_resid = split_conserved(dim, rhs_resid).mass
+                rhoe_resid = split_conserved(dim, rhs_resid).energy
+                mom_resid = split_conserved(dim, rhs_resid).momentum
 
-                rho_rhs = inviscid_rhs[0]
-                rhoe_rhs = inviscid_rhs[1]
-                rhov_rhs = inviscid_rhs[2:]
+                rho_rhs = split_conserved(dim, inviscid_rhs).mass
+                rhoe_rhs = split_conserved(dim, inviscid_rhs).energy
+                rhov_rhs = split_conserved(dim, inviscid_rhs).momentum
 
                 message = (
                     f"rho_rhs  = {rho_rhs}\n"
@@ -559,9 +559,9 @@ def test_uniform_rhs():
                 inviscid_rhs = inviscid_operator(discr, fields)
                 rhs_resid = inviscid_rhs - expected_rhs
 
-                rho_resid = rhs_resid[0]
-                rhoe_resid = rhs_resid[1]
-                mom_resid = rhs_resid[2:]
+                rho_resid = split_conserved(dim, rhs_resid).mass
+                rhoe_resid = split_conserved(dim, rhs_resid).energy
+                mom_resid = split_conserved(dim, rhs_resid).momentum
 
                 assert np.max(np.abs(rho_resid.get())) < tolerance
                 assert np.max(np.abs(rhoe_resid.get())) < tolerance
@@ -589,17 +589,16 @@ def test_uniform_rhs():
 
 
 def test_vortex_rhs():
-    #def test_vortex_rhs(ctx_factory)
+    #def test_vortex_rhs(ctx_factory):
     """Tests the inviscid rhs using the non-trivial
     2D isentropic vortex case configured to yield
     rhs = 0. Checks several different orders
     and refinement levels to check error
     behavior.
     """
-    #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     dim = 2
 
@@ -673,7 +672,7 @@ def test_lump_rhs():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     tolerance = 1e-10
     maxxerr = 0.0
@@ -748,9 +747,7 @@ def test_isentropic_vortex():
     together, with results converging at the expected
     rates vs. the order.
     """
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     dim = 2
 
@@ -768,88 +765,24 @@ def test_isentropic_vortex():
                 a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
             )
 
-            t = 0
-            t_final = 0.01
-            istep = 0
-
-            discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-            nodes = discr.nodes().with_queue(queue)
-
+            exittol = 1.0
+            t_final = 0.1
+            cfl = 1.0
             vel = np.zeros(shape=(dim,))
             orig = np.zeros(shape=(dim,))
-            vel[0] = 1.0
-            vel[1] = 1.0
+            vel[:dim] = 1.0
+            dt = .001
             initializer = Vortex2D(center=orig, velocity=vel)
-            #    initializer = Lump(center=orig,velocity=vel)
+            casename = 'Vortex'
             boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
             eos = IdealSingleGas()
-
-            fields = initializer(0, nodes)
-
-            cfl = 1.0
-            sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
-            constantcfl = False
-            dt = 0.001
-            nstep_status = 10
-
-            initname = initializer.__class__.__name__
-            eosname = eos.__class__.__name__
-            message = (
-                f"Num {dim}d elements: {mesh.nelements}\n"
-                f"Timestep:        {dt}\n"
-                f"Final time:      {t_final}\n"
-                f"Status freq:     {nstep_status}\n"
-                f"Initialization:  {initname}\n"
-                f"EOS:             {eosname}"
-            )
-            logger.info(message)
-
-            def write_soln():
-                expected_result = initializer(t, nodes)
-                result_resid = fields - expected_result
-                maxerr = [
-                    np.max(np.abs(result_resid[i].get()))
-                    for i in range(dim + 2)
-                ]
-                dv = eos(fields)
-                mindv = [np.min(dvfld.get()) for dvfld in dv]
-                maxdv = [np.max(dvfld.get()) for dvfld in dv]
-
-                statusmsg = (
-                    f"Status: Step({istep}) Time({t})\n"
-                    f"------   P({mindv[0]},{maxdv[0]})\n"
-                    f"------   T({mindv[1]},{maxdv[1]})\n"
-                    f"------   dt,cfl = ({dt},{cfl})\n"
-                    f"------   Err({maxerr})"
-                )
-                print(statusmsg)
-                return np.max(maxerr)
-
-            def rhs(t, w):
-                return inviscid_operator(
-                    discr, w=w, t=t, boundaries=boundaries, eos=eos
-                )
-
-            while t < t_final:
-
-                if constantcfl is True:
-                    dt = sdt
-                else:
-                    cfl = dt / sdt
-
-                if istep % nstep_status == 0:
-                    maxerr = write_soln()
-
-                fields = rk4_step(fields, t, dt, rhs)
-                t += dt
-                istep += 1
-
-                sdt = get_inviscid_timestep(
-                    discr, fields, c=cfl, eos=eos
-                )
-
-            logger.info("Writing final dump.")
-            maxerr = write_soln()
+            t = 0
+            flowparams = {'dim': dim, 'dt': dt, 'order': order, 'time': t,
+                          'boundaries': boundaries, 'initializer': initializer,
+                          'eos': eos, 'casename': casename, 'mesh': mesh,
+                          'tfinal': t_final, 'exittol': exittol, 'cfl': cfl,
+                          'constantcfl': False, 'nstatus': 0}
+            maxerr = euler_flow_stepper(flowparams)
             eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
         message = (
@@ -863,7 +796,6 @@ def test_isentropic_vortex():
         )
 
 
-PYOPENCL_TEST = "port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'"
 if __name__ == "__main__":
     import sys
 
