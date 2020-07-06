@@ -32,6 +32,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
+from mirgecom.euler import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -46,7 +47,7 @@ def test_lump_init():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4
@@ -71,9 +72,9 @@ def test_lump_init():
     lump = Lump(center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
-    mass = lump_soln[0]
-    energy = lump_soln[1]
-    mom = lump_soln[2:]
+    mass = split_conserved(dim, lump_soln).mass
+    energy = split_conserved(dim, lump_soln).energy
+    mom = split_conserved(dim, lump_soln).momentum
     p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
     exp_p = 1.0
     errmax = np.max(np.abs(p - exp_p))
@@ -92,7 +93,7 @@ def test_vortex_init():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4
@@ -113,9 +114,9 @@ def test_vortex_init():
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     gamma = 1.4
-    mass = vortex_soln[0]
-    energy = vortex_soln[1]
-    mom = vortex_soln[2:]
+    mass = split_conserved(dim, vortex_soln).mass
+    energy = split_conserved(dim, vortex_soln).energy
+    mom = split_conserved(dim, vortex_soln).momentum
     p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
     exp_p = mass ** gamma
     errmax = np.max(np.abs(p - exp_p))
