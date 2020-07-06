@@ -34,8 +34,7 @@ jobs:
             python -m flake8
         - name: Run tests
           shell: bash -l {0}
-          PYOPENCL_TEST = "port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'"
-          PYOPENCL_TEST = "port python -m pudb test_euler.py"
+          export PYOPENCL_TEST = "port python -m pudb test_euler.py"
           run: |
             [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
             export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors

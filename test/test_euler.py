@@ -796,6 +796,8 @@ def test_isentropic_vortex():
         )
 
 
+#PYOPENCL_TEST="port python -m pudb test_euler.py 'test_isentropic_vortex(cl._csc)'"
+
 if __name__ == "__main__":
     import sys
 
