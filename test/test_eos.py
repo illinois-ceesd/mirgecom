@@ -34,6 +34,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.eos import IdealSingleGas
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
+from mirgecom.euler import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -49,7 +50,7 @@ def test_idealsingle_lump():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4
@@ -94,7 +95,7 @@ def test_idealsingle_vortex():
     #    cl_ctx = ctx_factory()
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.Logger(__name__)
+    logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4
@@ -114,7 +115,7 @@ def test_idealsingle_vortex():
     # Init soln with Vortex
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
-    rho = vortex_soln[0]
+    rho = split_conserved(dim, vortex_soln).mass
     gamma = eos.gamma()
     p = eos.pressure(vortex_soln)
     exp_p = rho ** gamma
