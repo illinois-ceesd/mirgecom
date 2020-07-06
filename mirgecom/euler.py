@@ -37,6 +37,30 @@ from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
+from dataclasses import dataclass
+
+
+r"""
+This module is designed provide functions and utilities
+useful for solving the Euler flow equations.
+
+The Euler flow equations are:
+
+.. :math::
+
+    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
+    (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
+
+where:
+    state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+    flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+                (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+    domain boundary :math:`\partial_{\Omega}`,
+    sources :math:`mathbf{S} =
+                   [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+                    {(\partial_t{\rho\vec{V}})}_s]`
+
+"""
 
 # from grudge.dt_finding import (
 #    dt_geometric_factor,
@@ -44,6 +68,12 @@ from grudge.symbolic.primitives import TracePair
 # )
 
 __doc__ = """
+.. autofunction:: inviscid_operator
+.. autofunction:: number_of_scalars
+.. autofunction:: split_conserved
+.. autofunction:: split_species
+.. autofunction:: split_fields
+.. autofunction:: get_inviscid_timestep
 .. autofunction:: inviscid_operator
 """
 
@@ -56,6 +86,60 @@ __doc__ = """
 #
 
 
+@dataclass
+class ConservedVars:
+    r"""
+    Class to resolve the canonical conserved quantities,
+    (mass, energy, momentum) per unit volume =
+    :math:`(\rho,\rhoE,\rho\vec{V})` from an agglomerated
+    object array.
+    """
+    mass: np.ndarray
+    """mass per unit volume"""
+    energy: np.ndarray
+    """energy per unit volume"""
+    momentum: np.ndarray
+    """momentum vector per unit volume"""
+
+
+@dataclass
+class MassFractions:
+    r"""
+    Class to pick off the species mass fractions
+    (mass fractions) per unit volume =
+    :math:`(\rhoY_{\alpha}) | 1 \le \alpha \le N_{species}`,
+    from an agglomerated object array. :math:`N_{species}` is
+    the number of mixture species.
+    """
+    massfractions: np.ndarray
+    """mass fraction per unit volume for each mixture species"""
+
+
+def number_of_scalars(ndim, w):
+    """
+    Return the number of scalars or mixture species in a flow solution.
+    """
+    return len(w) - (ndim + 2)
+
+
+def split_conserved(dim, w):
+    """
+    Return a 'ConservedVars' object that splits out conserved quantities
+    by name. Useful for expressive coding.
+    """
+    return ConservedVars(mass=w[0], energy=w[1], momentum=w[2:2+dim])
+
+
+def split_species(dim, w):
+    """
+    Return a 'MassFractions' object that splits out mixture species
+    conserved quantities by name. Useful for expressive coding.
+    """
+    numscalar = number_of_scalars(dim, w)
+    sindex = dim + 2
+    return MassFractions(massfractions=w[sindex:sindex+numscalar])
+
+
 def _interior_trace_pair(discr, vec):
     i = discr.interp("vol", "int_faces", vec)
     e = with_object_array_or_scalar(
@@ -65,13 +149,17 @@ def _interior_trace_pair(discr, vec):
 
 
 def _inviscid_flux(discr, q, eos=IdealSingleGas()):
+    r"""Computes the inviscid flux vectors from flow solution *q*
 
+    The inviscid fluxes are
+    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})
+    """
     ndim = discr.dim
 
     # q = [ rho rhoE rhoV ]
-    mass = q[0]
-    energy = q[1]
-    mom = q[2:]
+    mass = split_conserved(ndim, q).mass
+    energy = split_conserved(ndim, q).energy
+    mom = split_conserved(ndim, q).momentum
 
     p = eos.pressure(q)
 
@@ -90,10 +178,10 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     return flat_obj_array(massflux, energyflux, momflux,)
 
 
-def _get_wavespeed(w, eos=IdealSingleGas()):
-
-    mass = w[0]
-    mom = w[2:]
+def _get_wavespeed(dim, w, eos=IdealSingleGas()):
+    """Returns the maximum wavespeed in for flow solution *w*"""
+    mass = split_conserved(dim, w).mass
+    mom = split_conserved(dim, w).momentum
 
     v = mom * make_obj_array([1.0 / mass])
 
@@ -102,12 +190,12 @@ def _get_wavespeed(w, eos=IdealSingleGas()):
 
 
 def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
-
+    """Returns the flux across a face given the solution on both sides *w_tpair*"""
     dim = discr.dim
 
-    mass = w_tpair[0]
-    energy = w_tpair[1]
-    mom = w_tpair[2:]
+    mass = split_conserved(dim, w_tpair).mass
+    energy = split_conserved(dim, w_tpair).energy
+    mom = split_conserved(dim, w_tpair).momentum
 
     normal = with_queue(mass.int.queue, discr.normal(w_tpair.dd))
 
@@ -125,7 +213,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
     flux_jump = (flux_int + flux_ext) * 0.5
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = [_get_wavespeed(qint), _get_wavespeed(qext)]
+    wavespeeds = [_get_wavespeed(dim, qint), _get_wavespeed(dim, qext)]
 
     lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
     lfr = qjump * make_obj_array([0.5 * lam])
@@ -151,23 +239,8 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 def inviscid_operator(
     discr, w, t=0.0, eos=IdealSingleGas(), boundaries={BTAG_ALL: DummyBoundary()},
 ):
-    r"""RHS of the Euler flow equations
-
-    The Euler flow equations are:
-
-    .. :math::
-
-          \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
-
-    where state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
-          flux :math:`\mathbf{F} =
-    [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
-          domain boundary :math:`\partial_{\Omega}`,
-          and sources :math:`mathbf{S} =
-    [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-    {(\partial_t{\rho\vec{V}})}_s]`
+    """
+    RHS of the Euler flow equations
     """
 
     ndim = discr.dim
@@ -196,7 +269,10 @@ def inviscid_operator(
 
 
 def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
-
+    """
+    Routine (will) return the maximum stable inviscid timestep. Currently,
+    it's a hack.
+    """
     dim = discr.dim
     mesh = discr.mesh
     order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
@@ -215,19 +291,24 @@ def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
 #    return c*dt_ngf*dt_gf/max_v
 
 
-def number_of_scalars(ndim, w):
-    return len(w) - (ndim + 2)
-
-
 def split_fields(ndim, w):
+    """
+    Method to spit out a list of named flow variables in
+    an agglomerated flow solution. Useful for specifying
+    named data arrays to helper functions (e.g. I/O).
+    """
+    mass = split_conserved(ndim, w).mass
+    energy = split_conserved(ndim, w).energy
+    mom = split_conserved(ndim, w).momentum
+
     retlist = [
-        ("mass", w[0]),
-        ("energy", w[1]),
-        ("momentum", w[2: (ndim + 2)]),
+        ("mass", mass),
+        ("energy", energy),
+        ("momentum", mom),
     ]
     nscalar = number_of_scalars(ndim, w)
     if nscalar > 0:
-        selem = ndim + 2
-        retlist.append(("massfraction", w[selem: selem + nscalar]))
+        massfrac = split_species(ndim, w).massfraction
+        retlist.append(("massfraction", massfrac))
 
     return retlist
