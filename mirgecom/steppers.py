@@ -110,6 +110,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
         nameform = casename + "-{iorank:04d}-{iostep:04d}.vtu"
         visfilename = nameform.format(iorank=rank, iostep=istep)
         vis.write_vtk_file(visfilename, io_fields)
+
         return maxerr
 
     def rhs(t, w):
