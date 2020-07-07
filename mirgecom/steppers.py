@@ -59,7 +59,7 @@ def euler_flow_stepper(parameters):
     constantcfl = parameters['constantcfl']
     nstepstatus = parameters['nstatus']
 
-    if t_final >= t:
+    if t_final <= t:
         return(0.0)
 
     rank = 0
