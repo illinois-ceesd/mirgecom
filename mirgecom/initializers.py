@@ -216,3 +216,64 @@ class Lump:
         momrhs = v * make_obj_array([-2 * mass * rdotv])
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
+
+
+class Uniform:
+    r"""Implements initialization to a uniform flow
+
+    A uniform flow is the same everywhere and should have
+    a zero RHS.
+    """
+
+    def __init__(
+            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
+    ):
+        r"""Initialize uniform flow parameters
+
+        Parameters
+        ----------
+        numdim : integer
+            specify the number of dimensions for the lump
+        rho : float
+            specifies the density
+        p : float
+            specifies the pressure
+        e : float
+            specifies the internal energy
+        velocity : float array
+            specifies the flow velocity
+        """
+
+        if len(velocity) == numdim:
+            self._velocity = velocity
+        elif len(velocity) > numdim:
+            numdim = len(velocity)
+            self._velocity = velocity
+        else:
+            self._velocity = np.zeros(shape=(numdim,))
+
+        assert len(self._velocity) == numdim
+
+        self._p = p
+        self._rho = rho
+        self._e = e
+        self._dim = numdim
+
+    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        gamma = eos.gamma()
+        mass = x_vec[0].copy()
+        mom = self._velocity * make_obj_array([mass])
+        energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+
+        return flat_obj_array(mass, energy, mom)
+
+    def exact_rhs(self, discr, w, t=0.0):
+        queue = w[0].queue
+        nodes = discr.nodes().with_queue(queue)
+        mass = nodes[0].copy()
+        mass[:] = 1.0
+        massrhs = 0.0 * mass
+        energyrhs = 0.0 * mass
+        momrhs = make_obj_array([0 * mass])
+
+        return flat_obj_array(massrhs, energyrhs, momrhs)
