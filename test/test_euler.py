@@ -41,6 +41,7 @@ from mirgecom.steppers import euler_flow_stepper
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
@@ -517,7 +518,8 @@ def test_uniform_rhs():
                     [discr.zeros(queue) for i in range(discr.dim + 2)]
                 )
 
-                inviscid_rhs = inviscid_operator(discr, fields)
+                boundaries = {BTAG_ALL: DummyBoundary()}
+                inviscid_rhs = inviscid_operator(discr, fields, boundaries)
                 rhs_resid = inviscid_rhs - expected_rhs
 
                 rho_resid = split_conserved(dim, rhs_resid).mass
@@ -554,7 +556,8 @@ def test_uniform_rhs():
                     mom_component[:] = (-1.0) ** i
                     i = i + 1
 
-                inviscid_rhs = inviscid_operator(discr, fields)
+                boundaries = {BTAG_ALL: DummyBoundary()}
+                inviscid_rhs = inviscid_operator(discr, fields, boundaries)
                 rhs_resid = inviscid_rhs - expected_rhs
 
                 rho_resid = split_conserved(dim, rhs_resid).mass

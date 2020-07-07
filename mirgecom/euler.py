@@ -32,7 +32,6 @@ from pytools.obj_array import (
 import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import with_queue
@@ -74,7 +73,6 @@ __doc__ = """
 .. autofunction:: split_species
 .. autofunction:: split_fields
 .. autofunction:: get_inviscid_timestep
-.. autofunction:: inviscid_operator
 """
 
 
@@ -237,7 +235,7 @@ def _facial_flux(discr, w_tpair, eos=IdealSingleGas()):
 
 
 def inviscid_operator(
-    discr, w, t=0.0, eos=IdealSingleGas(), boundaries={BTAG_ALL: DummyBoundary()},
+        discr, w, boundaries, t=0.0, eos=IdealSingleGas(),
 ):
     """
     RHS of the Euler flow equations
@@ -259,6 +257,15 @@ def inviscid_operator(
 
     # Domain boundaries
     domain_boundary_flux = sum(
+        #        _facial_flux(
+        #            discr,
+        #            w_tpair=boundaries[btag].boundary_pair(discr,
+        #                                                   w,
+        #                                                   t=t,
+        #                                                   btag=btag,
+        #                                                   eos=eos),
+        #            eos=eos
+        #        )
         boundaries[btag].get_boundary_flux(discr, w, t=t, btag=btag, eos=eos)
         for btag in boundaries
     )
