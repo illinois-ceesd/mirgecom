@@ -163,3 +163,42 @@ def test_shock_init():
             assert np.abs(p[i] - xpl) < tol
         else:
             assert np.abs(p[i] - xpr) < tol
+
+
+def test_shock_init(ctx_factory):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    nel_1d = 10
+    dim = 2
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], n=(nel_1d,) * dim
+    )
+
+    order = 3
+    print(f"Number of elements: {mesh.nelements}")
+
+    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    nodes = discr.nodes().with_queue(queue)
+
+    initr = SodShock1D()
+    initsoln = initr(t=0.0, x_vec=nodes)
+    print("Sod Soln:", initsoln)
+    xpl = 1.0
+    xpr = 0.1
+    tol = 1e-15
+    nodes_x = nodes[0]
+    eos = IdealSingleGas()
+    p = eos.pressure(initsoln)
+    nel = len(p)
+    # Check them all individually
+    for i in range(nel):
+        if nodes_x[i] < 0.5:
+            assert np.abs(p[i] - xpl) < tol
+        else:
+            assert np.abs(p[i] - xpr) < tol
+
+
