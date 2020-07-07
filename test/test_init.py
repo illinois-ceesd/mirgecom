@@ -163,5 +163,3 @@ def test_shock_init(ctx_factory):
             assert np.abs(p[i] - xpl) < tol
         else:
             assert np.abs(p[i] - xpr) < tol
-
-
