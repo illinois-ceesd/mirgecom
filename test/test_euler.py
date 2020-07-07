@@ -764,12 +764,12 @@ def test_isentropic_vortex():
             )
 
             exittol = 1.0
-            t_final = 0.1
+            t_final = 0.001
             cfl = 1.0
             vel = np.zeros(shape=(dim,))
             orig = np.zeros(shape=(dim,))
             vel[:dim] = 1.0
-            dt = .001
+            dt = .0001
             initializer = Vortex2D(center=orig, velocity=vel)
             casename = 'Vortex'
             boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
