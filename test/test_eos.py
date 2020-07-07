@@ -41,14 +41,13 @@ from pyopencl.tools import (  # noqa
 )
 
 
-def test_idealsingle_lump():
+def test_idealsingle_lump(ctx_factory):
     """
     Tests that the IdealSingleGas EOS returns
     the correct (uniform) pressure for the Lump
     solution field.
     """
-    #    cl_ctx = ctx_factory()
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     logger = logging.getLogger(__name__)
 
@@ -86,14 +85,13 @@ def test_idealsingle_lump():
     assert errmax < 1e-15
 
 
-def test_idealsingle_vortex():
+def test_idealsingle_vortex(ctx_factory):
     r"""
     Tests that the IdealSingleGas EOS returns
     the correct pressure (p) for the Vortex2D solution
     field (i.e. :math:'p = \rho^{\gamma}').
     """
-    #    cl_ctx = ctx_factory()
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     logger = logging.getLogger(__name__)
 

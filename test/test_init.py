@@ -39,13 +39,12 @@ from pyopencl.tools import (  # noqa
 )
 
 
-def test_lump_init():
+def test_lump_init(ctx_factory):
     """
     Simple test to check that Lump initializer
     creates the expected solution field.
     """
-    #    cl_ctx = ctx_factory()
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     logger = logging.getLogger(__name__)
 
@@ -85,13 +84,12 @@ def test_lump_init():
     assert errmax < 1e-15
 
 
-def test_vortex_init():
+def test_vortex_init(ctx_factory):
     """
     Simple test to check that Vortex2D initializer
     creates the expected solution field.
     """
-    #    cl_ctx = ctx_factory()
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     logger = logging.getLogger(__name__)
 

@@ -36,11 +36,11 @@ from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
-def euler_flow_stepper(parameters):
+def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     """
     Implements a generic time stepping loop for an inviscid flow.
     """
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     logger = logging.getLogger(__name__)
