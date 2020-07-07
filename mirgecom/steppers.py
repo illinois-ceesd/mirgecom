@@ -138,7 +138,15 @@ def euler_flow_stepper(parameters):
     else:
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
-        maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
+        maxerr = np.max(
+            [
+                np.max(
+                    np.abs(
+                        result_resid[i].get()
+                    )
+                ) for i in range(dim + 2)
+            ]
+        )
 
     if maxerr > exittol:
         raise ValueError("Solution failed to follow expected result.")
