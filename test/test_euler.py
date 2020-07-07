@@ -485,10 +485,8 @@ def test_uniform_rhs():
     for dim in [1, 2, 3]:
         for order in [1, 2, 3]:
             #            from pytools.convergence import EOCRecorder
-
             #            eoc_rec0 = EOCRecorder()
             #            eoc_rec1 = EOCRecorder()
-
             for nel_1d in [4, 8, 12]:
 
                 mesh = generate_regular_rect_mesh(
@@ -508,14 +506,14 @@ def test_uniform_rhs():
                 mass_input[:] = 1.0
                 energy_input[:] = 2.5
 
-                mom_input = flat_obj_array(
+                mom_input = make_obj_array(
                     [discr.zeros(queue) for i in range(discr.dim)]
                 )
                 fields = flat_obj_array(
                     mass_input, energy_input, mom_input
                 )
 
-                expected_rhs = flat_obj_array(
+                expected_rhs = make_obj_array(
                     [discr.zeros(queue) for i in range(discr.dim + 2)]
                 )
 
