@@ -48,5 +48,5 @@ jobs:
             ls $OCL_ICD_VENDORS
             clinfo
             export PYOPENCL_CTX=''
-            . ./examples/run_examples.sh
+            . ./examples/run_examples.sh examples
  
