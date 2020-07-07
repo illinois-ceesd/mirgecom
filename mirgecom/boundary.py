@@ -34,7 +34,7 @@ class PrescribedBoundary:
     def __init__(self, userfunc):
         self._userfunc = userfunc
 
-    def get_boundary_flux(
+    def boundary_pair(
             self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
         queue = w[0].queue
@@ -43,12 +43,7 @@ class PrescribedBoundary:
         nodes = boundary_discr.nodes().with_queue(queue)
         ext_soln = self._userfunc(t, nodes)
         int_soln = discr.interp("vol", btag, w)
-        #        return TracePair(btag, int_soln, ext_soln)
-        from mirgecom.euler import _facial_flux
-
-        return _facial_flux(
-            discr, w_tpair=TracePair(btag, int_soln, ext_soln), eos=eos,
-        )
+        return TracePair(btag, int_soln, ext_soln)
 
 
 class DummyBoundary:
@@ -56,13 +51,8 @@ class DummyBoundary:
     boundary-adjacent volume solution to both sides of a boundary
     face.
     """
-    def get_boundary_flux(
+    def boundary_pair(
         self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
         dir_soln = discr.interp("vol", btag, w)
-
-        from mirgecom.euler import _facial_flux  # hrm
-
-        return _facial_flux(
-            discr, w_tpair=TracePair(btag, dir_soln, dir_soln), eos=eos
-        )
+        return TracePair(btag, dir_soln, dir_soln)
