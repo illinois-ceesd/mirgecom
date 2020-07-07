@@ -39,12 +39,12 @@ class PrescribedBoundary:
     ):
         queue = w[0].queue
 
-        # help - how to make it just the boundary nodes?
-        nodes = discr.nodes().with_queue(queue)
-        prescribed_soln = self._userfunc(t, nodes)
-        ext_soln = discr.interp("vol", btag, prescribed_soln)
+        boundary_discr = discr.discr_from_dd(btag)
+        nodes = boundary_discr.nodes().with_queue(queue)
+        ext_soln = self._userfunc(t, nodes)
         int_soln = discr.interp("vol", btag, w)
-        from mirgecom.euler import _facial_flux  # hrm
+        #        return TracePair(btag, int_soln, ext_soln)
+        from mirgecom.euler import _facial_flux
 
         return _facial_flux(
             discr, w_tpair=TracePair(btag, int_soln, ext_soln), eos=eos,
