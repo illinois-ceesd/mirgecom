@@ -11,5 +11,6 @@ jobs:
     steps:
         - name: Flake8 test
           run: |
-            pip install wheel flake8 pep8-naming
+            pip install wheel 
+            pip install flake8 pep8-naming
             python -m flake8
