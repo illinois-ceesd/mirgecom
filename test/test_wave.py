@@ -82,6 +82,36 @@ def get_manufactured_cubic(dim):
     return (dim, 2., mesh_factory, sym_phi, 0.025)
 
 
+def sym_wave(dim, sym_phi):
+    """Return symbolic expressions for the wave equation system given a desired
+    solution. (Note: In order to support manufactured solutions, we modify the wave
+    equation to add a source term (f). If the solution is exact, this term should
+    be 0.)
+    """
+
+    sym_c = pmbl.var("c")
+    sym_coords = prim.make_sym_vector('x', dim)
+    sym_t = pmbl.var("t")
+
+    # f = phi_tt - c^2 * div(grad(phi))
+    sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - sym_c**2\
+                * sym.div(sym.grad(dim, sym_phi))
+
+    # u = phi_t
+    sym_u = sym.diff(sym_t)(sym_phi)
+
+    # v = c*grad(phi)
+    sym_v = [sym_c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
+
+    # rhs(u part) = c*div(v) + f
+    # rhs(v part) = c*grad(u)
+    sym_rhs = flat_obj_array(
+                sym_c * sym.div(sym_v) + sym_f,
+                make_obj_array([sym_c]) * sym.grad(dim, sym_u))
+
+    return sym_u, sym_v, sym_f, sym_rhs
+
+
 @pytest.mark.parametrize(("dim", "c", "mesh_factory", "sym_phi", "timestep_scale"),
     [
         get_standing_wave(2),
@@ -104,27 +134,7 @@ def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    # Note: In order to support manufactured solutions, we modify the wave equation
-    # to add a source term (f). If the solution is exact, this term should be 0.
-
-    sym_coords = prim.make_sym_vector('x', dim)
-    sym_t = pmbl.var("t")
-
-    # f = phi_tt - c^2 * div(grad(phi))
-    sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - c**2\
-                * sym.div(sym.grad(dim, sym_phi))
-
-    # u = phi_t
-    sym_u = sym.diff(sym_t)(sym_phi)
-
-    # v = c*grad(phi)
-    sym_v = [c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
-
-    # rhs(u part) = c*div(v) + f
-    # rhs(v part) = c*grad(u)
-    sym_rhs = flat_obj_array(
-                c * sym.div(sym_v) + sym_f,
-                make_obj_array([c]) * sym.grad(dim, sym_u))
+    sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
     def max_inf_norm(w):
         return np.max(np.array([la.norm(field.get(), np.inf) for field in w]))
@@ -143,7 +153,7 @@ def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
         nodes = discr.nodes().with_queue(queue)
 
         def sym_eval(expr, t):
-            return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
+            return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
 
         t_check = 1.23456789
 
@@ -186,7 +196,7 @@ def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
     nodes = discr.nodes().with_queue(queue)
 
     def sym_eval(expr, t):
-        return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
+        return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
 
     def get_rhs(t, w):
         result = wave_operator(discr, c=c, w=w)
