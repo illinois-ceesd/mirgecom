@@ -41,6 +41,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Tests below take a problem description as input, which is a tuple
+#   (dim, c, mesh_factory, sym_phi)
+# where:
+#   dim is the problem dimension
+#   c is the sound speed
+#   mesh_factory is a factory that creates a mesh given a characteristic size
+#   sym_phi is a symbolic expression for the solution
+
+
 def get_standing_wave(dim):
     # 2D: phi(x,y,t) = cos(sqrt(2)*c*t-pi/4)*cos(x)*cos(y)
     # 3D: phi(x,y,z,t) = cos(sqrt(3)*c*t-pi/4)*cos(x)*cos(y)*cos(z)
@@ -58,7 +67,7 @@ def get_standing_wave(dim):
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
     for i in range(dim):
         sym_phi *= sym_cos(sym_coords[i])
-    return (dim, c, mesh_factory, sym_phi, 0.05)
+    return (dim, c, mesh_factory, sym_phi)
 
 
 def get_manufactured_cubic(dim):
@@ -79,7 +88,7 @@ def get_manufactured_cubic(dim):
     sym_phi = sym_cos(sym_t - np.pi/4)
     for i in range(dim):
         sym_phi *= (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
-    return (dim, 2., mesh_factory, sym_phi, 0.025)
+    return (dim, 2., mesh_factory, sym_phi)
 
 
 def sym_wave(dim, sym_phi):
@@ -116,7 +125,7 @@ def max_inf_norm(fields):
     return np.max(np.array([la.norm(field.get(), np.inf) for field in fields]))
 
 
-@pytest.mark.parametrize(("dim", "c", "mesh_factory", "sym_phi", "timestep_scale"),
+@pytest.mark.parametrize("problem",
     [
         get_standing_wave(2),
         get_standing_wave(3),
@@ -124,23 +133,16 @@ def max_inf_norm(fields):
         get_manufactured_cubic(3)
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
-            visualize=False):
-    """Checks accuracy and stability of the wave operator for a given problem setup.
-    :arg dim: Problem dimension.
-    :arg c: Sound speed.
-    :arg mesh_factory: Creates a mesh given a characteristic size.
-    :arg sym_phi: Symbolic expression for the solution.
-    :arg timestep_scale: Scaling factor for the timestep in the stability test (tweak
-        this to get close to stability limit).
+def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
+    """Checks accuracy of the wave operator for a given problem setup.
     """
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
+    dim, c, mesh_factory, sym_phi = problem
 
-    # Check order of accuracy
+    sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
@@ -187,7 +189,27 @@ def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
     print(eoc_rec)
     assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
 
-    # Check stability
+
+@pytest.mark.parametrize(("problem", "timestep_scale"),
+    [
+        (get_standing_wave(2), 0.05),
+        (get_standing_wave(3), 0.05),
+        (get_manufactured_cubic(2), 0.025),
+        (get_manufactured_cubic(3), 0.025)
+    ])
+@pytest.mark.parametrize("order", [2, 3, 4])
+def test_wave_stability(ctx_factory, problem, timestep_scale, order,
+            visualize=False):
+    """Checks stability of the wave operator for a given problem setup.
+    Adjust *timestep_scale* to get timestep close to stability limit.
+    """
+
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    dim, c, mesh_factory, sym_phi = problem
+
+    sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
     mesh = mesh_factory(8)
 
