@@ -112,6 +112,10 @@ def sym_wave(dim, sym_phi):
     return sym_u, sym_v, sym_f, sym_rhs
 
 
+def max_inf_norm(fields):
+    return np.max(np.array([la.norm(field.get(), np.inf) for field in fields]))
+
+
 @pytest.mark.parametrize(("dim", "c", "mesh_factory", "sym_phi", "timestep_scale"),
     [
         get_standing_wave(2),
@@ -135,9 +139,6 @@ def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
     queue = cl.CommandQueue(cl_ctx)
 
     sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
-
-    def max_inf_norm(w):
-        return np.max(np.array([la.norm(field.get(), np.inf) for field in w]))
 
     # Check order of accuracy
 
