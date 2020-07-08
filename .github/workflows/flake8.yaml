@@ -13,4 +13,4 @@ jobs:
           run: |
             pip install wheel 
             pip install flake8 pep8-naming
-            python -m flake8
+            python -m flake8 --show-source --statistics && echo "Flake8 found no errors."
