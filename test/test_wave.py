@@ -139,8 +139,10 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
         u = sym_eval(sym_u, t_check)
         v = sym_eval(sym_v, t_check)
 
+        fields = flat_obj_array(u, v)
+
         from mirgecom.wave import wave_operator
-        rhs = wave_operator(discr, c=c, w=flat_obj_array(u, v))
+        rhs = wave_operator(discr, c=c, w=fields)
         rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
         expected_rhs = sym_eval(sym_rhs, t_check)
@@ -152,14 +154,14 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
         if visualize:
             from grudge.shortcuts import make_visualizer
             vis = make_visualizer(discr, discr.order)
-            vis.write_vtk_file("result_{n}.vtu".format(n=n),
-                    [
-                        ("u", u),
-                        ("v", v),
-                        ("rhs_u_actual", rhs[0]),
-                        ("rhs_v_actual", rhs[1:]),
-                        ("rhs_u_expected", expected_rhs[0]),
-                        ("rhs_v_expected", expected_rhs[1:]),
+            vis.write_vtk_file("wave_accuracy_{order}_{n}.vtu".format(order=order,
+                        n=n), [
+                            ("u", fields[0]),
+                            ("v", fields[1:]),
+                            ("rhs_u_actual", rhs[0]),
+                            ("rhs_v_actual", rhs[1:]),
+                            ("rhs_u_expected", expected_rhs[0]),
+                            ("rhs_v_expected", expected_rhs[1:]),
                         ])
 
     print("Approximation error:")
