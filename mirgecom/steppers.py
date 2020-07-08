@@ -86,7 +86,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
 
     vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
-    def write_soln():
+    def write_soln(write_status=True):
         dv = eos(fields)
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
@@ -94,20 +94,21 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
 
-        statusmsg = (
-            f"Status: Step({istep}) Time({t})\n"
-            f"------   P({mindv[0]},{maxdv[0]})\n"
-            f"------   T({mindv[1]},{maxdv[1]})\n"
-            f"------   dt,cfl = ({dt},{cfl})\n"
-            f"------   Err({maxerr})"
-        )
-        logger.info(statusmsg)
+        if write_status is True:
+            statusmsg = (
+                f"Status: Step({istep}) Time({t})\n"
+                f"------   P({mindv[0]},{maxdv[0]})\n"
+                f"------   T({mindv[1]},{maxdv[1]})\n"
+                f"------   dt,cfl = ({dt},{cfl})\n"
+                f"------   Err({maxerr})"
+            )
+            logger.info(statusmsg)
 
         io_fields = split_fields(dim, fields)
         io_fields += eos.split_fields(dim, dv)
         io_fields.append(("exact_soln", expected_result))
         io_fields.append(("residual", result_resid))
-        nameform = casename + "-{iorank:04d}-{iostep:04d}.vtu"
+        nameform = casename + "-{iorank:04d}-{iostep:06d}.vtu"
         visfilename = nameform.format(iorank=rank, iostep=istep)
         vis.write_vtk_file(visfilename, io_fields)
 
@@ -135,7 +136,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
-        maxerr = max(write_soln())
+        maxerr = max(write_soln(False))
     else:
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
@@ -149,6 +150,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
             ]
         )
 
+    logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
         raise ValueError("Solution failed to follow expected result.")
 
