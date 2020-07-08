@@ -33,8 +33,8 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
 def main():
-    dim = 2
-    nel_1d = 16
+    dim = 1
+    nel_1d = 24
     logger = logging.getLogger(__name__)
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -48,10 +48,10 @@ def main():
     exittol = 2e-1
     t_final = 0.01
     cfl = 1.0
-    dt = .0001
+    dt = 1e-4
     t = 0
     casename = 'Sod'
-    initializer = SodShock1D()
+    initializer = SodShock1D(dim=dim)
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     eos = IdealSingleGas()
     flowparams = {'dim': dim, 'dt': dt, 'order': order, 'time': t,
