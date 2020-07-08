@@ -117,29 +117,32 @@ class SodShock1D:
     """
 
     def __init__(
-        self, x0=0.5, rhol=1.0, rhor=0.1, energyl=1.0, energyr=0.1,
+            self, dim=2, x0=0.5, rhol=1.0, rhor=0.125, pleft=1.0, pright=0.1,
     ):
         """Initialize shock parameters
 
         Parameters
         ----------
+        dim: integer
+           dimension of domain
         x0: float
-        location of shock
+           location of shock
         rhol: float
-        density to left of shock
+           density to left of shock
         rhor: float
-        density to right of shock
-        energyl: float
-        energy to left of shock
-        energyr: float
-        energy to right of shock
+           density to right of shock
+        pleft: float
+           pressure to left of shock
+        pright: float
+           pressure to right of shock
         """
 
         self._x0 = x0
         self._rhol = rhol
         self._rhor = rhor
-        self._energyl = energyl
-        self._energyr = energyr
+        self._energyl = pleft
+        self._energyr = pright
+        self._dim = dim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         gm1 = eos.gamma() - 1.0
@@ -155,11 +158,14 @@ class SodShock1D:
         energyr = zeros + gmn1 * self._energyr
         mass = clarray.if_positive((x_rel - self._x0), rhor, rhol)
         energy = clarray.if_positive((x_rel - self._x0), energyr, energyl)
-        # gets the right shape of zeros
-        rhou = 1.0 * zeros
-        rhov = 1.0 * zeros
+        mom = make_obj_array(
+            [
+                clarray.zeros(queue, shape=x_rel.shape, dtype=np.float64)
+                for i in range(self._dim)
+            ]
+        )
 
-        return flat_obj_array(mass, energy, rhou, rhov)
+        return flat_obj_array(mass, energy, mom)
 
 
 class Lump:
