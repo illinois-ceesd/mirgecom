@@ -98,11 +98,30 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    from pytools.convergence import EOCRecorder
-    eoc_rec = EOCRecorder()
-
     # Note: In order to support manufactured solutions, we modify the wave equation
     # to add a source term (f). If the solution is exact, this term should be 0.
+
+    sym_coords = prim.make_sym_vector('x', dim)
+    sym_t = pmbl.var("t")
+
+    # f = phi_tt - c^2 * div(grad(phi))
+    sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - c**2\
+                * sym.div(sym.grad(dim, sym_phi))
+
+    # u = phi_t
+    sym_u = sym.diff(sym_t)(sym_phi)
+
+    # v = c*grad(phi)
+    sym_v = [c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
+
+    # rhs(u part) = c*div(v) + f
+    # rhs(v part) = c*grad(u)
+    sym_rhs = flat_obj_array(
+                c * sym.div(sym_v) + sym_f,
+                make_obj_array([c]) * sym.grad(dim, sym_u))
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec = EOCRecorder()
 
     for n in [4, 8, 16]:
         mesh = mesh_factory(n)
@@ -111,25 +130,6 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
         discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
         nodes = discr.nodes().with_queue(queue)
-
-        sym_coords = prim.make_sym_vector('x', dim)
-        sym_t = pmbl.var("t")
-
-        # f = phi_tt - c^2 * div(grad(phi))
-        sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - c**2\
-                    * sym.div(sym.grad(dim, sym_phi))
-
-        # u = phi_t
-        sym_u = sym.diff(sym_t)(sym_phi)
-
-        # v = c*grad(phi)
-        sym_v = [c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
-
-        # rhs(u part) = c*div(v) + f
-        # rhs(v part) = c*grad(u)
-        sym_rhs = flat_obj_array(
-                    c * sym.div(sym_v) + sym_f,
-                    make_obj_array([c]) * sym.grad(dim, sym_u))
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
