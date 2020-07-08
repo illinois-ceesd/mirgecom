@@ -75,7 +75,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     message = (
-        f"Num {dim}d elements: {mesh.nelements}\n"
+        f"Num {dim}d order-{order} elements: {mesh.nelements}\n"
         f"Timestep:        {dt}\n"
         f"Final time:      {t_final}\n"
         f"Status freq:     {nstepstatus}\n"
