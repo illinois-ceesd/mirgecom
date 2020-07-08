@@ -134,15 +134,17 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
-        u = sym_eval(sym_u, 0.)
-        v = sym_eval(sym_v, 0.)
-        f = sym_eval(sym_f, 0.)
+        t_check = 1.23456789
+
+        u = sym_eval(sym_u, t_check)
+        v = sym_eval(sym_v, t_check)
+        f = sym_eval(sym_f, t_check)
 
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=flat_obj_array(u, v))
         rhs[0] = rhs[0] + f
 
-        expected_rhs = sym_eval(sym_rhs, 0.)
+        expected_rhs = sym_eval(sym_rhs, t_check)
 
         err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
                 for i in range(dim+1)]))
