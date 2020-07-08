@@ -138,11 +138,10 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
 
         u = sym_eval(sym_u, t_check)
         v = sym_eval(sym_v, t_check)
-        f = sym_eval(sym_f, t_check)
 
         from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=flat_obj_array(u, v))
-        rhs[0] = rhs[0] + f
+        rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
