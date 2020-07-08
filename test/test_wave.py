@@ -29,6 +29,7 @@ from pytools.obj_array import flat_obj_array, make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
+from mirgecom.wave import wave_operator
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl
@@ -57,7 +58,7 @@ def get_standing_wave(dim):
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
     for i in range(dim):
         sym_phi *= sym_cos(sym_coords[i])
-    return (dim, c, mesh_factory, sym_phi)
+    return (dim, c, mesh_factory, sym_phi, 0.05)
 
 
 def get_manufactured_cubic(dim):
@@ -78,10 +79,10 @@ def get_manufactured_cubic(dim):
     sym_phi = sym_cos(sym_t - np.pi/4)
     for i in range(dim):
         sym_phi *= (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
-    return (dim, 2., mesh_factory, sym_phi)
+    return (dim, 2., mesh_factory, sym_phi, 0.025)
 
 
-@pytest.mark.parametrize(("dim", "c", "mesh_factory", "sym_phi"),
+@pytest.mark.parametrize(("dim", "c", "mesh_factory", "sym_phi", "timestep_scale"),
     [
         get_standing_wave(2),
         get_standing_wave(3),
@@ -89,10 +90,15 @@ def get_manufactured_cubic(dim):
         get_manufactured_cubic(3)
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False):
-    """Given a domain and an expected solution (exact or manufactured) in symbolic
-    form, computes symbolic and numerical wave equation RHSs for several different
-    mesh resolutions and checks order of convergence.
+def test_wave(ctx_factory, dim, c, mesh_factory, sym_phi, timestep_scale, order,
+            visualize=False):
+    """Checks accuracy and stability of the wave operator for a given problem setup.
+    :arg dim: Problem dimension.
+    :arg c: Sound speed.
+    :arg mesh_factory: Creates a mesh given a characteristic size.
+    :arg sym_phi: Symbolic expression for the solution.
+    :arg timestep_scale: Scaling factor for the timestep in the stability test (tweak
+        this to get close to stability limit).
     """
 
     cl_ctx = ctx_factory()
@@ -123,6 +129,8 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
     def max_inf_norm(w):
         return np.max(np.array([la.norm(field.get(), np.inf) for field in w]))
 
+    # Check order of accuracy
+
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
@@ -144,7 +152,6 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
 
         fields = flat_obj_array(u, v)
 
-        from mirgecom.wave import wave_operator
         rhs = wave_operator(discr, c=c, w=fields)
         rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
@@ -168,3 +175,53 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
     print("Approximation error:")
     print(eoc_rec)
     assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
+
+    # Check stability
+
+    mesh = mesh_factory(8)
+
+    from grudge.eager import EagerDGDiscretization
+    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+
+    nodes = discr.nodes().with_queue(queue)
+
+    def sym_eval(expr, t):
+        return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
+
+    def get_rhs(t, w):
+        result = wave_operator(discr, c=c, w=w)
+        result[0] += sym_eval(sym_f, t)
+        return result
+
+    t = 0.
+
+    u = sym_eval(sym_u, t)
+    v = sym_eval(sym_v, t)
+
+    fields = flat_obj_array(u, v)
+
+    from mirgecom.integrators import rk4_step
+    dt = timestep_scale/order**2
+    for istep in range(10):
+        fields = rk4_step(fields, t, dt, get_rhs)
+        t += dt
+
+    expected_u = sym_eval(sym_u, 10*dt)
+    expected_v = sym_eval(sym_v, 10*dt)
+    expected_fields = flat_obj_array(expected_u, expected_v)
+
+    if visualize:
+        from grudge.shortcuts import make_visualizer
+        vis = make_visualizer(discr, discr.order)
+        vis.write_vtk_file("wave_stability.vtu",
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                    ("u_expected", expected_fields[0]),
+                    ("v_expected", expected_fields[1:]),
+                    ])
+
+    err = max_inf_norm(fields-expected_fields)
+    max_err = max_inf_norm(expected_fields)
+
+    assert(err < max_err)
