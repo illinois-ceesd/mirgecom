@@ -120,6 +120,9 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
                 c * sym.div(sym_v) + sym_f,
                 make_obj_array([c]) * sym.grad(dim, sym_u))
 
+    def max_inf_norm(w):
+        return np.max(np.array([la.norm(field.get(), np.inf) for field in w]))
+
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
@@ -147,9 +150,7 @@ def test_wave(ctx_factory, dim, order, c, mesh_factory, sym_phi, visualize=False
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
-        err = np.max(np.array([la.norm((rhs[i] - expected_rhs[i]).get(), np.inf)
-                for i in range(dim+1)]))
-        eoc_rec.add_data_point(1./n, err)
+        eoc_rec.add_data_point(1./n, max_inf_norm(rhs - expected_rhs))
 
         if visualize:
             from grudge.shortcuts import make_visualizer
