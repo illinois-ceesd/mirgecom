@@ -38,4 +38,4 @@ def get_field_stats(state):
     numfields = len(state)
     field_mins = [np.min(state[i].get()) for i in range(numfields)]
     field_maxs = [np.max(state[i].get()) for i in range(numfields)]
-    return flat_obj_array(field_mins, field_maxs) 
+    return flat_obj_array(field_mins, field_maxs)
