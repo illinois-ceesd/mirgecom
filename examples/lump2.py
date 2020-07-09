@@ -121,6 +121,7 @@ def main(ctx_factory=cl.create_some_context):
         return inviscid_operator(discr, w=state, t=t, boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        # This stuff should be done by any/all checkpoint
         current_t = t
         current_step = step
         current_state = state
@@ -131,6 +132,7 @@ def main(ctx_factory=cl.create_some_context):
             current_cfl = get_inviscid_cfl(discr=discr, w=state,
                                            eos=eos, dt=current_dt)
 
+        # The rest of this checkpoint routine is customization
         do_status = check_step(step=step, n=nstatus)
         do_viz = check_step(step=step, n=nviz)
         if do_viz is False and do_status is False:
@@ -144,9 +146,10 @@ def main(ctx_factory=cl.create_some_context):
                                              dt=current_dt,
                                              cfl=current_cfl, dv=dv)
             max_errors = compare_states(state, expected_state)
+            statusmesg += f"\n------   Err({max_errors})"
             if rank == 0:
                 logger.info(statusmesg)
-                logger.info(f"------   Err({max_errors})")
+
             maxerr = np.max(max_errors)
             if maxerr > exittol:
                 logger.error("Solution failed to follow expected result.")
@@ -171,10 +174,13 @@ def main(ctx_factory=cl.create_some_context):
 
     if(current_t != checkpoint_t):
         if rank == 0:
-            logger.info("Checkpointing for final state ... \n")
+            logger.info("Checkpointing final state ...")
             my_checkpoint(current_step, t=current_t,
                           dt=(current_t - checkpoint_t),
                           state=current_state)
+
+    if current_t - t_final < 0:
+        raise ValueError("Simulation exited abnormally")
 
 
 if __name__ == "__main__":

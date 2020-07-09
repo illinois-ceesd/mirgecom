@@ -53,13 +53,13 @@ def make_init_message(dim, order, nelements, dt, t_final,
     )
 
 
-def make_status_message(time, step, dt, cfl, dv):
+def make_status_message(t, step, dt, cfl, dv):
     dvxt = get_field_stats(dv)
     statusmsg = (
-        f"Status: Step({step}) Time({time})\n"
-        f"------   P({dvxt[0][0]},{dvxt[1][0]})\n"
-        f"------   T({dvxt[0][1]},{dvxt[1][1]})\n"
-        f"------   dt,cfl = ({dt},{cfl})\n"
+        f"Status: Step({step}) Time({t})\n"
+        f"------   P({dvxt[0]},{dvxt[2]})\n"
+        f"------   T({dvxt[1]},{dvxt[3]})\n"
+        f"------   dt,cfl = ({dt},{cfl})"
     )
     return statusmsg
 
@@ -69,9 +69,9 @@ def write_viz(discr, visfilename, io_fields):
     vis.write_vtk_file(visfilename, io_fields)
 
 
-def make_visfile_name(basename, rank=0, iostep=0, t=0):
+def make_visfile_name(basename, rank=0, step=0, t=0):
     nameform = basename + "-{iorank:04d}-{iostep:06d}.vtu"
-    return nameform.format(iorank=rank, iostep=iostep)
+    return nameform.format(iorank=rank, iostep=step)
 
 
 def checkpoint(discr, logger, nstatus, nviz, rank, basename,
