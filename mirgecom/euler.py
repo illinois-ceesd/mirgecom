@@ -274,6 +274,14 @@ def inviscid_operator(
     )
 
 
+def get_inviscid_cfl(discr, w, dt, eos=IdealSingleGas()):
+    """
+    Routine calculates and returns CFL based on current state and timestep
+    """
+    wanted_dt = get_inviscid_timestep(discr, w, eos=eos)
+    return dt / wanted_dt
+
+
 def get_inviscid_timestep(discr, w, c=1.0, eos=IdealSingleGas()):
     """
     Routine (will) return the maximum stable inviscid timestep. Currently,
