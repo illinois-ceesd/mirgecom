@@ -1,6 +1,5 @@
 #!/bin/bash
 
-rm -f examples/*.vtu
 examples_dir=${1}
 if [ -z ${examples_dir} ]
 then

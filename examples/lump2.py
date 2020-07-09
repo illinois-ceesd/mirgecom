@@ -78,7 +78,7 @@ def main(ctx_factory=cl.create_some_context):
     current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(center=orig, velocity=vel)
-    casename = 'Lump'
+    casename = 'Lump2'
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
     nstatus = 10
