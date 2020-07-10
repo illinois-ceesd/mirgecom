@@ -1,0 +1,14 @@
+name: test-conda-env-py3
+channels:
+- conda-forge
+- nodefaults
+dependencies:
+- git
+- conda-forge::numpy
+- pocl
+- islpy
+- pyopencl
+- python=3
+- gmsh
+- pip
+- pytest
