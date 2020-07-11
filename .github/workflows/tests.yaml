@@ -40,16 +40,15 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            which python
-            which pip
             pip install -r requirements.txt
             pip install -e .
         - name: Run tests
           shell: bash -l {0}
           run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
+            export OCL_ICD_VENDORS=$MINIFORGE_INSTALL_DIR/envs/testing/etc/OpenCL/vendors
             ls $OCL_ICD_VENDORS
             clinfo
             pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
