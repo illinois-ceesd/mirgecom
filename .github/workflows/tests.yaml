@@ -38,6 +38,7 @@ jobs:
         - name: PIP installation
           shell: bash -l {0}
           run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             which python
             which pip
