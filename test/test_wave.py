@@ -147,7 +147,7 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for n in [4, 8, 16]:
+    for n in [4, 6, 8] if dim == 3 else [4, 8, 16]:
         mesh = mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
@@ -258,3 +258,12 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
     max_err = max_inf_norm(expected_fields)
 
     assert(err < max_err)
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])
