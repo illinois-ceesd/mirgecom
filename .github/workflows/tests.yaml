@@ -16,21 +16,39 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
         - uses: actions/checkout@v2
-        - uses: goanpeca/setup-miniconda@v1
-          with:
-            auto-update-conda: true
-            channels: conda-forge, nodefaults
-        - name: Install prerequisites
+        - name: Install miniforge
           shell: bash -l {0}
           run: |
-            conda install pocl islpy pyopencl pytest pip clinfo
-            pip install git+https://gitlab.tiker.net/inducer/{loopy,meshmode,dagrt,leap,modepy,meshpy,grudge}
+            if [ "$(uname)" = "Darwin" ]; then
+              PLATFORM=MacOSX
+            else
+              PLATFORM=Linux
+            fi
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
+            curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/$MINIFORGE_INSTALL_SH"
+            rm -Rf "$MINIFORGE_INSTALL_DIR"
+            bash "$MINIFORGE_INSTALL_SH" -b -p "$MINIFORGE_INSTALL_DIR"
+            PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update conda --yes --quiet
+            PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes --quiet
+            PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file .test-conda-env-py3.yml --name testing --quiet
+
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+
+        - name: PIP installation
+          shell: bash -l {0}
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            pip install -r requirements.txt
             pip install -e .
         - name: Run tests
           shell: bash -l {0}
           run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
+            export OCL_ICD_VENDORS=$MINIFORGE_INSTALL_DIR/envs/testing/etc/OpenCL/vendors
             ls $OCL_ICD_VENDORS
             clinfo
             pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
