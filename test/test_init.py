@@ -129,7 +129,7 @@ def test_vortex_init(ctx_factory):
 
 
 def test_shock_init(ctx_factory):
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
     nel_1d = 10
