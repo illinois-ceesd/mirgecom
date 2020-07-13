@@ -333,7 +333,7 @@ def test_facial_flux(ctx_factory, order, dim):
     has been interpolated to-and-from the element
     faces, this test is grid-dependent.
     """
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     logger = logging.getLogger(__name__)
 
