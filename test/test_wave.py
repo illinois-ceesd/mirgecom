@@ -134,12 +134,10 @@ def max_inf_norm(fields):
         get_manufactured_cubic(2),
         get_manufactured_cubic(3)
     ])
-
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
     """Checks accuracy of the wave operator for a given problem setup.
     """
-
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -160,7 +158,6 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
         nodes = discr.nodes().with_queue(queue)
 
-
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
 
@@ -168,7 +165,6 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
         u = sym_eval(sym_u, t_check)
         v = sym_eval(sym_v, t_check)
-
 
         fields = flat_obj_array(u, v)
 
@@ -218,7 +214,6 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-
     dim, c, mesh_factory, sym_phi = problem
 
     sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
@@ -227,7 +222,6 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
 
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-
 
     nodes = discr.nodes().with_queue(queue)
 
@@ -238,7 +232,6 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
         result = wave_operator(discr, c=c, w=w)
         result[0] += sym_eval(sym_f, t)
         return result
-
 
     t = 0.
 

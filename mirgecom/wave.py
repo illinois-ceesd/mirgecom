@@ -60,7 +60,7 @@ def _flux(discr, c, w_tpair):
 
     # upwind
     v_jump = np.dot(normal, v.int-v.ext)
-    flux_weak -= flat_obj_array(
+    flux_weak += flat_obj_array(
             0.5*(u.int-u.ext),
             0.5*normal_times(v_jump),
             )
