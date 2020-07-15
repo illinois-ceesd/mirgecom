@@ -25,11 +25,16 @@ import math
 import pytest
 import numpy as np
 
+import pyopencl as cl
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+
 from mirgecom.filter import get_spectral_filter
+from mirgecom.filter import SpectralFilter
+from mirgecom.initializers import Uniform
+from mirgecom.error import compare_states
 
 
 @pytest.mark.parametrize("cutoff", [3, 4, 8])
@@ -67,6 +72,7 @@ def test_filter_coeff(ctx_factory, cutoff, dim, order):
 
     # expected values @ filter band limits
     expected_high_coeff = np.exp(-1.0*alpha)
+    expected_cutoff_coeff = 1.0
     low_index = cutoff - 1
     high_index = numpoly - 1
     if nfilt <= 0:
@@ -75,9 +81,49 @@ def test_filter_coeff(ctx_factory, cutoff, dim, order):
 
     from modepy import vandermonde
     for group in vol_discr.groups:
+
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
         filter_coeff = get_spectral_filter(dim, order, cutoff, 2)
+
         assert(filter_coeff.shape == vanderm1.shape)
         assert(filter_coeff[high_index][high_index] == expected_high_coeff)
-        assert(filter_coeff[low_index][low_index] == 1.0)
+        assert(filter_coeff[low_index][low_index] == expected_cutoff_coeff)
+
+
+@pytest.mark.parametrize("cutoff", [3, 4, 8])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+def test_filter_class(ctx_factory, cutoff, dim, order):
+    """
+    Tests that the SpectralFilter class performs the 
+    correct operation on the input fields. Several
+    test input fields are (will be) tested.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    nel_1d = 16
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+    )
+
+    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    nodes = discr.nodes().with_queue(queue)
+
+    vol_discr = discr.discr_from_dd("vol")
+    filter_mat = get_spectral_filter(dim, order, cutoff, 2)
+    spectral_filter = SpectralFilter(vol_discr, filter_mat)
+
+    # First test a uniform field, which should pass through
+    # the filter unharmed.
+    initr = Uniform()
+    uniform_soln = initr(t=0, x_vec=nodes)
+    filtered_soln = spectral_filter(vol_discr, uniform_soln)
+    max_errors = compare_states(uniform_soln, filtered_soln)
+
+    print(f'Max Errors = {max_errors}')
+    assert(np.max(max_errors) < 1e-15)

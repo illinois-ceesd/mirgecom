@@ -23,6 +23,7 @@ THE SOFTWARE.
 """
 import math
 import numpy as np
+import loopy as lp
 
 
 def get_spectral_filter(dim, order, cutoff, filter_order):
@@ -44,3 +45,51 @@ def get_spectral_filter(dim, order, cutoff, filter_order):
         filter[m, m] = np.exp(-1.0 * alpha
                               * ((m - nstart) / nfilt) ** filter_order)
     return filter
+
+
+class SpectralFilter:
+    r"""
+    Encapsulates the simulation-static filter operators and
+    provides the methods to apply filtering to input fields.
+    """
+    def __init__(self, discr, filter_mat):
+        self._filter_operators = {}
+        from modepy import vandermonde
+        for group in discr.groups:
+            vander = vandermonde(group.basis(), group.unit_nodes)
+            vanderm1 = np.linalg.inv(vander)
+            filter_operator = np.matmul(vander, np.matmul(filter_mat, vanderm1))
+            self._filter_operators[group] = filter_operator
+
+        def knl():
+            knl = lp.make_kernel(
+                """{[k,i,j]:
+                    0<=k<nelements and
+                    0<=i<ndiscr_nodes_out and
+                    0<=j<ndiscr_nodes_in}""",
+                "result[k,i] = sum(j, mat[i, j] * vec[k, j])",
+                default_offset=lp.auto, name="diff")
+
+            knl = lp.split_iname(knl, "i", 16, inner_tag="l.0")
+            knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
+            return lp.tag_inames(knl, dict(k="g.0"))
+
+        self._knl = knl()
+
+    def __call__(self, discr, fields):
+        numfields = len(fields)
+        if numfields <= 0:
+            return fields
+        queue = fields[0].queue
+        dtype = fields[0].dtype
+
+        result = [discr.empty(queue=queue, dtype=dtype) for i in range(numfields)]
+
+        for group in discr.groups:
+            filter_operator = self._filter_operators[group]
+            for i, field in enumerate(fields):
+                self._knl()(queue=queue, mat=filter_operator,
+                            result=group.view(result[i]),
+                            vec=group.view(field))
+
+        return result
