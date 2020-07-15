@@ -1,11 +1,12 @@
 numpy
-git+https://github.com/inducer/pymbolic.git
-git+https://github.com/inducer/islpy.git
-git+https://github.com/inducer/pyopencl.git
+pytest
+git+https://github.com/inducer/pymbolic.git#egg=pymbolic
+git+https://github.com/inducer/islpy.git#egg=islpy
+git+https://github.com/inducer/pyopencl.git#egg=pyopencl
 git+https://github.com/inducer/loopy.git
 git+https://gitlab.tiker.net/inducer/dagrt.git
 git+https://gitlab.tiker.net/inducer/leap.git
 git+https://github.com/inducer/meshpy.git
 git+https://github.com/inducer/modepy.git
-git+https://github.com/inducer/meshmode.git
-git+https://github.com/inducer/grudge.git
+git+https://github.com/inducer/meshmode.git@pre-array-context
+git+https://github.com/inducer/grudge.git@pre-array-context
