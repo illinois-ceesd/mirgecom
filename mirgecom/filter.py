@@ -24,6 +24,8 @@ THE SOFTWARE.
 import math
 import numpy as np
 import loopy as lp
+#from pytools import memoize_method
+from pytools.obj_array import make_obj_array
 
 
 def get_spectral_filter(dim, order, cutoff, filter_order):
@@ -60,21 +62,16 @@ class SpectralFilter:
             vanderm1 = np.linalg.inv(vander)
             filter_operator = np.matmul(vander, np.matmul(filter_mat, vanderm1))
             self._filter_operators[group] = filter_operator
-
-        def knl():
-            knl = lp.make_kernel(
-                """{[k,i,j]:
-                    0<=k<nelements and
-                    0<=i<ndiscr_nodes_out and
-                    0<=j<ndiscr_nodes_in}""",
-                "result[k,i] = sum(j, mat[i, j] * vec[k, j])",
-                default_offset=lp.auto, name="diff")
-
-            knl = lp.split_iname(knl, "i", 16, inner_tag="l.0")
-            knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
-            return lp.tag_inames(knl, dict(k="g.0"))
-
-        self._knl = knl()
+        self._knl = lp.make_kernel(
+            """{[k,i,j]:
+            0<=k<nelements and
+            0<=i<ndiscr_nodes_out and
+            0<=j<ndiscr_nodes_in}""",
+            "result[k,i] = sum(j, mat[i, j] * vec[k, j])",
+            default_offset=lp.auto, name="diff")
+        self._knl = lp.split_iname(self._knl, "i", 16, inner_tag="l.0")
+        self._knl = lp.tag_array_axes(self._knl, "mat", "stride:auto,stride:auto")
+        self._knl = lp.tag_inames(self._knl, dict(k="g.0"))
 
     def __call__(self, discr, fields):
         numfields = len(fields)
@@ -83,13 +80,14 @@ class SpectralFilter:
         queue = fields[0].queue
         dtype = fields[0].dtype
 
-        result = [discr.empty(queue=queue, dtype=dtype) for i in range(numfields)]
+        result = make_obj_array([discr.empty(queue=queue, dtype=dtype)
+                                 for i in range(numfields)])
 
         for group in discr.groups:
             filter_operator = self._filter_operators[group]
             for i, field in enumerate(fields):
-                self._knl()(queue=queue, mat=filter_operator,
-                            result=group.view(result[i]),
-                            vec=group.view(field))
+                self._knl(queue, mat=filter_operator,
+                          result=group.view(result[i]),
+                          vec=group.view(field))
 
         return result
