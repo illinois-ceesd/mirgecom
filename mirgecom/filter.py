@@ -25,7 +25,7 @@ import math
 import numpy as np
 import loopy as lp
 #from pytools import memoize_method
-from pytools.obj_array import make_obj_array
+from pytools.obj_array import obj_array_vectorized_n_args
 
 
 def get_spectral_filter(dim, order, cutoff, filter_order):
@@ -73,21 +73,12 @@ class SpectralFilter:
         self._knl = lp.tag_array_axes(self._knl, "mat", "stride:auto,stride:auto")
         self._knl = lp.tag_inames(self._knl, dict(k="g.0"))
 
+    @obj_array_vectorized_n_args
     def __call__(self, discr, fields):
-        numfields = len(fields)
-        if numfields <= 0:
-            return fields
-        queue = fields[0].queue
-        dtype = fields[0].dtype
-
-        result = make_obj_array([discr.empty(queue=queue, dtype=dtype)
-                                 for i in range(numfields)])
-
+        result = discr.empty(queue=fields.queue, dtype=fields.dtype)
         for group in discr.groups:
             filter_operator = self._filter_operators[group]
-            for i, field in enumerate(fields):
-                self._knl(queue, mat=filter_operator,
-                          result=group.view(result[i]),
-                          vec=group.view(field))
-
+            self._knl(fields.queue, mat=filter_operator,
+                      result=group.view(result),
+                      vec=group.view(fields))
         return result

@@ -127,7 +127,7 @@ def test_filter_class(ctx_factory, dim, order):
     # the filter unharmed.
     initr = Uniform(numdim=dim)
     uniform_soln = initr(t=0, x_vec=nodes)
-    filtered_soln = spectral_filter(vol_discr, uniform_soln)
+    filtered_soln = spectral_filter(discr=vol_discr, fields=uniform_soln)
     max_errors = compare_states(uniform_soln, filtered_soln)
     tol = 1e-14
 
