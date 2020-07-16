@@ -335,6 +335,7 @@ class Uniform:
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         gamma = eos.gamma()
         mass = x_vec[0].copy()
+        mass[:] = self._rho
         mom = self._velocity * make_obj_array([mass])
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
