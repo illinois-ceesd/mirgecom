@@ -91,12 +91,11 @@ def test_filter_coeff(ctx_factory, cutoff, dim, order):
         assert(filter_coeff[low_index][low_index] == expected_cutoff_coeff)
 
 
-@pytest.mark.parametrize("cutoff", [3, 4, 8])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_filter_class(ctx_factory, cutoff, dim, order):
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("order", [2, 3, 4])
+def test_filter_class(ctx_factory, dim, order):
     """
-    Tests that the SpectralFilter class performs the 
+    Tests that the SpectralFilter class performs the
     correct operation on the input fields. Several
     test input fields are (will be) tested.
     """
@@ -114,16 +113,23 @@ def test_filter_class(ctx_factory, cutoff, dim, order):
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
 
+    npoly = int(1)
+    for i in range(dim):
+        npoly *= int(order + dim + 1)
+    npoly /= math.factorial(int(dim))
+    cutoff = int(npoly / 2)
+
     vol_discr = discr.discr_from_dd("vol")
     filter_mat = get_spectral_filter(dim, order, cutoff, 2)
     spectral_filter = SpectralFilter(vol_discr, filter_mat)
 
     # First test a uniform field, which should pass through
     # the filter unharmed.
-    initr = Uniform()
+    initr = Uniform(numdim=dim)
     uniform_soln = initr(t=0, x_vec=nodes)
     filtered_soln = spectral_filter(vol_discr, uniform_soln)
     max_errors = compare_states(uniform_soln, filtered_soln)
+    tol = 1e-14
 
     print(f'Max Errors = {max_errors}')
-    assert(np.max(max_errors) < 1e-15)
+    assert(np.max(max_errors) < tol)
