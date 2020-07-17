@@ -27,7 +27,7 @@ import pytest
 import numpy as np
 
 import pyopencl as cl
-import pyopencl.clmath as clmath
+#import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
