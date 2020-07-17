@@ -158,5 +158,3 @@ def apply_linear_operator(discr, operator, fields):
                                  result=group.view(result),
                                  vec=group.view(fields))
     return result
-
-
