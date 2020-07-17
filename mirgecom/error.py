@@ -29,7 +29,7 @@ from pytools.obj_array import flat_obj_array
 
 def compare_states(red_state, blue_state):
     resid = red_state - blue_state
-    numfields = len(red_state)
+    numfields = len(resid)
     max_errors = [np.max(np.abs(resid[i].get())) for i in range(numfields)]
     return max_errors
 

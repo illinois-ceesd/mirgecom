@@ -28,25 +28,100 @@ import loopy as lp
 from pytools.obj_array import obj_array_vectorized_n_args
 
 
-def get_spectral_filter(dim, order, cutoff, filter_order):
+def exponential_mode_response_function(mode_idx, alpha, cutoff, nfilt, filter_order):
+    return np.exp(-1.0 * alpha * ((sum(mode_idx) - cutoff) / nfilt)
+                  ** (2*filter_order))
+
+
+def make_spectral_filter(dim, order, cutoff, mode_response_function):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
     """
-    npol = 1
+    npt = 1
     for d in range(1, dim+1):
-        npol *= (order + d)
-    npol /= math.factorial(int(dim))
-    npol = int(npol)
-    filter = np.identity(npol)
-    alpha = -1.0*np.log(np.finfo(float).eps)
-    nfilt = npol - cutoff
+        npt *= (order + d)
+    npt /= math.factorial(int(dim))
+    npt = int(npt)
+
+    filter = np.identity(npt)
+    nfilt = order - cutoff
     if nfilt <= 0:
         return filter
-    nstart = cutoff - 1
-    for m in range(nstart, npol):
-        filter[m, m] = np.exp(-1.0 * alpha
-                              * ((m - nstart) / nfilt) ** filter_order)
+
+    if dim == 1:
+        for m in range(cutoff, npt):
+            filter[m, m] = mode_response_function([m])
+    elif dim == 2:
+        sk = 0
+        for i in range(order + 1):
+            for j in range(order - i + 1):
+                if((i + j) >= cutoff):
+                    filter[sk, sk] = mode_response_function([i, j])
+                sk += 1
+    elif dim == 3:
+        sk = 0
+        for i in range(order + 1):
+            for j in range(order - i + 1):
+                for k in range(order - (i + j) + 1):
+                    if (i + j + k) >= cutoff:
+                        filter[sk, sk] = mode_response_function([i, j, k])
+                    sk += 1
     return filter
+
+
+def get_spectral_filter(dim, alpha, order, cutoff, filter_order):
+    r"""
+    Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
+    """
+    npt = 1
+    for d in range(1, dim+1):
+        npt *= (order + d)
+    npt /= math.factorial(int(dim))
+    npt = int(npt)
+
+    filter = np.identity(npt)
+    filter_pow = 2*filter_order
+    nfilt = order - cutoff
+    if nfilt <= 0:
+        return filter
+
+    if dim == 1:
+        for m in range(cutoff, npt):
+            filter[m, m] = np.exp(-1.0 * alpha
+                                  * ((m - cutoff) / nfilt) ** filter_pow)
+    elif dim == 2:
+        sk = 0
+        for i in range(order + 1):
+            for j in range(order - i + 1):
+                if((i + j) >= cutoff):
+                    filter[sk, sk] = np.exp(-1.0 * alpha
+                                            * (((i + j) - cutoff) / nfilt)
+                                            ** filter_pow)
+                sk += 1
+    elif dim == 3:
+        sk = 0
+        for i in range(order + 1):
+            for j in range(order - i + 1):
+                for k in range(order - (i + j) + 1):
+                    if (i + j + k) >= cutoff:
+                        filter[sk, sk] = np.exp(-1.0 * alpha
+                                                * (((i + j + k) - cutoff) / nfilt)
+                                                ** filter_pow)
+                    sk += 1
+    return filter
+
+
+def linear_operator_kernel():
+    knl = lp.make_kernel(
+        """{[k,i,j]:
+        0<=k<nelements and
+        0<=i<ndiscr_nodes_out and
+        0<=j<ndiscr_nodes_in}""",
+        "result[k,i] = sum(j, mat[i, j] * vec[k, j])",
+        default_offset=lp.auto, name="diff")
+    knl = lp.split_iname(knl, "i", 16, inner_tag="l.0")
+    knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
+    return lp.tag_inames(knl, dict(k="g.0"))
 
 
 class SpectralFilter:
@@ -62,16 +137,7 @@ class SpectralFilter:
             vanderm1 = np.linalg.inv(vander)
             filter_operator = np.matmul(vander, np.matmul(filter_mat, vanderm1))
             self._filter_operators[group] = filter_operator
-        self._knl = lp.make_kernel(
-            """{[k,i,j]:
-            0<=k<nelements and
-            0<=i<ndiscr_nodes_out and
-            0<=j<ndiscr_nodes_in}""",
-            "result[k,i] = sum(j, mat[i, j] * vec[k, j])",
-            default_offset=lp.auto, name="diff")
-        self._knl = lp.split_iname(self._knl, "i", 16, inner_tag="l.0")
-        self._knl = lp.tag_array_axes(self._knl, "mat", "stride:auto,stride:auto")
-        self._knl = lp.tag_inames(self._knl, dict(k="g.0"))
+        self._knl = linear_operator_kernel()
 
     @obj_array_vectorized_n_args
     def __call__(self, discr, fields):
@@ -82,3 +148,15 @@ class SpectralFilter:
                       result=group.view(result),
                       vec=group.view(fields))
         return result
+
+
+@obj_array_vectorized_n_args
+def apply_linear_operator(discr, operator, fields):
+    result = discr.empty(queue=fields.queue, dtype=fields.dtype)
+    for group in discr.groups:
+        linear_operator_kernel()(fields.queue, mat=operator,
+                                 result=group.view(result),
+                                 vec=group.view(fields))
+    return result
+
+
