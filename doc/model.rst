@@ -8,6 +8,18 @@ Model
     Do not consider this information authoritative while this notice is still
     present.
 
+.. raw:: latex
+
+    \def\RE{\operatorname{RE}}
+    \def\PR{\operatorname{PR}}
+
+.. raw:: html
+
+    \(
+    \def\RE{\operatorname{RE}}
+    \def\PR{\operatorname{PR}}
+    \)
+
 In fluid domains, the code solves the compressible Navier-Stokes equations
 in curvilinear coordinates.  The basic equations, in a Cartesian coordinate space, for the conserved mass
 density :math:`\rho`, momentum density :math:`\rho u_i`, and total energy
