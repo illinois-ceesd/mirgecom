@@ -51,9 +51,8 @@ Heat flux constitutive relation
 
 The heat flux vector is defined as
 
-\f[
-q_i = - \kappa \frac{\partial T}{\partial x_i}
-\f]
+.. math::
+    q_i = - \kappa \frac{\partial T}{\partial x_i}
 
 where :math:`\kappa` is the thermal conductivity.
 
