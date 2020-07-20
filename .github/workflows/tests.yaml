@@ -48,10 +48,10 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=$MINIFORGE_INSTALL_DIR/envs/testing/etc/OpenCL/vendors
-            ls $OCL_ICD_VENDORS
+            #export OCL_ICD_VENDORS=$MINIFORGE_INSTALL_DIR/envs/testing/etc/OpenCL/vendors
+            #ls $OCL_ICD_VENDORS
             clinfo
             cd test
-            curl -L -O https://github.com/inducer/pyopencl/blob/master/examples/dump-properties.py
+            curl -L -O https://raw.githubusercontent.com/inducer/pyopencl/master/examples/dump-properties.py
             strace python dump-properties.py
-            #python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
