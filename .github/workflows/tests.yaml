@@ -52,4 +52,6 @@ jobs:
             ls $OCL_ICD_VENDORS
             clinfo
             cd test
-            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+            curl -L -O https://github.com/inducer/pyopencl/blob/master/examples/dump-properties.py
+            strace python dump-properties.py
+            #python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
