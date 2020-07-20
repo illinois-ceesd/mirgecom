@@ -47,6 +47,5 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
             cd test
             python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
