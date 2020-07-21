@@ -75,7 +75,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             kwargs = t.kwargs
             program = t.program
-            invoker_code = self.invoker_codes[program.name][tuple(kwargs)]
+            invoker_code, data = self.invoker_codes[program.name][tuple(kwargs)]
             evt = t.event
 
             types = {}
@@ -86,13 +86,25 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 param_dict[key] = value
 
             # extract integer argument generation code from wrapper
-            code = ""
-            import textwrap
-            for o in ["shapes", "strides"]: #"offsets",
-                subs = "# {{{ find integer arguments from " + o
-                start=invoker_code.find(subs) + len(subs)
-                end=invoker_code.find("# }}}", start)
-                code = code + textwrap.dedent(invoker_code[start:end])
+
+            gen = PythonFunctionGenerator(
+                "my_argfind" % kernel.name,
+                self.system_args + [
+                    "%s=None" % idi.name
+                    for idi in data
+                    if issubclass(idi.arg_class, KernelArgument)
+                    ])
+
+            generate_integer_arg_finding_from_shapes(gen, kernel, data)
+            generate_integer_arg_finding_from_offsets(gen, kernel, data)
+            generate_integer_arg_finding_from_strides(gen, kernel, data)
+            # code = ""
+            # import textwrap
+            # for o in ["shapes", "strides"]: #"offsets",
+            #     subs = "# {{{ find integer arguments from " + o
+            #     start=invoker_code.find(subs) + len(subs)
+            #     end=invoker_code.find("# }}}", start)
+            #     code = code + textwrap.dedent(invoker_code[start:end])
 
 
             for key, value in program.arg_dict.items():
@@ -100,7 +112,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                     param_dict[key] = None
 
             # execute integer argument generation code from wrapper
-            exec(code, param_dict)
+            exec(gen.code, param_dict)
 
             # get statistics
             program = lp.add_and_infer_dtypes(program, types)
@@ -171,9 +183,11 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         if program.name not in self.invoker_codes or tuple(kwargs) not in self.invoker_codes[program.name]:
             executor=program.target.get_kernel_executor(program, self.queue)
             info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
-            invoker_code = info.invoker.get()
+
+            data=info.implemented_data_info
+            invoker_code = info.invoker
             self.invoker_codes[program.name] = {}
-            self.invoker_codes[program.name][tuple(kwargs)] = invoker_code
+            self.invoker_codes[program.name][tuple(kwargs)] = (invoker_code, data)
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
