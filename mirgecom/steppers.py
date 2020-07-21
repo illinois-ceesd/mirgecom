@@ -38,7 +38,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     """
-    Implements a generic time stepping loop for an inviscid flow.
+    Deprecated: Implements a generic time stepping loop for an inviscid flow.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
