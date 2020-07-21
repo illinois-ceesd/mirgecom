@@ -27,9 +27,10 @@ import pytest
 import numpy as np
 
 import pyopencl as cl
-#import pyopencl.clmath as clmath
+# import pyopencl.clmath as clmath
 import pyopencl.array as clarray
 from grudge.eager import EagerDGDiscretization
+# from grudge.shortcuts import make_visualizer
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
@@ -125,16 +126,18 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_filter_class(ctx_factory, dim, order):
+    # def test_filter_class(dim, order):
     """
     Tests that the SpectralFilter class performs the
     correct operation on the input fields. Several
     test input fields are (will be) tested.
     """
     cl_ctx = ctx_factory()
+    #    cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     logger = logging.getLogger(__name__)
     filter_order = 1
-    nel_1d = 16
+    nel_1d = 2
     eta = .5
     alpha = -1.0*np.log(np.finfo(float).eps)
 
@@ -195,19 +198,29 @@ def test_filter_class(ctx_factory, dim, order):
     assert(np.max(max_errors) < tol)
 
     # Any order > cutoff fields should have higher modes attenuated
-    tol = 1e-3
+    tol = 2e-3
+    #    vis = make_visualizer(discr, discr.order)
     from modepy import vandermonde
     for field_order in range(cutoff+1, cutoff+4):
+        #    field_order = discr.order + 4
+        #    if True:
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]
         field = polyfn(coeff=coeff, x_vec=nodes)
         field = make_obj_array([field])
+        filtered_field = spectral_filter(vol_discr, field)
         for group in vol_discr.groups:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
             unfiltered_spectrum = apply_linear_operator(vol_discr, vanderm1, field)
-            filtered_field = spectral_filter(vol_discr, field)
             filtered_spectrum = apply_linear_operator(vol_discr, vanderm1,
                                                       filtered_field)
+            #            io_fields = [
+            #                ('unfiltered', field),
+            #                ('filtered', filtered_field),
+            #                ('unfiltered_spectrum', unfiltered_spectrum),
+            #                ('filtered_spectrum', filtered_spectrum)
+            #            ]
+            #            vis.write_vtk_file('filter_test.vtu', io_fields)
             max_errors = compare_states(unfiltered_spectrum, filtered_spectrum)
             logger.info(f'Field = {field}')
             logger.info(f'Filtered = {filtered_field}')
