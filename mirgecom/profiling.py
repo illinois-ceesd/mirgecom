@@ -22,6 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from meshmode.array_context import PyOpenCLArrayContext
+import pyopencl as cl
 
 class ProfileData:
     time = 0
