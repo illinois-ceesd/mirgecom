@@ -24,6 +24,12 @@ THE SOFTWARE.
 
 from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl as cl
+from pytools.py_codegen import PythonFunctionGenerator
+import loopy as lp
+import numpy as np
+
+from loopy.target.execution import ExecutionWrapperGeneratorBase
+
 
 class ProfileData:
     time = 0
@@ -74,7 +80,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             cl.wait_for_events([t.event for t in self.events])
 
         for t in self.events:
-
             kwargs = t.kwargs
             program = t.program
             invoker_code, data = self.invoker_codes[program.name][tuple(kwargs)]
@@ -87,34 +92,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 types[key] = value.dtype
                 param_dict[key] = value
 
-            # extract integer argument generation code from wrapper
-
-            gen = PythonFunctionGenerator(
-                "my_argfind" % kernel.name,
-                self.system_args + [
-                    "%s=None" % idi.name
-                    for idi in data
-                    if issubclass(idi.arg_class, KernelArgument)
-                    ])
-
-            generate_integer_arg_finding_from_shapes(gen, kernel, data)
-            generate_integer_arg_finding_from_offsets(gen, kernel, data)
-            generate_integer_arg_finding_from_strides(gen, kernel, data)
-            # code = ""
-            # import textwrap
-            # for o in ["shapes", "strides"]: #"offsets",
-            #     subs = "# {{{ find integer arguments from " + o
-            #     start=invoker_code.find(subs) + len(subs)
-            #     end=invoker_code.find("# }}}", start)
-            #     code = code + textwrap.dedent(invoker_code[start:end])
-
-
             for key, value in program.arg_dict.items():
                 if key not in param_dict:
                     param_dict[key] = None
 
             # execute integer argument generation code from wrapper
-            exec(gen.code, param_dict)
+            exec(invoker_code, param_dict)
 
             # get statistics
             program = lp.add_and_infer_dtypes(program, types)
@@ -167,8 +150,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         print(format_str.format('='*20, '='*6, '='*8, '='*8, '='*8, '='*8, '='*8, '='*8, '='*8, '='*8, '='*8, '='*8))
 
-    def __del__(self):
-        self.print_profiling_data()
+    # def __del__(self):
+    #     self.print_profiling_data()
 
     def call_loopy(self, program, **kwargs):
 
@@ -187,9 +170,26 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
             data=info.implemented_data_info
-            invoker_code = info.invoker
+
+            wrapper = executor.get_wrapper_generator()
+
+            from loopy.kernel.data import KernelArgument
+
+            gen = PythonFunctionGenerator(
+                "my_argfind_" + program.name
+            ,
+                [
+                    "%s=None" % idi.name
+                    for idi in data
+                    if issubclass(idi.arg_class, KernelArgument)
+                    ])
+
+            wrapper.generate_integer_arg_finding_from_strides(gen, program, data)
+            wrapper.generate_integer_arg_finding_from_offsets(gen, program, data)
+            wrapper.generate_integer_arg_finding_from_shapes(gen, program, data)
+
             self.invoker_codes[program.name] = {}
-            self.invoker_codes[program.name][tuple(kwargs)] = (invoker_code, data)
+            self.invoker_codes[program.name][tuple(kwargs)] = (gen.code, data)
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 

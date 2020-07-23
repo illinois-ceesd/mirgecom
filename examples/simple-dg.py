@@ -36,6 +36,10 @@ from meshmode.dof_array import DOFArray, freeze, thaw
 from meshmode.array_context import make_loopy_program
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
+import loopy as lp
+
+lp.set_caching_enabled(False)
+
 
 # Features lost vs. https://github.com/inducer/grudge:
 # - dimension independence / differential geometry
