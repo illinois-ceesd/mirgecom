@@ -19,3 +19,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
+import os
+import getpass
+import sys
+from warnings import warn
+from mpi4py import MPI
+
+# This code avoids slow startups due to file system locking when running with
+# large numbers of ranks. See https://github.com/illinois-ceesd/planning/issues/27
+# for details.
+
+size = MPI.COMM_WORLD.Get_size()
+
+if size >= 128:
+    for mod in ["pyopencl", "pytools", "loopy"]:
+        if mod in sys.modules:
+            warn("{} already loaded, not adjusting XDG_CACHE_HOME.".format(mod))
+
+    if "XDG_CACHE_HOME" in os.environ:
+        warn("XDG_CACHE_HOME already set, not adjusting it.")
+    else:
+        rank = MPI.COMM_WORLD.Get_rank()
+        username = getpass.getuser()
+
+        os.environ["XDG_CACHE_HOME"] = "/tmp/{}/xdg-cache-r{}".format(username, rank)

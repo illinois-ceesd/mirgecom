@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import mirgecom # noqa
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
@@ -58,9 +59,9 @@ def main():
     nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-            a=(-0.5,)*dim,
-            b=(0.5,)*dim,
-            n=(nel_1d,)*dim)
+        a=(-0.5,)*dim,
+        b=(0.5,)*dim,
+        n=(nel_1d,)*dim)
 
     order = 3
 
@@ -78,9 +79,9 @@ def main():
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
 
     fields = join_fields(
-            bump(discr, queue),
-            [discr.zeros(queue) for i in range(discr.dim)]
-            )
+        bump(discr, queue),
+        [discr.zeros(queue) for i in range(discr.dim)]
+        )
 
     vis = make_visualizer(discr, discr.order+3 if dim == 2 else discr.order)
 
