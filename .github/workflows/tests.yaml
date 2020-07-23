@@ -21,8 +21,10 @@ jobs:
           run: |
             if [ "$(uname)" = "Darwin" ]; then
               PLATFORM=MacOSX
+              brew install open-mpi
             else
               PLATFORM=Linux
+              sudo apt-get -y install openmpi-bin libopenmpi-dev
             fi
             MINIFORGE_INSTALL_DIR=.miniforge3
             MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
