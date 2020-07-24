@@ -19,6 +19,8 @@ Table of Contents
     model
     operators
     support
+    development
+    faq
     misc
 
 Indices and tables

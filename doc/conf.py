@@ -43,6 +43,8 @@ extensions = [
         "sphinx.ext.autodoc",
         "sphinx.ext.doctest",
         "sphinx.ext.napoleon",
+        "sphinx.ext.graphviz",
+        "sphinx.ext.todo",
         ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -82,5 +84,8 @@ intersphinx_mapping = {
     'https://documen.tician.de/grudge/': None,
     'https://documen.tician.de/pytato/': None,
     'http://documen.tician.de/loopy/': None,
+    'http://documen.tician.de/pytato': None,
     }
 autoclass_content = "both"
+
+todo_include_todos = True

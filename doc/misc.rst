@@ -1,9 +1,3 @@
-Installation
-============
-
-See the installation instructions for the `emirge
-<https://github.com/illinois-ceesd/emirge/>`_ installation infrastructure.
-
 User-Visible Changes
 ====================
 
@@ -33,6 +27,7 @@ National Nuclear Security Administration, under Award Number DE-NAXXXXXXXXXXX.
 
 Disclaimer
 ==========
+
 This report was prepared as an account of work sponsored by an agency of the
 United States Government.   Neither  the  United  States  Government  nor  any
 agency  thereof,  nor  any  of  their employees, makes any warranty, express or
@@ -45,3 +40,8 @@ necessarily constitute or imply its endorsement, recommendation, or favoring
 by the United States Government or any agency thereof.  The views and opinions
 of authors expressed herein  do  not  necessarily  state  or  reflect  those  of
 the  United  States  Government  or any  agency thereof.
+
+To-Do List for the Docs
+=======================
+
+.. todolist::
