@@ -65,6 +65,8 @@ jobs:
             python-version: '3.x'
         - name: Flake8 test
           run: |
-            pip install wheel
-            pip install flake8 pep8-naming
+            python3 -m venv myenv
+            source myenv/bin/activate
+            python -m pip install wheel
+            python -m pip install flake8 pep8-naming
             python -m flake8 --show-source --statistics && echo "Flake8 found no errors."
