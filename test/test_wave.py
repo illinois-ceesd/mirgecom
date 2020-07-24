@@ -32,8 +32,8 @@ import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
 
 from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl
-        as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl
+    as pytest_generate_tests)
 
 import pytest
 
@@ -57,9 +57,9 @@ def get_standing_wave(dim):
     def mesh_factory(n):
         from meshmode.mesh.generation import generate_regular_rect_mesh
         return generate_regular_rect_mesh(
-                a=(-0.5*np.pi,)*dim,
-                b=(0.5*np.pi,)*dim,
-                n=(n,)*dim)
+            a=(-0.5*np.pi,)*dim,
+            b=(0.5*np.pi,)*dim,
+            n=(n,)*dim)
     c = 2.
     sym_coords = prim.make_sym_vector('x', dim)
     sym_t = pmbl.var("t")
@@ -79,9 +79,9 @@ def get_manufactured_cubic(dim):
     def mesh_factory(n):
         from meshmode.mesh.generation import generate_regular_rect_mesh
         return generate_regular_rect_mesh(
-                a=(-1.,)*dim,
-                b=(1.,)*dim,
-                n=(n,)*dim)
+            a=(-1.,)*dim,
+            b=(1.,)*dim,
+            n=(n,)*dim)
     sym_coords = prim.make_sym_vector('x', dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
@@ -115,8 +115,8 @@ def sym_wave(dim, sym_phi):
     # rhs(u part) = c*div(v) + f
     # rhs(v part) = c*grad(u)
     sym_rhs = flat_obj_array(
-                sym_c * sym.div(sym_v) + sym_f,
-                make_obj_array([sym_c]) * sym.grad(dim, sym_u))
+        sym_c * sym.div(sym_v) + sym_f,
+        make_obj_array([sym_c]) * sym.grad(dim, sym_u))
 
     return sym_u, sym_v, sym_f, sym_rhs
 
@@ -184,7 +184,7 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
                             ("rhs_v_actual", rhs[1:]),
                             ("rhs_u_expected", expected_rhs[0]),
                             ("rhs_v_expected", expected_rhs[1:]),
-                        ])
+                            ])
 
     print("Approximation error:")
     print(eoc_rec)
