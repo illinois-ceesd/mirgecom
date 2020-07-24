@@ -54,3 +54,13 @@ jobs:
             ls $OCL_ICD_VENDORS
             clinfo
             pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+
+  flake8:
+    name: Flake8
+    runs-on: ubuntu-latest
+    steps:
+        - name: Flake8 test
+          run: |
+            pip install wheel
+            pip install flake8 pep8-naming
+            python -m flake8 --show-source --statistics && echo "Flake8 found no errors."
