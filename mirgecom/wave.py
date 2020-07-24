@@ -23,8 +23,8 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
-        join_fields, make_obj_array,
-        with_object_array_or_scalar)
+    join_fields, make_obj_array,
+    with_object_array_or_scalar)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import with_queue
 from grudge.symbolic.primitives import TracePair
@@ -38,8 +38,8 @@ __doc__ = """
 def _interior_trace_pair(discr, vec):
     i = discr.interp("vol", "int_faces", vec)
     e = with_object_array_or_scalar(
-            lambda el: discr.opposite_face_connection()(el.queue, el),
-            i)
+        lambda el: discr.opposite_face_connection()(el.queue, el),
+        i)
     return TracePair("int_faces", i, e)
 
 
@@ -54,16 +54,16 @@ def _flux(discr, c, w_tpair):
         return make_obj_array([ni*scalar for ni in normal])
 
     flux_weak = join_fields(
-            np.dot(v.avg, normal),
-            normal_times(u.avg),
-            )
+        np.dot(v.avg, normal),
+        normal_times(u.avg),
+        )
 
     # upwind
     v_jump = np.dot(normal, v.int-v.ext)
     flux_weak += join_fields(
-            0.5*(u.int-u.ext),
-            0.5*normal_times(v_jump),
-            )
+        0.5*(u.int-u.ext),
+        0.5*normal_times(v_jump),
+        )
 
     return discr.interp(w_tpair.dd, "all_faces", c*flux_weak)
 
@@ -78,15 +78,15 @@ def wave_operator(discr, c, w):
     dir_bc = join_fields(-dir_u, dir_v)
 
     return (
-            discr.inverse_mass(
-                join_fields(
-                    -c*discr.weak_div(v),
-                    -c*discr.weak_grad(u)
-                    )
-                +  # noqa: W504
-                discr.face_mass(
-                    _flux(discr, c=c, w_tpair=_interior_trace_pair(discr, w))
-                    + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
-                    dir_bc))
-                    ))
+        discr.inverse_mass(
+            join_fields(
+                -c*discr.weak_div(v),
+                -c*discr.weak_grad(u)
                 )
+            +  # noqa: W504
+            discr.face_mass(
+                _flux(discr, c=c, w_tpair=_interior_trace_pair(discr, w))
+                + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
+                dir_bc))
+                ))
+        )
