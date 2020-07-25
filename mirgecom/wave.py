@@ -35,9 +35,11 @@ __doc__ = """
 """
 
 
-def _flux(actx, discr, c, w_tpair):
+def _flux(discr, c, w_tpair):
     u = w_tpair[0]
     v = w_tpair[1:]
+
+    actx = w_tpair.int[0].array_context
 
     normal = thaw(actx, discr.normal(w_tpair.dd))
 
@@ -60,7 +62,7 @@ def _flux(actx, discr, c, w_tpair):
     return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
 
 
-def wave_operator(actx, discr, c, w):
+def wave_operator(discr, c, w):
     """
     Args:
         discr (grudge.eager.EagerDGDiscretization): the discretization to use
@@ -70,6 +72,8 @@ def wave_operator(actx, discr, c, w):
     Returns:
         np.ndarray: an object array of DOF arrays, representing the ODE RHS
     """
+    actx = w[0].array_context
+
     u = w[0]
     v = w[1:]
 
@@ -86,8 +90,8 @@ def wave_operator(actx, discr, c, w):
                 )
             +  # noqa: W504
             discr.face_mass(
-                _flux(actx, discr, c=c, w_tpair=interior_trace_pair(discr, w))
-                + _flux(actx, discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
+                _flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
+                + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
                 dir_bc))
                 ))
         )

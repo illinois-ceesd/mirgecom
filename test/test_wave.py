@@ -163,7 +163,7 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
         fields = flat_obj_array(u, v)
 
-        rhs = wave_operator(actx, discr, c=c, w=fields)
+        rhs = wave_operator(discr, c=c, w=fields)
         rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
         expected_rhs = sym_eval(sym_rhs, t_check)
@@ -224,7 +224,7 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
         return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
 
     def get_rhs(t, w):
-        result = wave_operator(actx, discr, c=c, w=w)
+        result = wave_operator(discr, c=c, w=w)
         result[0] += sym_eval(sym_f, t)
         return result
 
