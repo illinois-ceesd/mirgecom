@@ -30,6 +30,10 @@ THE SOFTWARE.
 # from grudge.symbolic.primitives import TracePair
 
 
-# __doc__ = """
-# .. autofunction:: euler_operator
-# """
+__doc__ = """
+.. autofunction:: euler_operator
+"""
+
+
+def euler_operator(discr, w):
+    pass
