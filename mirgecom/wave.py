@@ -72,8 +72,6 @@ def wave_operator(discr, c, w):
     Returns:
         np.ndarray: an object array of DOF arrays, representing the ODE RHS
     """
-    actx = w[0].array_context
-
     u = w[0]
     v = w[1:]
 
