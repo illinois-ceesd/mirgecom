@@ -21,7 +21,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import numpy.linalg as la
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
@@ -30,6 +29,8 @@ import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl
@@ -121,10 +122,6 @@ def sym_wave(dim, sym_phi):
     return sym_u, sym_v, sym_f, sym_rhs
 
 
-def max_inf_norm(fields):
-    return np.max(np.array([la.norm(field.get(), np.inf) for field in fields]))
-
-
 @pytest.mark.parametrize("problem",
     [
         get_standing_wave(2),
@@ -139,6 +136,7 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim, c, mesh_factory, sym_phi = problem
 
@@ -151,9 +149,9 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
         mesh = mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        nodes = discr.nodes().with_queue(queue)
+        nodes = thaw(actx, discr.nodes())
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
@@ -170,7 +168,9 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
-        rel_linf_err = max_inf_norm(rhs - expected_rhs)/max_inf_norm(expected_rhs)
+        rel_linf_err = (
+            discr.norm(rhs - expected_rhs, np.inf)
+            / discr.norm(expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
@@ -207,6 +207,7 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim, c, mesh_factory, sym_phi = problem
 
@@ -215,9 +216,9 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
     mesh = mesh_factory(8)
 
     from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    nodes = discr.nodes().with_queue(queue)
+    nodes = thaw(actx, discr.nodes())
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
@@ -255,10 +256,10 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
                     ("v_expected", expected_fields[1:]),
                     ])
 
-    err = max_inf_norm(fields-expected_fields)
-    max_err = max_inf_norm(expected_fields)
+    err = discr.norm(fields-expected_fields, np.inf)
+    max_err = discr.norm(expected_fields, np.inf)
 
-    assert(err < max_err)
+    assert err < max_err
 
 
 if __name__ == "__main__":
