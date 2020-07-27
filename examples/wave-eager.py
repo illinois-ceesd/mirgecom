@@ -33,7 +33,7 @@ from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
 
-def bump(discr, actx, t=0):
+def bump(actx, discr, t=0):
     source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
     source_width = 0.05
     source_omega = 3
@@ -80,7 +80,7 @@ def main():
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
     fields = join_fields(
-        bump(discr, actx),
+        bump(actx, discr),
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
@@ -96,7 +96,7 @@ def main():
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
-            print(istep, t)
+            print(istep, t, discr.norm(fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
