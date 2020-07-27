@@ -24,7 +24,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath
 from pytools.obj_array import join_fields
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
