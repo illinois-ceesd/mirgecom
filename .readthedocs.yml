@@ -8,4 +8,6 @@ version: 2
 
 python:
   version: 3.7
-  install: []
+  install:
+  - method: pip
+    path: .
