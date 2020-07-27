@@ -71,6 +71,8 @@ jobs:
             python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
 
         - name: Run examples
+          shell: bash -l {0}
+          run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             python examples/wave-eager.py
