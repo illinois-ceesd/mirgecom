@@ -42,29 +42,3 @@ def rk4_step(state, t, dt, rhs):
     k3 = rhs(t+dt/2, state + dt/2*k2)
     k4 = rhs(t+dt, state + dt*k3)
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
-
-
-def rk4_stepper(rhs, checkpoint, get_timestep,
-                state, t=0.0, t_final=1.0, istep=0):
-    """
-    Implements a generic RK4 time stepping loop for a state/rhs pair.
-    """
-    if t_final <= t:
-        return(istep, t, state)
-
-    while t < t_final:
-
-        dt = get_timestep(state=state)
-        if dt < 0:
-            return (istep, t, state)
-
-        status = checkpoint(state=state, step=istep, t=t, dt=dt)
-        if status != 0:
-            return (istep, t, state)
-
-        state = rk4_step(state, t, dt, rhs)
-
-        t += dt
-        istep += 1
-
-    return (istep, t, state)

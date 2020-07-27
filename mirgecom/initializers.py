@@ -38,17 +38,18 @@ class Vortex2D:
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
           (https://doi.org/10.1016/S0021-9991(03)00206-7)
         - JSH/TW Nodal DG Methods, p. 209
+          DOI: 10.1007/978-0-387-72067-8
 
     The isentropic vortex is defined by:
 
-    .. :math::
+    .. math::
 
-        u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
-        v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
-        \rho =
-        ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
-        \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
-        p = \rho^{\gamma}
+         u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
+         v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
+         \rho =
+         ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
+         \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
+         p = \rho^{\gamma}
 
     A call to this object after creation/init creates
     the isentropic vortex solution at a given time (t)
@@ -102,13 +103,13 @@ class SodShock1D:
 
     The Sod Shock setup is defined by:
 
-    .. :math::
+    .. math::
 
-    {\rho}(x < x_0, 0) = \rho_l\\
-    {\rho}(x > x_0, 0) = \rho_r\\
-    {\rho}{V_x}(x, 0) = 0
-    {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
-    {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
+         {\rho}(x < x_0, 0) = \rho_l\\
+         {\rho}(x > x_0, 0) = \rho_r\\
+         {\rho}{V_x}(x, 0) = 0
+         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
+         {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
 
     A call to this object after creation/init creates
     Sod's shock solution at a given time (t)
@@ -150,7 +151,7 @@ class SodShock1D:
         x_rel = x_vec[0]
         queue = x_rel.queue
 
-        zeros = clarray.zeros(queue, shape=x_rel.shape, dtype=np.float64)
+        zeros = 0*x_rel
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
@@ -173,11 +174,11 @@ class Lump:
 
     The Gaussian lump is defined by:
 
-    .. :math::
+    .. math::
 
-        {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-        {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
-        {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+         {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+         {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
+         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
     Where :math:`V_0` is the fixed velocity specified
     by the user at init time, and :math:`\gamma` is taken

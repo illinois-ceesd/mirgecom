@@ -28,6 +28,9 @@ import numpy as np
 def get_spectral_filter(dim, order, cutoff, filter_order):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
+    Returns a filter operator in the modal basis designed to apply an 
+    exponentially decreasing weight to spectral modes beyond the cutoff
+    mode.
     """
     npol = 1
     for d in range(1, dim+1):

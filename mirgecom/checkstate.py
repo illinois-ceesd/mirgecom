@@ -36,6 +36,7 @@ def compare_states(red_state, blue_state):
 
 def get_field_stats(state):
     numfields = len(state)
+    # TODO: function needs updated to use grudge/cl norms and constructs 
     field_mins = [np.min(state[i].get()) for i in range(numfields)]
     field_maxs = [np.max(state[i].get()) for i in range(numfields)]
     return flat_obj_array(field_mins, field_maxs)

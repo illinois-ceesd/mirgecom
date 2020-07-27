@@ -38,8 +38,8 @@ from mirgecom.filter import get_spectral_filter
 def test_filter_coeff(ctx_factory, cutoff, dim, order):
     """
     Tests that the filter coefficients have the right shape
-    and a quick sanity check on the values at the filter
-    band limits.
+    and a quick check that the values at the filter
+    band limits have the expected values.
     """
     cl_ctx = ctx_factory()
     nel_1d = 16

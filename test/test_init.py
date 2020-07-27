@@ -129,6 +129,10 @@ def test_vortex_init(ctx_factory):
 
 
 def test_shock_init(ctx_factory):
+    """
+    Simple test to check that Shock1D initializer
+    creates the expected solution field.
+    """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 

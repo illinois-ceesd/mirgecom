@@ -143,7 +143,7 @@ def test_inviscid_flux(ctx_factory, dim):
     # the expected values (and p0 within tolerance)
     # === with V = 0, fixed P = p0
     tolerance = 1e-15
-    for ntestnodes in [1, 10, 100]:
+    for ntestnodes in [1, 10]:
         fake_dis = MyDiscr(dim)
         mass = cl.clrandom.rand(
             queue, (ntestnodes,), dtype=np.float64
@@ -210,7 +210,7 @@ def test_inviscid_flux(ctx_factory, dim):
     # We expect calculated flux components to be floating point equal,
     # but not bitwise equal to the expected fluxes.
     for livedim in range(dim):
-        for ntestnodes in [1, 10, 100]:
+        for ntestnodes in [1, 10]:
             fake_dis = MyDiscr(dim)
             mass = cl.clrandom.rand(
                 queue, (ntestnodes,), dtype=np.float64
@@ -376,7 +376,7 @@ def test_facial_flux(ctx_factory, order, dim):
         from mirgecom.euler import _interior_trace_pair
 
         interior_face_flux = _facial_flux(
-            discr, w_tpair=_interior_trace_pair(discr, fields)
+            discr, q_tpair=_interior_trace_pair(discr, fields)
         )
 
         err = np.max(
@@ -421,7 +421,7 @@ def test_facial_flux(ctx_factory, order, dim):
         dir_bc = flat_obj_array(dir_mass, dir_e, dir_mom)
 
         boundary_flux = _facial_flux(
-            discr, w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
+            discr, q_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
         )
 
         err = np.max(
@@ -485,7 +485,8 @@ def test_uniform_rhs(ctx_factory, dim, order):
     #            eoc_rec0 = EOCRecorder()
     #            eoc_rec1 = EOCRecorder()
 
-    for nel_1d in [4, 8, 12]:
+#    for nel_1d in [4, 8, 12]:
+    for nel_1d in [8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
@@ -518,13 +519,15 @@ def test_uniform_rhs(ctx_factory, dim, order):
         inviscid_rhs = inviscid_operator(discr, fields, boundaries)
         rhs_resid = inviscid_rhs - expected_rhs
 
-        rho_resid = split_conserved(dim, rhs_resid).mass
-        rhoe_resid = split_conserved(dim, rhs_resid).energy
-        mom_resid = split_conserved(dim, rhs_resid).momentum
+        resid_split = split_conserved(dim, rhs_resid)
+        rho_resid = resid_split.mass
+        rhoe_resid = resid_split.energy
+        mom_resid = resid_split.momentum
 
-        rho_rhs = split_conserved(dim, inviscid_rhs).mass
-        rhoe_rhs = split_conserved(dim, inviscid_rhs).energy
-        rhov_rhs = split_conserved(dim, inviscid_rhs).momentum
+        rhs_split = split_conserved(dim, inviscid_rhs)
+        rho_rhs = rhs_split.mass
+        rhoe_rhs = rhs_split.energy
+        rhov_rhs = rhs_split.momentum
 
         message = (
             f"rho_rhs  = {rho_rhs}\n"
@@ -556,9 +559,10 @@ def test_uniform_rhs(ctx_factory, dim, order):
         inviscid_rhs = inviscid_operator(discr, fields, boundaries)
         rhs_resid = inviscid_rhs - expected_rhs
 
-        rho_resid = split_conserved(dim, rhs_resid).mass
-        rhoe_resid = split_conserved(dim, rhs_resid).energy
-        mom_resid = split_conserved(dim, rhs_resid).momentum
+        resid_split = split_conserved(dim, rhs_resid)
+        rho_resid = resid_split.mass
+        rhoe_resid = resid_split.energy
+        mom_resid = resid_split.momentum
 
         assert np.max(np.abs(rho_resid.get())) < tolerance
         assert np.max(np.abs(rhoe_resid.get())) < tolerance
