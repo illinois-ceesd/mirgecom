@@ -36,12 +36,13 @@ size = MPI.COMM_WORLD.Get_size()
 if size >= 128:
     for mod in ["pyopencl", "pytools", "loopy"]:
         if mod in sys.modules:
-            warn("{} already loaded, not adjusting XDG_CACHE_HOME.".format(mod))
+            warn("{} already loaded, not adjusting XDG_CACHE_HOME. Please "
+                 "import mirgecom before this module.".format(mod))
 
-    if "XDG_CACHE_HOME" in os.environ:
-        warn("XDG_CACHE_HOME already set, not adjusting it.")
-    else:
+    if "XDG_CACHE_HOME" not in os.environ:
         rank = MPI.COMM_WORLD.Get_rank()
         username = getpass.getuser()
 
-        os.environ["XDG_CACHE_HOME"] = "/tmp/{}/xdg-cache-r{}".format(username, rank)
+        xdg_cache_path = "/tmp/{}/xdg-cache-r{}".format(username, rank)
+        os.makedirs(xdg_cache_path, exist_ok=True)
+        os.environ["XDG_CACHE_HOME"] = xdg_cache_path
