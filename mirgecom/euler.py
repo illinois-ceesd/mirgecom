@@ -175,7 +175,7 @@ def split_species(dim, q):
 
 
 def _interior_trace_pair(discr, vec):
-    i = discr.interp("vol", "int_faces", vec)
+    i = discr.project("vol", "int_faces", vec)
     e = with_object_array_or_scalar(
         lambda el: discr.opposite_face_connection()(el.queue, el), i
     )
@@ -271,7 +271,7 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     # add Lax/Friedrichs jump penalty
     flux_weak = num_flux + lfr
 
-    return discr.interp(q_tpair.dd, "all_faces", flux_weak)
+    return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
 
 def inviscid_operator(

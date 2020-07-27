@@ -42,7 +42,7 @@ class PrescribedBoundary:
         boundary_discr = discr.discr_from_dd(btag)
         nodes = boundary_discr.nodes().with_queue(queue)
         ext_soln = self._userfunc(t, nodes)
-        int_soln = discr.interp("vol", btag, w)
+        int_soln = discr.project("vol", btag, w)
         return TracePair(btag, int_soln, ext_soln)
 
 
@@ -54,5 +54,5 @@ class DummyBoundary:
     def boundary_pair(
         self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
-        dir_soln = discr.interp("vol", btag, w)
+        dir_soln = discr.project("vol", btag, w)
         return TracePair(btag, dir_soln, dir_soln)
