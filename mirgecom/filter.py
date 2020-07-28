@@ -36,6 +36,9 @@ def exponential_mode_response_function(mode_idx, alpha, cutoff, nfilt, filter_or
 def make_spectral_filter(dim, order, cutoff, mode_response_function):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
+    Returns a filter operator in the modal basis designed to apply an 
+    exponentially decreasing weight to spectral modes beyond the cutoff
+    mode.
     """
     npt = 1
     for d in range(1, dim+1):

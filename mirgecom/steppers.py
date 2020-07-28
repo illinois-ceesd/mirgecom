@@ -36,9 +36,35 @@ from mirgecom.integrators import rk4_step
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
+def advance_state(rhs, timestepper, checkpoint, get_timestep,
+                  state, t=0.0, t_final=1.0, istep=0):
+    """
+    Implements a generic state advancement routine
+    """
+    if t_final <= t:
+        return(istep, t, state)
+
+    while t < t_final:
+
+        dt = get_timestep(state=state)
+        if dt < 0:
+            return (istep, t, state)
+
+        status = checkpoint(state=state, step=istep, t=t, dt=dt)
+        if status != 0:
+            return (istep, t, state)
+
+        state = timestepper(state, t, dt, rhs)
+
+        t += dt
+        istep += 1
+
+    return (istep, t, state)
+
+
 def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     """
-    Implements a generic time stepping loop for an inviscid flow.
+    Deprecated: Implements a generic time stepping loop for an inviscid flow.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -70,7 +96,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     nodes = discr.nodes().with_queue(queue)
     fields = initializer(0, nodes)
-    sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
+    sdt = get_inviscid_timestep(discr, fields, cfl=cfl, eos=eos)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -114,8 +140,8 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
 
         return maxerr
 
-    def rhs(t, w):
-        return inviscid_operator(discr, w=w, t=t, boundaries=boundaries, eos=eos)
+    def rhs(t, q):
+        return inviscid_operator(discr, q=q, t=t, boundaries=boundaries, eos=eos)
 
     while t < t_final:
 
@@ -132,7 +158,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
         t += dt
         istep += 1
 
-        sdt = get_inviscid_timestep(discr, fields, c=cfl, eos=eos)
+        sdt = get_inviscid_timestep(discr, fields, cfl=cfl, eos=eos)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")

@@ -23,20 +23,72 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
+import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 
-from mirgecom.steppers import euler_flow_stepper
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.eager import EagerDGDiscretization
+from grudge.shortcuts import make_visualizer
+
+from mirgecom.io import (
+    make_io_fields,
+    make_status_message,
+    make_visfile_name,
+    make_init_message,
+)
+
+from mirgecom.euler import (
+    get_inviscid_timestep,
+    get_inviscid_cfl,
+    inviscid_operator
+)
+from mirgecom.checkstate import compare_states
+from mirgecom.integrators import rk4_step
+from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
-def main():
+def check_step(step, n):
+    if n == 0:
+        return True
+    elif n < 0:
+        return False
+    elif step % n == 0:
+        return True
+    return False
+
+
+def main(ctx_factory=cl.create_some_context):
+
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    logger = logging.getLogger(__name__)
+
     dim = 2
     nel_1d = 16
-    logger = logging.getLogger(__name__)
+    order = 3
+    exittol = .09
+    t_final = 0.1
+    current_cfl = 1.0
+    vel = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,))
+    vel[:dim] = 1.0
+    current_dt = .001
+    current_t = 0
+    eos = IdealSingleGas()
+    initializer = Vortex2D(center=orig, velocity=vel)
+    casename = 'vortex'
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    constant_cfl = False
+    nstatus = 10
+    nviz = 10
+    rank = 0
+    checkpoint_t = current_t
+    current_step = 0
+    timestepper = rk4_step
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -44,27 +96,96 @@ def main():
         a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
     )
 
-    order = 3
-    exittol = .09
-    t_final = 0.1
-    cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
-    dt = .001
-    initializer = Vortex2D(center=orig, velocity=vel)
-    casename = 'Vortex'
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    eos = IdealSingleGas()
-    t = 0
-    flowparams = {'dim': dim, 'dt': dt, 'order': order, 'time': t,
-                  'boundaries': boundaries, 'initializer': initializer,
-                  'eos': eos, 'casename': casename, 'mesh': mesh,
-                  'tfinal': t_final, 'exittol': exittol, 'cfl': cfl,
-                  'constantcfl': False, 'nstatus': 10}
+    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    nodes = discr.nodes().with_queue(queue)
+    istate = initializer(0, nodes)
+    current_state = istate
 
-    maxerr = euler_flow_stepper(flowparams)
-    logger.info(f'{casename} maxerr = {maxerr}')
+    visualizer = make_visualizer(discr, discr.order + 3
+                                 if discr.dim == 2 else discr.order)
+    initname = initializer.__class__.__name__
+    eosname = eos.__class__.__name__
+    init_message = make_init_message(dim=dim, order=order, nelements=mesh.nelements,
+                                     dt=current_dt, t_final=t_final, nstatus=nstatus,
+                                     nviz=nviz, cfl=current_cfl,
+                                     constant_cfl=constant_cfl, initname=initname,
+                                     eosname=eosname, casename=casename)
+    if rank == 0:
+        logger.info(init_message)
+
+    def my_timestep(state):
+        mydt = current_dt
+        if constant_cfl is True:
+            mydt = get_inviscid_timestep(discr=discr, q=state,
+                                         cfl=current_cfl, eos=eos)
+        if (current_t + mydt) > t_final:
+            mydt = t_final - current_t
+        return mydt
+
+    def my_rhs(t, state):
+        return inviscid_operator(discr, q=state, t=t, boundaries=boundaries, eos=eos)
+
+    def my_checkpoint(step, t, dt, state):
+        # This stuff should be done by any/all checkpoint
+        current_t = t
+        current_step = step
+        current_state = state
+        current_dt = dt
+        checkpoint_status = 0
+
+        if constant_cfl is False:
+            current_cfl = get_inviscid_cfl(discr=discr, q=state,
+                                           eos=eos, dt=current_dt)
+
+        # The rest of this checkpoint routine is customization
+        do_status = check_step(step=step, n=nstatus)
+        do_viz = check_step(step=step, n=nviz)
+        if do_viz is False and do_status is False:
+            return checkpoint_status
+
+        dv = eos(q=current_state)
+        expected_state = initializer(t=current_t, x_vec=nodes, eos=eos)
+
+        if do_status is True:
+            statusmesg = make_status_message(t=current_t, step=current_step,
+                                             dt=current_dt,
+                                             cfl=current_cfl, dv=dv)
+            max_errors = compare_states(state, expected_state)
+            statusmesg += f"\n------   Err({max_errors})"
+            if rank == 0:
+                logger.info(statusmesg)
+
+            maxerr = np.max(max_errors)
+            if maxerr > exittol:
+                logger.error("Solution failed to follow expected result.")
+                checkpoint_status = 1
+
+        if do_viz:
+            checkpoint_t = current_t
+            visfilename = make_visfile_name(basename=casename, rank=rank,
+                                            step=step, t=checkpoint_t)
+            io_fields = make_io_fields(dim, state, dv, eos)
+            io_fields.append(("exact_soln", expected_state))
+            result_resid = state - expected_state
+            io_fields.append(("residual", result_resid))
+            visualizer.write_vtk_file(visfilename, io_fields)
+
+        return checkpoint_status
+
+    (current_step, current_t, current_state) = \
+        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
+                    get_timestep=my_timestep, state=current_state,
+                    t=current_t, t_final=t_final)
+
+    if current_t != checkpoint_t:
+        if rank == 0:
+            logger.info("Checkpointing final state ...")
+            my_checkpoint(current_step, t=current_t,
+                          dt=(current_t - checkpoint_t),
+                          state=current_state)
+
+    if current_t - t_final < 0:
+        raise ValueError("Simulation exited abnormally")
 
 
 if __name__ == "__main__":

@@ -49,8 +49,8 @@ from mirgecom.error import compare_states
 def test_filter_coeff(ctx_factory, filter_order, order, dim):
     """
     Tests that the filter coefficients have the right shape
-    and a quick sanity check on the values at the filter
-    band limits.
+    and a quick check that the values at the filter
+    band limits have the expected values.
     """
     cl_ctx = ctx_factory()
     #    actx = PyOpenCLArrayContext(cl.CommandQueue(cl_ctx))
