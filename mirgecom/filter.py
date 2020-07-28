@@ -21,10 +21,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import math
+# import math
 import numpy as np
 import loopy as lp
-#from pytools import memoize_method
+# from pytools import memoize_method
 from pytools.obj_array import obj_array_vectorized_n_args
 
 
@@ -33,42 +33,26 @@ def exponential_mode_response_function(mode_idx, alpha, cutoff, nfilt, filter_or
                   ** (2*filter_order))
 
 
-def make_spectral_filter(dim, order, cutoff, mode_response_function):
+def make_spectral_filter(element_group, dim, order, cutoff, mode_response_function):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
-    Returns a filter operator in the modal basis designed to apply an 
+    Returns a filter operator in the modal basis designed to apply an
     exponentially decreasing weight to spectral modes beyond the cutoff
     mode.
     """
-    npt = 1
-    for d in range(1, dim+1):
-        npt *= (order + d)
-    npt /= math.factorial(int(dim))
-    npt = int(npt)
-
-    filter = np.identity(npt)
+    mode_ids = element_group.mode_ids()
+    nmodes = len(mode_ids)
+    filter = np.identity(nmodes)
     nfilt = order - cutoff
     if nfilt <= 0:
         return filter
 
-    if dim == 1:
-        for m in range(cutoff, npt):
-            filter[m, m] = mode_response_function([m])
-    elif dim == 2:
-        sk = 0
-        for i in range(order + 1):
-            for j in range(order - i + 1):
-                if((i + j) >= cutoff):
-                    filter[sk, sk] = mode_response_function([i, j])
-                sk += 1
-    elif dim == 3:
-        sk = 0
-        for i in range(order + 1):
-            for j in range(order - i + 1):
-                for k in range(order - (i + j) + 1):
-                    if (i + j + k) >= cutoff:
-                        filter[sk, sk] = mode_response_function([i, j, k])
-                    sk += 1
+    for mode_index, mode_id in enumerate(mode_ids):
+        mode = mode_id
+        if dim > 1:
+            mode = sum(mode)
+        if mode >= cutoff:
+            filter[mode_index, mode_index] = mode_response_function(mode_id)
     return filter
 
 
@@ -76,14 +60,14 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
     """
-    nmodes = 1
-    for d in range(1, dim+1):
-        nmodes *= (order + d)
-    nmodes /= math.factorial(int(dim))
-    nmodes = int(nmodes)
+    #    nmodes = 1
+    #    for d in range(1, dim+1):
+    #        nmodes *= (order + d)
+    #    nmodes /= math.factorial(int(dim))
+    #    nmodes = int(nmodes)
 
-    #    mode_ids = elemgroup.mode_ids
-    #    nmodes = len(mode_ids)
+    mode_ids = elemgroup.mode_ids()
+    nmodes = len(mode_ids)
 
     filter = np.identity(nmodes)
     filter_pow = 2*filter_order
@@ -91,33 +75,36 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
     if nfilt <= 0:
         return filter
 
-#    for mode_index, mode_id  in enumerate(mode_ids):
-#        if mode_id >= cutoff:
-#            filter[mode_index, mode_index] = np.exp(-1.0 * alpha
-#                                  * ((mode_id - cutoff) / nfilt) ** filter_pow)
-    if dim == 1:
-        for m in range(cutoff, nmodes):
-            filter[m, m] = np.exp(-1.0 * alpha
-                                  * ((m - cutoff) / nfilt) ** filter_pow)
-    elif dim == 2:
-        sk = 0
-        for i in range(order + 1):
-            for j in range(order - i + 1):
-                if((i + j) >= cutoff):
-                    filter[sk, sk] = np.exp(-1.0 * alpha
-                                            * (((i + j) - cutoff) / nfilt)
-                                            ** filter_pow)
-                sk += 1
-    elif dim == 3:
-        sk = 0
-        for i in range(order + 1):
-            for j in range(order - i + 1):
-                for k in range(order - (i + j) + 1):
-                    if (i + j + k) >= cutoff:
-                        filter[sk, sk] = np.exp(-1.0 * alpha
-                                                * (((i + j + k) - cutoff) / nfilt)
-                                                ** filter_pow)
-                    sk += 1
+    for mode_index, mode_id in enumerate(mode_ids):
+        mode = mode_id
+        if dim > 1:
+            mode = sum(mode)
+        if mode >= cutoff:
+            filter[mode_index, mode_index] = np.exp(-1.0 * alpha
+                                  * ((mode - cutoff) / nfilt) ** filter_pow)
+            #    if dim == 1:
+            #        for m in range(cutoff, nmodes):
+            #            filter[m, m] = np.exp(-1.0 * alpha
+            #                                  * ((m - cutoff) / nfilt) ** filter_pow)
+            #    elif dim == 2:
+            #        sk = 0
+            #        for i in range(order + 1):
+            #            for j in range(order - i + 1):
+            #                if((i + j) >= cutoff):
+            #                    filter[sk, sk] = np.exp(-1.0 * alpha
+            #                                            * (((i + j) - cutoff) / nfilt)
+            #                                            ** filter_pow)
+            #                sk += 1
+            #    elif dim == 3:
+            #        sk = 0
+            #        for i in range(order + 1):
+            #            for j in range(order - i + 1):
+            #                for k in range(order - (i + j) + 1):
+            #                    if (i + j + k) >= cutoff:
+            #                        filter[sk, sk] = np.exp(-1.0 * alpha
+            #                                                * (((i + j + k) - cutoff) / nfilt)
+            #                                                ** filter_pow)
+            #                    sk += 1
     return filter
 
 
@@ -152,20 +139,20 @@ class SpectralFilter:
 
     @obj_array_vectorized_n_args
     def __call__(self, discr, fields):
-        result = discr.empty(queue=fields.queue, dtype=fields.dtype)
-        for group_index, group in enumerate(discr.groups):
-            filter_operator = self._filter_operators[group_index]
-            self._knl(fields.queue, mat=filter_operator,
-                      result=group.view(result),
-                      vec=group.view(fields))
+        result = discr.empty(fields.array_context, dtype=fields.dtype)
+#        for group_index, group in enumerate(discr.groups):
+#            filter_operator = self._filter_operators[group_index]
+#            self._knl(fields.array_context, mat=filter_operator,
+#                      result=group.view(result),
+#                      vec=group.view(fields))
         return result
 
 
 @obj_array_vectorized_n_args
 def apply_linear_operator(discr, operator, fields):
-    result = discr.empty(queue=fields.queue, dtype=fields.dtype)
+    result = discr.empty(fields.array_context, dtype=fields.dtype)
     for group in discr.groups:
-        linear_operator_kernel()(fields.queue, mat=operator,
+        linear_operator_kernel()(fields.array_context, mat=operator,
                                  result=group.view(result),
                                  vec=group.view(fields))
     return result

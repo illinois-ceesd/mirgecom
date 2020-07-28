@@ -28,14 +28,18 @@ import numpy as np
 
 import pyopencl as cl
 # import pyopencl.clmath as clmath
-# from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 import pyopencl.array as clarray
 from grudge.eager import EagerDGDiscretization
 # from grudge.shortcuts import make_visualizer
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from pytools.obj_array import make_obj_array
+from pytools.obj_array import (
+    flat_obj_array,
+    make_obj_array
+)
 from mirgecom.filter import get_spectral_filter
 from mirgecom.filter import SpectralFilter
 from mirgecom.filter import apply_linear_operator
@@ -53,7 +57,7 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     band limits have the expected values.
     """
     cl_ctx = ctx_factory()
-    #    actx = PyOpenCLArrayContext(cl.CommandQueue(cl_ctx))
+    actx = PyOpenCLArrayContext(cl.CommandQueue(cl_ctx))
     nel_1d = 16
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -63,7 +67,7 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     )
 
     #    discr = EagerDGDiscretization(actx, mesh, order=order)
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
     vol_discr = discr.discr_from_dd("vol")
 
     eta = .5
@@ -116,21 +120,29 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
 
     from modepy import vandermonde
     for group in vol_discr.groups:
-        #        mode_ids = group.mode_ids
+        mode_ids = group.mode_ids()
+        #        print(f'mode_ids = {mode_ids}')
+        #        for mode_index, mode_id in enumerate(mode_ids):
+        #            mode = sum(modelist)
+        #            print(f'mode = {mode}')
+        #            print(f'list(mode) = {list(mode)}')
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
         filter_coeff = get_spectral_filter(group, dim, alpha, order,
                                            cutoff, filter_order)
         assert(filter_coeff.shape == vanderm1.shape)
-        #        for mode_index, mode_id in enumerate(mode_ids):
-        #            if mode_id == cutoff:
-        #                assert(filter_coeff[mode_index][mode_index] == expected_cutoff_coeff)
-        #            if mode_id == order:
-        #                assert(filter_coeff[mode_index][mode_index] == expected_high_coeff)
-        for high_index in high_indices:
-            assert(filter_coeff[high_index][high_index] == expected_high_coeff)
-        for low_index in cutoff_indices:
-            assert(filter_coeff[low_index][low_index] == expected_cutoff_coeff)
+        for mode_index, mode_id in enumerate(mode_ids):
+            mode = mode_id
+            if dim > 1:
+                mode = sum(mode_id)
+            if mode == cutoff:
+                assert(filter_coeff[mode_index][mode_index] == expected_cutoff_coeff)
+            if mode == order:
+                assert(filter_coeff[mode_index][mode_index] == expected_high_coeff)
+        # for high_index in high_indices:
+        #     assert(filter_coeff[high_index][high_index] == expected_high_coeff)
+        # for low_index in cutoff_indices:
+        #     assert(filter_coeff[low_index][low_index] == expected_cutoff_coeff)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -145,6 +157,8 @@ def test_filter_class(ctx_factory, dim, order):
     cl_ctx = ctx_factory()
     #    cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
     filter_order = 1
     nel_1d = 2
@@ -157,13 +171,13 @@ def test_filter_class(ctx_factory, dim, order):
         a=(0.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
     )
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
-    npt = int(1)
+    nummodes = int(1)
     for i in range(dim):
-        npt *= int(order + dim + 1)
-    npt /= math.factorial(int(dim))
+        nummodes *= int(order + dim + 1)
+    nummodes /= math.factorial(int(dim))
     cutoff = int(eta * order)
 
     vol_discr = discr.discr_from_dd("vol")
@@ -174,8 +188,13 @@ def test_filter_class(ctx_factory, dim, order):
 
     # First test a uniform field, which should pass through
     # the filter unharmed.
-    initr = Uniform(numdim=dim)
-    uniform_soln = initr(t=0, x_vec=nodes)
+    #    initr = Uniform(numdim=dim)
+    #    uniform_soln = initr(t=0, x_vec=nodes)
+    input_mass = discr.zeros(actx) + 1.0
+    input_energy = discr.zeros(actx) + 2.5
+    input_momentum = [discr.zeros(actx) for i in range(dim)]
+
+    uniform_soln = flat_obj_array(input_mass, input_energy, input_momentum)
     filtered_soln = spectral_filter(discr=vol_discr, fields=uniform_soln)
     max_errors = compare_states(uniform_soln, filtered_soln)
     tol = 1e-14
