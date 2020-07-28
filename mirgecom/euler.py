@@ -32,7 +32,10 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair
+from grudge.eager import (
+    interior_trace_pair,
+    cross_rank_trace_pairs
+)
 
 from mirgecom.eos import IdealSingleGas
 
@@ -318,8 +321,15 @@ def inviscid_operator(
         for btag in boundaries
     )
 
+    # Flux across partition boundaries
+    partition_boundary_flux = sum(
+        _facial_flux(discr, q_tpair=part_pair, eos=eos)
+        for part_pair in cross_rank_trace_pairs(discr, q)
+    )
+
     return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux)
+        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
+                                + partition_boundary_flux)
     )
 
 
