@@ -22,21 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
-    with_object_array_or_scalar,
 )
-import pyopencl.clmath as clmath
-import pyopencl.array as clarray
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.eos import IdealSingleGas
+from grudge.eager import interior_trace_pair
 
-from grudge.eager import with_queue
-from grudge.symbolic.primitives import TracePair
-from dataclasses import dataclass
+from mirgecom.eos import IdealSingleGas
 
 
 r"""
@@ -156,6 +154,13 @@ def number_of_scalars(ndim, q):
     return len(q) - (ndim + 2)
 
 
+def number_of_equations(ndim, q):
+    """
+    Return the number of equations (i.e. number of dofs) in the soln
+    """
+    return len(q) + number_of_scalars(ndim, q)
+
+
 def split_conserved(dim, q):
     """
     Return a 'ConservedVars' object that splits out conserved quantities
@@ -174,12 +179,12 @@ def split_species(dim, q):
     return MassFractions(massfractions=q[sindex:sindex+numscalar])
 
 
-def _interior_trace_pair(discr, vec):
-    i = discr.project("vol", "int_faces", vec)
-    e = with_object_array_or_scalar(
-        lambda el: discr.opposite_face_connection()(el.queue, el), i
-    )
-    return TracePair("int_faces", i, e)
+# def _interior_trace_pair(discr, vec):
+#    i = discr.project("vol", "int_faces", vec)
+#    e = with_object_array_or_scalar(
+#        lambda el: discr.opposite_face_connection()(el.queue, el), i
+#    )
+#    return TracePair("int_faces", i, e)
 
 
 def _inviscid_flux(discr, q, eos=IdealSingleGas()):
@@ -209,6 +214,7 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     )
     massflux = mom * make_obj_array([1.0])
     energyflux = mom * make_obj_array([(energy + p) / mass])
+    # scalarflux = mom * massfractions / mass
 
     return flat_obj_array(massflux, energyflux, momflux,)
 
@@ -218,11 +224,12 @@ def _get_wavespeed(dim, q, eos=IdealSingleGas()):
     qs = split_conserved(dim, q)
     mass = qs.mass
     mom = qs.momentum
+    actx = mass.array_context
 
     v = mom * make_obj_array([1.0 / mass])
 
     sos = eos.sound_speed(q)
-    return clmath.sqrt(np.dot(v, v)) + sos
+    return actx.np.sqrt(np.dot(v, v)) + sos
 
 
 def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
@@ -233,8 +240,9 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     mass = qs.mass
     energy = qs.energy
     mom = qs.momentum
+    actx = mass.int.array_context
 
-    normal = with_queue(mass.int.queue, discr.normal(q_tpair.dd))
+    normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
     qint = flat_obj_array(mass.int, energy.int, mom.int)
@@ -253,7 +261,7 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = [_get_wavespeed(dim, qint), _get_wavespeed(dim, qext)]
 
-    lam = clarray.maximum(wavespeeds[0], wavespeeds[1])
+    lam = actx.np.maximum(wavespeeds[0], wavespeeds[1])
     lfr = qjump * make_obj_array([0.5 * lam])
 
     # Surface fluxes should be inviscid flux .dot. normal
@@ -261,10 +269,11 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     # (rhoE + p)V  .dot. normal
     # (rhoV.x.V)_1 .dot. normal
     # (rhoV.x.V)_2 .dot. normal
+    numeqns = number_of_equations(dim, qint)
     num_flux = flat_obj_array(
         [
             np.dot(flux_aver[(i * dim): ((i + 1) * dim)], normal)
-            for i in range(dim + 2)
+            for i in range(numeqns)
         ]
     )
 
@@ -292,7 +301,7 @@ def inviscid_operator(
     )
 
     interior_face_flux = _facial_flux(
-        discr, q_tpair=_interior_trace_pair(discr, q), eos=eos
+        discr, q_tpair=interior_trace_pair(discr, q), eos=eos
     )
 
     # Domain boundaries
