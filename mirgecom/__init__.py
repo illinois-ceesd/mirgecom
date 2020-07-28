@@ -23,6 +23,7 @@ THE SOFTWARE.
 import os
 import getpass
 import sys
+import tempfile
 from warnings import warn
 
 from mpi4py import MPI
@@ -32,17 +33,27 @@ from mpi4py import MPI
 # for details.
 
 size = MPI.COMM_WORLD.Get_size()
+rank = MPI.COMM_WORLD.Get_rank()
 
-if size >= 128:
-    for mod in ["pyopencl", "pytools", "loopy"]:
-        if mod in sys.modules:
-            warn("{} already loaded, not adjusting XDG_CACHE_HOME. Please "
-                 "import mirgecom before this module.".format(mod))
-
+if size <= 128 and rank == 0:
     if "XDG_CACHE_HOME" not in os.environ:
-        rank = MPI.COMM_WORLD.Get_rank()
-        username = getpass.getuser()
+        skip = False
 
-        xdg_cache_path = "/tmp/{}/xdg-cache-r{}".format(username, rank)
-        os.makedirs(xdg_cache_path, exist_ok=True)
-        os.environ["XDG_CACHE_HOME"] = xdg_cache_path
+        for mod in ["pyopencl", "pytools", "loopy"]:
+            if mod in sys.modules:
+                warn(f"{mod} already loaded, not adjusting XDG_CACHE_HOME. Please "
+                     "see https://github.com/illinois-ceesd/planning/issues/27 for "
+                     "information on how to avoid file system overheads by setting "
+                     "the XDG_CACHE_HOME variable in your job scripts.")
+                skip = True
+                break
+
+        if not skip:
+            username = getpass.getuser()
+            os.environ["XDG_CACHE_HOME"] = tempfile.mkdtemp(dir=f"/tmp/{username}/")
+
+            print(os.environ["XDG_CACHE_HOME"])
+            warn("Please set the XDG_CACHE_HOME variable in your job script to "
+                 "avoid file system overheads when running on large numbers of nodes."
+                 "See https://github.com/illinois-ceesd/planning/issues/27 for more "
+                 "information.")
