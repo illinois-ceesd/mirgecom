@@ -50,7 +50,9 @@ if size <= 128 and rank == 0:
 
         if not skip:
             username = getpass.getuser()
-            os.environ["XDG_CACHE_HOME"] = tempfile.mkdtemp(dir=f"/tmp/{username}/")
+            dir_prefix = f"/tmp/{username}/"
+            os.makedirs(dir_prefix, exist_ok=True)
+            os.environ["XDG_CACHE_HOME"] = tempfile.mkdtemp(dir=dir_prefix)
 
             print(os.environ["XDG_CACHE_HOME"])
             warn("Please set the XDG_CACHE_HOME variable in your job script to "
