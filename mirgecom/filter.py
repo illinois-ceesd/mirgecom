@@ -137,21 +137,21 @@ class SpectralFilter:
     provides the methods to apply filtering to input fields.
     """
     def __init__(self, discr, filter_mat):
-        self._filter_operators = {}
+        self._filter_operators = []
         from modepy import vandermonde
         for group in discr.groups:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
             filter_operator = vander @ filter_mat @ vanderm1
             # np.matmul(vander, np.matmul(filter_mat, vanderm1))
-            self._filter_operators[group] = filter_operator
+            self._filter_operators.append(filter_operator)
         self._knl = linear_operator_kernel()
 
     @obj_array_vectorized_n_args
     def __call__(self, discr, fields):
         result = discr.empty(queue=fields.queue, dtype=fields.dtype)
-        for group in discr.groups:
-            filter_operator = self._filter_operators[group]
+        for group_index, group in enumerate(discr.groups):
+            filter_operator = self._filter_operators[group_index]
             self._knl(fields.queue, mat=filter_operator,
                       result=group.view(result),
                       vec=group.view(fields))
