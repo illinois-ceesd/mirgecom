@@ -40,7 +40,7 @@ from mirgecom.filter import get_spectral_filter
 from mirgecom.filter import SpectralFilter
 from mirgecom.filter import apply_linear_operator
 from mirgecom.initializers import Uniform
-from mirgecom.error import compare_states
+from mirgecom.checkstate import compare_states
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
