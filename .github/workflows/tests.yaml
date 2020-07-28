@@ -68,7 +68,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+            python -m pytest --capture=no --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
 
         - name: Run examples
           shell: bash -l {0}
