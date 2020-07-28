@@ -28,6 +28,9 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
@@ -49,6 +52,7 @@ def test_lump_init(ctx_factory):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
     logger = logging.getLogger(__name__)
 
     dim = 2
@@ -63,8 +67,8 @@ def test_lump_init(ctx_factory):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -74,12 +78,13 @@ def test_lump_init(ctx_factory):
     lump = Lump(center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
-    mass = split_conserved(dim, lump_soln).mass
-    energy = split_conserved(dim, lump_soln).energy
-    mom = split_conserved(dim, lump_soln).momentum
+    qs = split_conserved(dim, lump_soln)
+    mass = qs.mass
+    energy = qs.energy
+    mom = qs.momentum
     p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
     exp_p = 1.0
-    errmax = np.max(np.abs(p - exp_p))
+    errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"lump_soln = {lump_soln}")
     logger.info(f"pressure = {p}")
@@ -94,6 +99,8 @@ def test_vortex_init(ctx_factory):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     dim = 2
@@ -108,19 +115,20 @@ def test_vortex_init(ctx_factory):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     gamma = 1.4
-    mass = split_conserved(dim, vortex_soln).mass
-    energy = split_conserved(dim, vortex_soln).energy
-    mom = split_conserved(dim, vortex_soln).momentum
+    qs = split_conserved(dim, vortex_soln)
+    mass = qs.mass
+    energy = qs.energy
+    mom = qs.momentum
     p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
     exp_p = mass ** gamma
-    errmax = np.max(np.abs(p - exp_p))
+    errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"vortex_soln = {vortex_soln}")
     logger.info(f"pressure = {p}")
@@ -135,6 +143,7 @@ def test_shock_init(ctx_factory):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 10
     dim = 2
@@ -148,8 +157,8 @@ def test_shock_init(ctx_factory):
     order = 3
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     initr = SodShock1D()
     initsoln = initr(t=0.0, x_vec=nodes)

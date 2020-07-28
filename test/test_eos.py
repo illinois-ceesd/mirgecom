@@ -30,6 +30,8 @@ import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 from mirgecom.eos import IdealSingleGas
 from mirgecom.initializers import Vortex2D
@@ -49,6 +51,8 @@ def test_idealsingle_lump(ctx_factory):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     dim = 2
@@ -63,8 +67,8 @@ def test_idealsingle_lump(ctx_factory):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -77,7 +81,7 @@ def test_idealsingle_lump(ctx_factory):
 
     p = eos.pressure(lump_soln)
     exp_p = 1.0
-    errmax = np.max(np.abs(p - exp_p))
+    errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"lump_soln = {lump_soln}")
     logger.info(f"pressure = {p}")
@@ -93,6 +97,8 @@ def test_idealsingle_vortex(ctx_factory):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     dim = 2
@@ -107,8 +113,8 @@ def test_idealsingle_vortex(ctx_factory):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -117,7 +123,7 @@ def test_idealsingle_vortex(ctx_factory):
     gamma = eos.gamma()
     p = eos.pressure(vortex_soln)
     exp_p = rho ** gamma
-    errmax = np.max(np.abs(p - exp_p))
+    errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"vortex_soln = {vortex_soln}")
     logger.info(f"pressure = {p}")

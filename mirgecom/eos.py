@@ -24,10 +24,11 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import flat_obj_array
-import pyopencl.clmath as clmath
+from pytools.obj_array import (
+    flat_obj_array,
+    make_obj_array
+)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
 
 r"""
 This module is designed provide Equation of State
@@ -210,7 +211,7 @@ class IdealSingleGas:
 
             p = (\gamma - 1)e
         """
-        return (self._gamma - 1.0) * self.internal_energy(q)
+        return self.internal_energy(q) * make_obj_array([self._gamma - 1.0])
 
     def sound_speed(self, q):
         r"""Speed of sound
@@ -222,9 +223,11 @@ class IdealSingleGas:
             c = \sqrt{\frac{\gamma{p}}{\rho}}
         """
         mass = q[0]
+        actx = mass.array_context
+
         p = self.pressure(q)
         c2 = self._gamma / mass * p
-        return clmath.sqrt(c2)
+        return actx.np.sqrt(c2)
 
     def temperature(self, q):
         r"""Gas temperature
