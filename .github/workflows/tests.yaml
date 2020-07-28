@@ -53,6 +53,7 @@ jobs:
             PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file .test-conda-env-py3.yml --name testing --quiet
 
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            clinfo
 
         - name: PIP installation
           shell: bash -l {0}

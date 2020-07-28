@@ -54,6 +54,6 @@ if size <= 128 and rank == 0:
 
             print(os.environ["XDG_CACHE_HOME"])
             warn("Please set the XDG_CACHE_HOME variable in your job script to "
-              "avoid file system overheads when running on large numbers of nodes. "
+              "avoid file system overheads when running on large numbers of ranks. "
               "See https://github.com/illinois-ceesd/planning/issues/27 for more "
               "information.")
