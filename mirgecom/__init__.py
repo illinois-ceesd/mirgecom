@@ -42,9 +42,9 @@ if size <= 128 and rank == 0:
         for mod in ["pyopencl", "pytools", "loopy"]:
             if mod in sys.modules:
                 warn(f"{mod} already loaded, not adjusting XDG_CACHE_HOME. Please "
-                     "see https://github.com/illinois-ceesd/planning/issues/27 for "
-                     "information on how to avoid file system overheads by setting "
-                     "the XDG_CACHE_HOME variable in your job scripts.")
+                  "see https://github.com/illinois-ceesd/planning/issues/27 for "
+                  "information on how to avoid file system overheads by setting "
+                  "the XDG_CACHE_HOME variable in your job scripts.")
                 skip = True
                 break
 
@@ -54,6 +54,6 @@ if size <= 128 and rank == 0:
 
             print(os.environ["XDG_CACHE_HOME"])
             warn("Please set the XDG_CACHE_HOME variable in your job script to "
-                 "avoid file system overheads when running on large numbers of nodes."
-                 "See https://github.com/illinois-ceesd/planning/issues/27 for more "
-                 "information.")
+              "avoid file system overheads when running on large numbers of nodes. "
+              "See https://github.com/illinois-ceesd/planning/issues/27 for more "
+              "information.")
