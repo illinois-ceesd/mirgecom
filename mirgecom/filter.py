@@ -69,24 +69,31 @@ def make_spectral_filter(dim, order, cutoff, mode_response_function):
     return filter
 
 
-def get_spectral_filter(dim, alpha, order, cutoff, filter_order):
+def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
     """
-    npt = 1
+    nmodes = 1
     for d in range(1, dim+1):
-        npt *= (order + d)
-    npt /= math.factorial(int(dim))
-    npt = int(npt)
+        nmodes *= (order + d)
+    nmodes /= math.factorial(int(dim))
+    nmodes = int(nmodes)
 
-    filter = np.identity(npt)
+    #    mode_ids = elemgroup.mode_ids
+    #    nmodes = len(mode_ids)
+
+    filter = np.identity(nmodes)
     filter_pow = 2*filter_order
     nfilt = order - cutoff
     if nfilt <= 0:
         return filter
 
+#    for mode_index, mode_id  in enumerate(mode_ids):
+#        if mode_id >= cutoff:
+#            filter[mode_index, mode_index] = np.exp(-1.0 * alpha
+#                                  * ((mode_id - cutoff) / nfilt) ** filter_pow)
     if dim == 1:
-        for m in range(cutoff, npt):
+        for m in range(cutoff, nmodes):
             filter[m, m] = np.exp(-1.0 * alpha
                                   * ((m - cutoff) / nfilt) ** filter_pow)
     elif dim == 2:
@@ -135,7 +142,8 @@ class SpectralFilter:
         for group in discr.groups:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
-            filter_operator = np.matmul(vander, np.matmul(filter_mat, vanderm1))
+            filter_operator = vander @ filter_mat @ vanderm1
+            # np.matmul(vander, np.matmul(filter_mat, vanderm1))
             self._filter_operators[group] = filter_operator
         self._knl = linear_operator_kernel()
 

@@ -28,6 +28,7 @@ import numpy as np
 
 import pyopencl as cl
 # import pyopencl.clmath as clmath
+# from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.array as clarray
 from grudge.eager import EagerDGDiscretization
 # from grudge.shortcuts import make_visualizer
@@ -52,6 +53,7 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     band limits.
     """
     cl_ctx = ctx_factory()
+    #    actx = PyOpenCLArrayContext(cl.CommandQueue(cl_ctx))
     nel_1d = 16
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -60,16 +62,18 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
         a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
 
+    #    discr = EagerDGDiscretization(actx, mesh, order=order)
     discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
     vol_discr = discr.discr_from_dd("vol")
 
     eta = .5
     # number of points
-    npt = 1
+    nmodes = 1
     for d in range(1, dim+1):
-        npt *= (order + d)
-    npt /= math.factorial(int(dim))
-    npt = int(npt)
+        nmodes *= (order + d)
+    nmodes /= math.factorial(int(dim))
+    nmodes = int(nmodes)
+
     cutoff = int(eta * order)
 
     # number of filtered modes
@@ -112,11 +116,17 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
 
     from modepy import vandermonde
     for group in vol_discr.groups:
-
+        #        mode_ids = group.mode_ids
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
-        filter_coeff = get_spectral_filter(dim, alpha, order, cutoff, filter_order)
+        filter_coeff = get_spectral_filter(group, dim, alpha, order,
+                                           cutoff, filter_order)
         assert(filter_coeff.shape == vanderm1.shape)
+        #        for mode_index, mode_id in enumerate(mode_ids):
+        #            if mode_id == cutoff:
+        #                assert(filter_coeff[mode_index][mode_index] == expected_cutoff_coeff)
+        #            if mode_id == order:
+        #                assert(filter_coeff[mode_index][mode_index] == expected_high_coeff)
         for high_index in high_indices:
             assert(filter_coeff[high_index][high_index] == expected_high_coeff)
         for low_index in cutoff_indices:
@@ -157,7 +167,9 @@ def test_filter_class(ctx_factory, dim, order):
     cutoff = int(eta * order)
 
     vol_discr = discr.discr_from_dd("vol")
-    filter_mat = get_spectral_filter(dim, alpha, order, cutoff, filter_order)
+    groups = vol_discr.groups
+    group = groups[0]
+    filter_mat = get_spectral_filter(group, dim, alpha, order, cutoff, filter_order)
     spectral_filter = SpectralFilter(vol_discr, filter_mat)
 
     # First test a uniform field, which should pass through
@@ -198,7 +210,7 @@ def test_filter_class(ctx_factory, dim, order):
     assert(np.max(max_errors) < tol)
 
     # Any order > cutoff fields should have higher modes attenuated
-    tol = 2e-3
+    tol = 1e-1
     #    vis = make_visualizer(discr, discr.order)
     from modepy import vandermonde
     for field_order in range(cutoff+1, cutoff+4):
