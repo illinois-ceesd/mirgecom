@@ -5,5 +5,5 @@
 # Required
 version: 2
 
-conda:
-  environment: .test-conda-env-py3.yml
+# conda:
+#   environment: .test-conda-env-py3.yml

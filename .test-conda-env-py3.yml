@@ -13,5 +13,3 @@ dependencies:
 - gmsh
 - pip
 - pytest
-- openmpi
-- openmpi-mpicc
