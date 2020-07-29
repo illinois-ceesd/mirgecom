@@ -84,6 +84,11 @@ def make_visfile_name(basename, rank=0, step=0, t=0):
     return nameform.format(iorank=rank, iostep=step)
 
 
+def make_parallel_visfile_name(basename, step=0, t=0):
+    nameform = basename + "-{iostep:06d}.pvtu"
+    return nameform.format(iostep=step)
+
+
 def checkpoint(discr, logger, visualizer, nstatus, nviz, rank, basename,
                eos, state, dim, t, step, dt, cfl):
     do_status = False

@@ -39,6 +39,7 @@ from mirgecom.io import (
     make_status_message,
     make_visfile_name,
     make_init_message,
+    make_parallel_visfile_name,
 )
 
 from mirgecom.euler import (
@@ -137,7 +138,8 @@ def main(ctx_factory=cl.create_some_context):
                                  if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order, nelements=mesh.nelements,
+    init_message = make_init_message(dim=dim, order=order,
+                                     nelements=local_mesh.nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
@@ -196,11 +198,24 @@ def main(ctx_factory=cl.create_some_context):
             checkpoint_t = current_t
             visfilename = make_visfile_name(basename=casename, rank=rank,
                                             step=step, t=checkpoint_t)
+            pvisfilename = visfilename
+            visnamelist = []
+            if rank == 0:
+                pvisfilename = make_parallel_visfile_name(basename=casename,
+                                                          step=step,
+                                                          t=checkpoint_t)
+                visnamelist = [make_visfile_name(basename=casename, rank=i,
+                                                 step=step, t=checkpoint_t)
+                               for i in range(num_parts)]
+                visnamelist = list(visnamelist)
+
             io_fields = make_io_fields(dim, state, dv, eos)
             io_fields.append(("exact_soln", expected_state))
             result_resid = state - expected_state
             io_fields.append(("residual", result_resid))
-            visualizer.write_vtk_file(visfilename, io_fields)
+            visualizer.write_vtk_file(visfilename, io_fields, mpicomm=comm,
+                                      par_namelist=visnamelist,
+                                      par_filename=pvisfilename)
 
         return checkpoint_status
 
