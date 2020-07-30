@@ -169,10 +169,5 @@ def test_shock_init(ctx_factory):
     nodes_x = nodes[0]
     eos = IdealSingleGas()
     p = eos.pressure(initsoln)
-    nel = len(p)
-    # Check them all individually
-    for i in range(nel):
-        if nodes_x[i] < 0.5:
-            assert np.abs(p[i] - xpl) < tol
-        else:
-            assert np.abs(p[i] - xpr) < tol
+
+    assert discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol
