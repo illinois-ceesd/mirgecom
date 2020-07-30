@@ -423,7 +423,7 @@ def test_facial_flux(ctx_factory, order, dim):
         # The off-diagonals are zero. We get a {ndim}-vector for each
         # dimension, the flux for the x-component of momentum (for example) is:
         # f_momx = < 1.0, 0 , 0> , then we return f_momx .dot. normal, which
-        # can have negative components values.
+        # can introduce negative values.
         #
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
