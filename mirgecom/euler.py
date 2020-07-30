@@ -182,14 +182,6 @@ def split_species(dim, q):
     return MassFractions(massfractions=q[sindex:sindex+numscalar])
 
 
-# def _interior_trace_pair(discr, vec):
-#    i = discr.project("vol", "int_faces", vec)
-#    e = with_object_array_or_scalar(
-#        lambda el: discr.opposite_face_connection()(el.queue, el), i
-#    )
-#    return TracePair("int_faces", i, e)
-
-
 def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     r"""Computes the inviscid flux vectors from flow solution *q*
 
@@ -343,8 +335,9 @@ def get_inviscid_cfl(discr, q, dt, eos=IdealSingleGas()):
 
 def get_inviscid_timestep(discr, q, cfl=1.0, eos=IdealSingleGas()):
     """
-    Routine (will) return the maximum stable inviscid timestep. Currently,
-    it's a hack.
+    Routine (will) return the (local) maximum stable inviscid timestep.
+    Currently, it's a hack waiting for the geometric_factor helpers port
+    from grudge.
     """
     dim = discr.dim
     mesh = discr.mesh
