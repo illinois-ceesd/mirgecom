@@ -31,7 +31,7 @@ from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import get_spectral_filter
 
 
