@@ -9,7 +9,12 @@ printf "Running examples in ${examples_dir}...\n"
 for example in $(ls ${examples_dir}/*.py)
 do
     printf "Running example: ${example}\n"
-    python ${example}
+    if [ "mpi" == *"${example}"* ]
+    then
+        mpiexec -n 2 python ${example}
+    else
+        python ${example}
+    fi
     printf "Example ${example} "
     if [ $? -eq 0 ]
     then
