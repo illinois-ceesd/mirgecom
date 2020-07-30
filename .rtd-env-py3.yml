@@ -1,0 +1,6 @@
+name: rtd-env-py3
+channels:
+- conda-forge
+- nodefaults
+dependencies:
+- mpi4py
