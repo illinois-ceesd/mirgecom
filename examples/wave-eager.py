@@ -24,40 +24,46 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath
-from pytools.obj_array import flat_obj_array
+from pytools.obj_array import join_fields
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 
-def bump(discr, queue, t=0):
-    source_center = np.array([0.2, 0.35, 0.1])[: discr.dim]
+def bump(actx, discr, t=0):
+    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
     source_width = 0.05
     source_omega = 3
 
-    nodes = discr.nodes().with_queue(queue)
-    center_dist = flat_obj_array(
-        [nodes[i] - source_center[i] for i in range(discr.dim)]
-    )
+    nodes = thaw(actx, discr.nodes())
+    center_dist = join_fields([
+        nodes[i] - source_center[i]
+        for i in range(discr.dim)
+        ])
 
-    return np.cos(source_omega * t) * clmath.exp(
-        -np.dot(center_dist, center_dist) / source_width ** 2
-    )
+    return (
+        np.cos(source_omega*t)
+        * actx.np.exp(
+            -np.dot(center_dist, center_dist)
+            / source_width**2))
 
 
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
     nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
-    )
+        a=(-0.5,)*dim,
+        b=(0.5,)*dim,
+        n=(nel_1d,)*dim)
 
     order = 3
 
@@ -72,11 +78,12 @@ def main():
 
     print("%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    fields = flat_obj_array(
-        bump(discr, queue), [discr.zeros(queue) for i in range(discr.dim)],
-    )
+    fields = join_fields(
+        bump(actx, discr),
+        [discr.zeros(actx) for i in range(discr.dim)]
+        )
 
     vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
@@ -90,11 +97,12 @@ def main():
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
-            print(istep, t, la.norm(fields[0].get()))
-            vis.write_vtk_file(
-                "fld-wave-eager-%04d.vtu" % istep,
-                [("u", fields[0]), ("v", fields[1:]), ],
-            )
+            print(istep, t, discr.norm(fields[0], np.inf))
+            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+                    [
+                        ("u", fields[0]),
+                        ("v", fields[1:]),
+                        ])
 
         t += dt
         istep += 1
