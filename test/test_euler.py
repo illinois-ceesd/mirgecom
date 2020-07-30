@@ -417,7 +417,17 @@ def test_facial_flux(ctx_factory, order, dim):
         assert fnorm(iff_split.mass) < tolerance
         assert fnorm(iff_split.energy) < tolerance
 
-        # FIXME (AK -> MC): explain why this is right
+        # The expected pressure 1.0 (by design). And the flux diagonal is
+        # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
+        #
+        # The off-diagonals are zero. We get a {ndim}-vector for each
+        # dimension, the flux for the x-component of momentum (for example) is:
+        # f_momx = < 1.0, 0 , 0> , then we return f_momx .dot. normal, which
+        # can have negative components values.
+        #
+        # (Explanation courtesy of Mike Campbell,
+        # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
+
         momerr = fnorm(iff_split.momentum) - p0
         assert momerr < tolerance
 
@@ -439,7 +449,6 @@ def test_facial_flux(ctx_factory, order, dim):
         assert fnorm(bf_split.mass) < tolerance
         assert fnorm(bf_split.energy) < tolerance
 
-        # FIXME (AK -> MC): explain why this is right
         momerr = fnorm(bf_split.momentum) - p0
         assert momerr < tolerance
 
