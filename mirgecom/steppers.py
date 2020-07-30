@@ -169,16 +169,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
         maxerr = max(write_soln(False))
     else:
         expected_result = initializer(t, nodes)
-        result_resid = fields - expected_result
-        maxerr = np.max(
-            [
-                np.max(
-                    np.abs(
-                        result_resid[i].get()
-                    )
-                ) for i in range(dim + 2)
-            ]
-        )
+        maxerr = discr.norm(fields - expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:

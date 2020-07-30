@@ -211,7 +211,7 @@ class IdealSingleGas:
 
             p = (\gamma - 1)e
         """
-        return self.internal_energy(q) * make_obj_array([self._gamma - 1.0])
+        return self.internal_energy(q) * (self._gamma - 1.0)
 
     def sound_speed(self, q):
         r"""Speed of sound

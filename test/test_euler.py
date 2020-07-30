@@ -395,15 +395,11 @@ def test_facial_flux(ctx_factory, order, dim):
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        mass_input = discr.zeros(actx)
-        energy_input = discr.zeros(actx)
+        mass_input = discr.zeros(actx) + 1.0
+        energy_input = discr.zeros(actx) + 2.5
         mom_input = flat_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
-
-        # This sets p = 1
-        mass_input[:] = 1.0
-        energy_input[:] = 2.5
 
         fields = flat_obj_array(
             mass_input, energy_input, mom_input
@@ -412,41 +408,20 @@ def test_facial_flux(ctx_factory, order, dim):
         from mirgecom.euler import _facial_flux
 
         interior_face_flux = _facial_flux(
-            discr, q_tpair=interior_trace_pair(discr, fields)
-        )
+            discr, q_tpair=interior_trace_pair(discr, fields))
 
-        err = np.max(
-            np.array(
-                [
-                    la.norm(interior_face_flux[i].get(), np.inf)
-                    for i in range(0, 2)
-                ]
-            )
-        )
+        from functools import partial
+        fnorm = partial(discr.norm, p=np.inf, dd="all_faces")
 
-        assert err < tolerance
+        iff_split = split_conserved(dim, interior_face_flux)
+        assert fnorm(iff_split.mass) < tolerance
+        assert fnorm(iff_split.energy) < tolerance
 
-        err1 = err
-        # mom flux max should be p = 1 + (any interp error)
-        maxmomerr = 0.0
-        for i in range(2, 2 + discr.dim):
-            err = np.max(
-                np.array(
-                    [
-                        la.norm(
-                            interior_face_flux[i].get(), np.inf
-                        )
-                    ]
-                )
-            )
-            err = np.abs(err - p0)
-            if err > maxmomerr:
-                maxmomerr = err
+        # FIXME (AK -> MC): explain why this is right
+        momerr = fnorm(iff_split.momentum) - p0
+        assert momerr < tolerance
 
-        assert err < tolerance
-
-        errrec = np.maximum(err1, maxmomerr)
-        eoc_rec0.add_data_point(1.0 / nel_1d, errrec)
+        eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
         # Check the boundary facial fluxes as called on a boundary
         dir_mass = discr.interp("vol", BTAG_ALL, mass_input)
@@ -460,33 +435,15 @@ def test_facial_flux(ctx_factory, order, dim):
             discr, q_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
         )
 
-        err = np.max(
-            np.array(
-                [
-                    la.norm(boundary_flux[i].get(), np.inf)
-                    for i in range(0, 2)
-                ]
-            )
-        )
+        bf_split = split_conserved(dim, boundary_flux)
+        assert fnorm(bf_split.mass) < tolerance
+        assert fnorm(bf_split.energy) < tolerance
 
-        assert err < tolerance
-        err1 = err
+        # FIXME (AK -> MC): explain why this is right
+        momerr = fnorm(bf_split.momentum) - p0
+        assert momerr < tolerance
 
-        # mom flux should be  == p ~= p0
-        maxmomerr = 0.0
-        for i in range(2, 2 + discr.dim):
-            err = np.max(
-                np.array(
-                    [la.norm(boundary_flux[i].get(), np.inf)]
-                )
-            )
-            err = np.abs(err - p0)
-            assert err < tolerance
-            if err > maxmomerr:
-                maxmomerr = err
-
-        errrec = np.maximum(err1, maxmomerr)
-        eoc_rec1.add_data_point(1.0 / nel_1d, errrec)
+        eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
 
     message = (
         f"standalone Errors:\n{eoc_rec0}"
@@ -536,12 +493,9 @@ def test_uniform_rhs(ctx_factory, dim, order):
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        mass_input = discr.zeros(actx)
-        energy_input = discr.zeros(actx)
+        mass_input = discr.zeros(actx) + 1
+        energy_input = discr.zeros(actx) + 2.5
 
-        # this sets p = p0 = 1.0
-        mass_input[:] = 1.0
-        energy_input[:] = 2.5
         mom_input = make_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
@@ -574,24 +528,20 @@ def test_uniform_rhs(ctx_factory, dim, order):
         )
         logger.info(message)
 
-        assert np.max(np.abs(rho_resid.get())) < tolerance
-        assert np.max(np.abs(rhoe_resid.get())) < tolerance
+        assert discr.norm(rho_resid, np.inf) < tolerance
+        assert discr.norm(rhoe_resid, np.inf) < tolerance
         for i in range(dim):
-            assert (
-                np.max(np.abs(mom_resid[i].get())) < tolerance
-            )
+            assert discr.norm(mom_resid[i], np.inf) < tolerance
 
-            err_max = np.max(np.abs(rhs_resid[i].get()))
+            err_max = discr.norm(rhs_resid[i], np.inf)
             #                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
         # set a non-zero, but uniform velocity component
-        i = 0
 
-        for mom_component in mom_input:
-            mom_component[:] = (-1.0) ** i
-            i = i + 1
+        for i in range(len(mom_input)):
+            mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = inviscid_operator(discr, fields, boundaries)
@@ -602,11 +552,12 @@ def test_uniform_rhs(ctx_factory, dim, order):
         rhoe_resid = resid_split.energy
         mom_resid = resid_split.momentum
 
-        assert np.max(np.abs(rho_resid.get())) < tolerance
-        assert np.max(np.abs(rhoe_resid.get())) < tolerance
+        assert discr.norm(rho_resid, np.inf) < tolerance
+        assert discr.norm(rhoe_resid, np.inf) < tolerance
+
         for i in range(dim):
-            assert np.max(np.abs(mom_resid[i].get())) < tolerance
-            err_max = np.max(np.abs(rhs_resid[i].get()))
+            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            err_max = discr.norm(rhs_resid[i], np.inf)
             #                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
@@ -669,15 +620,7 @@ def test_vortex_rhs(ctx_factory, order):
             discr, vortex_soln, t=0, boundaries=boundaries
         )
 
-        err_max = np.max(
-            np.array(
-                [
-                    la.norm(inviscid_rhs[i].get(), np.inf)
-                    for i in range(dim + 2)
-                ]
-            )
-        )
-
+        err_max = discr.norm(inviscid_rhs, np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     message = (
@@ -738,19 +681,7 @@ def test_lump_rhs(ctx_factory, dim, order):
         )
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
 
-        err_max = np.max(
-            np.array(
-                [
-                    la.norm(
-                        (
-                            inviscid_rhs[i] - expected_rhs[i]
-                        ).get(),
-                        np.inf,
-                    )
-                    for i in range(dim + 2)
-                ]
-            )
-        )
+        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
