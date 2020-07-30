@@ -26,6 +26,7 @@ import numpy as np
 import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
+from mpi4py import MPI
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -38,6 +39,7 @@ from mirgecom.io import (
     make_status_message,
     make_visfile_name,
     make_init_message,
+    make_parallel_visfile_name,
 )
 
 from mirgecom.euler import (
@@ -49,7 +51,7 @@ from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import Vortex2D
+from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
 
@@ -71,11 +73,11 @@ def main(ctx_factory=cl.create_some_context):
 
     logger = logging.getLogger(__name__)
 
-    dim = 2
+    dim = 3
     nel_1d = 16
     order = 3
     exittol = .09
-    t_final = 0.1
+    t_final = 0.01
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
@@ -83,24 +85,50 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .001
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Vortex2D(center=orig, velocity=vel)
-    casename = 'vortex'
+    initializer = Lump(numdim=dim, center=orig, velocity=vel)
+    casename = 'lump'
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
-    nstatus = 10
-    nviz = 10
-    rank = 0
+    nstatus = 1
+    nviz = 1
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
+    box_ll = -5.0
+    box_ur = 5.0
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
+    comm = MPI.COMM_WORLD
+    nproc = comm.Get_size()
+    rank = comm.Get_rank()
+    num_parts = nproc
 
-    mesh = generate_regular_rect_mesh(
-        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+    from meshmode.distributed import (
+        MPIMeshDistributor,
+        get_partition_by_pymetis,
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    mesh_dist = MPIMeshDistributor(comm)
+
+    if mesh_dist.is_mananger_rank():
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+
+        mesh = generate_regular_rect_mesh(
+            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
+        )
+
+        logging.info(f"Total {dim}d elements: {mesh.nelements}")
+
+        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+
+        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+        del mesh
+
+    else:
+        local_mesh = mesh_dist.receive_mesh_part()
+
+    discr = EagerDGDiscretization(
+        actx, local_mesh, order=order, mpi_communicator=comm
+    )
     nodes = thaw(actx, discr.nodes())
 
     istate = initializer(0, nodes)
@@ -110,7 +138,8 @@ def main(ctx_factory=cl.create_some_context):
                                  if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order, nelements=mesh.nelements,
+    init_message = make_init_message(dim=dim, order=order,
+                                     nelements=local_mesh.nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
@@ -169,25 +198,41 @@ def main(ctx_factory=cl.create_some_context):
             checkpoint_t = current_t
             visfilename = make_visfile_name(basename=casename, rank=rank,
                                             step=step, t=checkpoint_t)
+            pvisfilename = visfilename
+            visnamelist = []
+            if rank == 0:
+                pvisfilename = make_parallel_visfile_name(basename=casename,
+                                                          step=step,
+                                                          t=checkpoint_t)
+                visnamelist.append(pvisfilename)
+                visnamelist += [make_visfile_name(basename=casename, rank=i,
+                                                  step=step, t=checkpoint_t)
+                                for i in range(num_parts)]
+
             io_fields = make_io_fields(dim, state, dv, eos)
             io_fields.append(("exact_soln", expected_state))
             result_resid = state - expected_state
             io_fields.append(("residual", result_resid))
-            visualizer.write_vtk_file(visfilename, io_fields, overwrite=True)
+            visualizer.write_vtk_file(visfilename, io_fields,
+                                      par_namelist=visnamelist,
+                                      overwrite=True)
 
         return checkpoint_status
 
+    comm.Barrier()
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
                     get_timestep=my_timestep, state=current_state,
                     t=current_t, t_final=t_final)
 
+    comm.Barrier()
+
     if current_t != checkpoint_t:
         if rank == 0:
             logger.info("Checkpointing final state ...")
-            my_checkpoint(current_step, t=current_t,
-                          dt=(current_t - checkpoint_t),
-                          state=current_state)
+        my_checkpoint(current_step, t=current_t,
+                      dt=(current_t - checkpoint_t),
+                      state=current_state)
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")

@@ -204,18 +204,18 @@ def main(ctx_factory=cl.create_some_context):
                 pvisfilename = make_parallel_visfile_name(basename=casename,
                                                           step=step,
                                                           t=checkpoint_t)
-                visnamelist = [make_visfile_name(basename=casename, rank=i,
-                                                 step=step, t=checkpoint_t)
-                               for i in range(num_parts)]
-                visnamelist = list(visnamelist)
+                visnamelist.append(pvisfilename)
+                visnamelist += [make_visfile_name(basename=casename, rank=i,
+                                                  step=step, t=checkpoint_t)
+                                for i in range(num_parts)]
 
             io_fields = make_io_fields(dim, state, dv, eos)
             io_fields.append(("exact_soln", expected_state))
             result_resid = state - expected_state
             io_fields.append(("residual", result_resid))
-            visualizer.write_vtk_file(visfilename, io_fields, mpicomm=comm,
+            visualizer.write_vtk_file(visfilename, io_fields,
                                       par_namelist=visnamelist,
-                                      par_filename=pvisfilename)
+                                      overwrite=True)
 
         return checkpoint_status
 

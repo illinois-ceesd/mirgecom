@@ -171,7 +171,7 @@ def main(ctx_factory=cl.create_some_context):
             io_fields.append(("exact_soln", expected_state))
             result_resid = state - expected_state
             io_fields.append(("residual", result_resid))
-            visualizer.write_vtk_file(visfilename, io_fields)
+            visualizer.write_vtk_file(visfilename, io_fields, overwrite=True)
 
         return checkpoint_status
 
