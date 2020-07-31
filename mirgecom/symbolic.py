@@ -22,9 +22,6 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la # noqa
-import pyopencl as cl # noqa
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath
 # from pytools.obj_array import flat_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
@@ -90,11 +87,11 @@ class EvaluationMapper(ev.EvaluationMapper):
         if isinstance(val, Number):
             return np.sin(val)
         else:
-            return clmath.sin(val)
+            return val.array_context.np.sin(val)
 
     def _cos(self, val):
         from numbers import Number
         if isinstance(val, Number):
             return np.cos(val)
         else:
-            return clmath.cos(val)
+            return val.array_context.np.cos(val)

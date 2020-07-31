@@ -28,8 +28,7 @@ from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
-import pyopencl.array as clarray
-import pyopencl.clmath as clmath
+from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 
 
@@ -82,10 +81,10 @@ class Vortex2D:
         # coordinates relative to vortex center
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
-
+        actx = x_vec[0].array_context
         gamma = eos.gamma()
-        r = clmath.sqrt(x_rel ** 2 + y_rel ** 2)
-        expterm = self._beta * clmath.exp(1 - r ** 2)
+        r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
+        expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
         mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
@@ -118,7 +117,7 @@ class SodShock1D:
     """
 
     def __init__(
-            self, dim=2, x0=0.5, rhol=1.0, rhor=0.125, pleft=1.0, pright=0.1,
+            self, dim=2, xdir=0, x0=0.5, rhol=1.0, rhor=0.125, pleft=1.0, pright=0.1,
     ):
         """Initialize shock parameters
 
@@ -144,24 +143,29 @@ class SodShock1D:
         self._energyl = pleft
         self._energyr = pright
         self._dim = dim
+        self._xdir = xdir
+        if self._xdir >= self._dim:
+            self._xdir = self._dim - 1
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
-        x_rel = x_vec[0]
-        queue = x_rel.queue
+        x_rel = x_vec[self._xdir]
+        actx = x_rel.array_context
 
         zeros = 0*x_rel
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
+        x0 = zeros + self._x0
         energyl = zeros + gmn1 * self._energyl
         energyr = zeros + gmn1 * self._energyr
-        mass = clarray.if_positive((x_rel - self._x0), rhor, rhol)
-        energy = clarray.if_positive((x_rel - self._x0), energyr, energyl)
+        yesno = x_rel > x0
+        mass = actx.np.where(yesno, rhor, rhol)
+        energy = actx.np.where(yesno, energyr, energyl)
         mom = make_obj_array(
             [
-                clarray.zeros(queue, shape=x_rel.shape, dtype=np.float64)
+                0*x_rel
                 for i in range(self._dim)
             ]
         )
@@ -255,31 +259,32 @@ class Lump:
         rel_center = make_obj_array(
             [x_vec[i] - lump_loc[i] for i in range(self._dim)]
         )
-        r = clmath.sqrt(np.dot(rel_center, rel_center))
+        actx = x_vec[0].array_context
+        r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
         gamma = eos.gamma()
-        expterm = self._rhoamp * clmath.exp(1 - r ** 2)
+        expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
         mom = self._velocity * make_obj_array([mass])
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         return flat_obj_array(mass, energy, mom)
 
-    def exact_rhs(self, discr, w, t=0.0):
-        queue = w[0].queue
-        nodes = discr.nodes().with_queue(queue)
+    def exact_rhs(self, discr, q, t=0.0):
+        actx = q[0].array_context
+        nodes = thaw(actx, discr.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
             [nodes[i] - lump_loc[i] for i in range(self._dim)]
         )
-        r = clmath.sqrt(np.dot(rel_center, rel_center))
+        r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
         # The expected rhs is:
         # rhorhs  = -2*rho*(r.dot.v)
         # rhoerhs = -rho*v^2*(r.dot.v)
         # rhovrhs = -2*rho*(r.dot.v)*v
-        expterm = self._rhoamp * clmath.exp(1 - r ** 2)
+        expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
 
         v = self._velocity * make_obj_array([1.0 / mass])
@@ -341,9 +346,9 @@ class Uniform:
 
         return flat_obj_array(mass, energy, mom)
 
-    def exact_rhs(self, discr, w, t=0.0):
-        queue = w[0].queue
-        nodes = discr.nodes().with_queue(queue)
+    def exact_rhs(self, discr, q, t=0.0):
+        actx = q[0].array_context
+        nodes = thaw(actx, discr.nodes())
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass

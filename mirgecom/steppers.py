@@ -27,13 +27,16 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 
+from meshmode.dof_array import thaw
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+
 from mirgecom.euler import get_inviscid_timestep
 from mirgecom.euler import inviscid_operator
 from mirgecom.euler import split_fields
 from mirgecom.integrators import rk4_step
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
@@ -68,6 +71,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     logger = logging.getLogger(__name__)
@@ -93,8 +97,8 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
     dim = mesh.dim
     istep = 0
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
     fields = initializer(0, nodes)
     sdt = get_inviscid_timestep(discr, fields, cfl=cfl, eos=eos)
 
@@ -165,16 +169,7 @@ def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
         maxerr = max(write_soln(False))
     else:
         expected_result = initializer(t, nodes)
-        result_resid = fields - expected_result
-        maxerr = np.max(
-            [
-                np.max(
-                    np.abs(
-                        result_resid[i].get()
-                    )
-                ) for i in range(dim + 2)
-            ]
-        )
+        maxerr = discr.norm(fields - expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:

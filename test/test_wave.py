@@ -21,25 +21,24 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import numpy.linalg as la
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import flat_obj_array, make_obj_array
-
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 
 from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
+    pytest_generate_tests_for_pyopencl
+    as pytest_generate_tests)
 
 import pytest
 
 import logging
-
 logger = logging.getLogger(__name__)
 
 
@@ -59,9 +58,9 @@ def get_standing_wave(dim):
     def mesh_factory(n):
         from meshmode.mesh.generation import generate_regular_rect_mesh
         return generate_regular_rect_mesh(
-                a=(-0.5*np.pi,)*dim,
-                b=(0.5*np.pi,)*dim,
-                n=(n,)*dim)
+            a=(-0.5*np.pi,)*dim,
+            b=(0.5*np.pi,)*dim,
+            n=(n,)*dim)
     c = 2.
     sym_coords = prim.make_sym_vector('x', dim)
     sym_t = pmbl.var("t")
@@ -81,9 +80,9 @@ def get_manufactured_cubic(dim):
     def mesh_factory(n):
         from meshmode.mesh.generation import generate_regular_rect_mesh
         return generate_regular_rect_mesh(
-                a=(-1.,)*dim,
-                b=(1.,)*dim,
-                n=(n,)*dim)
+            a=(-1.,)*dim,
+            b=(1.,)*dim,
+            n=(n,)*dim)
     sym_coords = prim.make_sym_vector('x', dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
@@ -117,14 +116,10 @@ def sym_wave(dim, sym_phi):
     # rhs(u part) = c*div(v) + f
     # rhs(v part) = c*grad(u)
     sym_rhs = flat_obj_array(
-                sym_c * sym.div(sym_v) + sym_f,
-                make_obj_array([sym_c]) * sym.grad(dim, sym_u))
+        sym_c * sym.div(sym_v) + sym_f,
+        make_obj_array([sym_c]) * sym.grad(dim, sym_u))
 
     return sym_u, sym_v, sym_f, sym_rhs
-
-
-def max_inf_norm(fields):
-    return np.max(np.array([la.norm(field.get(), np.inf) for field in fields]))
 
 
 @pytest.mark.parametrize("problem",
@@ -138,25 +133,25 @@ def max_inf_norm(fields):
 def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
     """Checks accuracy of the wave operator for a given problem setup.
     """
+
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim, c, mesh_factory, sym_phi = problem
 
     sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
     from pytools.convergence import EOCRecorder
-
     eoc_rec = EOCRecorder()
 
     for n in [8, 10, 12] if dim == 3 else [4, 8, 16]:
         mesh = mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
+        discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-
-        nodes = discr.nodes().with_queue(queue)
+        nodes = thaw(actx, discr.nodes())
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
@@ -173,7 +168,9 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
-        rel_linf_err = max_inf_norm(rhs - expected_rhs)/max_inf_norm(expected_rhs)
+        rel_linf_err = (
+            discr.norm(rhs - expected_rhs, np.inf)
+            / discr.norm(expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
@@ -187,14 +184,11 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
                             ("rhs_v_actual", rhs[1:]),
                             ("rhs_u_expected", expected_rhs[0]),
                             ("rhs_v_expected", expected_rhs[1:]),
-                        ])
+                            ])
 
     print("Approximation error:")
     print(eoc_rec)
-    assert (
-        eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < 1e-11
-    )
+    assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
 
 
 @pytest.mark.parametrize(("problem", "timestep_scale"),
@@ -213,6 +207,7 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim, c, mesh_factory, sym_phi = problem
 
@@ -221,9 +216,9 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
     mesh = mesh_factory(8)
 
     from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    nodes = discr.nodes().with_queue(queue)
+    nodes = thaw(actx, discr.nodes())
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
@@ -261,10 +256,10 @@ def test_wave_stability(ctx_factory, problem, timestep_scale, order,
                     ("v_expected", expected_fields[1:]),
                     ])
 
-    err = max_inf_norm(fields-expected_fields)
-    max_err = max_inf_norm(expected_fields)
+    err = discr.norm(fields-expected_fields, np.inf)
+    max_err = discr.norm(expected_fields, np.inf)
 
-    assert(err < max_err)
+    assert err < max_err
 
 
 if __name__ == "__main__":

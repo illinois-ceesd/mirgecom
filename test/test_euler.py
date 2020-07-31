@@ -34,7 +34,12 @@ from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
+
+from meshmode.array_context import PyOpenCLArrayContext
+# from meshmode.dof_array import thaw, unflatten
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import inviscid_operator
 from mirgecom.euler import split_conserved
@@ -61,6 +66,8 @@ def test_inviscid_flux(ctx_factory, dim):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
     nel_1d = 16
 
@@ -72,7 +79,7 @@ def test_inviscid_flux(ctx_factory, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
     eos = IdealSingleGas()
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -125,7 +132,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
 
     Checks that the Euler-internal inviscid flux
     routine (_inviscid_flux) returns exactly the
-    expected result with a constant pressure and 
+    expected result with a constant pressure and
     no flow.
     Expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
@@ -137,6 +144,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+
     logger = logging.getLogger(__name__)
 
     eos = IdealSingleGas()
@@ -362,6 +370,8 @@ def test_facial_flux(ctx_factory, order, dim):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     tolerance = 1e-14
@@ -383,61 +393,45 @@ def test_facial_flux(ctx_factory, order, dim):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        mass_input = discr.zeros(queue)
-        energy_input = discr.zeros(queue)
+        mass_input = discr.zeros(actx) + 1.0
+        energy_input = discr.zeros(actx) + 2.5
         mom_input = flat_obj_array(
-            [discr.zeros(queue) for i in range(discr.dim)]
+            [discr.zeros(actx) for i in range(discr.dim)]
         )
-
-        # This sets p = 1
-        mass_input[:] = 1.0
-        energy_input[:] = 2.5
 
         fields = flat_obj_array(
             mass_input, energy_input, mom_input
         )
 
         from mirgecom.euler import _facial_flux
-        from mirgecom.euler import _interior_trace_pair
 
         interior_face_flux = _facial_flux(
-            discr, q_tpair=_interior_trace_pair(discr, fields)
-        )
+            discr, q_tpair=interior_trace_pair(discr, fields))
 
-        err = np.max(
-            np.array(
-                [
-                    la.norm(interior_face_flux[i].get(), np.inf)
-                    for i in range(0, 2)
-                ]
-            )
-        )
+        from functools import partial
+        fnorm = partial(discr.norm, p=np.inf, dd="all_faces")
 
-        assert err < tolerance
+        iff_split = split_conserved(dim, interior_face_flux)
+        assert fnorm(iff_split.mass) < tolerance
+        assert fnorm(iff_split.energy) < tolerance
 
-        err1 = err
-        # mom flux max should be p = 1 + (any interp error)
-        maxmomerr = 0.0
-        for i in range(2, 2 + discr.dim):
-            err = np.max(
-                np.array(
-                    [
-                        la.norm(
-                            interior_face_flux[i].get(), np.inf
-                        )
-                    ]
-                )
-            )
-            err = np.abs(err - p0)
-            if err > maxmomerr:
-                maxmomerr = err
+        # The expected pressure 1.0 (by design). And the flux diagonal is
+        # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
+        #
+        # The off-diagonals are zero. We get a {ndim}-vector for each
+        # dimension, the flux for the x-component of momentum (for example) is:
+        # f_momx = < 1.0, 0 , 0> , then we return f_momx .dot. normal, which
+        # can introduce negative values.
+        #
+        # (Explanation courtesy of Mike Campbell,
+        # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        assert err < tolerance
+        momerr = fnorm(iff_split.momentum) - p0
+        assert momerr < tolerance
 
-        errrec = np.maximum(err1, maxmomerr)
-        eoc_rec0.add_data_point(1.0 / nel_1d, errrec)
+        eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
         # Check the boundary facial fluxes as called on a boundary
         dir_mass = discr.interp("vol", BTAG_ALL, mass_input)
@@ -451,33 +445,14 @@ def test_facial_flux(ctx_factory, order, dim):
             discr, q_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
         )
 
-        err = np.max(
-            np.array(
-                [
-                    la.norm(boundary_flux[i].get(), np.inf)
-                    for i in range(0, 2)
-                ]
-            )
-        )
+        bf_split = split_conserved(dim, boundary_flux)
+        assert fnorm(bf_split.mass) < tolerance
+        assert fnorm(bf_split.energy) < tolerance
 
-        assert err < tolerance
-        err1 = err
+        momerr = fnorm(bf_split.momentum) - p0
+        assert momerr < tolerance
 
-        # mom flux should be  == p ~= p0
-        maxmomerr = 0.0
-        for i in range(2, 2 + discr.dim):
-            err = np.max(
-                np.array(
-                    [la.norm(boundary_flux[i].get(), np.inf)]
-                )
-            )
-            err = np.abs(err - p0)
-            assert err < tolerance
-            if err > maxmomerr:
-                maxmomerr = err
-
-        errrec = np.maximum(err1, maxmomerr)
-        eoc_rec1.add_data_point(1.0 / nel_1d, errrec)
+        eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
 
     message = (
         f"standalone Errors:\n{eoc_rec0}"
@@ -504,6 +479,8 @@ def test_uniform_rhs(ctx_factory, dim, order):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     tolerance = 1e-9
@@ -523,23 +500,20 @@ def test_uniform_rhs(ctx_factory, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
 
-        mass_input = discr.zeros(queue)
-        energy_input = discr.zeros(queue)
+        mass_input = discr.zeros(actx) + 1
+        energy_input = discr.zeros(actx) + 2.5
 
-        # this sets p = p0 = 1.0
-        mass_input[:] = 1.0
-        energy_input[:] = 2.5
         mom_input = make_obj_array(
-            [discr.zeros(queue) for i in range(discr.dim)]
+            [discr.zeros(actx) for i in range(discr.dim)]
         )
         fields = flat_obj_array(
             mass_input, energy_input, mom_input
         )
 
         expected_rhs = make_obj_array(
-            [discr.zeros(queue) for i in range(discr.dim + 2)]
+            [discr.zeros(actx) for i in range(discr.dim + 2)]
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -563,24 +537,20 @@ def test_uniform_rhs(ctx_factory, dim, order):
         )
         logger.info(message)
 
-        assert np.max(np.abs(rho_resid.get())) < tolerance
-        assert np.max(np.abs(rhoe_resid.get())) < tolerance
+        assert discr.norm(rho_resid, np.inf) < tolerance
+        assert discr.norm(rhoe_resid, np.inf) < tolerance
         for i in range(dim):
-            assert (
-                np.max(np.abs(mom_resid[i].get())) < tolerance
-            )
+            assert discr.norm(mom_resid[i], np.inf) < tolerance
 
-            err_max = np.max(np.abs(rhs_resid[i].get()))
+            err_max = discr.norm(rhs_resid[i], np.inf)
             #                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
         # set a non-zero, but uniform velocity component
-        i = 0
 
-        for mom_component in mom_input:
-            mom_component[:] = (-1.0) ** i
-            i = i + 1
+        for i in range(len(mom_input)):
+            mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = inviscid_operator(discr, fields, boundaries)
@@ -591,11 +561,12 @@ def test_uniform_rhs(ctx_factory, dim, order):
         rhoe_resid = resid_split.energy
         mom_resid = resid_split.momentum
 
-        assert np.max(np.abs(rho_resid.get())) < tolerance
-        assert np.max(np.abs(rhoe_resid.get())) < tolerance
+        assert discr.norm(rho_resid, np.inf) < tolerance
+        assert discr.norm(rhoe_resid, np.inf) < tolerance
+
         for i in range(dim):
-            assert np.max(np.abs(mom_resid[i].get())) < tolerance
-            err_max = np.max(np.abs(rhs_resid[i].get()))
+            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            err_max = discr.norm(rhs_resid[i], np.inf)
             #                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
@@ -626,6 +597,8 @@ def test_vortex_rhs(ctx_factory, order):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
     dim = 2
 
@@ -644,8 +617,8 @@ def test_vortex_rhs(ctx_factory, order):
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-        nodes = discr.nodes().with_queue(queue)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -656,15 +629,7 @@ def test_vortex_rhs(ctx_factory, order):
             discr, vortex_soln, t=0, boundaries=boundaries
         )
 
-        err_max = np.max(
-            np.array(
-                [
-                    la.norm(inviscid_rhs[i].get(), np.inf)
-                    for i in range(dim + 2)
-                ]
-            )
-        )
-
+        err_max = discr.norm(inviscid_rhs, np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     message = (
@@ -689,6 +654,8 @@ def test_lump_rhs(ctx_factory, dim, order):
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     tolerance = 1e-10
@@ -709,8 +676,8 @@ def test_lump_rhs(ctx_factory, dim, order):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-        nodes = discr.nodes().with_queue(queue)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
@@ -723,19 +690,7 @@ def test_lump_rhs(ctx_factory, dim, order):
         )
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
 
-        err_max = np.max(
-            np.array(
-                [
-                    la.norm(
-                        (
-                            inviscid_rhs[i] - expected_rhs[i]
-                        ).get(),
-                        np.inf,
-                    )
-                    for i in range(dim + 2)
-                ]
-            )
-        )
+        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 

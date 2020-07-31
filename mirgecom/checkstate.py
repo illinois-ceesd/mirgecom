@@ -24,19 +24,23 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
+from meshmode.dof_array import flatten
 from pytools.obj_array import flat_obj_array
 
 
 def compare_states(red_state, blue_state):
+    actx = red_state[0].array_context
     resid = red_state - blue_state
     numfields = len(red_state)
-    max_errors = [np.max(np.abs(resid[i].get())) for i in range(numfields)]
+    max_errors = [np.max(np.abs(actx.to_numpy(flatten(resid[i]))))
+                  for i in range(numfields)]
     return max_errors
 
 
 def get_field_stats(state):
+    actx = state[0].array_context
     numfields = len(state)
-    # TODO: function needs updated to use grudge/cl norms and constructs 
-    field_mins = [np.min(state[i].get()) for i in range(numfields)]
-    field_maxs = [np.max(state[i].get()) for i in range(numfields)]
+    # TODO: function needs updated to use grudge/cl norms and constructs
+    field_mins = [np.min(actx.to_numpy(flatten(state[i]))) for i in range(numfields)]
+    field_maxs = [np.max(actx.to_numpy(flatten(state[i]))) for i in range(numfields)]
     return flat_obj_array(field_mins, field_maxs)

@@ -27,6 +27,8 @@ import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -65,6 +67,8 @@ def main(ctx_factory=cl.create_some_context):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     logger = logging.getLogger(__name__)
 
     dim = 2
@@ -96,8 +100,9 @@ def main(ctx_factory=cl.create_some_context):
         a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
     )
 
-    discr = EagerDGDiscretization(cl_ctx, mesh, order=order)
-    nodes = discr.nodes().with_queue(queue)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
     istate = initializer(0, nodes)
     current_state = istate
 
@@ -168,7 +173,7 @@ def main(ctx_factory=cl.create_some_context):
             io_fields.append(("exact_soln", expected_state))
             result_resid = state - expected_state
             io_fields.append(("residual", result_resid))
-            visualizer.write_vtk_file(visfilename, io_fields)
+            visualizer.write_vtk_file(visfilename, io_fields, overwrite=True)
 
         return checkpoint_status
 
