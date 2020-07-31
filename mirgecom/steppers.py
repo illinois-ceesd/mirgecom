@@ -55,7 +55,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         if status != 0:
             return (istep, t, state)
 
-        state = timestepper(state, t, dt, rhs)
+        state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
         t += dt
         istep += 1
