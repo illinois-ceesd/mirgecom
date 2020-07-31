@@ -53,13 +53,15 @@ def make_io_fields(dim, state, dv, eos):
     return io_fields
 
 
-def make_init_message(dim, order, nelements, dt, t_final,
+def make_init_message(dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
-                      initname, eosname, casename):
+                      initname, eosname, casename,
+                      nelements=0, global_nelements=0):
     return(
         f"Initialization for Case({casename})\n"
         f"===\n"
-        f"Num {dim}d order-{order} elements: nelements\n"
+        f"Num {dim}d order-{order} elements: {nelements}\n"
+        f"Num global elements: {global_nelements}\n"
         f"Timestep:        {dt}\n"
         f"Final time:      {t_final}\n"
         f"CFL:             {cfl}\n"

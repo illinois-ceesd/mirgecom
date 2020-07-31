@@ -75,6 +75,7 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
     actx = q[0].array_context
     nodes = thaw(actx, discr.nodes())
     rank = 0
+
     if comm is not None:
         rank = comm.Get_rank()
     checkpoint_status = 0
@@ -105,6 +106,6 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
             result_resid = q - expected_state
             io_fields.append(("residual", result_resid))
             make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                             step=step, t=t, overwrite=True)
+                             comm=comm, step=step, t=t, overwrite=True)
 
         return checkpoint_status
