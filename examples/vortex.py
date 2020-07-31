@@ -88,9 +88,7 @@ def main(ctx_factory=cl.create_some_context):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-
-    istate = initializer(0, nodes)
-    current_state = istate
+    current_state = initializer(0, nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)

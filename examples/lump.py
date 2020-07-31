@@ -26,6 +26,7 @@ import numpy as np
 import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
+from functools import partial
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -33,34 +34,19 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.io import (
-    make_io_fields,
-    make_status_message,
-    make_output_dump,
-    make_init_message,
-)
 
-from mirgecom.euler import (
-    get_inviscid_timestep,
-    get_inviscid_cfl,
-    inviscid_operator
+from mirgecom.euler import inviscid_operator
+from mirgecom.simutil import (
+    inviscid_sim_timestep,
+    exact_sim_checkpoint
 )
-from mirgecom.checkstate import compare_states
+from mirgecom.io import make_init_message
+
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
-
-
-def check_step(step, n):
-    if n == 0:
-        return True
-    elif n < 0:
-        return False
-    elif step % n == 0:
-        return True
-    return False
 
 
 def main(ctx_factory=cl.create_some_context):
@@ -102,9 +88,7 @@ def main(ctx_factory=cl.create_some_context):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-
-    istate = initializer(0, nodes)
-    current_state = istate
+    current_state = initializer(0, nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -118,75 +102,31 @@ def main(ctx_factory=cl.create_some_context):
     if rank == 0:
         logger.info(init_message)
 
-    def my_timestep(state):
-        mydt = current_dt
-        if constant_cfl is True:
-            mydt = get_inviscid_timestep(discr=discr, q=state,
-                                         cfl=current_cfl, eos=eos)
-        if (current_t + mydt) > t_final:
-            mydt = t_final - current_t
-        return mydt
+    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
+                           dt=current_dt, cfl=current_cfl, eos=eos,
+                           t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return inviscid_operator(discr, q=state, t=t, boundaries=boundaries, eos=eos)
+        return inviscid_operator(discr, q=state, t=t,
+                                 boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        # This stuff should be done by any/all checkpoint
-        current_t = t
-        current_step = step
-        current_state = state
-        current_dt = dt
-        checkpoint_status = 0
-
-        if constant_cfl is False:
-            current_cfl = get_inviscid_cfl(discr=discr, q=state,
-                                           eos=eos, dt=current_dt)
-
-        # The rest of this checkpoint routine is customization
-        do_status = check_step(step=step, n=nstatus)
-        do_viz = check_step(step=step, n=nviz)
-        if do_viz is False and do_status is False:
-            return checkpoint_status
-
-        dv = eos(q=current_state)
-        expected_state = initializer(t=current_t, x_vec=nodes, eos=eos)
-
-        if do_status is True:
-            statusmesg = make_status_message(t=current_t, step=current_step,
-                                             dt=current_dt,
-                                             cfl=current_cfl, dv=dv)
-            max_errors = compare_states(state, expected_state)
-            statusmesg += f"\n------   Err({max_errors})"
-            if rank == 0:
-                logger.info(statusmesg)
-
-            maxerr = np.max(max_errors)
-            if maxerr > exittol:
-                logger.error("Solution failed to follow expected result.")
-                checkpoint_status = 1
-
-        if do_viz:
-            checkpoint_t = current_t
-            io_fields = make_io_fields(dim, state, dv, eos)
-            io_fields.append(("exact_soln", expected_state))
-            result_resid = state - expected_state
-            io_fields.append(("residual", result_resid))
-            make_output_dump(visualizer, basename=casename, io_fields=io_fields,
-                             step=step, t=checkpoint_t, overwrite=True)
-
-        return checkpoint_status
+        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
+                            q=state, vizname=casename, step=step, t=t, dt=dt,
+                            nstatus=nstatus, nviz=nviz, exittol=exittol,
+                            constant_cfl=constant_cfl)
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=my_timestep, state=current_state,
+                    get_timestep=get_timestep, state=current_state,
                     t=current_t, t_final=t_final)
 
-    if current_t != checkpoint_t:
-        if rank == 0:
-            logger.info("Checkpointing final state ...")
-            my_checkpoint(current_step, t=current_t,
-                          dt=(current_t - checkpoint_t),
-                          state=current_state)
+    #    if current_t != checkpoint_t:
+    if rank == 0:
+        logger.info("Checkpointing final state ...")
+        my_checkpoint(current_step, t=current_t,
+                      dt=(current_t - checkpoint_t),
+                      state=current_state)
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
