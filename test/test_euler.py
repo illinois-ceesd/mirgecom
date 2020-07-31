@@ -720,6 +720,9 @@ def test_isentropic_vortex(ctx_factory, order):
     rates vs. the order.
     """
     logger = logging.getLogger(__name__)
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = 2
 
@@ -753,7 +756,7 @@ def test_isentropic_vortex(ctx_factory, order):
                       'eos': eos, 'casename': casename, 'mesh': mesh,
                       'tfinal': t_final, 'exittol': exittol, 'cfl': cfl,
                       'constantcfl': False, 'nstatus': 0}
-        maxerr = euler_flow_stepper(flowparams, ctx_factory=ctx_factory)
+        maxerr = euler_flow_stepper(actx, flowparams)
         eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
     message = (

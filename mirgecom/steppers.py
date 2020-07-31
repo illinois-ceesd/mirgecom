@@ -65,14 +65,10 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
     return (istep, t, state)
 
 
-def euler_flow_stepper(parameters, ctx_factory=cl.create_some_context):
+def euler_flow_stepper(actx, parameters):
     """
     Deprecated: Implements a generic time stepping loop for an inviscid flow.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
-
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     logger = logging.getLogger(__name__)
 
