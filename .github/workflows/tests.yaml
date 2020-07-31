@@ -75,9 +75,5 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
-            ls $OCL_ICD_VENDORS
-            clinfo
-            export PYOPENCL_CTX=''
             . ./examples/run_examples.sh examples
+

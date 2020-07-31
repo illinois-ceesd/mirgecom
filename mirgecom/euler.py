@@ -349,7 +349,6 @@ def get_inviscid_timestep(discr, q, cfl=1.0, eos=IdealSingleGas()):
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     return cfl * dt
 
-
 #    dt_ngf = dt_non_geometric_factor(discr.mesh)
 #    dt_gf  = dt_geometric_factor(discr.mesh)
 #    wavespeeds = _get_wavespeed(w,eos=eos)
