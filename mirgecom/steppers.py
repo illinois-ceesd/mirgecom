@@ -24,11 +24,9 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
 import pyopencl.array as cla  # noqa
 
 from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
