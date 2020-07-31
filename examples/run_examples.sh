@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 examples_dir=${1}
 if [ -z ${examples_dir} ]
 then
