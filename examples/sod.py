@@ -36,7 +36,7 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.io import (
     make_io_fields,
     make_status_message,
-    make_visfile_name,
+    make_output_dump,
     make_init_message,
 )
 
@@ -165,13 +165,12 @@ def main(ctx_factory=cl.create_some_context):
 
         if do_viz:
             checkpoint_t = current_t
-            visfilename = make_visfile_name(basename=casename, rank=rank,
-                                            step=step, t=checkpoint_t)
             io_fields = make_io_fields(dim, state, dv, eos)
             io_fields.append(("exact_soln", expected_state))
             result_resid = state - expected_state
             io_fields.append(("residual", result_resid))
-            visualizer.write_vtk_file(visfilename, io_fields, overwrite=True)
+            make_output_dump(visualizer, basename=casename, io_fields=io_fields,
+                             step=step, t=checkpoint_t, overwrite=True)
 
         return checkpoint_status
 

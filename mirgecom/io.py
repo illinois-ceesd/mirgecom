@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import os
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 
@@ -79,42 +80,31 @@ def make_status_message(t, step, dt, cfl, dv):
     return statusmsg
 
 
-def make_visfile_name(basename, rank=0, step=0, t=0):
-    nameform = basename + "-{iorank:04d}-{iostep:06d}.vtu"
-    return nameform.format(iorank=rank, iostep=step)
+def make_serial_fname(basename, step=0, t=0):
+    return f"{basename}-{step:06d}.vtu"
 
 
-def make_parallel_visfile_name(basename, step=0, t=0):
-    nameform = basename + "-{iostep:06d}.pvtu"
-    return nameform.format(iostep=step)
+def make_rank_fname(basename, rank=0, step=0, t=0):
+    return f"{basename}-{step:06d}-{{rank:04d}}.vtu"
 
 
-def checkpoint(discr, logger, visualizer, nstatus, nviz, rank, basename,
-               eos, state, dim, t, step, dt, cfl):
-    do_status = False
-    do_viz = False
+def make_par_fname(basename, step=0, t=0):
+    return f"{basename}-{step:06d}.pvtu"
 
-    if nstatus > 0 and nstatus % step == 0:
-        do_status = True
-    if nviz > 0 and nviz % step == 0:
-        do_viz = True
 
-    if do_status is False and do_viz is False:
-        return 0
-
-    dim = discr.dim
-    dv = eos(state)
-
-    if do_status:
-        statusmesg = make_status_message(t=t, step=step, dt=dt,
-                                         cfl=cfl, dv=dv)
+def make_output_dump(visualizer, basename, io_fields,
+                     comm=None, step=0, t=0, overwrite=True):
+    rank = 0
+    nproc = 1
+    if comm is not None:
+        rank = comm.Get_rank()
+        nproc = comm.Get_size()
+    if nproc > 1:
+        rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
+        par_fn = make_par_fname(basename=basename, step=step, t=t)
+        visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields, overwrite=True)
         if rank == 0:
-            logger.info(statusmesg)
-
-    if do_viz:
-        visfilename = make_visfile_name(basename=basename, rank=rank,
-                                        step=step, t=t)
-        io_fields = make_io_fields(dim, state, dv, eos)
-        visualizer.write_vtk_file(visfilename, io_fields)
-
-    return 0
+            os.rename(rank_fn.format(rank=rank).replace("vtu", "pvtu"), par_fn)
+    else:
+        fname = make_serial_fname(basename=basename, step=step, t=t)
+        visualizer.write_vtk_file(fname, io_fields, overwrite=True)

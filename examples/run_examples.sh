@@ -1,10 +1,13 @@
 #!/bin/bash
 
+# set -e
+
 examples_dir=${1}
 if [ -z ${examples_dir} ]
 then
     examples_dir="."
 fi
+declare -i exitcode=0
 printf "Running examples in ${examples_dir}...\n"
 for example in $(ls ${examples_dir}/*.py)
 do
@@ -20,8 +23,16 @@ do
     then
         printf "succeeded.\n"
     else
+        ((exitcode=exitcode+1))
         printf "failed.\n"
     fi
 done
-printf "Done running examples!\n" 
+printf "Done running examples!\n"
+if [ $exitcode -eq 0 ]
+then
+    printf "No errors.\n"
+else
+    printf "Errors detected (${exitcode}).\n"
+    exit $exitcode
+fi
 #rm -f examples/*.vtu
