@@ -85,14 +85,14 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
             #    if dim == 1:
             #        for m in range(cutoff, nmodes):
             #            filter[m, m] = np.exp(-1.0 * alpha
-            #                                  * ((m - cutoff) / nfilt) ** filter_pow)
+            #                             * ((m - cutoff) / nfilt) ** filter_pow)
             #    elif dim == 2:
             #        sk = 0
             #        for i in range(order + 1):
             #            for j in range(order - i + 1):
             #                if((i + j) >= cutoff):
             #                    filter[sk, sk] = np.exp(-1.0 * alpha
-            #                                            * (((i + j) - cutoff) / nfilt)
+            #                                       * (((i + j) - cutoff) / nfilt)
             #                                            ** filter_pow)
             #                sk += 1
             #    elif dim == 3:
@@ -102,7 +102,7 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
             #                for k in range(order - (i + j) + 1):
             #                    if (i + j + k) >= cutoff:
             #                        filter[sk, sk] = np.exp(-1.0 * alpha
-            #                                                * (((i + j + k) - cutoff) / nfilt)
+            #                                     * (((i + j + k) - cutoff) / nfilt)
             #                                                ** filter_pow)
             #                    sk += 1
     return filter
