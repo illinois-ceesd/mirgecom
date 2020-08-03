@@ -29,7 +29,6 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
@@ -55,7 +54,8 @@ def bump(actx, discr, t=0):
 
 def main():
     cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
+    queue = cl.CommandQueue(cl_ctx,
+        properties=cl.command_queue_properties.PROFILING_ENABLE)
     actx = PyOpenCLProfilingArrayContext(queue)
 
     dim = 2
@@ -98,6 +98,7 @@ def main():
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
+            actx.print_profiling_data()
             print(istep, t, discr.norm(fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
