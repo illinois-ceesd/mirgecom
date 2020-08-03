@@ -60,11 +60,6 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
     r"""
     Exponential spectral filter from JSH/TW Nodal DG Methods, pp. 130, 186
     """
-    #    nmodes = 1
-    #    for d in range(1, dim+1):
-    #        nmodes *= (order + d)
-    #    nmodes /= math.factorial(int(dim))
-    #    nmodes = int(nmodes)
 
     mode_ids = elemgroup.mode_ids()
     nmodes = len(mode_ids)
@@ -82,29 +77,6 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
         if mode >= cutoff:
             filter[mode_index, mode_index] = np.exp(-1.0 * alpha
                                   * ((mode - cutoff) / nfilt) ** filter_pow)
-            #    if dim == 1:
-            #        for m in range(cutoff, nmodes):
-            #            filter[m, m] = np.exp(-1.0 * alpha
-            #                             * ((m - cutoff) / nfilt) ** filter_pow)
-            #    elif dim == 2:
-            #        sk = 0
-            #        for i in range(order + 1):
-            #            for j in range(order - i + 1):
-            #                if((i + j) >= cutoff):
-            #                    filter[sk, sk] = np.exp(-1.0 * alpha
-            #                                       * (((i + j) - cutoff) / nfilt)
-            #                                            ** filter_pow)
-            #                sk += 1
-            #    elif dim == 3:
-            #        sk = 0
-            #        for i in range(order + 1):
-            #            for j in range(order - i + 1):
-            #                for k in range(order - (i + j) + 1):
-            #                    if (i + j + k) >= cutoff:
-            #                        filter[sk, sk] = np.exp(-1.0 * alpha
-            #                                     * (((i + j + k) - cutoff) / nfilt)
-            #                                                ** filter_pow)
-            #                    sk += 1
     return filter
 
 
@@ -133,7 +105,6 @@ class SpectralFilter:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
             filter_operator = vander @ filter_mat @ vanderm1
-            # np.matmul(vander, np.matmul(filter_mat, vanderm1))
             self._filter_operators.append(filter_operator)
         self._knl = linear_operator_kernel()
 
