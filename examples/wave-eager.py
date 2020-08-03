@@ -32,6 +32,8 @@ from mirgecom.integrators import rk4_step
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 
 def bump(actx, discr, t=0):
     source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
@@ -53,8 +55,8 @@ def bump(actx, discr, t=0):
 
 def main():
     cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    queue = cl.CommandQueue(cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
+    actx = PyOpenCLProfilingArrayContext(queue)
 
     dim = 2
     nel_1d = 16
