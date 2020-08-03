@@ -83,7 +83,7 @@ class AdiabaticSlipBoundary:
         # of velocity from the velocity at the wall
         wall_velocity = bsoln.momentum / bsoln.mass
         wnorm_vel = np.dot(wall_velocity, nhat) * normal
-        wall_velocity = wall_velocity - wnorm_vel
+        wall_velocity = wall_velocity - 2.0 * wnorm_vel
 
         # Re-calculate the boundary solution with the new
         # momentum
