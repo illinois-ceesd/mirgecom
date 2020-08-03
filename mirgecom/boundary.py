@@ -21,10 +21,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.eos import IdealSingleGas
+from mirgecom.euler import split_conserved
 from grudge.symbolic.primitives import TracePair
 
 
@@ -57,3 +58,36 @@ class DummyBoundary:
     ):
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, dir_soln, dir_soln)
+
+
+class AdiabaticSlipBoundary:
+    """Adiabatic slipwall boundary for inviscid flows"""
+    def boundary_pair(
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        # Grab some boundary-relevant data
+        actx = q[0].array_context
+        dim = discr.dim
+        boundary_discr = discr.discr_from_dd(btag)
+        normal = thaw(actx, discr.normal(boundary_discr))
+        normal_mag = actx.np.sqrt(np.dot(normal, normal))
+        nhat = normal / normal_mag
+
+        # Get the interior/exterior solns
+        int_soln = discr.project("vol", btag, q)
+        boundary_soln = discr.project("vol", btag, q)  # copy?
+        bpressure = eos.pressure(boundary_soln)
+        bsoln = split_conserved(dim, boundary_soln)
+
+        # Subtract out the wall-normal component
+        # of velocity from the velocity at the wall
+        wall_velocity = bsoln.momentum / bsoln.mass
+        wnorm_vel = np.dot(wall_velocity, nhat)
+        wall_velocity = wall_velocity - wnorm_vel
+
+        # Re-calculate the boundary solution with the new
+        # momentum
+        bsoln.momentum = bsoln.mass * wall_velocity
+        bsoln.energy = eos.energy(bsoln.mass, bpressure, bsoln.momentum)
+
+        return TracePair(btag, int_soln, boundary_soln)

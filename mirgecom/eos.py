@@ -242,6 +242,21 @@ class IdealSingleGas:
             ((self._gamma - 1.0) / self._gas_const) * self.internal_energy(q) / mass
         )
 
+    def energy(self, mass, pressure, momentum):
+        r"""Gas total energy from mass, pressure, momentum
+
+        The total energy density (rhoE) is calculated from
+        the mass density (rho) , pressure (p) , and
+        momentum (rhoV) as:
+
+        .. :math::
+
+            \rhoE = \frac{p}{(\gamma - 1)} +
+            \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
+        """
+        return (pressure / (self._gamma - 1.0)
+                + 0.5 * np.dot(momentum, momentum) / mass)
+
     def __call__(self, q):
         return flat_obj_array(self.pressure(q), self.temperature(q))
 
