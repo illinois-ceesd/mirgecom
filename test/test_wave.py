@@ -25,7 +25,6 @@ import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import flat_obj_array, make_obj_array
-
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
@@ -40,7 +39,6 @@ from pyopencl.tools import (  # noqa
 import pytest
 
 import logging
-
 logger = logging.getLogger(__name__)
 
 
@@ -145,7 +143,6 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
     sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
     from pytools.convergence import EOCRecorder
-
     eoc_rec = EOCRecorder()
 
     for n in [8, 10, 12] if dim == 3 else [4, 8, 16]:
@@ -191,7 +188,7 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
 
     print("Approximation error:")
     print(eoc_rec)
-    assert eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11
+    assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
 
 
 @pytest.mark.parametrize(("problem", "timestep_scale"),
