@@ -27,6 +27,7 @@ import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 from functools import partial
+from mpi4py import MPI
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -57,11 +58,11 @@ def main(ctx_factory=cl.create_some_context):
 
     logger = logging.getLogger(__name__)
 
-    dim = 2
+    dim = 3
     nel_1d = 16
     order = 3
-    exittol = 2e-2
-    t_final = 0.1
+    exittol = .09
+    t_final = 0.01
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
@@ -69,24 +70,53 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .001
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(center=orig, velocity=vel)
+    initializer = Lump(numdim=dim, center=orig, velocity=vel)
     casename = 'lump'
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
-    nstatus = 10
-    nviz = 10
+    nstatus = 1
+    nviz = 1
     rank = 0
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
+    box_ll = -5.0
+    box_ur = 5.0
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
+    comm = MPI.COMM_WORLD
+    nproc = comm.Get_size()
+    rank = comm.Get_rank()
+    num_parts = nproc
 
-    mesh = generate_regular_rect_mesh(
-        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+    from meshmode.distributed import (
+        MPIMeshDistributor,
+        get_partition_by_pymetis,
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    mesh_dist = MPIMeshDistributor(comm)
+    global_nelements = 0
+    local_nelements = 0
+    if mesh_dist.is_mananger_rank():
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+
+        mesh = generate_regular_rect_mesh(
+            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
+        )
+        global_nelements = mesh.nelements
+        logging.info(f"Total {dim}d elements: {global_nelements}")
+
+        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+
+        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+        del mesh
+
+    else:
+        local_mesh = mesh_dist.receive_mesh_part()
+    local_nelements = local_mesh.nelements
+
+    discr = EagerDGDiscretization(
+        actx, local_mesh, order=order, mpi_communicator=comm
+    )
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
@@ -94,7 +124,9 @@ def main(ctx_factory=cl.create_some_context):
                                  if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order, nelements=mesh.nelements,
+    init_message = make_init_message(dim=dim, order=order,
+                                     nelements=local_nelements,
+                                     global_nelements=global_nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
@@ -114,7 +146,7 @@ def main(ctx_factory=cl.create_some_context):
         return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
                             q=state, vizname=casename, step=step, t=t, dt=dt,
                             nstatus=nstatus, nviz=nviz, exittol=exittol,
-                            constant_cfl=constant_cfl)
+                            constant_cfl=constant_cfl, comm=comm)
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,

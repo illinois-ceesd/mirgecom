@@ -25,8 +25,9 @@ import logging
 import math
 import pytest
 import numpy as np
-
 import pyopencl as cl
+
+# import pyopencl as cl
 # import pyopencl.clmath as clmath
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -40,10 +41,10 @@ from pytools.obj_array import (
     flat_obj_array,
     make_obj_array
 )
+from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import get_spectral_filter
 from mirgecom.filter import SpectralFilter
 from mirgecom.filter import apply_linear_operator
-from mirgecom.initializers import Uniform
 from mirgecom.checkstate import compare_states
 
 
@@ -57,7 +58,9 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     band limits have the expected values.
     """
     cl_ctx = ctx_factory()
-    actx = PyOpenCLArrayContext(cl.CommandQueue(cl_ctx))
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
     nel_1d = 16
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -66,7 +69,6 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
         a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
 
-    #    discr = EagerDGDiscretization(actx, mesh, order=order)
     discr = EagerDGDiscretization(actx, mesh, order=order)
     vol_discr = discr.discr_from_dd("vol")
 

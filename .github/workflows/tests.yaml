@@ -8,6 +8,23 @@ on:
 
 
 jobs:
+  flake8:
+    name: Flake8
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v2
+        -
+          uses: actions/setup-python@v1
+          with:
+            python-version: '3.x'
+        - name: Flake8 test
+          run: |
+            python3 -m venv myenv
+            source myenv/bin/activate
+            python -m pip install wheel
+            python -m pip install flake8 pep8-naming
+            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples && echo "Flake8 found no errors."
+
   build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -21,8 +38,10 @@ jobs:
           run: |
             if [ "$(uname)" = "Darwin" ]; then
               PLATFORM=MacOSX
+              brew install open-mpi
             else
               PLATFORM=Linux
+              sudo apt-get -y install openmpi-bin libopenmpi-dev
             fi
             MINIFORGE_INSTALL_DIR=.miniforge3
             MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
@@ -41,24 +60,20 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             pip install -r requirements.txt
-            pip install -e .
+            python setup.py install
+
         - name: Run tests
           shell: bash -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=$MINIFORGE_INSTALL_DIR/envs/testing/etc/OpenCL/vendors
-            ls $OCL_ICD_VENDORS
-            clinfo
-            pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
+            cd test
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+
         - name: Run examples
           shell: bash -l {0}
           run: |
-            [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
-            ls $OCL_ICD_VENDORS
-            clinfo
-            export PYOPENCL_CTX=''
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             . ./examples/run_examples.sh examples
- 
+

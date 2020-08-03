@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
@@ -35,14 +36,14 @@ class PrescribedBoundary:
         self._userfunc = userfunc
 
     def boundary_pair(
-            self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
-        queue = w[0].queue
+        actx = q[0].array_context
 
         boundary_discr = discr.discr_from_dd(btag)
-        nodes = boundary_discr.nodes().with_queue(queue)
+        nodes = thaw(actx, boundary_discr.nodes())
         ext_soln = self._userfunc(t, nodes)
-        int_soln = discr.project("vol", btag, w)
+        int_soln = discr.project("vol", btag, q)
         return TracePair(btag, int_soln, ext_soln)
 
 
@@ -52,7 +53,7 @@ class DummyBoundary:
     face.
     """
     def boundary_pair(
-        self, discr, w, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
-        dir_soln = discr.project("vol", btag, w)
+        dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, dir_soln, dir_soln)
