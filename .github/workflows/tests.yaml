@@ -8,6 +8,23 @@ on:
 
 
 jobs:
+  flake8:
+    name: Flake8
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v2
+        -
+          uses: actions/setup-python@v1
+          with:
+            python-version: '3.x'
+        - name: Flake8 test
+          run: |
+            python3 -m venv myenv
+            source myenv/bin/activate
+            python -m pip install wheel
+            python -m pip install flake8 pep8-naming
+            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples && echo "Flake8 found no errors."
+
   build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -16,27 +33,46 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
         - uses: actions/checkout@v2
-        - uses: goanpeca/setup-miniconda@v1
-          with:
-            auto-update-conda: true
-            channels: conda-forge, nodefaults
-        - name: Install prerequisites
+        - name: Install miniforge
           shell: bash -l {0}
-          run: | 
-            conda install pocl islpy pyopencl pytest pip clinfo mpi4py
-            if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-            pip install -e .
+          run: |
+            if [ "$(uname)" = "Darwin" ]; then
+              PLATFORM=MacOSX
+              brew install open-mpi
+            else
+              PLATFORM=Linux
+              sudo apt-get -y install openmpi-bin libopenmpi-dev
+            fi
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
+            curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/$MINIFORGE_INSTALL_SH"
+            rm -Rf "$MINIFORGE_INSTALL_DIR"
+            bash "$MINIFORGE_INSTALL_SH" -b -p "$MINIFORGE_INSTALL_DIR"
+            PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update conda --yes --quiet
+            PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes --quiet
+            PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file .test-conda-env-py3.yml --name testing --quiet
+
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+
+        - name: PIP installation
+          shell: bash -l {0}
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            pip install -r requirements.txt
+            python setup.py install
+
         - name: Run tests
           shell: bash -l {0}
           run: |
-            [[ $(uname) = "Darwin" ]] && myprefix=local || myprefix=share
-            export OCL_ICD_VENDORS=/usr/$myprefix/miniconda/envs/test/etc/OpenCL/vendors
-            ls $OCL_ICD_VENDORS
-            clinfo
-            pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw
-        - name: Flake8
-          if: ${{ runner.os == 'Linux' }}
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            cd test
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+
+        - name: Run examples
           shell: bash -l {0}
           run: |
-            pip install flake8 pep8-naming
-            python -m flake8
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            python examples/wave-eager.py

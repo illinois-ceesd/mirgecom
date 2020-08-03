@@ -235,4 +235,10 @@ def split_fields(ndim, w):
         selem = ndim + 2
         retlist.append(("massfraction", w[selem: selem + nscalar]))
 
-    return retlist
+__doc__ = """
+.. autofunction:: euler_operator
+"""
+
+
+def euler_operator(discr, w):
+    pass

@@ -1,8 +1,13 @@
 numpy
-git+https://github.com/inducer/pymbolic.git
+pytest
+mpi4py
+pyvisfile
+git+https://github.com/inducer/pymbolic.git#egg=pymbolic
+git+https://github.com/inducer/islpy.git#egg=islpy
+git+https://github.com/inducer/pyopencl.git#egg=pyopencl
 git+https://github.com/inducer/loopy.git
-git+https://gitlab.tiker.net/inducer/dagrt.git
-git+https://gitlab.tiker.net/inducer/leap.git
+git+https://github.com/inducer/dagrt.git
+git+https://github.com/inducer/leap.git
 git+https://github.com/inducer/meshpy.git
 git+https://github.com/inducer/modepy.git
 git+https://gitlab.tiker.net/inducer/meshmode.git@array-context
