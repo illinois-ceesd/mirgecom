@@ -134,22 +134,28 @@ def main(ctx_factory=cl.create_some_context):
         get_partition_by_pymetis,
     )
 
-    mesh_dist = MPIMeshDistributor(comm)
     global_nelements = 0
     local_nelements = 0
-    if mesh_dist.is_mananger_rank():
 
-        mesh = import_pseudo_y0_mesh()
-        global_nelements = mesh.nelements
-        logging.info(f"Total {dim}d elements: {global_nelements}")
+    if nproc > 1:
+        mesh_dist = MPIMeshDistributor(comm)
+        if mesh_dist.is_mananger_rank():
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            mesh = import_pseudo_y0_mesh()
+            global_nelements = mesh.nelements
+            logging.info(f"Total {dim}d elements: {global_nelements}")
 
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-        del mesh
+            part_per_element = get_partition_by_pymetis(mesh, num_parts)
 
+            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+            del mesh
+
+        else:
+            local_mesh = mesh_dist.receive_mesh_part()
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        local_mesh = import_pseudo_y0_mesh()
+        global_nelements = local_mesh.nelements
+
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
@@ -160,6 +166,7 @@ def main(ctx_factory=cl.create_some_context):
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
+
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
