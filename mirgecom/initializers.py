@@ -150,19 +150,22 @@ class SodShock1D:
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
-        x_rel = x_vec[self._xdir]
+
+        from meshmode.dof_array import flatten
+        x_rel = flatten(x_vec[self._xdir])
         actx = x_rel.array_context
 
-        zeros = 0*x_rel
+        zeros = 0.0*x_rel
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
-        x0 = zeros + self._x0
+
         energyl = zeros + gmn1 * self._energyl
         energyr = zeros + gmn1 * self._energyr
-        yesno = x_rel > x0
-        mass = actx.np.where(yesno, rhor, rhol)
-        energy = actx.np.where(yesno, energyr, energyl)
+        yesno = x_rel < self._x0
+
+        mass = actx.np.where(yesno, rhol, rhor)
+        energy = actx.np.where(yesno, energyl, energyr)
         mom = make_obj_array(
             [
                 0*x_rel
