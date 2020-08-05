@@ -5,17 +5,18 @@
 examples_dir=${1}
 if [ -z ${examples_dir} ]
 then
-    examples_dir="."
+    examples_dir=`pwd`
 fi
 declare -i exitcode=0
 printf "Running examples in ${examples_dir}...\n"
-for example in $(ls ${examples_dir}/*.py)
+for example in ${examples_dir}/*.py
 do
-    printf "Running example: ${example}\n"
-    if [ "mpi" == *"${example}"* ]
+    if [[ "${example}" == *"mpi"* ]]
     then
+        printf "Running parallel example: ${example}\n"        
         mpiexec -n 2 python ${example}
     else
+        printf "Running serial example: ${example}\n"        
         python ${example}
     fi
     printf "Example ${example} "
