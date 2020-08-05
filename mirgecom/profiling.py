@@ -188,8 +188,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 f32op = op_map.filter_by(dtype=[np.float32]).eval_and_sum(param_dict)
                 f64op = op_map.filter_by(dtype=[np.float64]).eval_and_sum(param_dict)
 
-                mem32 = mem_map.filter_by(dtype=[np.float32]).eval_and_sum(param_dict)
-                mem64 = mem_map.filter_by(dtype=[np.float64]).eval_and_sum(param_dict)
+                mem32 = mem_map.filter_by(dtype=[np.float32]).eval_and_sum(
+                    param_dict)
+                mem64 = mem_map.filter_by(dtype=[np.float64]).eval_and_sum(
+                    param_dict)
 
                 flops = f32op + f64op
                 mem_accesses = mem32 + mem64
