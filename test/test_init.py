@@ -154,11 +154,9 @@ def test_shock_init(ctx_factory, dim):
     actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 10
-    #    dim = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    #    for dim in [1, 2, 3]:
     mesh = generate_regular_rect_mesh(
         a=(-1.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
     )
@@ -168,7 +166,6 @@ def test_shock_init(ctx_factory, dim):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-    print(f"nodes={nodes}")
 
     xpl = 1.0
     xpr = 0.1
@@ -179,27 +176,10 @@ def test_shock_init(ctx_factory, dim):
         x0 = 0.0
         initr = SodShock1D(dim=dim, xdir=xdir, x0=x0)
         initsoln = initr(t=0.0, x_vec=nodes)
-        print(f"Sod Soln(dim={dim},xdir={xdir}): {initsoln}")
-        x_rel = nodes[xdir]
-        print(f"x_rel = {x_rel}")
+        p = eos.pressure(initsoln)
+        nodes_x = nodes[xdir]
+        assert discr.norm(actx.np.where(nodes_x < x0, p-xpl, p-xpr), np.inf) < tol
 
-        #        from meshmode.dof_array import flatten
-        #        nodes_x = flatten(x_rel)
-        #        new_actx = nodes_x.array_context
-
-        #        print(f"nodes_x = {nodes_x}")
-
-        #        p = flatten(eos.pressure(initsoln))
-        #        print(f"Pressure={p}")
-        #        new_actx = p.array_context
-        #        testyesno = nodes_x < x0
-        #        print(f"testyesno = {testyesno}")
-        #        thing = actx.np.where(nodes_x < x0, p-xpl, p-xpr)
-        #        print(f"thing = {thing}")
-        #        new_actx2 = thing.array_context
-
-        #        assert discr.norm(thing, np.inf) < tol
-    assert(False)
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_uniform(ctx_factory, dim):
