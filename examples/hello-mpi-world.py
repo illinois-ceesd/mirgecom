@@ -5,5 +5,4 @@ myrank = comm.Get_rank()
 nproc = comm.Get_size()
 
 comm.Barrier()
-print (f'Hello MPI World! My rank is {myrank} / {nproc}')
-
+print(f'Hello MPI World! My rank is {myrank} / {nproc}')
