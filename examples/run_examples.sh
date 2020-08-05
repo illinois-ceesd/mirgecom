@@ -9,7 +9,7 @@ then
 fi
 declare -i exitcode=0
 printf "Running examples in ${examples_dir}...\n"
-for example in $(ls ${examples_dir}/*.py)
+for example in ${examples_dir}/*.py
 do
     printf "Running example: ${example}\n"
     if [ "mpi" == *"${example}"* ]
