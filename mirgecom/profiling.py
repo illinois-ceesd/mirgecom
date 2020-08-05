@@ -35,19 +35,13 @@ class ProfileData:
         self.flops = flops
         self.mem_access = mem_access
 
-    def __repr__(self) -> str:
-        return f"(time={self.time}, flops={self.flops},\
-          mem_access={self.mem_access})"
-
-    def __str__(self) -> str:
-        return self.__repr__()
-
 
 class TimingEvent:
-    def __init__(self, event, program, kwargs) -> None:
+    def __init__(self, event, name, flops, mem_accesses) -> None:
         self.event = event
-        self.program = program
-        self.kwargs = kwargs
+        self.name = name
+        self.flops = flops
+        self.mem_accesses = mem_accesses
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
@@ -64,10 +58,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.events = []
         self.profiling_data = {}
-        self.invoker_codes = {}
+        self.kernel_stats = {}
 
     def finish_profile_events(self) -> None:
-
         if not self.profiling_enabled:
             return
 
@@ -75,24 +68,23 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             cl.wait_for_events([t.event for t in self.events])
 
         for t in self.events:
-            kwargs = t.kwargs
-            program = t.program
-            flops, mem_accesses = self.invoker_codes[program.name][tuple(kwargs)]
+            name = t.name
+            flops = t.flops
+            mem_accesses = t.mem_accesses
             evt = t.event
 
             time = evt.profile.end - evt.profile.start
 
-            if program.name in self.profiling_data:
-                self.profiling_data[program.name].append(
+            if name in self.profiling_data:
+                self.profiling_data[name].append(
                     ProfileData(time, flops, mem_accesses))
             else:
-                self.profiling_data[program.name] = [
+                self.profiling_data[name] = [
                     ProfileData(time, flops, mem_accesses)]
 
         self.events = []
 
     def print_profiling_data(self) -> None:
-
         if not self.profiling_enabled:
             return
 
@@ -129,7 +121,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             '='*8, '='*8, '='*8, '='*8, '='*8))
 
     def call_loopy(self, program, **kwargs) -> dict:
-
         from warnings import resetwarnings, filterwarnings
         resetwarnings()
         filterwarnings('ignore', category=Warning)
@@ -138,67 +129,79 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         assert program.options.return_dict
         assert program.options.no_numpy
 
-        # Determine if we need to get the invoker code to generate integer arguments
-        # N.B.: The invoker code might be different for the same program with
-        # different kwargs
-        if (program.name not in self.invoker_codes
-          or tuple(kwargs) not in self.invoker_codes[program.name]):
-            executor = program.target.get_kernel_executor(program, self.queue)
-            info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
-
-            kernel = executor.get_typed_and_scheduled_kernel(
-                executor.arg_to_dtype_set(kwargs))
-
-            data = info.implemented_data_info
-
-            wrapper = executor.get_wrapper_generator()
-
-            gen = PythonCodeGenerator()
-
-            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, data)
-            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, data)
-            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, data)
-
-            types = {}
-            param_dict = {}
+        if self.profiling_enabled:
+            args_tuple = ()
 
             for key, value in kwargs.items():
-                if hasattr(value, 'dtype') and not value.dtype == object:
-                    types[key] = value.dtype
-                param_dict[key] = value
+                if hasattr(value, 'shape'):
+                    args_tuple = args_tuple + (key, value.shape)
+                else:
+                    args_tuple = args_tuple + (key, value)
 
-            for key, value in kernel.arg_dict.items():
-                if key not in param_dict:
-                    param_dict[key] = None
+            # Check if we need to get the invoker code to generate integer arguments
+            # N.B.: The invoker code might be different for the same program with
+            # different kwargs
+            if (program.name not in self.kernel_stats
+              or args_tuple not in self.kernel_stats[program.name]):
+                executor = program.target.get_kernel_executor(program, self.queue)
+                info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
-            for d in data:
-                if d.name not in param_dict:
-                    param_dict[d.name] = None
+                kernel = executor.get_typed_and_scheduled_kernel(
+                    executor.arg_to_dtype_set(kwargs))
 
-            # Run the wrapper code
-            exec(gen.get(), param_dict)
+                data = info.implemented_data_info
 
-            # Get statistics
-            kernel.options.ignore_boostable_into = True
-            kernel = lp.add_and_infer_dtypes(kernel, types)
-            op_map = lp.get_op_map(kernel, subgroup_size='guess')
-            mem_map = lp.get_mem_access_map(kernel, subgroup_size='guess')
+                # Generate the wrapper code
+                wrapper = executor.get_wrapper_generator()
 
-            f32op = op_map.filter_by(dtype=[np.float32]).eval_and_sum(param_dict)
-            f64op = op_map.filter_by(dtype=[np.float64]).eval_and_sum(param_dict)
+                gen = PythonCodeGenerator()
 
-            mem32 = mem_map.filter_by(dtype=[np.float32]).eval_and_sum(param_dict)
-            mem64 = mem_map.filter_by(dtype=[np.float64]).eval_and_sum(param_dict)
+                wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, data)
+                wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, data)
+                wrapper.generate_integer_arg_finding_from_strides(gen, kernel, data)
 
-            flops = f32op + f64op
-            mem_accesses = mem32 + mem64
+                types = {}
+                param_dict = {}
 
-            self.invoker_codes[program.name] = {}
-            self.invoker_codes[program.name][tuple(kwargs)] = (flops, mem_accesses)
+                for key, value in kwargs.items():
+                    if hasattr(value, 'dtype') and not value.dtype == object:
+                        types[key] = value.dtype
+                    param_dict[key] = value
+
+                for key, value in kernel.arg_dict.items():
+                    if key not in param_dict:
+                        param_dict[key] = None
+
+                for d in data:
+                    if d.name not in param_dict:
+                        param_dict[d.name] = None
+
+                # Run the wrapper code, save argument values in param_dict
+                exec(gen.get(), param_dict)
+
+                # Get flops/memory statistics
+                kernel.options.ignore_boostable_into = True
+                kernel = lp.add_and_infer_dtypes(kernel, types)
+                op_map = lp.get_op_map(kernel, subgroup_size='guess')
+                mem_map = lp.get_mem_access_map(kernel, subgroup_size='guess')
+
+                f32op = op_map.filter_by(dtype=[np.float32]).eval_and_sum(param_dict)
+                f64op = op_map.filter_by(dtype=[np.float64]).eval_and_sum(param_dict)
+
+                mem32 = mem_map.filter_by(dtype=[np.float32]).eval_and_sum(param_dict)
+                mem64 = mem_map.filter_by(dtype=[np.float64]).eval_and_sum(param_dict)
+
+                flops = f32op + f64op
+                mem_accesses = mem32 + mem64
+
+                self.kernel_stats[program.name] = {}
+                self.kernel_stats[program.name][args_tuple] = (flops, mem_accesses)
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
         if self.profiling_enabled:
-            self.events.append(TimingEvent(evt, program, kwargs))
+            flops = self.kernel_stats[program.name][args_tuple][0]
+            mem_accesses = self.kernel_stats[program.name][args_tuple][1]
+            self.events.append(TimingEvent(evt, program.name, flops, mem_accesses))
 
         return result
