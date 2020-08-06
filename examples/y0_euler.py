@@ -39,19 +39,86 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    check_step,
+    make_status_message,
 )
-from mirgecom.io import make_init_message
-
+from mirgecom.io import (
+    make_init_message,
+    make_io_fields,
+    make_output_dump,
+)
+from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import DummyBoundary
 from mirgecom.initializers import Uniform
+from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
+
+
+def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
+                   constant_cfl=False, comm=None):
+    r"""
+    Checkpointing utility for runs with known exact solution generator
+    """
+
+    do_viz = check_step(step=step, n=nviz)
+    do_status = check_step(step=step, n=nstatus)
+    if do_viz is False and do_status is False:
+        return 0
+
+    actx = q[0].array_context
+    nodes = thaw(actx, discr.nodes())
+    rank = 0
+
+    if comm is not None:
+        rank = comm.Get_rank()
+    checkpoint_status = 0
+
+    dv = eos(q=q)
+
+    have_exact = False
+
+    if ((do_status is True or do_viz is True) and exact_soln is not None):
+        have_exact = True
+        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+    
+        
+
+    if do_status is True:
+        #        if constant_cfl is False:
+        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
+        #                                           eos=eos, dt=dt)
+        statusmesg = make_status_message(t=t, step=step, dt=dt,
+                                         cfl=cfl, dv=dv)
+        if have_exact is True:
+            max_errors = compare_states(red_state=q, blue_state=expected_state)
+            statusmesg += f"\n------   Err({max_errors})"
+            if rank == 0:
+                logger.info(statusmesg)
+
+            maxerr = np.max(max_errors)
+            if maxerr > exittol:
+                logger.error("Solution failed to follow expected result.")
+                checkpoint_status = 1
+
+    if do_viz:
+        dim = discr.dim
+        io_fields = make_io_fields(dim, q, dv, eos)
+        if have_exact is True:
+            io_fields.append(("exact_soln", expected_state))
+            result_resid = q - expected_state
+            io_fields.append(("residual", result_resid))
+        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
+                         comm=comm, step=step, t=t, overwrite=True)
+
+    return checkpoint_status
 
 
 # Surrogate for the currently non-functioning Uniform class
@@ -134,13 +201,14 @@ def main(ctx_factory=cl.create_some_context):
     exittol = .09
     t_final = 0.01
     current_cfl = 1.0
-    #    vel = np.zeros(shape=(dim,))
-    #    orig = np.zeros(shape=(dim,))
-    #    vel[:dim] = 1.0
-    current_dt = .001
+    vel = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,))
+    vel[0] = 1.0
+    current_dt = 1e-5
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Uniform(numdim=dim)
+    initializer = Lump(numdim=dim, center=orig, velocity=vel)
+    #    initializer = Uniform(numdim=dim)
     casename = 'pseudoY0'
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
@@ -189,8 +257,8 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    #    current_state = initializer(0, nodes)
-    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
+    current_state = initializer(0, nodes)
+    #    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -216,10 +284,10 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
-                            q=state, vizname=casename, step=step, t=t, dt=dt,
-                            nstatus=nstatus, nviz=nviz, exittol=exittol,
-                            constant_cfl=constant_cfl, comm=comm)
+        return sim_checkpoint(discr, visualizer, eos, logger, exact_soln=initializer,
+                              q=state, vizname=casename, step=step, t=t, dt=dt,
+                              nstatus=nstatus, nviz=nviz, exittol=exittol,
+                              constant_cfl=constant_cfl, comm=comm)
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,

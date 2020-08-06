@@ -60,9 +60,9 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
-def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
-                         vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
-                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
+def sim_checkpoint(discr, visualizer, eos, logger, q, exact_soln=None,
+                   vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
+                   nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
     r"""
     Checkpointing utility for runs with known exact solution generator
     """
@@ -81,7 +81,14 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
     checkpoint_status = 0
 
     dv = eos(q=q)
-    expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+
+    have_exact = False
+
+    if ((do_status is True or do_viz is True) and exact_soln is not None):
+        have_exact = True
+        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+    
+        
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -89,23 +96,26 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
         #                                           eos=eos, dt=dt)
         statusmesg = make_status_message(t=t, step=step, dt=dt,
                                          cfl=cfl, dv=dv)
-        max_errors = compare_states(red_state=q, blue_state=expected_state)
-        statusmesg += f"\n------   Err({max_errors})"
-        if rank == 0:
-            logger.info(statusmesg)
+        if have_exact is True:
+            max_errors = compare_states(red_state=q, blue_state=expected_state)
+            statusmesg += f"\n------   Err({max_errors})"
+            if rank == 0:
+                logger.info(statusmesg)
 
-        maxerr = np.max(max_errors)
-        if maxerr > exittol:
-            logger.error("Solution failed to follow expected result.")
-            checkpoint_status = 1
+            maxerr = np.max(max_errors)
+            if maxerr > exittol:
+                logger.error("Solution failed to follow expected result.")
+                checkpoint_status = 1
 
-        if do_viz:
-            dim = discr.dim
-            io_fields = make_io_fields(dim, q, dv, eos)
+    if do_viz:
+        dim = discr.dim
+        io_fields = make_io_fields(dim, q, dv, eos)
+        if have_exact is True:
             io_fields.append(("exact_soln", expected_state))
             result_resid = q - expected_state
             io_fields.append(("residual", result_resid))
-            make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                             comm=comm, step=step, t=t, overwrite=True)
+        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
+                         comm=comm, step=step, t=t, overwrite=True)
 
-        return checkpoint_status
+    return checkpoint_status
+
