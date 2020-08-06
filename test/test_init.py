@@ -35,7 +35,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from mirgecom.initializers import Uniform
+# from mirgecom.initializers import Uniform
 from mirgecom.initializers import SodShock1D
 
 from mirgecom.euler import split_conserved
@@ -233,7 +233,6 @@ def test_uniform(ctx_factory, dim):
     #    initsoln = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
     initsoln = set_uniform_solution(t=0.0, x_vec=nodes)
-    #    initsoln = initr.set_uniform_solution(t=0.0, x_vec=nodes)
     ssoln = split_conserved(dim, initsoln)
     assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
     assert discr.norm(ssoln.energy - 2.5, np.inf) < tol

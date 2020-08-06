@@ -48,6 +48,10 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Uniform
 from mirgecom.eos import IdealSingleGas
+from pytools.obj_array import (
+    flat_obj_array,
+    make_obj_array,
+)
 
 
 # Surrogate for the currently non-functioning Uniform class

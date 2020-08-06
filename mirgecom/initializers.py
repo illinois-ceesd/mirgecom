@@ -334,7 +334,7 @@ class Uniform:
         self._e = e
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        
+
         dim = len(x_vec)
         _rho = self._rho
         _p = self._p
@@ -357,16 +357,16 @@ class Uniform:
 
     def set_uniform_solution(t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
                              velocity=None, eos=IdealSingleGas()):
-        
+
         dim = len(x_vec)
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
-            
+
         _rho = mass
         _p = pressure
-        _velocity = velocity 
+        _velocity = velocity
         _gamma = eos.gamma()
-        
+
         mom0 = _rho * _velocity
         e0 = _p / (_gamma - 1.0)
         ke = 0.5 * np.dot(_velocity, _velocity) / _rho
