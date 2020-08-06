@@ -60,9 +60,9 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
-def sim_checkpoint(discr, visualizer, eos, logger, q, exact_soln=None,
-                   vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
-                   nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
+def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
+                   constant_cfl=False, comm=None):
     r"""
     Checkpointing utility for runs with known exact solution generator
     """
@@ -87,8 +87,6 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, exact_soln=None,
     if ((do_status is True or do_viz is True) and exact_soln is not None):
         have_exact = True
         expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
-    
-        
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -118,4 +116,3 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, exact_soln=None,
                          comm=comm, step=step, t=t, overwrite=True)
 
     return checkpoint_status
-

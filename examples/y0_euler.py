@@ -51,8 +51,8 @@ from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.boundary import DummyBoundary
-from mirgecom.initializers import Uniform
+# from mirgecom.boundary import DummyBoundary
+# from mirgecom.initializers import Uniform
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 from pytools.obj_array import (
@@ -88,8 +88,6 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
     if ((do_status is True or do_viz is True) and exact_soln is not None):
         have_exact = True
         expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
-    
-        
 
     if do_status is True:
         #        if constant_cfl is False:
