@@ -355,7 +355,7 @@ class Uniform:
 
         return flat_obj_array(mass, energy, mom)
 
-    def set_uniform_solution(t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
+    def set_uniform_solution(self, t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
                              velocity=None, eos=IdealSingleGas()):
 
         dim = len(x_vec)
