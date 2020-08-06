@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-# import numpy as np
+import numpy as np
 import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
@@ -48,6 +48,29 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Uniform
 from mirgecom.eos import IdealSingleGas
+
+
+# Surrogate for the currently non-functioning Uniform class
+def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
+
+    dim = len(x_vec)
+    _rho = 1.0
+    _p = 1.0
+    _velocity = np.zeros(shape=(dim,))
+    _gamma = 1.4
+
+    mom0 = _rho * _velocity
+    e0 = _p / (_gamma - 1.0)
+    ke = 0.5 * np.dot(_velocity, _velocity) / _rho
+    x_rel = x_vec[0]
+    zeros = 0.0*x_rel
+    ones = zeros + 1.0
+
+    mass = zeros + _rho
+    mom = make_obj_array([mom0 * ones for i in range(dim)])
+    energy = e0 + ke + zeros
+
+    return flat_obj_array(mass, energy, mom)
 
 
 def import_pseudo_y0_mesh():
@@ -162,7 +185,8 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+    #    current_state = initializer(0, nodes)
+    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)

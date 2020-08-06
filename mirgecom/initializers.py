@@ -307,7 +307,7 @@ class Uniform:
     """
 
     def __init__(
-            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
+            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=None,
     ):
         r"""Initialize uniform flow parameters
 
@@ -324,27 +324,59 @@ class Uniform:
         velocity : float array
             specifies the flow velocity
         """
-
-        if len(velocity) == numdim:
-            self._velocity = velocity
-        elif len(velocity) > numdim:
-            numdim = len(velocity)
-            self._velocity = velocity
-        else:
+        if velocity is None:
             self._velocity = np.zeros(shape=(numdim,))
-
-        assert len(self._velocity) == numdim
-
+        else:
+            self._velocity = velocity
+        self._dim = len(self._velocity)
         self._p = p
         self._rho = rho
         self._e = e
-        self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        gamma = eos.gamma()
-        mass = x_vec[0].copy()
-        mom = self._velocity * make_obj_array([mass])
-        energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+        
+        dim = len(x_vec)
+        _rho = self._rho
+        _p = self._p
+        _velocity = self._velocity
+        _gamma = eos.gamma()
+
+        mom0 = _rho * _velocity
+        e0 = _p / (_gamma - 1.0)
+        ke = 0.5 * np.dot(_velocity, _velocity) / _rho
+
+        x_rel = x_vec[0]
+        zeros = 0.0*x_rel
+        ones = zeros + 1.0
+
+        mass = zeros + _rho
+        mom = make_obj_array([mom0 * ones for i in range(dim)])
+        energy = e0 + ke + zeros
+
+        return flat_obj_array(mass, energy, mom)
+
+    def set_uniform_solution(t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
+                             velocity=None, eos=IdealSingleGas()):
+        
+        dim = len(x_vec)
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+            
+        _rho = mass
+        _p = pressure
+        _velocity = velocity 
+        _gamma = eos.gamma()
+        
+        mom0 = _rho * _velocity
+        e0 = _p / (_gamma - 1.0)
+        ke = 0.5 * np.dot(_velocity, _velocity) / _rho
+        x_rel = x_vec[0]
+        zeros = 0.0*x_rel
+        ones = zeros + 1.0
+
+        mass = zeros + _rho
+        mom = make_obj_array([mom0 * ones for i in range(dim)])
+        energy = e0 + ke + zeros
 
         return flat_obj_array(mass, energy, mom)
 
