@@ -59,7 +59,6 @@ def test_lump_init(ctx_factory, dim):
     actx = PyOpenCLArrayContext(queue)
     logger = logging.getLogger(__name__)
 
-    #    dim = 2
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -67,9 +66,6 @@ def test_lump_init(ctx_factory, dim):
     mesh = generate_regular_rect_mesh(
         a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
-    #    mesh = generate_regular_rect_mesh(
-    #        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
-    #    )
 
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
@@ -78,7 +74,6 @@ def test_lump_init(ctx_factory, dim):
     nodes = thaw(actx, discr.nodes())
 
     for vdim in range(dim):
-        # Init soln with Vortex
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
         velocity[vdim] = 1.0
@@ -143,7 +138,7 @@ def test_vortex_init(ctx_factory):
     assert errmax < 1e-15
 
 
-@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("dim", [1, 2, 3])
 def test_shock_init(ctx_factory, dim):
     """
     Simple test to check that Shock1D initializer
@@ -192,17 +187,12 @@ def test_uniform(ctx_factory, dim):
     actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 10
-    #    dim = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    #    for dim in [1, 2, 3]:
     mesh = generate_regular_rect_mesh(
         a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
-    #    mesh = generate_regular_rect_mesh(
-    #        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], n=(nel_1d,) * dim
-    #    )
 
     order = 3
     print(f"Number of elements: {mesh.nelements}")

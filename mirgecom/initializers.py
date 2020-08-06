@@ -150,9 +150,9 @@ class SodShock1D:
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
-        actx = x_vec.array_context
 
         x_rel = x_vec[self._xdir]
+        actx = x_rel.array_context
 
         zeros = 0.0*x_rel
 
