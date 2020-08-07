@@ -1,6 +1,5 @@
 mpi4py
 numpy
-pudb
 pytest
 pyvisfile
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
