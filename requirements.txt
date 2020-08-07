@@ -1,26 +1,14 @@
-mpi4py
 numpy
 pytest
+mpi4py
 pyvisfile
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/islpy.git#egg=islpy
 git+https://github.com/inducer/pyopencl.git#egg=pyopencl
-git+https://github.com/inducer/loopy.git#egg=loo.py
-git+https://github.com/inducer/dagrt.git#egg=dagrt
-git+https://github.com/inducer/leap.git#egg=leap
-git+https://github.com/inducer/meshpy.git#egg=meshpy
-git+https://github.com/inducer/modepy.git#egg=modepy
-git+https://github.com/inducer/meshmode.git#egg=meshmode
-git+https://github.com/inducer/grudge.git#egg=grudge
-
-# Toy Fortran parser for Loopy
-#
-# Unfortunately, f2py doesn't exist as a package on the package index:
-# https://pypi.org/search/?q=f2py
-#
-# To explain the context of this a bit: f2py is a Fortran->Python wrapper generator that ships
-# with numpy. Due to limitations of the old code base (no F90), Pearu (Peterson, original author of
-# f2py) decided to restart from scratch, starting with a Fortran parser. That's as far as he got,
-# and a forked version of this is in this repo.
-
-git+https://github.com/inducer/f2py.git#egg=fparser
+git+https://github.com/inducer/loopy.git
+git+https://github.com/inducer/dagrt.git
+git+https://github.com/inducer/leap.git
+git+https://github.com/inducer/meshpy.git
+git+https://github.com/inducer/modepy.git
+git+https://github.com/inducer/meshmode.git
+git+https://github.com/inducer/grudge.git
