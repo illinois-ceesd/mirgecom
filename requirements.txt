@@ -1,6 +1,7 @@
-numpy
-pytest
 mpi4py
+numpy
+pudb
+pytest
 pyvisfile
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/islpy.git#egg=islpy
@@ -14,4 +15,4 @@ git+https://github.com/inducer/meshmode.git
 git+https://github.com/inducer/grudge.git
 
 # Toy Fortran parser for Loopy
-git+https://github.com/inducer/f2py.git
+f2py
