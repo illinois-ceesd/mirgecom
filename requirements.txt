@@ -12,3 +12,6 @@ git+https://github.com/inducer/meshpy.git
 git+https://github.com/inducer/modepy.git
 git+https://github.com/inducer/meshmode.git
 git+https://github.com/inducer/grudge.git
+
+# Toy Fortran parser for Loopy
+git+https://github.com/inducer/f2py.git
