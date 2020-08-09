@@ -9,7 +9,7 @@ declare -i exitcode=0
 echo "Running examples in $examples_dir ..."
 for example in $examples_dir/*.py
 do
-    if [[ "$example" == *"mpi"* ]]
+    if [[ "$example" == *"-mpi.py" ]]
     then
         echo "Running parallel example: $example"        
         mpiexec -n 2 python ${example}
