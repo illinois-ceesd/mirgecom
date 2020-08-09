@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # set -e
+set -o nounset
 
 origin=$(pwd)
 examples_dir=${1-$origin}
@@ -16,7 +17,7 @@ do
         printf "Running serial example: ${example}\n"        
         python ${example}
     fi
-    if [ $? -eq 0 ]
+    if [[ $? -eq 0 ]]
     then
         printf "Example ${example} succeeded.\n"
     else
