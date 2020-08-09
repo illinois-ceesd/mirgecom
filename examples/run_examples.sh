@@ -2,11 +2,8 @@
 
 # set -e
 
-examples_dir=${1}
-if [ -z ${examples_dir} ]
-then
-    examples_dir=`pwd`
-fi
+origin=$(pwd)
+examples_dir=${1-$origin}
 declare -i exitcode=0
 printf "Running examples in ${examples_dir}...\n"
 for example in ${examples_dir}/*.py
@@ -19,13 +16,12 @@ do
         printf "Running serial example: ${example}\n"        
         python ${example}
     fi
-    printf "Example ${example} "
     if [ $? -eq 0 ]
     then
-        printf "succeeded.\n"
+        printf "Example ${example} succeeded.\n"
     else
         ((exitcode=exitcode+1))
-        printf "failed.\n"
+        printf "Example ${example} failed.\n"
     fi
 done
 printf "Done running examples!\n"
