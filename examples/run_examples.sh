@@ -6,10 +6,10 @@ set -o nounset
 origin=$(pwd)
 examples_dir=${1-$origin}
 declare -i exitcode=0
-echo "Running examples in ${examples_dir}..."
-for example in ${examples_dir}/*.py
+echo "Running examples in $examples_dir ..."
+for example in $examples_dir/*.py
 do
-    if [[ "${example}" == *"mpi"* ]]
+    if [[ "$example" == *"mpi"* ]]
     then
         echo "Running parallel example: $example"        
         mpiexec -n 2 python ${example}
