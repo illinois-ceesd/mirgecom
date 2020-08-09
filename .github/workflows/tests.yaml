@@ -75,4 +75,4 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            python examples/wave-eager.py
+            examples/run_examples.sh ./examples
