@@ -17,7 +17,7 @@ An indicator of concurrency issues are warnings like these:
 
 
 In order to avoid the slowdowns and warnings, users can direct PyOpenCL to create
-cache files in directories that are private to each rank by using the `XDG_CACHE_HOME`
+cache files in directories that are private to each rank by using the ``XDG_CACHE_HOME``
 environment variable.
 
 .. code::
