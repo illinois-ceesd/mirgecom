@@ -1,10 +1,8 @@
 Running MirgeCOM
 ================
 
-.. _many-ranks:
-
-Special considerations when running with large numbers of ranks and nodes
--------------------------------------------------------------------------
+Running with large numbers of ranks and nodes
+---------------------------------------------
 
 The PyOpenCL package used in MirgeCOM caches results of compilation on the hard
 disk in order to speed up multiple executions of the same kernel. This can lead
