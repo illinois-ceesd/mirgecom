@@ -33,7 +33,7 @@ from mirgecom.checkstate import get_field_stats
 
 def make_io_fields(dim, state, dv, eos):
     r"""Makes fluid-flow-specific fields for restart or
-    visualization io.
+    visualization I/O.
 
     Parameters
     ----------
@@ -53,7 +53,7 @@ def make_io_fields(dim, state, dv, eos):
     return io_fields
 
 
-def make_init_message(dim, order, dt, t_final,
+def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
                       initname, eosname, casename,
                       nelements=0, global_nelements=0):
@@ -71,7 +71,7 @@ def make_init_message(dim, order, dt, t_final,
     )
 
 
-def make_status_message(t, step, dt, cfl, dv):
+def make_status_message(*, t, step, dt, cfl, dv):
     dvxt = get_field_stats(dv)
     statusmsg = (
         f"Status: Step({step}) Time({t})\n"
