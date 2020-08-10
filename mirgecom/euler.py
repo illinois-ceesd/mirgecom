@@ -166,7 +166,7 @@ def number_of_equations(ndim, q):
 
 def split_conserved(dim, q):
     """
-    Return a 'ConservedVars' object that splits out conserved quantities
+    Return a :class:`ConservedVars` object that splits out conserved quantities
     by name. Useful for expressive coding.
     """
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
