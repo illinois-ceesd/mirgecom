@@ -283,6 +283,22 @@ def inviscid_operator(
 ):
     """
     RHS of the Euler flow equations
+
+    Parameters
+    ----------
+    q
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point.
+
+    boundaries
+        Dictionary of boundary functions, one for each valid btag
+
+    t
+        Time
+
+    eos
+        class:EOS implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
     """
 
     ndim = discr.dim
