@@ -20,5 +20,6 @@ In order to avoid the slowdowns and warnings, users can direct PyOpenCL to creat
 cache files in directories that are private to each rank by using the `XDG_CACHE_HOME`
 environment variable.
 
-..code::
+.. code::
+
   $ srun -n 512 bash -c 'XDG_CACHE_HOME=/p/lscratchh/diener3/xdg-scratch$SLURM_PROCID python examples/wave-eager-mpi.py'
