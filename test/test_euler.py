@@ -222,8 +222,8 @@ def test_inviscid_flux_components(ctx_factory, dim):
                         )
 
 
-@pytest.mark.parametrize(("dim", "livedim") [
-    (1,0 ), 
+@pytest.mark.parametrize(("dim", "livedim")[
+    (1, 0),
     (2, 0),
     (2, 1),
     (3, 0),
