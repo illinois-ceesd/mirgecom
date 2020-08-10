@@ -222,8 +222,13 @@ def test_inviscid_flux_components(ctx_factory, dim):
                         )
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_mom_flux_components(ctx_factory, dim):
+@pytest.mark.parametrize(("dim", "livedim") [
+    (1,0 ), 
+    (2, 0),
+    (2, 1),
+    (3, 0),
+    ])
+def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
     r"""Constant pressure, V != 0:
     Checks that the flux terms are returned in the proper
     order by running only 1 non-zero velocity component at-a-time.
