@@ -222,11 +222,13 @@ def test_inviscid_flux_components(ctx_factory, dim):
                         )
 
 
-@pytest.mark.parametrize(("dim", "livedim")[
+@pytest.mark.parametrize(("dim", "livedim"), [
     (1, 0),
     (2, 0),
     (2, 1),
     (3, 0),
+    (3, 1),
+    (3, 2),
     ])
 def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
     r"""Constant pressure, V != 0:
@@ -383,9 +385,6 @@ def test_facial_flux(ctx_factory, order, dim):
     p0 = 1.0
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-
-    #    for order in [1, 2, 3]:
-    #        for dim in [1, 2, 3]:
     from pytools.convergence import EOCRecorder
 
     eoc_rec0 = EOCRecorder()
@@ -490,11 +489,11 @@ def test_uniform_rhs(ctx_factory, dim, order):
 
     tolerance = 1e-9
     maxxerr = 0.0
+
     #            from pytools.convergence import EOCRecorder
     #            eoc_rec0 = EOCRecorder()
     #            eoc_rec1 = EOCRecorder()
-
-#    for nel_1d in [4, 8, 12]:
+    #            for nel_1d in [4, 8, 12]:
     for nel_1d in [8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
