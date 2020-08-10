@@ -4,11 +4,10 @@ Running MirgeCOM
 Running with large numbers of ranks and nodes
 ---------------------------------------------
 
-The PyOpenCL package used in MirgeCOM caches results of compilation on the hard
+Several packages used in MirgeCOM cache generated files on the hard
 disk in order to speed up multiple executions of the same kernel. This can lead
 to slowdowns on startup when executing on many ranks and/or nodes due to concurrent
-hard disk accesses. We have seen these slowdowns starting with 256 ranks/nodes.
-An indicator of concurrency issues are warnings like these:
+hard disk accesses. An indicator of concurrency issues are warnings like these:
 
 .. code::
 
@@ -16,9 +15,9 @@ An indicator of concurrency issues are warnings like these:
   could not obtain cache lock--delete '.cache/pyopencl/pyopencl-compiler-cache-v2-py3.8.3.final.0/lock' if necessary
 
 
-In order to avoid the slowdowns and warnings, users can direct PyOpenCL to create
+In order to avoid the slowdowns and warnings, users can direct the packages to create
 cache files in directories that are private to each rank by using the ``XDG_CACHE_HOME``
-environment variable.
+environment variable, such as in the following example.
 
 .. code::
 
