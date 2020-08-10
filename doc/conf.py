@@ -39,13 +39,13 @@ release = ver_dic["VERSION_TEXT"]
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.autodoc",
-    "sphinx.ext.doctest",
-    "sphinx.ext.napoleon",
-    "sphinx.ext.graphviz",
-    "sphinx.ext.todo",
-    ]
+        "sphinx.ext.intersphinx",
+        "sphinx.ext.autodoc",
+        "sphinx.ext.doctest",
+        "sphinx.ext.napoleon",
+        "sphinx.ext.graphviz",
+        "sphinx.ext.todo",
+        ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -64,11 +64,11 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 html_theme = 'alabaster'
 
 html_theme_options = {
-    "extra_nav_links": {
-        "🚀 Github": "https://github.com/illinois-ceesd/mirgecom",
-        "💾 Download Releases": "https://pypi.org/project/mirgecom",
+        "extra_nav_links": {
+            "🚀 Github": "https://github.com/illinois-ceesd/mirgecom",
+            "💾 Download Releases": "https://pypi.org/project/mirgecom",
+            }
         }
-    }
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

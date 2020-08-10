@@ -20,12 +20,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import mirgecom # noqa
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-from pytools.obj_array import flat_obj_array
+from pytools.obj_array import join_fields
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
@@ -40,7 +39,7 @@ def bump(actx, discr, t=0):
     source_omega = 3
 
     nodes = thaw(actx, discr.nodes())
-    center_dist = flat_obj_array([
+    center_dist = join_fields([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
         ])
@@ -80,7 +79,7 @@ def main():
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    fields = flat_obj_array(
+    fields = join_fields(
         bump(actx, discr),
         [discr.zeros(actx) for i in range(discr.dim)]
         )
