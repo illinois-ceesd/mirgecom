@@ -1,6 +1,8 @@
 Running MirgeCOM
 ================
 
+.. _many-ranks:
+
 Special considerations when running with large numbers of ranks and nodes
 -------------------------------------------------------------------------
 

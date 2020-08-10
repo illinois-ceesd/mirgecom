@@ -21,41 +21,20 @@ THE SOFTWARE.
 """
 
 import os
-import getpass
-import sys
-import tempfile
 from warnings import warn
 
 from mpi4py import MPI
 
 # This code avoids slow startups due to file system locking when running with
-# large numbers of ranks. See https://github.com/illinois-ceesd/planning/issues/27
-# for details.
+# large numbers of ranks. See
+# https://mirgecom.readthedocs.io/en/pyopenclstartup/running.html#special-considerations-when-running-with-large-numbers-of-ranks-and-nodes
+# for more details
 
 size = MPI.COMM_WORLD.Get_size()
 rank = MPI.COMM_WORLD.Get_rank()
 
-if size >= 256 and rank == 0:
-    if "XDG_CACHE_HOME" not in os.environ:
-        skip = False
-
-        for mod in ["pyopencl", "pytools", "loopy"]:
-            if mod in sys.modules:
-                warn(f"{mod} already loaded, not adjusting XDG_CACHE_HOME. Please "
-                  "see https://github.com/illinois-ceesd/planning/issues/27 for "
-                  "information on how to avoid file system overheads by setting "
-                  "the XDG_CACHE_HOME variable in your job scripts.")
-                skip = True
-                break
-
-        if not skip:
-            username = getpass.getuser()
-            dir_prefix = f"/tmp/{username}/"
-            os.makedirs(dir_prefix, exist_ok=True)
-            os.environ["XDG_CACHE_HOME"] = tempfile.mkdtemp(dir=dir_prefix)
-
-            print(os.environ["XDG_CACHE_HOME"])
-            warn("Please set the XDG_CACHE_HOME variable in your job script to "
-              "avoid file system overheads when running on large numbers of ranks. "
-              "See https://github.com/illinois-ceesd/planning/issues/27 for more "
-              "information.")
+if size >= 256 and rank == 0 and "XDG_CACHE_HOME" not in os.environ:
+    warn("Please set the XDG_CACHE_HOME variable in your job script to "
+         "avoid file system overheads when running on large numbers of ranks. "
+         "See https://mirgecom.readthedocs.io/en/pyopenclstartup/running.html#special-considerations-when-running-with-large-numbers-of-ranks-and-nodes for more "  # noqa: E501
+         "information.")
