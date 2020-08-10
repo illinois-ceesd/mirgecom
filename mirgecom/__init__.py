@@ -35,7 +35,7 @@ from mpi4py import MPI
 size = MPI.COMM_WORLD.Get_size()
 rank = MPI.COMM_WORLD.Get_rank()
 
-if size <= 128 and rank == 0:
+if size >= 256 and rank == 0:
     if "XDG_CACHE_HOME" not in os.environ:
         skip = False
 
