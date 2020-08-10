@@ -249,7 +249,7 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     flux_int = _inviscid_flux(discr, qint, eos)
     flux_ext = _inviscid_flux(discr, qext, eos)
 
-    # Lax/Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
+    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
     # DOI: 10.1007/978-0-387-72067-8
     flux_aver = (flux_int + flux_ext) * 0.5
 
