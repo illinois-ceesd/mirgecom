@@ -20,6 +20,7 @@ Table of Contents
     operators
     support
     development
+    running
     faq
     misc
 
