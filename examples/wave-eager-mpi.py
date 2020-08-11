@@ -27,83 +27,18 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from pytools.obj_array import flat_obj_array, make_obj_array
+from pytools.obj_array import flat_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from grudge.eager import (
-    EagerDGDiscretization, interior_trace_pair, cross_rank_trace_pairs)
+from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.symbolic.primitives import TracePair
+from mirgecom.integrators import rk4_step
+from mirgecom.wave import wave_operator
 from mpi4py import MPI
-
-
-# {{{ wave equation bits
-
-def scalar(arg):
-    return make_obj_array([arg])
-
-
-def wave_flux(discr, c, w_tpair):
-    u = w_tpair[0]
-    v = w_tpair[1:]
-
-    normal = thaw(u.int.array_context, discr.normal(w_tpair.dd))
-
-    flux_weak = flat_obj_array(
-        np.dot(v.avg, normal),
-        normal*scalar(u.avg),
-        )
-
-    # upwind
-    v_jump = np.dot(normal, v.int-v.ext)
-    flux_weak += flat_obj_array(
-        0.5*(u.int-u.ext),
-        0.5*normal*scalar(v_jump),
-        )
-
-    return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
-
-
-def wave_operator(discr, c, w):
-    u = w[0]
-    v = w[1:]
-
-    dir_u = discr.project("vol", BTAG_ALL, u)
-    dir_v = discr.project("vol", BTAG_ALL, v)
-    dir_bval = flat_obj_array(dir_u, dir_v)
-    dir_bc = flat_obj_array(-dir_u, dir_v)
-
-    return (
-        discr.inverse_mass(
-            flat_obj_array(
-                -c*discr.weak_div(v),
-                -c*discr.weak_grad(u)
-                )
-            +  # noqa: W504
-            discr.face_mass(
-                wave_flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
-                + wave_flux(discr, c=c, w_tpair=TracePair(
-                    BTAG_ALL, dir_bval, dir_bc))
-                + sum(
-                    wave_flux(discr, c=c, w_tpair=tpair)
-                    for tpair in cross_rank_trace_pairs(discr, w))
-                )
-            )
-        )
-
-# }}}
-
-
-def rk4_step(y, t, h, f):
-    k1 = f(t, y)
-    k2 = f(t+h/2, y + h/2*k1)
-    k3 = f(t+h/2, y + h/2*k2)
-    k4 = f(t+h, y + h*k3)
-    return y + h/6*(k1 + 2*k2 + 2*k3 + k4)
 
 
 def bump(actx, discr, t=0):
