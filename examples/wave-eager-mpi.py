@@ -35,7 +35,7 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import (
-        EagerDGDiscretization, interior_trace_pair, cross_rank_trace_pairs)
+    EagerDGDiscretization, interior_trace_pair, cross_rank_trace_pairs)
 from grudge.shortcuts import make_visualizer
 from grudge.symbolic.primitives import TracePair
 from mpi4py import MPI
@@ -54,16 +54,16 @@ def wave_flux(discr, c, w_tpair):
     normal = thaw(u.int.array_context, discr.normal(w_tpair.dd))
 
     flux_weak = flat_obj_array(
-            np.dot(v.avg, normal),
-            normal*scalar(u.avg),
-            )
+        np.dot(v.avg, normal),
+        normal*scalar(u.avg),
+        )
 
     # upwind
     v_jump = np.dot(normal, v.int-v.ext)
     flux_weak += flat_obj_array(
-            0.5*(u.int-u.ext),
-            0.5*normal*scalar(v_jump),
-            )
+        0.5*(u.int-u.ext),
+        0.5*normal*scalar(v_jump),
+        )
 
     return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
 
@@ -78,22 +78,22 @@ def wave_operator(discr, c, w):
     dir_bc = flat_obj_array(-dir_u, dir_v)
 
     return (
-            discr.inverse_mass(
-                flat_obj_array(
-                    -c*discr.weak_div(v),
-                    -c*discr.weak_grad(u)
-                    )
-                +  # noqa: W504
-                discr.face_mass(
-                    wave_flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
-                    + wave_flux(discr, c=c, w_tpair=TracePair(
-                        BTAG_ALL, dir_bval, dir_bc))
-                    + sum(
-                        wave_flux(discr, c=c, w_tpair=tpair)
-                        for tpair in cross_rank_trace_pairs(discr, w))
-                    )
+        discr.inverse_mass(
+            flat_obj_array(
+                -c*discr.weak_div(v),
+                -c*discr.weak_grad(u)
                 )
+            +  # noqa: W504
+            discr.face_mass(
+                wave_flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
+                + wave_flux(discr, c=c, w_tpair=TracePair(
+                    BTAG_ALL, dir_bval, dir_bc))
+                + sum(
+                    wave_flux(discr, c=c, w_tpair=tpair)
+                    for tpair in cross_rank_trace_pairs(discr, w))
                 )
+            )
+        )
 
 # }}}
 
@@ -141,9 +141,9 @@ def main():
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
-                a=(-0.5,)*dim,
-                b=(0.5,)*dim,
-                n=(nel_1d,)*dim)
+            a=(-0.5,)*dim,
+            b=(0.5,)*dim,
+            n=(nel_1d,)*dim)
 
         print("%d elements" % mesh.nelements)
 
@@ -171,9 +171,9 @@ def main():
         raise ValueError("don't have a stable time step guesstimate")
 
     fields = flat_obj_array(
-            bump(actx, discr),
-            [discr.zeros(actx) for i in range(discr.dim)]
-            )
+        bump(actx, discr),
+        [discr.zeros(actx) for i in range(discr.dim)]
+        )
 
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
