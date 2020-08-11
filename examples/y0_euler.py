@@ -144,45 +144,50 @@ def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
 
 def import_pseudo_y0_mesh():
 
-    from meshmode.mesh.io import generate_gmsh, ScriptWithFilesSource
-    mesh = generate_gmsh(
-        ScriptWithFilesSource("""
-        Merge "pseudoY0.brep";
-        Mesh.CharacteristicLengthMin = 1;
-        Mesh.CharacteristicLengthMax = 10;
-        Mesh.ElementOrder = 2;
-        Mesh.CharacteristicLengthExtendFromBoundary = 0;
-
-        // Inside and end surfaces of nozzle/scramjet
-        Field[1] = Distance;
-        Field[1].NNodesByEdge = 100;
-        Field[1].FacesList = {5,7,8,9,10};
-        Field[2] = Threshold;
-        Field[2].IField = 1;
-        Field[2].LcMin = 1;
-        Field[2].LcMax = 10;
-        Field[2].DistMin = 0;
-        Field[2].DistMax = 20;
-
-        // Edges separating surfaces with boundary layer
-        // refinement from those without
-        // (Seems to give a smoother transition)
-        Field[3] = Distance;
-        Field[3].NNodesByEdge = 100;
-        Field[3].EdgesList = {5,10,14,16};
-        Field[4] = Threshold;
-        Field[4].IField = 3;
-        Field[4].LcMin = 1;
-        Field[4].LcMax = 10;
-        Field[4].DistMin = 0;
-        Field[4].DistMax = 20;
-
-        // Min of the two sections above
-        Field[5] = Min;
-        Field[5].FieldsList = {2,4};
-
-        Background Field = 5;
+    from meshmode.mesh.io import read_gmsh, generate_gmsh, ScriptWithFilesSource
+    import os
+    if os.path.exists("pseudoY0.msh") is False:
+        mesh = generate_gmsh(
+            ScriptWithFilesSource("""
+            Merge "pseudoY0.brep";
+            Mesh.CharacteristicLengthMin = 1;
+            Mesh.CharacteristicLengthMax = 10;
+            Mesh.ElementOrder = 2;
+            Mesh.CharacteristicLengthExtendFromBoundary = 0;
+            
+            // Inside and end surfaces of nozzle/scramjet
+            Field[1] = Distance;
+            Field[1].NNodesByEdge = 100;
+            Field[1].FacesList = {5,7,8,9,10};
+            Field[2] = Threshold;
+            Field[2].IField = 1;
+            Field[2].LcMin = 1;
+            Field[2].LcMax = 10;
+            Field[2].DistMin = 0;
+            Field[2].DistMax = 20;
+            
+            // Edges separating surfaces with boundary layer
+            // refinement from those without
+            // (Seems to give a smoother transition)
+            Field[3] = Distance;
+            Field[3].NNodesByEdge = 100;
+            Field[3].EdgesList = {5,10,14,16};
+            Field[4] = Threshold;
+            Field[4].IField = 3;
+            Field[4].LcMin = 1;
+            Field[4].LcMax = 10;
+            Field[4].DistMin = 0;
+            Field[4].DistMax = 20;
+            
+            // Min of the two sections above
+            Field[5] = Min;
+            Field[5].FieldsList = {2,4};
+            
+            Background Field = 5;
         """, ["pseudoY0.brep"]), 3, target_unit='MM')
+    else:
+        mesh = read_gmsh("pseudoY0.msh")
+        
     return mesh
 
 
@@ -201,7 +206,7 @@ def main(ctx_factory=cl.create_some_context):
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    vel[0] = 1.0
+    vel[2] = 1.0
     current_dt = 1e-5
     current_t = 0
     eos = IdealSingleGas()
