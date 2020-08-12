@@ -232,9 +232,9 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     qint = q_tpair.int
     qext = q_tpair.ext
 
-    # Jump in soln 
+    # Jump in soln
     qjump = qext - qint
-    
+
     flux_int = _inviscid_flux(discr, qint, eos)
     flux_ext = _inviscid_flux(discr, qext, eos)
 
