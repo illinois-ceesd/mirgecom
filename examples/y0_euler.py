@@ -154,7 +154,7 @@ def import_pseudo_y0_mesh():
             Mesh.CharacteristicLengthMax = 10;
             Mesh.ElementOrder = 2;
             Mesh.CharacteristicLengthExtendFromBoundary = 0;
-            
+
             // Inside and end surfaces of nozzle/scramjet
             Field[1] = Distance;
             Field[1].NNodesByEdge = 100;
@@ -165,7 +165,7 @@ def import_pseudo_y0_mesh():
             Field[2].LcMax = 10;
             Field[2].DistMin = 0;
             Field[2].DistMax = 20;
-            
+
             // Edges separating surfaces with boundary layer
             // refinement from those without
             // (Seems to give a smoother transition)
@@ -178,16 +178,16 @@ def import_pseudo_y0_mesh():
             Field[4].LcMax = 10;
             Field[4].DistMin = 0;
             Field[4].DistMax = 20;
-            
+
             // Min of the two sections above
             Field[5] = Min;
             Field[5].FieldsList = {2,4};
-            
+
             Background Field = 5;
         """, ["pseudoY0.brep"]), 3, target_unit='MM')
     else:
         mesh = read_gmsh("pseudoY0.msh")
-        
+
     return mesh
 
 
