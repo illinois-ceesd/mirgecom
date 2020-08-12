@@ -240,12 +240,12 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    qint = flat_obj_array(mass.int, energy.int, mom.int)
-    qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
+    qint = q_tpair.int
+    qext = q_tpair.ext
 
-    # - Figure out how to manage grudge branch dependencies
-    #    qjump = flat_obj_array(rho.jump, rhoE.jump, rhoV.jump)
+    # Jump in soln 
     qjump = qext - qint
+    
     flux_int = _inviscid_flux(discr, qint, eos)
     flux_ext = _inviscid_flux(discr, qext, eos)
 
