@@ -224,13 +224,18 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     dim = discr.dim
 
     qs = split_conserved(dim, q_tpair)
+    mass = qs.mass
+    energy = qs.energy
+    mom = qs.momentum
     actx = qs.mass.int.array_context
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    qint = q_tpair.int
-    qext = q_tpair.ext
+    #    qint = q_tpair.int
+    #    qext = q_tpair.ext
+    qint = flat_obj_array(mass.int, energy.int, mom.int)
+    qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
 
     # Jump in soln
     qjump = qext - qint
