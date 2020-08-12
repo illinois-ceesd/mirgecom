@@ -39,8 +39,13 @@ from grudge.eager import (
 
 from mirgecom.eos import IdealSingleGas
 
+# from grudge.dt_finding import (
+#    dt_geometric_factor,
+#    dt_non_geometric_factor,
+# )
 
-r"""
+
+__doc__ = r"""
 This module is designed provide functions and utilities
 useful for solving the Euler flow equations.
 
@@ -60,29 +65,16 @@ where:
                    [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
                     {(\partial_t{\rho\vec{V}})}_s]`
 
-"""
-
-# from grudge.dt_finding import (
-#    dt_geometric_factor,
-#    dt_non_geometric_factor,
-# )
-
-__doc__ = """
 .. autofunction:: inviscid_operator
 .. autofunction:: number_of_scalars
 .. autofunction:: split_conserved
 .. autofunction:: split_species
 .. autofunction:: split_fields
 .. autofunction:: get_inviscid_timestep
+.. autofunction:: get_inviscid_cfl
+.. autoclass:: ConservedVars
+.. autoclass:: MassFractions
 """
-
-
-#
-# Euler flow eqns:
-# d_t(q) + nabla .dot. f = 0 (no sources atm)
-# state vector q: [rho rhoE rhoV]
-# flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + p*I)]
-#
 
 
 @dataclass
@@ -232,10 +224,7 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     dim = discr.dim
 
     qs = split_conserved(dim, q_tpair)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-    actx = mass.int.array_context
+    actx = qs.mass.int.array_context
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
