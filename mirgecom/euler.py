@@ -256,7 +256,7 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = [_get_wavespeed(dim, qint), _get_wavespeed(dim, qext)]
 
-    lam = actx.np.maximum(wavespeeds[0], wavespeeds[1])
+    lam = actx.np.maximum(*wavespeeds)
     lfr = qjump * make_obj_array([0.5 * lam])
 
     # Surface fluxes should be inviscid flux .dot. normal
