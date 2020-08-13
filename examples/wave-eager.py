@@ -55,7 +55,8 @@ def bump(actx, discr, t=0):
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue, allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    actx = PyOpenCLArrayContext(queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
