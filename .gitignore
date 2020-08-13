@@ -33,6 +33,9 @@ run-debug-*
 
 .cache
 .pytest_cache
-miniforge3
+
+modules.zip
+
+miniforge3/
 config/
 src/
