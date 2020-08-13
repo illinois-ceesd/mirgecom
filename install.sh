@@ -85,7 +85,7 @@ echo "==== Create $env_name conda environment"
 #shellcheck disable=SC1090
 source "$MY_CONDA_DIR"/bin/activate
 
-conda update --all
+conda update --all --yes
 
 conda create --name "$env_name" --yes
 
