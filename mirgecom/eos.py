@@ -27,7 +27,7 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-r"""
+__doc__ = """
 This module is designed provide Equation of State
 objects used to compute and manage the relationships
 between and among state and thermodynamic variables.

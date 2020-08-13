@@ -1,39 +1,36 @@
 #!/bin/bash
 
 # set -e
+set -o nounset
 
-examples_dir=${1}
-if [ -z ${examples_dir} ]
-then
-    examples_dir=`pwd`
-fi
+origin=$(pwd)
+examples_dir=${1-$origin}
 declare -i exitcode=0
-printf "Running examples in ${examples_dir}...\n"
-for example in ${examples_dir}/*.py
+echo "Running examples in $examples_dir ..."
+for example in $examples_dir/*.py
 do
-    if [[ "${example}" == *"mpi"* ]]
+    if [[ "$example" == *"-mpi.py" ]]
     then
-        printf "Running parallel example: ${example}\n"        
+        echo "Running parallel example: $example"        
         mpiexec -n 2 python ${example}
     else
-        printf "Running serial example: ${example}\n"        
+        echo "Running serial example: $example"        
         python ${example}
     fi
-    printf "Example ${example} "
-    if [ $? -eq 0 ]
+    if [[ $? -eq 0 ]]
     then
-        printf "succeeded.\n"
+        echo "Example $example succeeded."
     else
         ((exitcode=exitcode+1))
-        printf "failed.\n"
+        echo "Example $example failed."
     fi
 done
-printf "Done running examples!\n"
-if [ $exitcode -eq 0 ]
+echo "Done running examples!"
+if [[ $exitcode -eq 0 ]]
 then
-    printf "No errors.\n"
+    echo "No errors."
 else
-    printf "Errors detected (${exitcode}).\n"
+    echo "Errors detected ($exitcode)."
     exit $exitcode
 fi
 #rm -f examples/*.vtu

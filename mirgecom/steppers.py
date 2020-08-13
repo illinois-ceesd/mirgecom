@@ -60,7 +60,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         t += dt
         istep += 1
 
-    return (istep, t, state)
+    return istep, t, state
 
 
 def euler_flow_stepper(actx, parameters):

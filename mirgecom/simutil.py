@@ -39,18 +39,26 @@ building simulation applications.
 """
 
 
-def check_step(step, n):
-    if n == 0:
+def check_step(step, interval):
+    """
+    Utility to check step number against a user-specified interval. Useful for
+    checking whether the current step is an output step, or anyting else that
+    occurs on fixed intervals.
+    """
+    if interval == 0:
         return True
-    elif n < 0:
+    elif interval < 0:
         return False
-    elif step % n == 0:
+    elif step % interval == 0:
         return True
     return False
 
 
 def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
-                              t_final, constant_cfl=False):
+                          t_final, constant_cfl=False):
+    """
+    Wrapper function returns the dt for the next step.
+    """
     mydt = dt
     if constant_cfl is True:
         mydt = get_inviscid_timestep(discr=discr, q=state,
@@ -67,8 +75,8 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
     Checkpointing utility for runs with known exact solution generator
     """
 
-    do_viz = check_step(step=step, n=nviz)
-    do_status = check_step(step=step, n=nstatus)
+    do_viz = check_step(step=step, interval=nviz)
+    do_status = check_step(step=step, interval=nstatus)
     if do_viz is False and do_status is False:
         return 0
 

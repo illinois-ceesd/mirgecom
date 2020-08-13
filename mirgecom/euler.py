@@ -39,8 +39,13 @@ from grudge.eager import (
 
 from mirgecom.eos import IdealSingleGas
 
+# from grudge.dt_finding import (
+#    dt_geometric_factor,
+#    dt_non_geometric_factor,
+# )
 
-r"""
+
+__doc__ = r"""
 This module is designed provide functions and utilities
 useful for solving the Euler flow equations.
 
@@ -60,29 +65,16 @@ where:
                    [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
                     {(\partial_t{\rho\vec{V}})}_s]`
 
-"""
-
-# from grudge.dt_finding import (
-#    dt_geometric_factor,
-#    dt_non_geometric_factor,
-# )
-
-__doc__ = """
 .. autofunction:: inviscid_operator
 .. autofunction:: number_of_scalars
 .. autofunction:: split_conserved
 .. autofunction:: split_species
 .. autofunction:: split_fields
 .. autofunction:: get_inviscid_timestep
+.. autofunction:: get_inviscid_cfl
+.. autoclass:: ConservedVars
+.. autoclass:: MassFractions
 """
-
-
-#
-# Euler flow eqns:
-# d_t(q) + nabla .dot. f = 0 (no sources atm)
-# state vector q: [rho rhoE rhoV]
-# flux tensor f: [rhoV (rhoE + p)V (rhoV.x.V + p*I)]
-#
 
 
 @dataclass
@@ -166,7 +158,7 @@ def number_of_equations(ndim, q):
 
 def split_conserved(dim, q):
     """
-    Return a 'ConservedVars' object that splits out conserved quantities
+    Return a :class:`ConservedVars` object that splits out conserved quantities
     by name. Useful for expressive coding.
     """
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
@@ -235,28 +227,30 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     mass = qs.mass
     energy = qs.energy
     mom = qs.momentum
-    actx = mass.int.array_context
+    actx = qs.mass.int.array_context
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
+    #    qint = q_tpair.int
+    #    qext = q_tpair.ext
     qint = flat_obj_array(mass.int, energy.int, mom.int)
     qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
 
-    # - Figure out how to manage grudge branch dependencies
-    #    qjump = flat_obj_array(rho.jump, rhoE.jump, rhoV.jump)
+    # Jump in soln
     qjump = qext - qint
+
     flux_int = _inviscid_flux(discr, qint, eos)
     flux_ext = _inviscid_flux(discr, qext, eos)
 
-    # Lax/Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
+    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
     # DOI: 10.1007/978-0-387-72067-8
     flux_aver = (flux_int + flux_ext) * 0.5
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
     wavespeeds = [_get_wavespeed(dim, qint), _get_wavespeed(dim, qext)]
 
-    lam = actx.np.maximum(wavespeeds[0], wavespeeds[1])
+    lam = actx.np.maximum(*wavespeeds)
     lfr = qjump * make_obj_array([0.5 * lam])
 
     # Surface fluxes should be inviscid flux .dot. normal
@@ -283,6 +277,22 @@ def inviscid_operator(
 ):
     """
     RHS of the Euler flow equations
+
+    Parameters
+    ----------
+    q
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point.
+
+    boundaries
+        Dictionary of boundary functions, one for each valid btag
+
+    t
+        Time
+
+    eos
+        class:EOS implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
     """
 
     ndim = discr.dim
