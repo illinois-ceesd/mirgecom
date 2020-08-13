@@ -153,9 +153,12 @@ class SpectralFilter:
 
 @obj_array_vectorized_n_args
 def apply_linear_operator(discr, operator, fields):
-    result = discr.empty(fields.array_context, dtype=fields.dtype)
+    actx = fields.array_context
+    result = discr.empty(actx, dtype=fields.entry_dtype)
     for group in discr.groups:
-        linear_operator_kernel()(fields.array_context, mat=operator,
-                                 result=group.view(result),
-                                 vec=group.view(fields))
+        actx.call_loopy(
+            linear_operator_kernel(),
+            mat=actx.from_numpy(operator),
+            result=result[group.index],
+            vec=fields[group.index])
     return result
