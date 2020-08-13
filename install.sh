@@ -85,12 +85,14 @@ echo "==== Create $env_name conda environment"
 #shellcheck disable=SC1090
 source "$MY_CONDA_DIR"/bin/activate
 
+conda update --all
+
 conda create --name "$env_name" --yes
 
 #shellcheck disable=SC1090
 source "$MY_CONDA_DIR"/bin/activate "$env_name"
 
-mkdir -p "$mcprefix"
+echo "==== Installing conda packages"
 
 ./install-conda-dependencies.sh
 [[ -n "$conda_pkg_file" ]] && ./install-conda-dependencies.sh "$conda_pkg_file"
