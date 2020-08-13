@@ -212,7 +212,7 @@ def test_filter_class(ctx_factory, dim, order):
         )
         #        r = clmath.sqrt(np.dot(my_x, my_x))
         r = my_x[0]
-        result = clarray.zeros(r.queue, shape=r.shape, dtype=np.float64)
+        result = 0
         for n, a in enumerate(coeff):
             result += a * r ** n
         return result
