@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -o errexit -o nounset
+set -o errexit
 # Conda does not like 'set -o nounset'
 
 echo "#####################################################"
@@ -110,9 +110,15 @@ python -m pip install pytest pudb flake8 pep8-naming pytest-pudb sphinx
 
 echo "==== Installing packages from requirements.txt"
 
-python -m pip install -r requirements.txt
+grep -E -v '(islpy|pyopencl)' requirements.txt >> .req
+python -m pip install -r .req
+rm -f .req
 
 [[ -n "$pip_pkg_file" ]] && python -m pip install -r "$pip_pkg_file"
+
+echo "==== Installing mirgecom"
+
+python -m pip install --editable .
 
 # Install an environment activation script
 rm -rf "$mcprefix"/config
