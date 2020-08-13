@@ -31,6 +31,7 @@ from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
+import pyopencl.tools as cl_tools
 
 
 def bump(actx, discr, t=0):
@@ -54,7 +55,7 @@ def bump(actx, discr, t=0):
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue, allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
