@@ -26,6 +26,7 @@ import numpy as np
 import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
+import pyopencl.tools as cl_tools
 from functools import partial
 from mpi4py import MPI
 
@@ -54,7 +55,8 @@ def main(ctx_factory=cl.create_some_context):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
 
