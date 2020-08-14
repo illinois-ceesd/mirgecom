@@ -105,13 +105,14 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
         if have_exact is True:
             max_errors = compare_states(red_state=q, blue_state=expected_state)
             statusmesg += f"\n------   Err({max_errors})"
-            if rank == 0:
-                logger.info(statusmesg)
-
             maxerr = np.max(max_errors)
             if maxerr > exittol:
                 logger.error("Solution failed to follow expected result.")
                 checkpoint_status = 1
+                
+        if rank == 0:
+            logger.info(statusmesg)
+
 
     if do_viz:
         dim = discr.dim
