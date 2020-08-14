@@ -109,6 +109,6 @@ def make_output_dump(visualizer, basename, io_fields,
             os.rename(rank_fn.format(rank=rank).replace("vtu", "pvtu"), par_fn)
     else:
         fname = make_serial_fname(basename=basename, step=step, t=t)
-        print(f"vizfilename = {fname}")
-        print(f"io_fields = {io_fields}")
+        #        print(f"vizfilename = {fname}")
+        #        print(f"io_fields = {io_fields}")
         visualizer.write_vtk_file(fname, io_fields, overwrite=True)

@@ -34,18 +34,23 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import (
+    inviscid_operator,
+    split_conserved
+)
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    sim_checkpoint
 )
 from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import Lump
+from mirgecom.initializers import (
+    Lump,
+    make_pulse
+)
 from mirgecom.eos import IdealSingleGas
 
 
@@ -65,11 +70,11 @@ def main(ctx_factory=cl.create_some_context):
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
+    #    vel[:dim] = 1.0
     current_dt = .001
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(center=orig, velocity=vel)
+    initializer = Lump(center=orig, velocity=vel,rhoamp=0.0)
     casename = 'lump'
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
@@ -83,13 +88,15 @@ def main(ctx_factory=cl.create_some_context):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+        a=(-.5,) * dim, b=(.5,) * dim, n=(nel_1d,) * dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
-
+    qs = split_conserved(dim, current_state)
+    qs.energy = qs.energy + make_pulse(amp=1.0, w=.1, r0=orig, r=nodes)
+    current_state[1] = current_state[1] + make_pulse(amp=1.0, w=.1, r0=orig, r=nodes)
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
@@ -111,10 +118,10 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
-                            q=state, vizname=casename, step=step, t=t, dt=dt,
-                            nstatus=nstatus, nviz=nviz, exittol=exittol,
-                            constant_cfl=constant_cfl)
+        return sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos, logger=logger,
+                              q=state, vizname=casename, step=step, t=t, dt=dt,
+                              nstatus=nstatus, nviz=nviz, exittol=exittol,
+                              constant_cfl=constant_cfl)
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
