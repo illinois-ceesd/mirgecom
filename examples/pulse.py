@@ -191,7 +191,7 @@ def main(ctx_factory=cl.create_some_context):
     q = set_uniform_solution(t=0, x_vec=nodes, eos=eos)
     qs = split_conserved(dim, q)
     r0 = np.zeros(dim)
-    qs.energy = qs.energy + make_pulse(amp=1.0, w=.1, r0=r0, r=nodes)
+    #    qs.energy = qs.energy + make_pulse(amp=1.0, w=.1, r0=r0, r=nodes)
     current_state = q
 
     visualizer = make_visualizer(discr, discr.order + 3
