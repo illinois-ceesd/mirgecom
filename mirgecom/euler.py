@@ -39,11 +39,6 @@ from grudge.eager import (
 
 from mirgecom.eos import IdealSingleGas
 
-# from grudge.dt_finding import (
-#    dt_geometric_factor,
-#    dt_non_geometric_factor,
-# )
-
 
 __doc__ = r"""
 This module is designed provide functions and utilities

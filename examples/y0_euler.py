@@ -146,10 +146,10 @@ def import_pseudo_y0_mesh():
 
     from meshmode.mesh.io import read_gmsh, generate_gmsh, ScriptWithFilesSource
     import os
-    if os.path.exists("pseudoY0.msh") is False:
+    if os.path.exists("data/pseudoY0.msh") is False:
         mesh = generate_gmsh(
             ScriptWithFilesSource("""
-            Merge "pseudoY0.brep";
+            Merge "data/pseudoY0.brep";
             Mesh.CharacteristicLengthMin = 1;
             Mesh.CharacteristicLengthMax = 10;
             Mesh.ElementOrder = 2;
@@ -184,9 +184,9 @@ def import_pseudo_y0_mesh():
             Field[5].FieldsList = {2,4};
 
             Background Field = 5;
-        """, ["pseudoY0.brep"]), 3, target_unit='MM')
+        """, ["data/pseudoY0.brep"]), 3, target_unit='MM')
     else:
-        mesh = read_gmsh("pseudoY0.msh")
+        mesh = read_gmsh("data/pseudoY0.msh")
 
     return mesh
 
