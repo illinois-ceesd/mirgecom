@@ -105,7 +105,7 @@ class AdiabaticSlipBoundary:
         #        bsoln.momentum = bsoln.mass * wall_velocity
         #        bsoln.energy = eos.energy(bsoln.mass, bpressure, bsoln.momentum)
         for i in range(dim):
-            boundary_soln[dim+i] = boundary_soln[0] * wall_velocity[i]
+            boundary_soln[dim+i-1] = boundary_soln[0] * wall_velocity[i]
         boundary_soln[1] = eos.energy(boundary_soln[0], bpressure, boundary_soln[2:])
         
         return TracePair(btag, int_soln, boundary_soln)
