@@ -50,7 +50,10 @@ from mirgecom.io import (
 from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import (
+    PrescribedBoundary,
+    AdiabaticSlipBoundary
+)
 # from mirgecom.boundary import DummyBoundary
 # from mirgecom.initializers import Uniform
 from mirgecom.initializers import Lump
@@ -68,8 +71,8 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
     Checkpointing utility for runs with known exact solution generator
     """
 
-    do_viz = check_step(step=step, n=nviz)
-    do_status = check_step(step=step, n=nstatus)
+    do_viz = check_step(step=step, interval=nviz)
+    do_status = check_step(step=step, interval=nstatus)
     if do_viz is False and do_status is False:
         return 0
 
@@ -202,7 +205,7 @@ def main(ctx_factory=cl.create_some_context):
     dim = 3
     order = 1
     exittol = .09
-    t_final = 0.01
+    t_final = 0.1
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
@@ -213,10 +216,13 @@ def main(ctx_factory=cl.create_some_context):
     initializer = Lump(numdim=dim, center=orig, velocity=vel)
     #    initializer = Uniform(numdim=dim)
     casename = 'pseudoY0'
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    wall = AdiabaticSlipBoundary()
+    from grudge import sym
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer),
+                  sym.DTAG_BOUNDARY("Wall"): wall}
     constant_cfl = False
     nstatus = 1
-    nviz = 1
+    nviz = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -242,7 +248,9 @@ def main(ctx_factory=cl.create_some_context):
             mesh = import_pseudo_y0_mesh()
             global_nelements = mesh.nelements
             logging.info(f"Total {dim}d elements: {global_nelements}")
-
+            logging.info(f"Grid BTAGS: {mesh.boundary_tags}")
+            #            print(f"btags = {mesh.boundary_tags}")
+            
             part_per_element = get_partition_by_pymetis(mesh, num_parts)
 
             local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
