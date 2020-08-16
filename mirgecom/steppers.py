@@ -38,13 +38,13 @@ from mirgecom.integrators import rk4_step
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t=0.0, t_final=1.0, istep=0):
+                  state, t=0.0, t_final=1.0, istep=0, profiler=None):
     """
     Implements a generic state advancement routine
     """
     if t_final <= t:
         return(istep, t, state)
-
+    
     while t < t_final:
 
         dt = get_timestep(state=state)
@@ -55,7 +55,11 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         if status != 0:
             return (istep, t, state)
 
+        if profiler is not None:
+            profiler.starttimer(f"step_{istep}")
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
+        if profiler is not None:
+            profiler.endtimer(f"step_{istep}")
 
         t += dt
         istep += 1

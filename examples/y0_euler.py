@@ -56,7 +56,7 @@ from mirgecom.boundary import (
 )
 # from mirgecom.boundary import DummyBoundary
 # from mirgecom.initializers import Uniform
-from mirgecom.initializers import Lump
+from mirgecom.initializers import Lump, make_pulse
 from mirgecom.eos import IdealSingleGas
 from pytools.obj_array import (
     flat_obj_array,
@@ -209,17 +209,20 @@ def main(ctx_factory=cl.create_some_context):
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    vel[2] = 1.0
+    vel[0] = 340.0
     current_dt = 1e-5
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(numdim=dim, center=orig, velocity=vel)
+    initializer = Lump(numdim=dim, rho0=1.225, p0=100000.0,
+                       center=orig, velocity=vel, rhoamp=0.0)
     #    initializer = Uniform(numdim=dim)
     casename = 'pseudoY0'
     wall = AdiabaticSlipBoundary()
     from grudge import sym
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer),
-                  sym.DTAG_BOUNDARY("Wall"): wall}
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    #    boundaries = {sym.DTAG_BOUNDARY("Inflow"): PrescribedBoundary(initializer),
+    #                  sym.DTAG_BOUNDARY("Outflow"): PrescribedBoundary(initializer),
+    #                  sym.DTAG_BOUNDARY("Wall"): wall}
     constant_cfl = False
     nstatus = 1
     nviz = 10
@@ -250,26 +253,47 @@ def main(ctx_factory=cl.create_some_context):
             logging.info(f"Total {dim}d elements: {global_nelements}")
             logging.info(f"Grid BTAGS: {mesh.boundary_tags}")
             #            print(f"btags = {mesh.boundary_tags}")
-            
+
+            logging.info("Partitioning grid.")
             part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            logging.info("Sending grid partitions")
 
             local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
             del mesh
+            logging.info("Grid partitions sent.")
 
         else:
             local_mesh = mesh_dist.receive_mesh_part()
+        
+        comm.Barrier()
+
+        if rank == 0:
+            logging.info("Grid distributed.")
     else:
+        logging.info("Reading grid.")
         local_mesh = import_pseudo_y0_mesh()
         global_nelements = local_mesh.nelements
+        logging.info("Done. Reading grid.")
 
     local_nelements = local_mesh.nelements
 
+    comm.Barrier()
+    if rank == 0:
+        logging.info("Making discretization")
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
+    comm.Barrier()
+    if rank == 0:
+        logging.info("Initializing soln.")
     current_state = initializer(0, nodes)
     #    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
+    comm.Barrier()
+    if rank == 0:
+        logging.info("Adding pulse.")
+    current_state[1] = current_state[1] + make_pulse(amp=50000.0, w=.002,
+                                                     r0=orig, r=nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -295,10 +319,14 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, logger, exact_soln=initializer,
+        return sim_checkpoint(discr, visualizer, eos, logger, 
                               q=state, vizname=casename, step=step, t=t, dt=dt,
                               nstatus=nstatus, nviz=nviz, exittol=exittol,
                               constant_cfl=constant_cfl, comm=comm)
+
+    comm.Barrier()
+    if rank == 0:
+        logging.info("Stepping.")
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,

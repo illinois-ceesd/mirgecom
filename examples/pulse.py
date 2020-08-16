@@ -66,10 +66,10 @@ def main(ctx_factory=cl.create_some_context):
     logger = logging.getLogger(__name__)
 
     dim = 2
-    nel_1d = 16
+    nel_1d = 32
     order = 3
     exittol = 2e-2
-    t_final = 1.0
+    t_final = 0.01
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
@@ -78,7 +78,7 @@ def main(ctx_factory=cl.create_some_context):
     current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(center=orig, velocity=vel,rhoamp=0.0)
-    casename = 'lump'
+    casename = 'pulse'
     #    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}

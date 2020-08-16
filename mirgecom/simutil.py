@@ -70,7 +70,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
 
 def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None):
+                   constant_cfl=False, comm=None, profiler=None):
     r"""
     Checkpointing utility for runs with known exact solution generator
     """
@@ -80,6 +80,9 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
     if do_viz is False and do_status is False:
         return 0
 
+    if profiler is not None:
+        profiler.starttimer(f"checkpoint_{step}")
+        
     actx = q[0].array_context
     nodes = thaw(actx, discr.nodes())
     rank = 0
@@ -97,6 +100,8 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
         expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
 
     if do_status is True:
+        if profiler is not None:
+            profiler.starttimer(f"status_{step}")
         #        if constant_cfl is False:
         #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
         #                                           eos=eos, dt=dt)
@@ -112,9 +117,13 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
                 
         if rank == 0:
             logger.info(statusmesg)
-
+            
+        if profiler is not None:
+            profiler.endtimer(f"status_{step}")
 
     if do_viz:
+        if profiler is not None:
+            profiler.starttimer(f"viz_{step}")
         dim = discr.dim
         io_fields = make_io_fields(dim, q, dv, eos)
         if have_exact is True:
@@ -123,5 +132,10 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
             io_fields.append(("residual", result_resid))
         make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
                          comm=comm, step=step, t=t, overwrite=True)
+        if profiler is not None:
+            profiler.endtimer(f"viz_{step}")
+
+    if profiler is not None:
+        profiler.endtimer(f"checkpoint_{step}")
 
     return checkpoint_status

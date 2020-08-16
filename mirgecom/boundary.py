@@ -78,7 +78,7 @@ class AdiabaticSlipBoundary:
         nhat = normal
         for i in range(dim):
             nhat[i] = nhat_mult * nhat[i]
-        
+
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
         boundary_soln = discr.project("vol", btag, q)  # copy?
@@ -101,11 +101,11 @@ class AdiabaticSlipBoundary:
 
         # Re-calculate the boundary solution with the new
         # momentum
-        
+
         #        bsoln.momentum = bsoln.mass * wall_velocity
         #        bsoln.energy = eos.energy(bsoln.mass, bpressure, bsoln.momentum)
         for i in range(dim):
-            boundary_soln[dim+i-1] = boundary_soln[0] * wall_velocity[i]
+            boundary_soln[2 + i] = boundary_soln[0] * wall_velocity[i]
         boundary_soln[1] = eos.energy(boundary_soln[0], bpressure, boundary_soln[2:])
-        
+
         return TracePair(btag, int_soln, boundary_soln)
