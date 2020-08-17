@@ -37,11 +37,11 @@ class ProfileData:
 
 
 class TimingEvent:
-    def __init__(self, event, program, flops, mem_accesses) -> None:
+    def __init__(self, event, program, flops, bytes_accessed) -> None:
         self.event = event
         self.program = program
         self.flops = flops
-        self.mem_accesses = mem_accesses
+        self.bytes_accessed = bytes_accessed
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
@@ -70,17 +70,17 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         for t in self.events:
             program = t.program
             flops = t.flops
-            mem_accesses = t.mem_accesses
+            bytes_accessed = t.bytes_accessed
             evt = t.event
 
             time = evt.profile.end - evt.profile.start
 
             if program in self.profiling_data:
                 self.profiling_data[program].append(
-                    ProfileData(time, flops, mem_accesses))
+                    ProfileData(time, flops, bytes_accessed))
             else:
                 self.profiling_data[program] = [
-                    ProfileData(time, flops, mem_accesses)]
+                    ProfileData(time, flops, bytes_accessed)]
 
         self.events = []
 
@@ -90,7 +90,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.finish_profile_events()
 
-        max_name_len = max([len(key.name) for key, value in self.profiling_data.items()])
+        max_name_len = max(
+            [len(key.name) for key, value in self.profiling_data.items()])
         max_name_len = max(max_name_len, len('Function'))
 
         format_str = ("{:<" + str(max_name_len)
@@ -110,12 +111,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             times = [v.time for v in value]
             flops = [v.flops for v in value]
-            mem_access = [v.mem_access for v in value]
+            bytes_accessed = [v.bytes_accessed for v in value]
 
-            print(format_str.format(key.name, num_values, min(times), int(mean(times)),
-                max(times), min(flops), int(mean(flops)), max(flops),
-                min(mem_access), int(mean(mem_access)), max(mem_access),
-                round(mean(mem_access)/mean(times), 3)))
+            print(format_str.format(key.name, num_values, min(times),
+                int(mean(times)), max(times), min(flops), int(mean(flops)),
+                max(flops), min(bytes_accessed), int(mean(bytes_accessed)),
+                max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3)))
 
         print(format_str.format('='*20, '='*6, '='*8, '='*8, '='*8, '='*8, '='*8,
             '='*8, '='*8, '='*8, '='*8, '='*8))
@@ -194,18 +195,18 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                     param_dict)
 
                 flops = f32op + f64op
-                mem_accesses = mem32 + mem64
+                bytes_accessed = mem32*4 + mem64*8
 
                 if program not in self.kernel_stats:
                     self.kernel_stats[program] = {}
 
-                self.kernel_stats[program][args_tuple] = (flops, mem_accesses)
+                self.kernel_stats[program][args_tuple] = (flops, bytes_accessed)
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
         if self.profiling_enabled:
             flops = self.kernel_stats[program][args_tuple][0]
-            mem_accesses = self.kernel_stats[program][args_tuple][1]
-            self.events.append(TimingEvent(evt, program, flops, mem_accesses))
+            bytes_accessed = self.kernel_stats[program][args_tuple][1]
+            self.events.append(TimingEvent(evt, program, flops, bytes_accessed))
 
         return result
