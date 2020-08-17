@@ -308,11 +308,8 @@ def inviscid_operator(
     domain_boundary_flux = sum(
         _facial_flux(
             discr,
-            q_tpair=boundaries[btag].boundary_pair(discr,
-                                                   q,
-                                                   t=t,
-                                                   btag=btag,
-                                                   eos=eos),
+            q_tpair=boundaries[btag].boundary_pair(discr, q, t=t,
+                                                   btag=btag, eos=eos),
             eos=eos
         )
         for btag in boundaries

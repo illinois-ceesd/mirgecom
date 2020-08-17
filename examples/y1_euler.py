@@ -156,8 +156,9 @@ def main(ctx_factory=cl.create_some_context):
     current_cfl = 1.0
     vel_init = np.zeros(shape=(dim,))
     vel_inflow = np.zeros(shape=(dim,))
+    # pulse center
     orig = np.zeros(shape=(dim,))
-    orig[0] = 0.83
+    orig[0] = -0.03
     orig[2] = 0.001
     #    vel[0] = 340.0
     vel_inflow[0] = 100.0
@@ -166,16 +167,16 @@ def main(ctx_factory=cl.create_some_context):
     eos = IdealSingleGas()
     bulk_init = Lump(numdim=dim, rho0=1.225, p0=100000.0,
                      center=orig, velocity=vel_init, rhoamp=0.0)
-    inflow_init = Lump(numdim=dim, rho0=1.225, p0=200000.0,
+    inflow_init = Lump(numdim=dim, rho0=2.0, p0=200000.0,
                        center=orig, velocity=vel_inflow, rhoamp=0.0)
 
     #    initializer = Uniform(numdim=dim)
-    casename = 'pseudoY1'
+    casename = 'pseudoY1-flow2'
     wall = AdiabaticSlipBoundary()
     from grudge import sym
     #    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     boundaries = {sym.DTAG_BOUNDARY("Inflow"): PrescribedBoundary(inflow_init),
-                  sym.DTAG_BOUNDARY("Outflow"): DummyBoundary,
+                  sym.DTAG_BOUNDARY("Outflow"): DummyBoundary(),
                   sym.DTAG_BOUNDARY("Wall"): wall}
     constant_cfl = False
     nstatus = 10
@@ -252,7 +253,7 @@ def main(ctx_factory=cl.create_some_context):
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
     #    initname = initializer.__class__.__name__
-    initname = "pseudoY1"
+    initname = "pseudoY1-flow2"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
