@@ -13,3 +13,4 @@ dependencies:
 - gmsh
 - pip
 - pytest
+- libhwloc=1

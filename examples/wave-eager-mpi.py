@@ -1,4 +1,4 @@
-__copyright__ = "Copyright (C) 2020 CEESD Developers"
+__copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,19 +20,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
-import pyopencl.array as cla  # noqa
-from pytools.obj_array import join_fields
+
+from pytools.obj_array import flat_obj_array
+
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw
+
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from meshmode.dof_array import thaw
+from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
-
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
+from mpi4py import MPI
 
 
 def bump(actx, discr, t=0):
@@ -41,7 +46,7 @@ def bump(actx, discr, t=0):
     source_omega = 3
 
     nodes = thaw(actx, discr.nodes())
-    center_dist = join_fields([
+    center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
         ])
@@ -55,20 +60,41 @@ def bump(actx, discr, t=0):
 
 def main():
     cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx,
-        properties=cl.command_queue_properties.PROFILING_ENABLE)
+    queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    comm = MPI.COMM_WORLD
+    num_parts = comm.Get_size()
+
+    from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
+    mesh_dist = MPIMeshDistributor(comm)
+
     dim = 2
     nel_1d = 16
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,)*dim,
-        b=(0.5,)*dim,
-        n=(nel_1d,)*dim)
+
+    if mesh_dist.is_mananger_rank():
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(-0.5,)*dim,
+            b=(0.5,)*dim,
+            n=(nel_1d,)*dim)
+
+        print("%d elements" % mesh.nelements)
+
+        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+
+        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+
+        del mesh
+
+    else:
+        local_mesh = mesh_dist.receive_mesh_part()
 
     order = 3
+
+    discr = EagerDGDiscretization(actx, local_mesh, order=order,
+                    mpi_communicator=comm)
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
@@ -79,19 +105,17 @@ def main():
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
-    print("%d elements" % mesh.nelements)
-
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-
-    fields = join_fields(
+    fields = flat_obj_array(
         bump(actx, discr),
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-    vis = make_visualizer(discr, discr.order+3 if dim == 2 else discr.order)
+    vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
+
+    rank = comm.Get_rank()
 
     t = 0
     t_final = 3
@@ -100,9 +124,8 @@ def main():
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
-            actx.print_profiling_data()
-            print(istep, t, discr.norm(fields[0], np.inf))
-            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+            print(istep, t, discr.norm(fields[0]))
+            vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
