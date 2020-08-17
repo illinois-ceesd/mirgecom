@@ -30,10 +30,10 @@ import numpy as np
 
 
 class ProfileData:
-    def __init__(self, time, flops, mem_access) -> None:
+    def __init__(self, time, flops, bytes_accessed) -> None:
         self.time = time
         self.flops = flops
-        self.mem_access = mem_access
+        self.bytes_accessed = bytes_accessed
 
 
 class TimingEvent:
