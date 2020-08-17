@@ -39,15 +39,16 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    check_step,
-    make_status_message,
+    #    check_step,
+    #    make_status_message,
+    sim_checkpoint
 )
 from mirgecom.io import (
     make_init_message,
-    make_io_fields,
-    make_output_dump,
+    #    make_io_fields,
+    #    make_output_dump,
 )
-from mirgecom.checkstate import compare_states
+# from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
@@ -56,70 +57,15 @@ from mirgecom.boundary import (
 )
 # from mirgecom.boundary import DummyBoundary
 # from mirgecom.initializers import Uniform
-from mirgecom.initializers import Lump, make_pulse
+from mirgecom.initializers import (
+    Lump,
+    #    make_pulse
+)
 from mirgecom.eos import IdealSingleGas
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
-
-
-def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None):
-    r"""
-    Checkpointing utility for runs with known exact solution generator
-    """
-
-    do_viz = check_step(step=step, interval=nviz)
-    do_status = check_step(step=step, interval=nstatus)
-    if do_viz is False and do_status is False:
-        return 0
-
-    actx = q[0].array_context
-    nodes = thaw(actx, discr.nodes())
-    rank = 0
-
-    if comm is not None:
-        rank = comm.Get_rank()
-    checkpoint_status = 0
-
-    dv = eos(q=q)
-
-    have_exact = False
-
-    if ((do_status is True or do_viz is True) and exact_soln is not None):
-        have_exact = True
-        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
-
-    if do_status is True:
-        #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-        #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(t=t, step=step, dt=dt,
-                                         cfl=cfl, dv=dv)
-        if have_exact is True:
-            max_errors = compare_states(red_state=q, blue_state=expected_state)
-            statusmesg += f"\n------   Err({max_errors})"
-            if rank == 0:
-                logger.info(statusmesg)
-
-            maxerr = np.max(max_errors)
-            if maxerr > exittol:
-                logger.error("Solution failed to follow expected result.")
-                checkpoint_status = 1
-
-    if do_viz:
-        dim = discr.dim
-        io_fields = make_io_fields(dim, q, dv, eos)
-        if have_exact is True:
-            io_fields.append(("exact_soln", expected_state))
-            result_resid = q - expected_state
-            io_fields.append(("residual", result_resid))
-        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                         comm=comm, step=step, t=t, overwrite=True)
-
-    return checkpoint_status
 
 
 # Surrogate for the currently non-functioning Uniform class
@@ -209,8 +155,9 @@ def main(ctx_factory=cl.create_some_context):
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    vel[0] = 340.0
-    current_dt = 1e-5
+    #    vel[0] = 340.0
+    vel[0] = 100.0
+    current_dt = 1e-8
     current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(numdim=dim, rho0=1.225, p0=100000.0,
@@ -219,12 +166,12 @@ def main(ctx_factory=cl.create_some_context):
     casename = 'pseudoY0'
     wall = AdiabaticSlipBoundary()
     from grudge import sym
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    #    boundaries = {sym.DTAG_BOUNDARY("Inflow"): PrescribedBoundary(initializer),
-    #                  sym.DTAG_BOUNDARY("Outflow"): PrescribedBoundary(initializer),
-    #                  sym.DTAG_BOUNDARY("Wall"): wall}
+    #    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    boundaries = {sym.DTAG_BOUNDARY("Inflow"): PrescribedBoundary(initializer),
+                  sym.DTAG_BOUNDARY("Outflow"): PrescribedBoundary(initializer),
+                  sym.DTAG_BOUNDARY("Wall"): wall}
     constant_cfl = False
-    nstatus = 1
+    nstatus = 10
     nviz = 10
     rank = 0
     checkpoint_t = current_t
@@ -264,7 +211,7 @@ def main(ctx_factory=cl.create_some_context):
 
         else:
             local_mesh = mesh_dist.receive_mesh_part()
-        
+
         comm.Barrier()
 
         if rank == 0:
@@ -290,10 +237,11 @@ def main(ctx_factory=cl.create_some_context):
     current_state = initializer(0, nodes)
     #    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
     comm.Barrier()
-    if rank == 0:
-        logging.info("Adding pulse.")
-    current_state[1] = current_state[1] + make_pulse(amp=50000.0, w=.002,
-                                                     r0=orig, r=nodes)
+    # Comment out the pulse for minute
+    #    if rank == 0:
+    #        logging.info("Adding pulse.")
+    #    current_state[1] = current_state[1] + make_pulse(amp=50000.0, w=.002,
+    #    r0=orig, r=nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -319,10 +267,12 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, logger, 
-                              q=state, vizname=casename, step=step, t=t, dt=dt,
-                              nstatus=nstatus, nviz=nviz, exittol=exittol,
-                              constant_cfl=constant_cfl, comm=comm)
+        if rank == 0:
+            logger.info(f"Checkpoint: {step}.")
+        return sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos,
+                              logger=logger, q=state, vizname=casename, step=step,
+                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
 
     comm.Barrier()
     if rank == 0:

@@ -25,7 +25,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.eos import IdealSingleGas
-from mirgecom.euler import split_conserved
+# from mirgecom.euler import split_conserved
 from grudge.symbolic.primitives import TracePair
 
 
@@ -68,7 +68,7 @@ class AdiabaticSlipBoundary:
         # Grab some boundary-relevant data
         actx = q[0].array_context
         dim = discr.dim
-        boundary_discr = discr.discr_from_dd(btag)
+        #       boundary_discr = discr.discr_from_dd(btag)
         normal = thaw(actx, discr.normal(btag))
         normal_mag = actx.np.sqrt(np.dot(normal, normal))
         nhat_mult = 1.0 / normal_mag
@@ -83,7 +83,7 @@ class AdiabaticSlipBoundary:
         int_soln = discr.project("vol", btag, q)
         boundary_soln = discr.project("vol", btag, q)  # copy?
         bpressure = eos.pressure(boundary_soln)
-        bsoln = split_conserved(dim, boundary_soln)
+        #        bsoln = split_conserved(dim, boundary_soln)
 
         # Subtract out the wall-normal component
         # of velocity from the velocity at the wall
@@ -96,7 +96,7 @@ class AdiabaticSlipBoundary:
         for i in range(dim):
             wnorm_vel[i] = nvelhat * normal[i]
             wall_velocity[i] = wall_velocity[i] - 2.0 * wnorm_vel[i]
-            
+
         # wall_velocity = wall_velocity - 2.0 * wnorm_vel
 
         # Re-calculate the boundary solution with the new

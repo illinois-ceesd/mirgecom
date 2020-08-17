@@ -76,7 +76,7 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .001
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(center=orig, velocity=vel,rhoamp=0.0)
+    initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
     casename = 'lump'
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
@@ -120,10 +120,10 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos, logger=logger,
+        return sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos,
                               q=state, vizname=casename, step=step, t=t, dt=dt,
                               nstatus=nstatus, nviz=nviz, exittol=exittol,
-                              constant_cfl=constant_cfl)
+                              constant_cfl=constant_cfl, logger=logger)
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,

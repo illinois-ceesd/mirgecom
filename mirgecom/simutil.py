@@ -77,26 +77,26 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
 
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
+
     if do_viz is False and do_status is False:
         return 0
 
     if profiler is not None:
         profiler.starttimer(f"checkpoint_{step}")
-        
-    actx = q[0].array_context
-    nodes = thaw(actx, discr.nodes())
-    rank = 0
 
+    rank = 0
     if comm is not None:
         rank = comm.Get_rank()
+
     checkpoint_status = 0
 
     dv = eos(q=q)
 
     have_exact = False
-
     if ((do_status is True or do_viz is True) and exact_soln is not None):
         have_exact = True
+        actx = q[0].array_context
+        nodes = thaw(actx, discr.nodes())
         expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
 
     if do_status is True:
@@ -114,10 +114,10 @@ def sim_checkpoint(discr, visualizer, eos, logger, q, vizname, exact_soln=None,
             if maxerr > exittol:
                 logger.error("Solution failed to follow expected result.")
                 checkpoint_status = 1
-                
+
         if rank == 0:
             logger.info(statusmesg)
-            
+
         if profiler is not None:
             profiler.endtimer(f"status_{step}")
 

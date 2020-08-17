@@ -44,7 +44,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
     """
     if t_final <= t:
         return(istep, t, state)
-    
+
     while t < t_final:
 
         dt = get_timestep(state=state)
