@@ -1,0 +1,17 @@
+#!/bin/bash --login
+
+if [[ -z "$1" ]]
+then
+    echo "Error: no mirgecom python file given."
+fi
+mcexe=$1
+conda_exe=$(which conda)
+echo "Conda exe: $conda_exe"
+conda env list
+conda activate dgfem
+conda_env_name=$(conda env list | grep "*" | awk '{print $1}')
+echo "Conda environment name: $conda_env_name)"
+export XDG_CACHE_HOME="/tmp/xdg_scratch_$SLURM_PROCID"
+python $@ > output_E$2.txt
+
+

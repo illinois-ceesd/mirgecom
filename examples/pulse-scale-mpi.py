@@ -21,17 +21,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import sys
 import logging
+from time import perf_counter as gettime
+from contextlib import contextmanager
 from mpi4py import MPI
 import numpy as np
 import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 from functools import partial
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -60,9 +59,6 @@ from mirgecom.initializers import (
     make_pulse
 )
 from mirgecom.eos import IdealSingleGas
-from time import perf_counter as gettime
-import sys
-from contextlib import contextmanager
 
 
 class Profiler:
@@ -295,36 +291,13 @@ class Profiler:
         return profilefilename
 
 
-# Surrogate for the currently non-functioning Uniform class
-def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
-
-    dim = len(x_vec)
-    _rho = 1.0
-    _p = 1.0
-    _velocity = np.zeros(shape=(dim,))
-    _gamma = 1.4
-
-    mom0 = _rho * _velocity
-    e0 = _p / (_gamma - 1.0)
-    ke = 0.5 * np.dot(_velocity, _velocity) / _rho
-    x_rel = x_vec[0]
-    zeros = 0.0*x_rel
-    ones = zeros + 1.0
-
-    mass = zeros + _rho
-    mom = make_obj_array([mom0 * ones for i in range(dim)])
-    energy = e0 + ke + zeros
-
-    return flat_obj_array(mass, energy, mom)
-
-
 comm = MPI.COMM_WORLD
 myprofiler = Profiler(comm)
 
 myprofiler.starttimer()
 
 
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context, nel_1d=8, order=1):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -334,8 +307,8 @@ def main(ctx_factory=cl.create_some_context):
     myprofiler.starttimer("Setup")
 
     dim = 2
-    nel_1d = 32
-    order = 1
+    #    nel_1d = 32
+    #    order = 1
     exittol = 2e-2
     exittol = 100.0
     t_final = .0001
@@ -400,6 +373,7 @@ def main(ctx_factory=cl.create_some_context):
         local_mesh = generate_regular_rect_mesh(
             a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
         )
+        global_nelements = local_mesh.nelements
 
     local_nelements = local_mesh.nelements
     myprofiler.endtimer("Mesh")
@@ -462,20 +436,39 @@ def main(ctx_factory=cl.create_some_context):
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
+
     myrank = comm.Get_rank()
     numproc = comm.Get_size()
 
+    nel_1d = 8
+    order = 1
+    narg = len(sys.argv)
+
+    if narg > 1:
+        nel_1d = int(sys.argv[1])
+    if narg > 2:
+        order = int(sys.argv[2])
+    if nel_1d <= 0 or nel_1d > 4098:
+        nel_1d = 8
+    if order < 0 or order > 10:
+        order = 1
+
+    if myrank == 0:
+        print(f"Global number of points per box side: {nel_1d}\n"
+              f"Order: {order}", flush=True)
     myprofiler.starttimer("mirgecom")
-    main()
+    main(nel_1d=nel_1d, order=order)
     myprofiler.endtimer("mirgecom")
 
     myprofiler.endtimer()
 
+    profile_name_root = f"pulse_E{nel_1d}_O{order}_P{numproc}"
     if myrank == 0:
-        myprofiler.writeserialprofile("pulse_rank0_profile_"+str(numproc))
+        rank0_profile_name = f"{profile_name_root}_rank0.txt"
+        myprofiler.writeserialprofile(rank0_profile_name)
 
     if numproc > 1:
-        parallelprofilefilename = myprofiler.makeparallelfilename("pulse")
+        parallelprofilefilename = myprofiler.makeparallelfilename(profile_name_root)
         myprofiler.writeparallelprofile(parallelprofilefilename)
 
 # vim: foldmethod=marker
