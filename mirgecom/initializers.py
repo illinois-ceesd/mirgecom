@@ -23,7 +23,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,

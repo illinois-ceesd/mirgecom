@@ -25,7 +25,6 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
@@ -158,16 +157,17 @@ def number_of_equations(ndim, q):
 
 def split_conserved(dim, q):
     """
-    Return a :class:`ConservedVars` object that splits out conserved quantities
-    by name. Useful for expressive coding.
+    Return a :class:`ConservedVars` that is the canonical conserved quantities,
+    mass, energy, and momentum from the agglomerated object array representing
+    the state, q.
     """
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
 def split_species(dim, q):
     """
-    Return a 'MassFractions' object that splits out mixture species
-    conserved quantities by name. Useful for expressive coding.
+    Return a :class:`MassFractions` object that represent the mixture species
+    mass fractions from the agglomerated object array representing the state, q.
     """
     numscalar = number_of_scalars(dim, q)
     sindex = dim + 2
@@ -275,8 +275,15 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
 def inviscid_operator(
         discr, q, boundaries, t=0.0, eos=IdealSingleGas(),
 ):
-    """
+    r"""
     RHS of the Euler flow equations
+
+    Returns
+    -------
+    The right-hand-side of the Euler flow equations:
+
+    :math:`\dot\mathbf{q} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega}`
 
     Parameters
     ----------

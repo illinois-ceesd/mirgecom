@@ -22,18 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import os
-import numpy.linalg as la  # noqa
-import pyopencl.array as cla  # noqa
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.euler import split_fields
 from mirgecom.checkstate import get_field_stats
 
 
-def make_io_fields(dim, state, dv, eos):
-    r"""Makes fluid-flow-specific fields for restart or
-    visualization I/O.
+def make_io_fields(dim, state, dependent_vars, eos):
+    r"""Helper function to create io field dictionary for VTK I/O interface.
 
     Parameters
     ----------
@@ -41,7 +37,7 @@ def make_io_fields(dim, state, dv, eos):
         Dimensionality of solution
     state
         Solution state
-    dv
+    dependent_vars
         EOS-specific dependent quantities
         (e.g. pressure, temperature, for ideal monatomic gas)
     eos
@@ -49,7 +45,7 @@ def make_io_fields(dim, state, dv, eos):
         fields.
     """
     io_fields = split_fields(dim, state)
-    io_fields += eos.split_fields(dim, dv)
+    io_fields += eos.split_fields(dim, dependent_vars)
     return io_fields
 
 
@@ -71,8 +67,8 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, t, step, dt, cfl, dv):
-    dvxt = get_field_stats(dv)
+def make_status_message(*, t, step, dt, cfl, dependent_vars):
+    dvxt = get_field_stats(dependent_vars)
     statusmsg = (
         f"Status: Step({step}) Time({t})\n"
         f"------   P({dvxt[0]},{dvxt[2]})\n"

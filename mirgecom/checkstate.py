@@ -22,12 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np
-import numpy.linalg as la  # noqa
-import pyopencl.array as cla  # noqa
 from meshmode.dof_array import flatten
 from pytools.obj_array import flat_obj_array
 
 
+# TODO: Implement this better, add more comparison metrics
 def compare_states(red_state, blue_state):
     actx = red_state[0].array_context
     resid = red_state - blue_state

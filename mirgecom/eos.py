@@ -23,7 +23,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -38,6 +37,11 @@ class GasEOS:
     r"""Implements an object designed to provide methods
     for implementing and computing relations between
     fluid or gas state variables.
+
+    Each interface call expects that the agglomerated
+    object array representing the state vector (:math:`q`),
+    contains the relevant simulation state quantities. Each
+    EOS class should document its own state data requirements.
 
     .. automethod :: pressure
     .. automethod :: temperature
@@ -64,10 +68,7 @@ class GasEOS:
         Parameters
         ----------
         q
-            State array which expects at least
-            the canonical conserved quantities:
-            :math:`q=[\rho,\rho{E},\rho\vec{V}]`
-            for the fluid at each point
+            Agglomerated object array representing state data
 
         Returns
         ----------
@@ -83,10 +84,7 @@ class GasEOS:
         Parameters
         ----------
         q
-            State array which expects at least
-            the canonical conserved quantities:
-            :math:`q=[\rho,\rho{E},\rho\vec{V}]`
-            for the fluid at each point
+            Agglomerated object array representing state data
 
         Returns
         ----------
@@ -101,10 +99,7 @@ class GasEOS:
         Parameters
         ----------
         q
-            State array which expects at least
-            the canonical conserved quantities:
-            :math:`q=[\rho,\rho{E},\rho\vec{V}]`
-            for the fluid at each point
+            Agglomerated object array representing state data
 
         Returns
         ----------
@@ -119,10 +114,7 @@ class GasEOS:
         Parameters
         ----------
         q
-            State array which expects at least
-            the canonical conserved quantities:
-            :math:`q=[\rho,\rho{E},\rho\vec{V}]`
-            for the fluid at each point
+            Agglomerated object array representing state data
 
         Returns
         ----------
@@ -137,10 +129,7 @@ class GasEOS:
         Parameters
         ----------
         q
-            State array which expects at least
-            the canonical conserved quantities:
-            :math:`q=[\rho,\rho{E},\rho\vec{V}]`
-            for the fluid at each point
+            Agglomerated object array representing state data
 
         Returns
         ----------
@@ -156,10 +145,7 @@ class GasEOS:
         Parameters
         ----------
         q
-            State array which expects at least
-            the canonical conserved quantities:
-            :math:`q=[\rho,\rho{E},\rho\vec{V}]`
-            for the fluid at each point
+            Agglomerated object array representing state data
 
         Returns
         ----------
@@ -172,6 +158,16 @@ class GasEOS:
 class IdealSingleGas:
     r"""Implements the ideal gas law (:math:`p = \rho{R}{T}`)
     for a single monatomic gas.
+
+    The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
+    but can be set according to simulation units and materials.
+
+    Each interface call expects that the agglomerated
+    object array representing the state vector (:math:`q`),
+    contains at least the canonical conserved quantities
+    mass (:math:`\rho`), energy (:math:`\rho{E}`), and
+    momentum (:math:`\rho\vec{V}`).
+
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1):

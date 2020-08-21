@@ -23,8 +23,6 @@ THE SOFTWARE.
 """
 import logging
 import pyopencl as cl
-import numpy.linalg as la  # noqa
-import pyopencl.array as cla  # noqa
 import pyopencl.tools as cl_tools
 from functools import partial
 
