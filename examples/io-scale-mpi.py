@@ -30,7 +30,6 @@ import numpy as np
 import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
-from functools import partial
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -38,22 +37,9 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.euler import (
-    inviscid_operator,
-    #    split_conserved
-)
-from mirgecom.simutil import (
-    inviscid_sim_timestep,
-    sim_checkpoint
-)
+from mirgecom.simutil import sim_checkpoint
 from mirgecom.io import make_init_message
 
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    PrescribedBoundary,
-    AdiabaticSlipBoundary
-)
 from mirgecom.initializers import (
     Lump,
     make_pulse
@@ -307,30 +293,19 @@ def main(ctx_factory=cl.create_some_context, nel_1d=8, order=1):
     myprofiler.starttimer("Setup")
 
     dim = 2
-    #    nel_1d = 32
-    #    order = 1
-    exittol = 2e-2
-    exittol = 100.0
     t_final = .0001
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     #    vel[:dim] = 1.0
     current_dt = .00001
-    current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
     casename = 'pulse'
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    wall = AdiabaticSlipBoundary()
-    boundaries = {BTAG_ALL: wall}
     constant_cfl = False
     nstatus = 10
     nviz = 10
     rank = 0
-    checkpoint_t = current_t
-    current_step = 0
-    timestepper = rk4_step
     box_ll = -0.5
     box_ur = 0.5
 
@@ -400,15 +375,19 @@ def main(ctx_factory=cl.create_some_context, nel_1d=8, order=1):
     if rank == 0:
         logger.info(init_message)
 
-    
     myprofiler.endtimer("Setup")
-    
+
+    numtrials = 5
     for ntrial in range(numtrials):
+        step = 0
+        t = 0
+        dt = 0
         visname = f"{casename}-{ntrial}"
         myprofiler.starttimer(f"checkpoint-{ntrial}")
         sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos, logger=logger,
-                       q=state, visname=casename, step=step, t=t, dt=dt, nstatus=-1,
-                       nviz=nviz, constant_cfl=constant_cfl, profiler=myprofiler)
+                       q=current_state, visname=visname, step=step, t=t, dt=dt,
+                       nstatus=-1, nviz=nviz, constant_cfl=constant_cfl,
+                       profiler=myprofiler)
         myprofiler.endtimer(f"checkpoint-{ntrial}")
 
 
