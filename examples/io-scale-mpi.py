@@ -357,8 +357,10 @@ def main(ctx_factory=cl.create_some_context, nel_1d=8, order=1):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+    if rank == 0:
+        logger.info(f"Local number of points: {len(nodes[0])}")
 
+    current_state = initializer(0, nodes)
     #    qs = split_conserved(dim, current_state)
     #    qs.energy = qs.energy + make_pulse(amp=1.0, w=.2, r0=orig, r=nodes)
     current_state[1] = current_state[1] + make_pulse(amp=1.0, w=.1, r0=orig, r=nodes)
@@ -385,7 +387,7 @@ def main(ctx_factory=cl.create_some_context, nel_1d=8, order=1):
         visname = f"{casename}-{ntrial}"
         myprofiler.starttimer(f"checkpoint-{ntrial}")
         sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos, logger=logger,
-                       q=current_state, visname=visname, step=step, t=t, dt=dt,
+                       q=current_state, vizname=visname, step=step, t=t, dt=dt,
                        nstatus=-1, nviz=nviz, constant_cfl=constant_cfl,
                        profiler=myprofiler)
         myprofiler.endtimer(f"checkpoint-{ntrial}")
