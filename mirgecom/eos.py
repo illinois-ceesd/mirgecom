@@ -241,8 +241,8 @@ class IdealSingleGas:
     def __call__(self, q):
         return flat_obj_array(self.pressure(q), self.temperature(q))
 
-    def split_fields(self, ndim, dv):
+    def split_fields(self, ndim, dependent_vars):
         return [
-            ("pressure", dv[0]),
-            ("temperature", dv[1]),
+            ("pressure", dependent_vars[0]),
+            ("temperature", dependent_vars[1]),
         ]

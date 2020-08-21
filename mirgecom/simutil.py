@@ -88,7 +88,7 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
         rank = comm.Get_rank()
     checkpoint_status = 0
 
-    dv = eos(q=q)
+    dependent_vars = eos(q=q)
     expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
 
     if do_status is True:
@@ -96,7 +96,7 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
         #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
         #                                           eos=eos, dt=dt)
         statusmesg = make_status_message(t=t, step=step, dt=dt,
-                                         cfl=cfl, dv=dv)
+                                         cfl=cfl, dependent_vars=dependent_vars)
         max_errors = compare_states(red_state=q, blue_state=expected_state)
         statusmesg += f"\n------   Err({max_errors})"
         if rank == 0:
@@ -109,7 +109,7 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
 
         if do_viz:
             dim = discr.dim
-            io_fields = make_io_fields(dim, q, dv, eos)
+            io_fields = make_io_fields(dim, q, dependent_vars, eos)
             io_fields.append(("exact_soln", expected_state))
             result_resid = q - expected_state
             io_fields.append(("residual", result_resid))

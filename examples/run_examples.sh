@@ -12,7 +12,7 @@ do
     if [[ "$example" == *"-mpi.py" ]]
     then
         echo "Running parallel example: $example"        
-        mpiexec -n 2 python ${example}
+        srun -n 2 python ${example}
     else
         echo "Running serial example: $example"        
         python ${example}
