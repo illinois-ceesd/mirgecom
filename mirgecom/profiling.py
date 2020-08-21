@@ -122,10 +122,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             '='*8, '='*8, '='*8, '='*8, '='*8))
 
     def call_loopy(self, program, **kwargs) -> dict:
-        from warnings import resetwarnings, filterwarnings
-        resetwarnings()
-        filterwarnings('ignore', category=Warning)
-
         program = self.transform_loopy_program(program)
         assert program.options.return_dict
         assert program.options.no_numpy

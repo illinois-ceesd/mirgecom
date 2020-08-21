@@ -57,7 +57,7 @@ def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx,
         properties=cl.command_queue_properties.PROFILING_ENABLE)
-    actx = PyOpenCLArrayContext(queue,
+    actx = PyOpenCLProfilingArrayContext(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
