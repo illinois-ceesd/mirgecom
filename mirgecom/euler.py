@@ -67,12 +67,10 @@ where:
 .. autofunction:: inviscid_operator
 .. autofunction:: number_of_scalars
 .. autofunction:: split_conserved
-.. autofunction:: split_species
 .. autofunction:: split_fields
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
 .. autoclass:: ConservedVars
-.. autoclass:: MassFractions
 """
 
 
@@ -101,22 +99,6 @@ class ConservedVars:
     momentum: np.ndarray
 
 
-@dataclass
-class MassFractions:
-    r"""
-    Class to pick off the species mass fractions
-    (mass fractions) per unit volume =
-    :math:`(\rhoY_{\alpha}) | 1 \le \alpha \le N_{species}`,
-    from an agglomerated object array. :math:`N_{species}` is
-    the number of mixture species.
-
-    .. attribute:: mass
-
-        Mass fraction per unit volume for each mixture species
-    """
-    massfractions: np.ndarray
-
-
 def split_fields(ndim, q):
     """
     Method to spit out a list of named flow variables in
@@ -128,31 +110,18 @@ def split_fields(ndim, q):
     energy = qs.energy
     mom = qs.momentum
 
-    retlist = [
+    return [
         ("mass", mass),
         ("energy", energy),
         ("momentum", mom),
     ]
-    nscalar = number_of_scalars(ndim, q)
-    if nscalar > 0:
-        massfrac = split_species(ndim, q).massfraction
-        retlist.append(("massfraction", massfrac))
-
-    return retlist
-
-
-def number_of_scalars(ndim, q):
-    """
-    Return the number of scalars or mixture species in a flow solution.
-    """
-    return len(q) - (ndim + 2)
 
 
 def number_of_equations(ndim, q):
     """
     Return the number of equations (i.e. number of dofs) in the soln
     """
-    return len(q) + number_of_scalars(ndim, q)
+    return len(q) 
 
 
 def split_conserved(dim, q):
@@ -162,16 +131,6 @@ def split_conserved(dim, q):
     the state, q.
     """
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
-
-
-def split_species(dim, q):
-    """
-    Return a :class:`MassFractions` object that represent the mixture species
-    mass fractions from the agglomerated object array representing the state, q.
-    """
-    numscalar = number_of_scalars(dim, q)
-    sindex = dim + 2
-    return MassFractions(massfractions=q[sindex:sindex+numscalar])
 
 
 def _inviscid_flux(discr, eos, q):
@@ -201,7 +160,6 @@ def _inviscid_flux(discr, eos, q):
     )
     massflux = mom * make_obj_array([1.0])
     energyflux = mom * make_obj_array([(energy + p) / mass])
-    # scalarflux = mom * massfractions / mass
 
     return flat_obj_array(massflux, energyflux, momflux,)
 
