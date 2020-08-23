@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t=0.0, t_final=1.0, istep=0):
+                  state, t_final, t=0.0, istep=0):
     """
     Implements a generic state advancement routine
 
@@ -43,6 +43,15 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
         the stepper should stop gracefully.
+    state: obj array
+        Agglomerated object array containing at least the state variables that
+        will be advanced by this stepper
+    t_final: float
+        Simulated time at which to stop
+    t: float
+        Time at which to start
+    istep: integer
+        Step number from which to start
 
     Returns
     -------
