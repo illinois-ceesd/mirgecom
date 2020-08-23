@@ -35,8 +35,8 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
-
-from mirgecom.eos import IdealSingleGas
+#
+# from mirgecom.eos import IdealSingleGas
 
 # from grudge.dt_finding import (
 #    dt_geometric_factor,
@@ -174,7 +174,7 @@ def split_species(dim, q):
     return MassFractions(massfractions=q[sindex:sindex+numscalar])
 
 
-def _inviscid_flux(discr, q, eos=IdealSingleGas()):
+def _inviscid_flux(discr, eos, q):
     r"""Computes the inviscid flux vectors from flow solution *q*
 
     The inviscid fluxes are
@@ -206,7 +206,7 @@ def _inviscid_flux(discr, q, eos=IdealSingleGas()):
     return flat_obj_array(massflux, energyflux, momflux,)
 
 
-def _get_wavespeed(dim, q, eos=IdealSingleGas()):
+def _get_wavespeed(dim, eos, q):
     """Returns the maximum wavespeed in for flow solution *q*"""
     qs = split_conserved(dim, q)
     mass = qs.mass
@@ -219,7 +219,7 @@ def _get_wavespeed(dim, q, eos=IdealSingleGas()):
     return actx.np.sqrt(np.dot(v, v)) + sos
 
 
-def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
+def _facial_flux(discr, eos, q_tpair):
     """Returns the flux across a face given the solution on both sides *q_tpair*"""
     dim = discr.dim
 
@@ -240,15 +240,16 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
     # Jump in soln
     qjump = qext - qint
 
-    flux_int = _inviscid_flux(discr, qint, eos)
-    flux_ext = _inviscid_flux(discr, qext, eos)
+    flux_int = _inviscid_flux(discr, eos, qint)
+    flux_ext = _inviscid_flux(discr, eos, qext)
 
     # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
     # DOI: 10.1007/978-0-387-72067-8
     flux_aver = (flux_int + flux_ext) * 0.5
 
     # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = [_get_wavespeed(dim, qint), _get_wavespeed(dim, qext)]
+    wavespeeds = [_get_wavespeed(dim, eos=eos, q=qint),
+                  _get_wavespeed(dim, eos=eos, q=qext)]
 
     lam = actx.np.maximum(*wavespeeds)
     lfr = qjump * make_obj_array([0.5 * lam])
@@ -273,8 +274,7 @@ def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
 
 
 def inviscid_operator(
-        discr, q, boundaries, t=0.0, eos=IdealSingleGas(),
-):
+        discr, eos, boundaries, q, t=0.0):
     r"""
     RHS of the Euler flow equations
 
@@ -298,13 +298,13 @@ def inviscid_operator(
         Time
 
     eos
-        class:EOS implementing the pressure and temperature functions for
+        :class:`EOS` implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     """
 
     ndim = discr.dim
 
-    vol_flux = _inviscid_flux(discr, q, eos)
+    vol_flux = _inviscid_flux(discr, eos, q)
     dflux = flat_obj_array(
         [
             discr.weak_div(vol_flux[(i * ndim): (i + 1) * ndim])
@@ -313,18 +313,17 @@ def inviscid_operator(
     )
 
     interior_face_flux = _facial_flux(
-        discr, q_tpair=interior_trace_pair(discr, q), eos=eos
-    )
+        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
 
     # Domain boundaries
     domain_boundary_flux = sum(
         _facial_flux(
             discr,
             q_tpair=boundaries[btag].boundary_pair(discr,
-                                                   q,
-                                                   t=t,
+                                                   eos=eos,
                                                    btag=btag,
-                                                   eos=eos),
+                                                   t=t,
+                                                   q=q),
             eos=eos
         )
         for btag in boundaries
@@ -332,7 +331,7 @@ def inviscid_operator(
 
     # Flux across partition boundaries
     partition_boundary_flux = sum(
-        _facial_flux(discr, q_tpair=part_pair, eos=eos)
+        _facial_flux(discr, eos=eos, q_tpair=part_pair)
         for part_pair in cross_rank_trace_pairs(discr, q)
     )
 
@@ -342,15 +341,15 @@ def inviscid_operator(
     )
 
 
-def get_inviscid_cfl(discr, q, dt, eos=IdealSingleGas()):
+def get_inviscid_cfl(discr, eos, dt, q):
     """
     Routine calculates and returns CFL based on current state and timestep
     """
-    wanted_dt = get_inviscid_timestep(discr, q, eos=eos)
+    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
 
 
-def get_inviscid_timestep(discr, q, cfl=1.0, eos=IdealSingleGas()):
+def get_inviscid_timestep(discr, eos, cfl, q):
     """
     Routine (will) return the (local) maximum stable inviscid timestep.
     Currently, it's a hack waiting for the geometric_factor helpers port

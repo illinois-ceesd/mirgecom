@@ -123,7 +123,7 @@ def test_inviscid_flux(ctx_factory, dim):
 
     from mirgecom.euler import _inviscid_flux
 
-    flux = _inviscid_flux(discr, q, eos)
+    flux = _inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
     for i in range((dim + 2) * dim):
@@ -194,7 +194,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
         q = flat_obj_array(mass, energy, mom)
         p = eos.pressure(q)
-        flux = _inviscid_flux(fake_dis, q, eos)
+        flux = _inviscid_flux(fake_dis, eos, q)
 
         logger.info(f"{dim}d flux = {flux}")
 
@@ -288,7 +288,7 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
             )
             q = flat_obj_array(mass, energy, mom)
             p = eos.pressure(q)
-            flux = _inviscid_flux(fake_dis, q, eos)
+            flux = _inviscid_flux(fake_dis, eos, q)
 
             logger.info(f"{dim}d flux = {flux}")
 
@@ -416,7 +416,7 @@ def test_facial_flux(ctx_factory, order, dim):
         from mirgecom.euler import _facial_flux
 
         interior_face_flux = _facial_flux(
-            discr, q_tpair=interior_trace_pair(discr, fields))
+            discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
 
         from functools import partial
         fnorm = partial(discr.norm, p=np.inf, dd="all_faces")
@@ -450,7 +450,8 @@ def test_facial_flux(ctx_factory, order, dim):
         dir_bc = flat_obj_array(dir_mass, dir_e, dir_mom)
 
         boundary_flux = _facial_flux(
-            discr, q_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
+            discr, eos=IdealSingleGas(),
+            q_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
         )
 
         bf_split = split_conserved(dim, boundary_flux)
@@ -525,7 +526,8 @@ def test_uniform_rhs(ctx_factory, dim, order):
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = inviscid_operator(discr, fields, boundaries)
+        inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
+                                         boundaries=boundaries, q=fields, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         resid_split = split_conserved(dim, rhs_resid)
@@ -561,7 +563,8 @@ def test_uniform_rhs(ctx_factory, dim, order):
             mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = inviscid_operator(discr, fields, boundaries)
+        inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
+                                         boundaries=boundaries, q=fields, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         resid_split = split_conserved(dim, rhs_resid)
@@ -634,8 +637,8 @@ def test_vortex_rhs(ctx_factory, order):
         boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
 
         inviscid_rhs = inviscid_operator(
-            discr, vortex_soln, t=0, boundaries=boundaries
-        )
+            discr, eos=IdealSingleGas(), boundaries=boundaries,
+            q=vortex_soln, t=0.0)
 
         err_max = discr.norm(inviscid_rhs, np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
@@ -694,8 +697,7 @@ def test_lump_rhs(ctx_factory, dim, order):
         lump_soln = lump(0, nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = inviscid_operator(
-            discr, lump_soln, t=0.0, boundaries=boundaries
-        )
+            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
 
         err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
@@ -747,7 +749,7 @@ def _euler_flow_stepper(actx, parameters):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     fields = initializer(0, nodes)
-    sdt = get_inviscid_timestep(discr, fields, cfl=cfl, eos=eos)
+    sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -792,7 +794,7 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return inviscid_operator(discr, q=q, t=t, boundaries=boundaries, eos=eos)
+        return inviscid_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
 
     while t < t_final:
 
@@ -809,7 +811,7 @@ def _euler_flow_stepper(actx, parameters):
         t += dt
         istep += 1
 
-        sdt = get_inviscid_timestep(discr, fields, cfl=cfl, eos=eos)
+        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
