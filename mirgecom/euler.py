@@ -121,7 +121,7 @@ def number_of_equations(ndim, q):
     """
     Return the number of equations (i.e. number of dofs) in the soln
     """
-    return len(q) 
+    return len(q)
 
 
 def split_conserved(dim, q):
