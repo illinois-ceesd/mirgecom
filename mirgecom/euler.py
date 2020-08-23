@@ -67,10 +67,12 @@ where:
 .. autofunction:: inviscid_operator
 .. autofunction:: number_of_scalars
 .. autofunction:: split_conserved
+.. autofunction:: split_species
 .. autofunction:: split_fields
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
 .. autoclass:: ConservedVars
+.. autoclass:: MassFractions
 """
 
 
@@ -99,6 +101,36 @@ class ConservedVars:
     momentum: np.ndarray
 
 
+@dataclass
+class MassFractions:
+    r"""
+    Class to pick off the species mass fractions
+    (mass fractions) per unit volume =
+    :math:`(\rhoY_{\alpha}) | 1 \le \alpha \le N_{species}`,
+    from an agglomerated object array. :math:`N_{species}` is
+    the number of mixture species.
+
+    .. attribute:: mass
+
+        Mass fraction per unit volume for each mixture species
+    """
+    massfractions: np.ndarray
+
+
+def get_number_of_scalars(ndim, q):
+    """
+    Return the number of scalars or mixture species in a flow solution.
+    """
+    return len(q) - (ndim + 2)
+
+
+def get_number_of_equations(ndim, q):
+    """
+    Return the number of equations (i.e. number of dofs) in the soln
+    """
+    return len(q) + get_number_of_scalars(ndim, q)
+
+
 def split_fields(ndim, q):
     """
     Method to spit out a list of named flow variables in
@@ -110,18 +142,17 @@ def split_fields(ndim, q):
     energy = qs.energy
     mom = qs.momentum
 
-    return [
+    retlist = [
         ("mass", mass),
         ("energy", energy),
         ("momentum", mom),
     ]
+    nscalar = get_number_of_scalars(ndim, q)
+    if nscalar > 0:
+        massfrac = split_species(ndim, q).massfraction
+        retlist.append(("massfraction", massfrac))
 
-
-def number_of_equations(ndim, q):
-    """
-    Return the number of equations (i.e. number of dofs) in the soln
-    """
-    return len(q) 
+    return retlist
 
 
 def split_conserved(dim, q):
@@ -131,6 +162,16 @@ def split_conserved(dim, q):
     the state, q.
     """
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
+
+
+def split_species(dim, q):
+    """
+    Return a :class:`MassFractions` object that represent the mixture species
+    mass fractions from the agglomerated object array representing the state, q.
+    """
+    numscalar = get_number_of_scalars(dim, q)
+    sindex = dim + 2
+    return MassFractions(massfractions=q[sindex:sindex+numscalar])
 
 
 def _inviscid_flux(discr, eos, q):
@@ -146,6 +187,8 @@ def _inviscid_flux(discr, eos, q):
     mass = qs.mass
     energy = qs.energy
     mom = qs.momentum
+    sp = split_species(ndim, q)
+    massfracs = sp.massfractions
 
     p = eos.pressure(q)
 
@@ -160,8 +203,9 @@ def _inviscid_flux(discr, eos, q):
     )
     massflux = mom * make_obj_array([1.0])
     energyflux = mom * make_obj_array([(energy + p) / mass])
+    scalarflux = mom * massfracs / mass
 
-    return flat_obj_array(massflux, energyflux, momflux,)
+    return flat_obj_array(massflux, energyflux, momflux, scalarflux)
 
 
 def _get_wavespeed(dim, eos, q):
@@ -217,7 +261,7 @@ def _facial_flux(discr, eos, q_tpair):
     # (rhoE + p)V  .dot. normal
     # (rhoV.x.V)_1 .dot. normal
     # (rhoV.x.V)_2 .dot. normal
-    numeqns = number_of_equations(dim, qint)
+    numeqns = get_number_of_equations(dim, qint)
     num_flux = flat_obj_array(
         [
             np.dot(flux_aver[(i * dim): ((i + 1) * dim)], normal)
@@ -261,12 +305,13 @@ def inviscid_operator(
     """
 
     ndim = discr.dim
+    neq = get_number_of_equations(ndim, q)
 
     vol_flux = _inviscid_flux(discr, eos, q)
     dflux = flat_obj_array(
         [
             discr.weak_div(vol_flux[(i * ndim): (i + 1) * ndim])
-            for i in range(ndim + 2)
+            for i in range(neq)
         ]
     )
 
