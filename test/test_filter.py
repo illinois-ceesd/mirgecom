@@ -212,7 +212,7 @@ def test_filter_class(ctx_factory, dim, order):
         )
         #        r = clmath.sqrt(np.dot(my_x, my_x))
         r = my_x[0]
-        result = discr.zeros(actx) # clarray.zeros(r.queue, shape=r.shape, dtype=np.float64)
+        result = 0
         for n, a in enumerate(coeff):
             result += a * r ** n
         return result
@@ -231,7 +231,7 @@ def test_filter_class(ctx_factory, dim, order):
     #    assert(np.max(max_errors) < tol)
 
     # Any order > cutoff fields should have higher modes attenuated
-    tol = 1e-1
+    # tol = 1e-1
     #    vis = make_visualizer(discr, discr.order)
     from modepy import vandermonde
     for field_order in range(cutoff+1, cutoff+4):

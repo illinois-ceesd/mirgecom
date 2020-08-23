@@ -81,16 +81,16 @@ def get_spectral_filter(elemgroup, dim, alpha, order, cutoff, filter_order):
 
 
 def linear_operator_kernel():
-    knl = lp.make_kernel(
-        """{[k,i,j]:
-        0<=k<nelements and
-        0<=i<ndiscr_nodes_out and
+    from meshmode.array_context import make_loopy_program
+    knl = make_loopy_program(
+        """{[iel,idof,j]:
+        0<=iel<nelements and
+        0<=idof<ndiscr_nodes_out and
         0<=j<ndiscr_nodes_in}""",
-        "result[k,i] = sum(j, mat[i, j] * vec[k, j])",
-        default_offset=lp.auto, name="diff")
-    knl = lp.split_iname(knl, "i", 16, inner_tag="l.0")
+        "result[iel,idof] = sum(j, mat[idof, j] * vec[iel, j])",
+        name="spectral_filter")
     knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
-    return lp.tag_inames(knl, dict(k="g.0"))
+    return knl
 
 
 class SpectralFilter:
@@ -110,20 +110,26 @@ class SpectralFilter:
 
     @obj_array_vectorized_n_args
     def __call__(self, discr, fields):
-        result = discr.empty(fields.array_context, dtype=fields.dtype)
-#        for group_index, group in enumerate(discr.groups):
-#            filter_operator = self._filter_operators[group_index]
-#            self._knl(fields.array_context, mat=filter_operator,
-#                      result=group.view(result),
-#                      vec=group.view(fields))
+        actx = fields.array_context
+        result = discr.empty(fields.array_context, dtype=fields.entry_dtype)
+        for group_index, group in enumerate(discr.groups):
+            # FIXME Do the transfer once, not repeatedly
+            filter_operator = actx.from_numpy(self._filter_operators[group_index])
+            actx.call_loopy(self._knl,
+                    mat=filter_operator,
+                    result=result[group_index],
+                    vec=fields[group_index])
         return result
 
 
 @obj_array_vectorized_n_args
 def apply_linear_operator(discr, operator, fields):
-    result = discr.empty(fields.array_context, dtype=fields.dtype)
+    actx = fields.array_context
+    result = discr.empty(actx, dtype=fields.entry_dtype)
     for group in discr.groups:
-        linear_operator_kernel()(fields.array_context, mat=operator,
-                                 result=group.view(result),
-                                 vec=group.view(fields))
+        actx.call_loopy(
+            linear_operator_kernel(),
+            mat=actx.from_numpy(operator),
+            result=result[group.index],
+            vec=fields[group.index])
     return result
