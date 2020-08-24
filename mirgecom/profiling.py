@@ -186,10 +186,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 flops = f32op + f64op
                 bytes_accessed = mem32*4 + mem64*8
 
-                if program not in self.kernel_stats:
-                    self.kernel_stats[program] = {}
-
-                self.kernel_stats[program][args_tuple] = (flops, bytes_accessed)
+                self.kernel_stats.setdefault(program, {})[args_tuple] = (flops, bytes_accessed)
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
