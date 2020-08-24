@@ -31,20 +31,11 @@ from dataclasses import dataclass
 
 
 @dataclass
-class ProfileResult:
-    """Class to hold results from a completed profile event."""
-    time: int
-    flops: int
-    bytes_accessed: int
-
-
-@dataclass
 class ProfileEvent:
     """Class to hold a profile event that (potentially) has not completed yet."""
-    event: cl._cl.Event
+    cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
-    flops: int
-    bytes_accessed: int
+    args_tuple: tuple
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
@@ -64,22 +55,15 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     def finish_profile_events(self) -> None:
         # First, wait for event completion
         if self.profile_events:
-            cl.wait_for_events([t.event for t in self.profile_events])
+            cl.wait_for_events([t.cl_event for t in self.profile_events])
 
         for t in self.profile_events:
             program = t.program
-            flops = t.flops
-            bytes_accessed = t.bytes_accessed
-            evt = t.event
+            (flops, bytes_accessed) = self.kernel_stats[program][t.args_tuple]
+            time = t.cl_event.profile.end - t.cl_event.profile.start
 
-            time = evt.profile.end - evt.profile.start
-
-            if program in self.profile_results:
-                self.profile_results[program].append(
-                    ProfileResult(time, flops, bytes_accessed))
-            else:
-                self.profile_results[program] = [
-                    ProfileResult(time, flops, bytes_accessed)]
+            self.profile_results.setdefault(program, []).append(
+                    dict(time=time, flops=flops, bytes_accessed=bytes_accessed))
 
         self.profile_events = []
 
@@ -105,9 +89,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         for key, value in self.profile_results.items():
             num_values = len(value)
 
-            times = [v.time for v in value]
-            flops = [v.flops for v in value]
-            bytes_accessed = [v.bytes_accessed for v in value]
+            times = [v['time'] for v in value]
+            flops = [v['flops'] for v in value]
+            bytes_accessed = [v['bytes_accessed'] for v in value]
 
             print(format_str.format(key.name, num_values, min(times),
                 int(mean(times)), max(times), min(flops), int(mean(flops)),
@@ -178,11 +162,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = (
                 flops, bytes_accessed)
-        else:
-            (flops, bytes_accessed) = self.kernel_stats[program][args_tuple]
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
-        self.profile_events.append(ProfileEvent(evt, program, flops, bytes_accessed))
+        self.profile_events.append(ProfileEvent(evt, program, args_tuple))
 
         return result
