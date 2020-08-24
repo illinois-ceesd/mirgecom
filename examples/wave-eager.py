@@ -30,6 +30,7 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 from meshmode.dof_array import thaw
+from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
@@ -53,12 +54,17 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main():
+def main(use_profiling=False):
     cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx,
-        properties=cl.command_queue_properties.PROFILING_ENABLE)
-    actx = PyOpenCLProfilingArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
@@ -100,7 +106,8 @@ def main():
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
-            actx.print_profiling_data()
+            if use_profiling:
+                actx.print_profiling_data()
             print(istep, t, discr.norm(fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
