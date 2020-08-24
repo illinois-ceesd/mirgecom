@@ -54,7 +54,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
             raise RuntimeError("Profiling was not enabled in the command queue."
-                 "Timing data will not be collected.")
+                 "Please create the queue with "
+                 "cl.command_queue_properties.PROFILING_ENABLE.")
 
         self.profile_events = []
         self.profile_results = {}
