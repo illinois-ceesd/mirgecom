@@ -129,7 +129,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # N.B.: The invoker code might be different for the same program with
         # different kwargs
         if (program not in self.kernel_stats
-          or args_tuple not in self.kernel_stats[program]):
+                or args_tuple not in self.kernel_stats[program]):
             executor = program.target.get_kernel_executor(program, self.queue)
             info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
@@ -172,7 +172,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size='guess') \
               .to_bytes().eval_and_sum(param_dict)
 
-            flops = op_map.filter_by(dtype=[np.float32,np.float64]).eval_and_sum(param_dict)
+            flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
+                param_dict)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = (
                 flops, bytes_accessed)
