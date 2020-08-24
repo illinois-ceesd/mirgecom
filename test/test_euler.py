@@ -58,6 +58,8 @@ from mirgecom.euler import get_inviscid_timestep
 from mirgecom.euler import split_fields
 from mirgecom.integrators import rk4_step
 
+logger = logging.getLogger(__name__)
+
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux(ctx_factory, dim):
@@ -72,7 +74,6 @@ def test_inviscid_flux(ctx_factory, dim):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    logger = logging.getLogger(__name__)
     nel_1d = 16
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -159,8 +160,6 @@ def test_inviscid_flux_components(ctx_factory, dim):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-
-    logger = logging.getLogger(__name__)
 
     eos = IdealSingleGas()
 
@@ -253,7 +252,6 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    logger = logging.getLogger(__name__)
 
     eos = IdealSingleGas()
 
@@ -394,8 +392,6 @@ def test_facial_flux(ctx_factory, order, dim):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    logger = logging.getLogger(__name__)
-
     tolerance = 1e-14
     p0 = 1.0
 
@@ -500,8 +496,6 @@ def test_uniform_rhs(ctx_factory, dim, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
-
-    logger = logging.getLogger(__name__)
 
     tolerance = 1e-9
     maxxerr = 0.0
@@ -621,7 +615,6 @@ def test_vortex_rhs(ctx_factory, order):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    logger = logging.getLogger(__name__)
     dim = 2
 
     from pytools.convergence import EOCRecorder
@@ -678,8 +671,6 @@ def test_lump_rhs(ctx_factory, dim, order):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    logger = logging.getLogger(__name__)
-
     tolerance = 1e-10
     maxxerr = 0.0
 
@@ -734,7 +725,6 @@ def _euler_flow_stepper(actx, parameters):
     Implements a generic time stepping loop for testing an inviscid flow.
     """
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    logger = logging.getLogger(__name__)
 
     mesh = parameters['mesh']
     t = parameters['time']
@@ -849,7 +839,6 @@ def test_isentropic_vortex(ctx_factory, order):
     together, with results converging at the expected
     rates vs. the order.
     """
-    logger = logging.getLogger(__name__)
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)

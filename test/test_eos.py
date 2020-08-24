@@ -42,6 +42,8 @@ from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def test_idealsingle_lump(ctx_factory):
     """
@@ -53,7 +55,7 @@ def test_idealsingle_lump(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    logger = logging.getLogger(__name__)
+    # logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4
@@ -99,7 +101,7 @@ def test_idealsingle_vortex(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    logger = logging.getLogger(__name__)
+    # logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4
