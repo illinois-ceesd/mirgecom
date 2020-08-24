@@ -26,7 +26,6 @@ import os
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.euler import split_fields
-from mirgecom.checkstate import get_field_stats
 
 
 def make_io_fields(dim, state, dependent_vars, eos):
@@ -71,11 +70,9 @@ def make_init_message(*, dim, order, dt, t_final,
 def make_status_message(*, t, step, dt, cfl, dependent_vars):
     r"""Make simulation status and health message
     """
-    dvxt = get_field_stats(dependent_vars)
+    # FIXME: Bring back field stats
     statusmsg = (
         f"Status: Step({step}) Time({t})\n"
-        f"------   P({dvxt[0]},{dvxt[2]})\n"
-        f"------   T({dvxt[1]},{dvxt[3]})\n"
         f"------   dt,cfl = ({dt},{cfl})"
     )
     return statusmsg
