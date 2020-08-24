@@ -36,7 +36,7 @@ jobs:
         - name: Install
           shell: bash -l {0}
           run: |
-            . ci-support/install.sh
+            . .ci-support/install.sh
 
         - name: Run tests
           shell: bash -l {0}
@@ -58,7 +58,7 @@ jobs:
         - name: Install
           shell: bash -l {0}
           run: |
-            . ci-support/install.sh
+            . .ci-support/install.sh
 
         - name: Run examples
           shell: bash -l {0}
@@ -76,7 +76,7 @@ jobs:
         - name: Install
           shell: bash -l {0}
           run: |
-            . ci-support/install.sh
+            . .ci-support/install.sh
 
         - name: Build docs
           shell: bash -l {0}
