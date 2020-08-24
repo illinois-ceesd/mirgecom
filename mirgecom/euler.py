@@ -77,7 +77,7 @@ where:
 @dataclass
 class ConservedVars:
     r"""
-    Class to resolve the canonical conserved quantities,
+    Resolve the canonical conserved quantities,
     (mass, energy, momentum) per unit volume =
     :math:`(\rho,\rhoE,\rho\vec{V})` from an agglomerated
     object array.
@@ -101,7 +101,7 @@ class ConservedVars:
 
 def split_fields(ndim, q):
     """
-    Method to spit out a list of named flow variables in
+    Create list of named flow variables in
     an agglomerated flow solution. Useful for specifying
     named data arrays to helper functions (e.g. I/O).
     """
@@ -134,7 +134,7 @@ def split_conserved(dim, q):
 
 
 def _inviscid_flux(discr, eos, q):
-    r"""Computes the inviscid flux vectors from flow solution *q*
+    r"""Compute the inviscid flux vectors from flow solution *q*
 
     The inviscid fluxes are
     :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})
@@ -147,10 +147,15 @@ def _inviscid_flux(discr, eos, q):
     energy = qs.energy
     mom = qs.momentum
 
-    p = eos.pressure(q)
+    p = eos.get_pressure(q)
 
     # Fluxes:
     # [ rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
+    #    momflux = np.empty(shape=(ndim, ndim), dtype=object)
+    #    for j in range(ndim):
+    #        for i in range(ndim):
+    #            momflux[j][i] = mom[j] * mom[i] / mass + (p if i == j else 0)
+
     momflux = make_obj_array(
         [
             (mom[i] * mom[j] / mass + (p if i == j else 0))
@@ -161,11 +166,11 @@ def _inviscid_flux(discr, eos, q):
     massflux = mom * make_obj_array([1.0])
     energyflux = mom * make_obj_array([(energy + p) / mass])
 
-    return flat_obj_array(massflux, energyflux, momflux,)
+    return flat_obj_array(massflux, energyflux, momflux)
 
 
 def _get_wavespeed(dim, eos, q):
-    """Returns the maximum wavespeed in for flow solution *q*"""
+    """Return the maximum wavespeed in for flow solution *q*"""
     qs = split_conserved(dim, q)
     mass = qs.mass
     mom = qs.momentum
@@ -173,12 +178,12 @@ def _get_wavespeed(dim, eos, q):
 
     v = mom * make_obj_array([1.0 / mass])
 
-    sos = eos.sound_speed(q)
+    sos = eos.get_sound_speed(q)
     return actx.np.sqrt(np.dot(v, v)) + sos
 
 
 def _facial_flux(discr, eos, q_tpair):
-    """Returns the flux across a face given the solution on both sides *q_tpair*"""
+    """Return the flux across a face given the solution on both sides *q_tpair*"""
     dim = discr.dim
 
     qs = split_conserved(dim, q_tpair)
@@ -234,7 +239,7 @@ def _facial_flux(discr, eos, q_tpair):
 def inviscid_operator(
         discr, eos, boundaries, q, t=0.0):
     r"""
-    RHS of the Euler flow equations
+    Compute RHS of the Euler flow equations
 
     Returns
     -------
@@ -301,7 +306,7 @@ def inviscid_operator(
 
 def get_inviscid_cfl(discr, eos, dt, q):
     """
-    Routine calculates and returns CFL based on current state and timestep
+    Calculate and return CFL based on current state and timestep
     """
     wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt

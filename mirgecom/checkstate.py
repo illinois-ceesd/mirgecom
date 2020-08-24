@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
 import numpy as np
 from meshmode.dof_array import flatten
 from pytools.obj_array import flat_obj_array
@@ -28,6 +29,11 @@ from pytools.obj_array import flat_obj_array
 
 # TODO: Implement this better, add more comparison metrics
 def compare_states(red_state, blue_state):
+    r"""
+    Compare two states with specified metrics
+
+    TODO: Add more metrics
+    """
     actx = red_state[0].array_context
     resid = red_state - blue_state
     numfields = len(red_state)
@@ -37,6 +43,12 @@ def compare_states(red_state, blue_state):
 
 
 def get_field_stats(state):
+    r"""
+    Get statistics on fields in an aggolerated object array
+
+    Useful for debugging numerics
+    TODO: Add mean, parallelization
+    """
     actx = state[0].array_context
     numfields = len(state)
     # TODO: function needs updated to use grudge/cl norms and constructs

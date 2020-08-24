@@ -32,7 +32,7 @@ from mirgecom.eos import IdealSingleGas
 
 
 class Vortex2D:
-    r"""Implements the isentropic vortex after
+    r"""Implement the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
           (https://doi.org/10.1016/S0021-9991(03)00206-7)
         - JSH/TW Nodal DG Methods, p. 209
@@ -81,7 +81,7 @@ class Vortex2D:
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
         actx = x_vec[0].array_context
-        gamma = eos.gamma()
+        gamma = eos.get_gamma()
         r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
         expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
@@ -96,7 +96,7 @@ class Vortex2D:
 
 
 class SodShock1D:
-    r"""Implements a 1D Sod Shock
+    r"""Implement a 1D Sod Shock
         - JSH/TW Nodal DG Methods, p. 209
 
     The Sod Shock setup is defined by:
@@ -147,7 +147,7 @@ class SodShock1D:
             self._xdir = self._dim - 1
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        gm1 = eos.gamma() - 1.0
+        gm1 = eos.get_gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
         actx = x_rel.array_context
@@ -173,7 +173,7 @@ class SodShock1D:
 
 
 class Lump:
-    r"""Implements an N-dimensional Gaussian lump of mass.
+    r"""Implement an N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
@@ -261,7 +261,7 @@ class Lump:
         actx = x_vec[0].array_context
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
-        gamma = eos.gamma()
+        gamma = eos.get_gamma()
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
         mom = self._velocity * make_obj_array([mass])
@@ -297,7 +297,7 @@ class Lump:
 
 
 class Uniform:
-    r"""Implements initialization to a uniform flow
+    r"""Implement initialization to a uniform flow
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
@@ -338,7 +338,7 @@ class Uniform:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        gamma = eos.gamma()
+        gamma = eos.get_gamma()
         mass = x_vec[0].copy()
         mom = self._velocity * make_obj_array([mass])
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)

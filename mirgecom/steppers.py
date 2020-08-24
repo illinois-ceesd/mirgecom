@@ -26,7 +26,7 @@ THE SOFTWARE.
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0):
     """
-    Implements a generic state advancement routine
+    Advance state from some time (t) to some time (t_final)
 
     Parameters
     ----------

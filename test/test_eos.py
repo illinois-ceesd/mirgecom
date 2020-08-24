@@ -79,7 +79,7 @@ def test_idealsingle_lump(ctx_factory):
     eos = IdealSingleGas()
     lump_soln = lump(0, nodes)
 
-    p = eos.pressure(lump_soln)
+    p = eos.get_pressure(lump_soln)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
 
@@ -120,8 +120,8 @@ def test_idealsingle_vortex(ctx_factory):
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     rho = split_conserved(dim, vortex_soln).mass
-    gamma = eos.gamma()
-    p = eos.pressure(vortex_soln)
+    gamma = eos.get_gamma()
+    p = eos.get_pressure(vortex_soln)
     exp_p = rho ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 

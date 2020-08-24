@@ -106,10 +106,16 @@ def test_inviscid_flux(ctx_factory, dim):
     q = flat_obj_array(mass, energy, mom)
 
     # Create the expected result
-    p = eos.pressure(q)
+    p = eos.get_pressure(q)
     escale = (energy + p) / mass
     expected_mass_flux = mom
     expected_energy_flux = mom * make_obj_array([escale])
+
+    #    expected_mom_flux = np.empty(shape=(dim, dim), dtype=object)
+    #    for i in range(dim):
+    #        for j in range(dim):
+    #            expected_mom_flux[i][j] = (mom[i] * mom[j] / mass +
+    #    (p if i == j else 0))
     expected_mom_flux = make_obj_array(
         [
             (mom[i] * mom[j] / mass + (p if i == j else 0))
@@ -117,6 +123,11 @@ def test_inviscid_flux(ctx_factory, dim):
             for j in range(dim)
         ]
     )
+
+    #    expected_flux = make_obj_array([expected_mass_flux,
+    #                                   expected_energy_flux,
+    #                                    expected_mom_flux])
+
     expected_flux = flat_obj_array(
         expected_mass_flux, expected_energy_flux, expected_mom_flux
     )
@@ -193,7 +204,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
                 mom[j][i] = 0.0 * mass[i]
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
         q = flat_obj_array(mass, energy, mom)
-        p = eos.pressure(q)
+        p = eos.get_pressure(q)
         flux = _inviscid_flux(fake_dis, eos, q)
 
         logger.info(f"{dim}d flux = {flux}")
@@ -283,11 +294,11 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
                     mom[j][i] = 0.0 * mass[i]
                     mom[livedim][i] = mass[i]
             energy = (
-                p / (eos.gamma() - 1.0)
+                p / (eos.get_gamma() - 1.0)
                 + 0.5 * np.dot(mom, mom) / mass
             )
             q = flat_obj_array(mass, energy, mom)
-            p = eos.pressure(q)
+            p = eos.get_pressure(q)
             flux = _inviscid_flux(fake_dis, eos, q)
 
             logger.info(f"{dim}d flux = {flux}")

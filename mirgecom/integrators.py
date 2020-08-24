@@ -35,7 +35,7 @@ __doc__ = """
 
 def rk4_step(state, t, dt, rhs):
     """
-    Implements a generic RK4 time step state/rhs pair.
+    Implement a generic RK4 time step state/rhs pair.
     """
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)

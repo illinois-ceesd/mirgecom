@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import (
@@ -41,9 +42,10 @@ building simulation applications.
 
 def check_step(step, interval):
     """
-    Utility to check step number against a user-specified interval. Useful for
-    checking whether the current step is an output step, or anyting else that
-    occurs on fixed intervals.
+    Check step number against a user-specified interval.
+
+    Useful for checking whether the current step is an output step,
+    or anyting else that occurs on fixed intervals.
     """
     if interval == 0:
         return True
@@ -57,7 +59,7 @@ def check_step(step, interval):
 def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
                           t_final, constant_cfl=False):
     """
-    Wrapper function returns the dt for the next step.
+    Return the maximum stable dt.
     """
     mydt = dt
     if constant_cfl is True:
@@ -72,7 +74,9 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
                          vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
                          nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
     r"""
-    Checkpointing utility for runs with known exact solution generator
+    Check simulation health, status, viz dumps, and restart
+
+    TODO: Add restart
     """
 
     do_viz = check_step(step=step, interval=nviz)

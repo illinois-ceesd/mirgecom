@@ -34,7 +34,7 @@ between and among state and thermodynamic variables.
 
 
 class GasEOS:
-    r"""Implements an object designed to provide methods
+    r"""Implement an object designed to provide methods
     for implementing and computing relations between
     fluid or gas state variables.
 
@@ -43,11 +43,11 @@ class GasEOS:
     contains the relevant simulation state quantities. Each
     EOS class should document its own state data requirements.
 
-    .. automethod :: pressure
-    .. automethod :: temperature
-    .. automethod :: sound_speed
-    .. automethod :: internal_energy
-    .. automethod :: gas_const
+    .. automethod :: get_pressure
+    .. automethod :: get_temperature
+    .. automethod :: get_sound_speed
+    .. automethod :: get_internal_energy
+    .. automethod :: get_gas_const
     """
 
     def __init__(self, parameters=None):
@@ -78,8 +78,8 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def pressure(self, q=None):
-        r"""Gas pressure
+    def get_pressure(self, q=None):
+        r"""Get gas pressure
 
         Parameters
         ----------
@@ -93,8 +93,8 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def temperature(self, q=None):
-        r"""Gas temperature
+    def get_temperature(self, q=None):
+        r"""Get gas temperature
 
         Parameters
         ----------
@@ -108,8 +108,8 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def sound_speed(self, q=None):
-        r"""Speed of sound
+    def get_sound_speed(self, q=None):
+        r"""Get speed of sound
 
         Parameters
         ----------
@@ -123,8 +123,8 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def gas_const(self, q=None):
-        r"""Specific gas constant (R)
+    def get_gas_const(self, q=None):
+        r"""Get specific gas constant (R)
 
         Parameters
         ----------
@@ -139,8 +139,8 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def internal_energy(self, q=None):
-        r"""Internal energy
+    def get_internal_energy(self, q=None):
+        r"""get internal energy
 
         Parameters
         ----------
@@ -156,7 +156,7 @@ class GasEOS:
 
 
 class IdealSingleGas:
-    r"""Implements the ideal gas law (:math:`p = \rho{R}{T}`)
+    r"""Implement the ideal gas law (:math:`p = \rho{R}{T}`)
     for a single monatomic gas.
 
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
@@ -174,14 +174,14 @@ class IdealSingleGas:
         self._gamma = gamma
         self._gas_const = gas_const
 
-    def gamma(self):
+    def get_gamma(self):
         return self._gamma
 
-    def gas_const(self):
+    def get_gas_const(self):
         return self._gas_const
 
-    def internal_energy(self, q):
-        r"""Internal energy
+    def get_internal_energy(self, q):
+        r"""Get internal energy
 
         The internal energy (e) is calculated as:
         .. :math::
@@ -194,8 +194,8 @@ class IdealSingleGas:
 
         return (energy - 0.5 * np.dot(mom, mom) / mass)
 
-    def pressure(self, q):
-        r"""Gas pressure
+    def get_pressure(self, q):
+        r"""get gas pressure
 
         The thermodynmic pressure (p) is calculated from
         the internal energy (e) as:
@@ -204,10 +204,10 @@ class IdealSingleGas:
 
             p = (\gamma - 1)e
         """
-        return self.internal_energy(q) * (self._gamma - 1.0)
+        return self.get_internal_energy(q) * (self._gamma - 1.0)
 
-    def sound_speed(self, q):
-        r"""Speed of sound
+    def get_sound_speed(self, q):
+        r"""Get speed of sound
 
         The speed of sound (c) is calculated as:
 
@@ -218,12 +218,12 @@ class IdealSingleGas:
         mass = q[0]
         actx = mass.array_context
 
-        p = self.pressure(q)
+        p = self.get_pressure(q)
         c2 = self._gamma / mass * p
         return actx.np.sqrt(c2)
 
-    def temperature(self, q):
-        r"""Gas temperature
+    def get_temperature(self, q):
+        r"""Get gas temperature
 
         The thermodynmic temperature (T) is calculated from
         the internal energy (e) and specific gas constant (R)
@@ -235,11 +235,14 @@ class IdealSingleGas:
         """
         mass = q[0]
         return (
-            ((self._gamma - 1.0) / self._gas_const) * self.internal_energy(q) / mass
+            (((self._gamma - 1.0) / self._gas_const)
+            * self.get_internal_energy(q) / mass)
         )
 
     def __call__(self, q):
-        return flat_obj_array(self.pressure(q), self.temperature(q))
+        """Get the dimensional pressure and temperature
+        """
+        return flat_obj_array(self.get_pressure(q), self.get_temperature(q))
 
     def split_fields(self, ndim, dependent_vars):
         return [
