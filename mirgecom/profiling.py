@@ -127,13 +127,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         assert program.options.no_numpy
 
         if self.profiling_enabled:
-            args_tuple = ()
-
-            for key, value in kwargs.items():
-                if hasattr(value, 'shape'):
-                    args_tuple = args_tuple + (key, value.shape)
-                else:
-                    args_tuple = args_tuple + (key, value)
+            args_tuple = tuple(
+                (key, value.shape) if  hasattr(value, 'shape') else (key, value)
+                for key, value in kwargs.items())
 
             # Check if we need to get the invoker code to generate integer arguments
             # N.B.: The invoker code might be different for the same program with
