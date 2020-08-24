@@ -1,3 +1,5 @@
+.. module:: mirgecom
+
 Linear Acoustic Wave Equation
 =============================
 

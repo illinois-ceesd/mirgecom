@@ -46,24 +46,13 @@ class GasEOS:
     contains the relevant simulation state quantities. Each
     EOS class should document its own state data requirements.
 
-    .. automethod :: get_pressure
-    .. automethod :: get_temperature
-    .. automethod :: get_sound_speed
-    .. automethod :: get_internal_energy
-    .. automethod :: get_gas_const
+    .. automethod:: __call__
+    .. automethod:: get_pressure
+    .. automethod:: get_temperature
+    .. automethod:: get_sound_speed
+    .. automethod:: get_internal_energy
+    .. automethod:: get_gas_const
     """
-
-    def __init__(self, parameters=None):
-        r"""Initialize routine should take any relevant
-        parameters expected to remain constant throughout
-        the simulation.
-
-        Parameters
-        ----------
-        parameters
-            Dictionary containing the eos-relevant parameters.
-        """
-        raise NotImplementedError()
 
     def __call__(self, q=None):
         r"""Call to object
@@ -112,8 +101,7 @@ class GasEOS:
         raise NotImplementedError()
 
     def get_sound_speed(self, q=None):
-        r"""Get speed of sound
-
+        r"""
         Parameters
         ----------
         q
@@ -143,8 +131,7 @@ class GasEOS:
         raise NotImplementedError()
 
     def get_internal_energy(self, q=None):
-        r"""get internal energy
-
+        r"""
         Parameters
         ----------
         q
@@ -171,6 +158,14 @@ class IdealSingleGas:
     mass (:math:`\rho`), energy (:math:`\rho{E}`), and
     momentum (:math:`\rho\vec{V}`).
 
+    .. automethod:: __init__
+    .. automethod:: get_gamma
+    .. automethod:: get_gas_const
+    .. automethod:: get_pressure
+    .. automethod:: get_sound_speed
+    .. automethod:: get_temperature
+    .. automethod:: __call__
+    .. automethod:: split_fields
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1):
@@ -198,9 +193,7 @@ class IdealSingleGas:
         return (energy - 0.5 * np.dot(mom, mom) / mass)
 
     def get_pressure(self, q):
-        r"""get gas pressure
-
-        The thermodynmic pressure (p) is calculated from
+        r"""The thermodynmic pressure (p) is calculated from
         the internal energy (e) as:
 
         .. :math::
@@ -210,8 +203,7 @@ class IdealSingleGas:
         return self.get_internal_energy(q) * (self._gamma - 1.0)
 
     def get_sound_speed(self, q):
-        r"""Get speed of sound
-
+        r"""
         The speed of sound (c) is calculated as:
 
         .. :math::
@@ -226,8 +218,7 @@ class IdealSingleGas:
         return actx.np.sqrt(c2)
 
     def get_temperature(self, q):
-        r"""Get gas temperature
-
+        r"""
         The thermodynmic temperature (T) is calculated from
         the internal energy (e) and specific gas constant (R)
         as:

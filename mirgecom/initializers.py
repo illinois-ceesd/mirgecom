@@ -64,6 +64,9 @@ class Vortex2D:
     the isentropic vortex solution at a given time (t)
     relative to the configured origin (center) and
     background flow velocity (velocity).
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(
@@ -120,10 +123,12 @@ class SodShock1D:
          {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
          {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
 
-    A call to this object after creation/init creates
-    Sod's shock solution at a given time (t)
-    relative to the configured origin (center) and
-    background flow velocity (velocity).
+    A call to this object after creation/init creates Sod's shock solution at a
+    given time (t) relative to the configured origin (center) and background
+    flow velocity (velocity).
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(
@@ -213,6 +218,7 @@ class Lump:
 
     .. automethod:: __init__
     .. automethod:: __call__
+    .. automethod:: exact_rhs
     """
 
     def __init__(
