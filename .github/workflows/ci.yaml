@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+  schedule:
+  - cron:  '5 0 * * *'
+
+
+jobs:
+    flake8:
+        name: Flake8
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        -
+          uses: actions/setup-python@v1
+          with:
+            python-version: '3.x'
+        - name: Flake8 test
+          run: |
+            python3 -m venv myenv
+            source myenv/bin/activate
+            python -m pip install wheel
+            python -m pip install flake8 pep8-naming
+            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples && echo "Flake8 found no errors."
+
+    pytest:
+        name: Pytest ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [ubuntu-latest, macos-latest]
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install
+          shell: bash -l {0}
+          run: |
+            . ci-support/install.sh
+
+        - name: Run tests
+          shell: bash -l {0}
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            cd test
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+
+    examples:
+        name: Examples ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [ubuntu-latest, macos-latest]
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install
+          shell: bash -l {0}
+          run: |
+            . ci-support/install.sh
+
+        - name: Run examples
+          shell: bash -l {0}
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            examples/run_examples.sh ./examples
+
+    doc:
+        name: Documentation
+        runs-on: ubuntu-latest
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install
+          shell: bash -l {0}
+          run: |
+            . ci-support/install.sh
+
+        - name: Build docs
+          shell: bash -l {0}
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+
+            conda install sphinx napoleon
+            cd doc
+            make html SPHINXOPTS="-W --keep-going -n"
