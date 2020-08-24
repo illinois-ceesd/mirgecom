@@ -27,21 +27,6 @@ from meshmode.dof_array import flatten
 from pytools.obj_array import flat_obj_array
 
 
-# TODO: Implement this better, add more comparison metrics
-def compare_states(red_state, blue_state):
-    r"""
-    Compare two states with specified metrics
-
-    TODO: Add more metrics
-    """
-    actx = red_state[0].array_context
-    resid = red_state - blue_state
-    numfields = len(red_state)
-    max_errors = [np.max(np.abs(actx.to_numpy(flatten(resid[i]))))
-                  for i in range(numfields)]
-    return max_errors
-
-
 def get_field_stats(state):
     r"""
     Get statistics on fields in an aggolerated object array

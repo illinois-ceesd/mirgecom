@@ -29,7 +29,6 @@ from mirgecom.io import (
     make_status_message,
     make_output_dump,
 )
-from mirgecom.checkstate import compare_states
 from mirgecom.euler import (
     get_inviscid_timestep,
 )
@@ -101,7 +100,7 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
         #                                           eos=eos, dt=dt)
         statusmesg = make_status_message(t=t, step=step, dt=dt,
                                          cfl=cfl, dependent_vars=dependent_vars)
-        max_errors = compare_states(red_state=q, blue_state=expected_state)
+        max_errors = discr.norm(q-expected_state, np.inf)
         statusmesg += f"\n------   Err({max_errors})"
         if rank == 0:
             logger.info(statusmesg)
