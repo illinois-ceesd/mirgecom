@@ -27,15 +27,18 @@ from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 __doc__ = """
-This module is designed provide Equation of State
-objects used to compute and manage the relationships
-between and among state and thermodynamic variables.
+Equations of State
+^^^^^^^^^^^^^^^^^^
+This module is designed provide Equation of State objects used to compute and
+manage the relationships between and among state and thermodynamic variables.
+
+.. autoclass:: GasEOS
+.. autoclass:: IdealSingleGas
 """
 
 
 class GasEOS:
-    r"""Implement an object designed to provide methods
-    for implementing and computing relations between
+    r"""An abstract interface designed to compute relations between
     fluid or gas state variables.
 
     Each interface call expects that the agglomerated

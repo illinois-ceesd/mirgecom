@@ -37,9 +37,13 @@ from mirgecom.euler import (
 logger = logging.getLogger(__name__)
 
 
-r"""
+__doc__ = r"""
 This module provides some convenient utilities for
 building simulation applications.
+
+.. autofunction:: check_step
+.. autofunction:: inviscid_sim_timestep
+.. autofunction:: exact_sim_checkpoint
 """
 
 
@@ -78,9 +82,8 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
                          nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
     r"""
     Check simulation health, status, viz dumps, and restart
-
-    TODO: Add restart
     """
+    # TODO: Add restart
 
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)

@@ -1,12 +1,12 @@
-Miscellaneous PDE Operators
-===========================
-
-Wave Equation
--------------
+Linear Acoustic Wave Equation
+=============================
 
 .. automodule:: mirgecom.wave
 
-Gas Dynamics PDE Operators
---------------------------
+Gas Dynamics
+============
 
 .. automodule:: mirgecom.euler
+.. automodule:: mirgecom.boundary
+.. automodule:: mirgecom.eos
+.. automodule:: mirgecom.initializers

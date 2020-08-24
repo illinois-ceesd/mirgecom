@@ -35,42 +35,43 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
-#
-# from mirgecom.eos import IdealSingleGas
-
-# from grudge.dt_finding import (
-#    dt_geometric_factor,
-#    dt_non_geometric_factor,
-# )
 
 
 __doc__ = r"""
-This module is designed provide functions and utilities
-useful for solving the Euler flow equations.
+:mod:`mirgecom.euler` helps solve Euler's equations of gas dynamics:
 
-The Euler flow equations are:
-
-.. :math::
+.. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
+    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
 
 where:
-    state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
-    flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-                (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
-    domain boundary :math:`\partial_{\Omega}`,
-    sources :math:`mathbf{S} =
-                   [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-                    {(\partial_t{\rho\vec{V}})}_s]`
 
-.. autofunction:: inviscid_operator
-.. autofunction:: number_of_scalars
+-   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+-   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+-   domain boundary :math:`\partial_{\Omega}`,
+-   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+    {(\partial_t{\rho\vec{V}})}_s]`
+
+
+State Vector Handling
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: split_fields
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
+.. autofunction:: inviscid_operator
+
+Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^
+
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
-.. autoclass:: ConservedVars
 """
 
 
@@ -79,7 +80,7 @@ class ConservedVars:
     r"""
     Resolve the canonical conserved quantities,
     (mass, energy, momentum) per unit volume =
-    :math:`(\rho,\rhoE,\rho\vec{V})` from an agglomerated
+    :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
     object array.
 
     .. attribute:: mass

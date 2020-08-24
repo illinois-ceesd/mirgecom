@@ -31,6 +31,17 @@ from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 
 
+__doc__ = """
+Initial Conditions
+^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: Vortex2D
+.. autoclass:: SodShock1D
+.. autoclass:: Lump
+.. autoclass:: Uniform
+"""
+
+
 class Vortex2D:
     r"""Implement the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
@@ -199,6 +210,9 @@ class Lump:
     This object also supplies the exact expected RHS
     terms from the analytic expression in the
     "expected_rhs" method.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(
@@ -301,6 +315,10 @@ class Uniform:
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: exact_rhs
     """
 
     def __init__(

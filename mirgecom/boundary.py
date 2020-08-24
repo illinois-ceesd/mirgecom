@@ -28,9 +28,21 @@ from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 
 
+__doc__ = """
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: PrescribedBoundary
+.. autoclass:: DummyBoundary
+"""
+
+
 class PrescribedBoundary:
     """Boundary condition assigns the boundary solution with a
     user-specified function
+
+    .. automethod:: __init__
+    .. automethod:: boundary_pair
     """
     def __init__(self, userfunc):
         self._userfunc = userfunc
@@ -51,6 +63,8 @@ class DummyBoundary:
     """Simple example boundary condition that interpolates the
     boundary-adjacent volume solution to both sides of a boundary
     face.
+
+    .. automethod:: boundary_pair
     """
     def boundary_pair(
         self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()

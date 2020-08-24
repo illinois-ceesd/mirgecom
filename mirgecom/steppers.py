@@ -23,6 +23,11 @@ THE SOFTWARE.
 """
 
 
+__doc__ = """
+.. autofunction:: advance_state
+"""
+
+
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0):
     """
