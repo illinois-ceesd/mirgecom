@@ -55,8 +55,6 @@ def test_idealsingle_lump(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    # logger = logging.getLogger(__name__)
-
     dim = 2
     nel_1d = 4
 
@@ -100,8 +98,6 @@ def test_idealsingle_vortex(ctx_factory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
-
-    # logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 4

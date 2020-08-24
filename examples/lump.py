@@ -48,14 +48,15 @@ from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
 
+logger = logging.getLogger(__name__)
+
+
 def main(ctx_factory=cl.create_some_context):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
-    logger = logging.getLogger(__name__)
 
     dim = 2
     nel_1d = 16
