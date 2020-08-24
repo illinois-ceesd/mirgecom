@@ -108,7 +108,7 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
+        return exact_sim_checkpoint(discr, initializer, visualizer, eos,
                             q=state, vizname=casename, step=step, t=t, dt=dt,
                             nstatus=nstatus, nviz=nviz, exittol=exittol,
                             constant_cfl=constant_cfl)

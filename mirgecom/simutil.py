@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import logging
 
 import numpy as np
 from meshmode.dof_array import thaw
@@ -32,6 +33,9 @@ from mirgecom.io import (
 from mirgecom.euler import (
     get_inviscid_timestep,
 )
+
+logger = logging.getLogger(__name__)
+
 
 r"""
 This module provides some convenient utilities for
@@ -69,7 +73,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
-def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
+def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
                          vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
                          nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
     r"""
