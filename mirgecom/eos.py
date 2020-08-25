@@ -63,7 +63,7 @@ class GasEOS:
             Agglomerated object array representing state data
 
         Returns
-        ----------
+        -------
         object array of floating point arrays with the
         EOS-specific dependent variables.
         (e.g. [ pressure, temperature ] for an ideal gas)
@@ -79,7 +79,7 @@ class GasEOS:
             Agglomerated object array representing state data
 
         Returns
-        ----------
+        -------
         floating point array with the thermodynamic
         pressure at each point
         """
@@ -94,7 +94,7 @@ class GasEOS:
             Agglomerated object array representing state data
 
         Returns
-        ----------
+        -------
         floating point array with the thermodynamic
         temperature at each point
         """
@@ -108,7 +108,7 @@ class GasEOS:
             Agglomerated object array representing state data
 
         Returns
-        ----------
+        -------
         floating point number or array with the speed of sound
         for each point
         """
@@ -123,7 +123,7 @@ class GasEOS:
             Agglomerated object array representing state data
 
         Returns
-        ----------
+        -------
         floating point number or array with the specific
         gas constant for the domain, or at each point for
         mixture-type EOS.
@@ -138,7 +138,7 @@ class GasEOS:
             Agglomerated object array representing state data
 
         Returns
-        ----------
+        -------
         floating point array with the internal
         energy at each point.
         """
