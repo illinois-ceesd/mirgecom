@@ -39,7 +39,13 @@ class ProfileEvent:
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
-    """An array context that profiles kernel executions."""
+    """An array context that profiles kernel executions.
+
+    .. automethod:: finish_profile_events
+    .. automethod:: print_profiling_data
+    .. automethod:: call_loopy
+    """
+
     def __init__(self, queue, allocator=None) -> None:
         super().__init__(queue, allocator)
 
