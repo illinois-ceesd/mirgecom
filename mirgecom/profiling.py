@@ -63,26 +63,19 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
             self.profile_results.setdefault(program, []).append(
-                    dict(time=time, flops=flops, bytes_accessed=bytes_accessed))
+                dict(time=time, flops=flops, bytes_accessed=bytes_accessed))
 
         self.profile_events = []
 
     def print_profiling_data(self) -> None:
         self.finish_profile_events()
 
-        max_name_len = max(
-            [len(key.name) for key, value in self.profile_results.items()])
-        max_name_len = max(max_name_len, len('Function'))
+        import pytools
 
-        format_str = ("{:<" + str(max_name_len)
-            + "} {:>6} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8}")
+        tbl = pytools.Table()
 
-        print(format_str.format('='*20, '='*6, '='*8, '='*8, '='*8, '='*8, '='*8,
-            '='*8, '='*8, '='*8, '='*8, '='*8))
-        print(format_str.format('Function', 'Calls', 'T_min', 'T_avg', 'T_max',
-            'F_min', 'F_avg', 'F_max', 'M_min', 'M_avg', 'M_max', 'BW_avg'))
-        print(format_str.format('='*20, '='*6, '='*8, '='*8, '='*8,
-            '='*8, '='*8, '='*8, '='*8, '='*8, '='*8, '='*8))
+        tbl.add_row(['Function', 'Calls', 'T_min', 'T_avg', 'T_max',
+            'F_min', 'F_avg', 'F_max', 'M_min', 'M_avg', 'M_max', 'BW_avg'])
 
         from statistics import mean
 
@@ -93,13 +86,15 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             flops = [v['flops'] for v in value]
             bytes_accessed = [v['bytes_accessed'] for v in value]
 
-            print(format_str.format(key.name, num_values, min(times),
+            tbl.add_row([key.name, num_values, min(times),
                 int(mean(times)), max(times), min(flops), int(mean(flops)),
                 max(flops), min(bytes_accessed), int(mean(bytes_accessed)),
-                max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3)))
+                max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3)])
 
-        print(format_str.format('='*20, '='*6, '='*8, '='*8, '='*8, '='*8, '='*8,
-            '='*8, '='*8, '='*8, '='*8, '='*8))
+        if hasattr(pytools.Table, 'github_markdown'):
+            print(tbl.github_markdown())
+        else:
+            print(tbl)
 
     def call_loopy(self, program, **kwargs) -> dict:
         program = self.transform_loopy_program(program)
