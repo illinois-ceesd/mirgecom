@@ -67,10 +67,10 @@ def wave_operator(discr, c, w):
     Args:
         discr (grudge.eager.EagerDGDiscretization): the discretization to use
         c (float): the (constant) wave speed)
-        w (np.ndarray): an object array of DOF arrays, representing the state vector
+        w (numpy.ndarray): an object array of DOF arrays, representing the state vector
 
     Returns:
-        np.ndarray: an object array of DOF arrays, representing the ODE RHS
+        numpy.ndarray: an object array of DOF arrays, representing the ODE RHS
     """
     u = w[0]
     v = w[1:]

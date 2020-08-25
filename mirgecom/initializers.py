@@ -78,10 +78,10 @@ class Vortex2D:
         ----------
         beta : float
             vortex amplitude
-        center : 2-dimensional float array
-            center of vortex
-        velocity : 2-dimensional float array
-            fixed flow velocity used for exact solution at t != 0
+        center : numpy.ndarray
+            center of vortex, shape ``(2,)``
+        velocity : numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0, shape ``(2,)``
         """
 
         self._beta = beta
@@ -138,7 +138,7 @@ class SodShock1D:
 
         Parameters
         ----------
-        dim: integer
+        dim: int
            dimension of domain
         x0: float
            location of shock
@@ -229,7 +229,7 @@ class Lump:
 
         Parameters
         ----------
-        numdim : integer
+        numdim : int
             specify the number of dimensions for the lump
         rho0 : float
             specifies the value of :math:`\rho_0`
@@ -237,10 +237,11 @@ class Lump:
             specifies the value of :math:`\rho_a`
         p0 : float
             specifies the value of :math:`p_0`
-        center : 2-dimensional float array
-            center of lump
-        velocity : 2-dimensional float array
-            fixed flow velocity used for exact solution at t != 0
+        center : numpy.ndarray
+            center of lump, shape ``(2,)``
+        velocity : numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(2,)``
         """
 
         if len(center) == numdim:
@@ -334,7 +335,7 @@ class Uniform:
 
         Parameters
         ----------
-        numdim : integer
+        numdim : int
             specify the number of dimensions for the lump
         rho : float
             specifies the density
@@ -342,7 +343,7 @@ class Uniform:
             specifies the pressure
         e : float
             specifies the internal energy
-        velocity : float array
+        velocity : numpy.ndarray
             specifies the flow velocity
         """
 

@@ -237,8 +237,7 @@ def _facial_flux(discr, eos, q_tpair):
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(
-        discr, eos, boundaries, q, t=0.0):
+def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     r"""
     Compute RHS of the Euler flow equations
 
@@ -261,8 +260,8 @@ def inviscid_operator(
     t
         Time
 
-    eos
-        :class:`EOS` implementing the pressure and temperature functions for
+    eos : mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     """
 

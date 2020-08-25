@@ -16,7 +16,7 @@ Why does everything go through :mod:`loopy`?
   least GPUs by Nvidia, Intel, and AMD are in the mix. But large-vector ARM
   CPUs are not out of the question.
 
-  Loopy lets us generate code for all these :class:`~loopy.target.Target`\ s (e.g.
+  Loopy lets us generate code for all these :class:`~loopy.TargetBase`\ s (e.g.
   CUDA, OpenCL) with ease.
 
 - Likely, the loop structure for efficient code will not look the same on each
@@ -35,6 +35,4 @@ Arrays are the central large-scale data structure that :mod:`mirgecom` operates 
 :class:`meshmode.array_context.ArrayContext` allows us flexibility in how those are
 created (and which ones we use) just by changing which array context we run with.
 Some array types you might choose include :class:`pyopencl.array.Array`\ s on the GPU
-through OpenCL, or :class:`~pytato.Array` lazily-evaluated arrays through
-:mod:`pytato`.
-
+through OpenCL, or lazily-evaluated :class:`pytato.Array`\ s.
