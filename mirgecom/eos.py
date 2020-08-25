@@ -157,7 +157,7 @@ class GasEOS:
 
 class IdealSingleGas:
     r"""Implement the ideal gas law (:math:`p = \rho{R}{T}`)
-    for a single monatomic gas.
+    for a single component gas.
 
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
