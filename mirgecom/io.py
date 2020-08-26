@@ -115,10 +115,9 @@ def make_output_dump(visualizer, basename, io_fields,
         nproc = comm.Get_size()
     if nproc > 1:
         rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
-        par_fn = make_par_fname(basename=basename, step=step, t=t)
-        visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields, overwrite=True)
-        if rank == 0:
-            os.rename(rank_fn.format(rank=rank).replace("vtu", "pvtu"), par_fn)
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields, overwrite=True,
+            par_manifest_filename=make_par_fname(basename=basename, step=step, t=t))
     else:
         fname = make_serial_fname(basename=basename, step=step, t=t)
         visualizer.write_vtk_file(fname, io_fields, overwrite=True)
