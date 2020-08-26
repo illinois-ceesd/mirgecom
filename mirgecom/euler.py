@@ -184,8 +184,6 @@ def _facial_flux(discr, eos, q_tpair):
     mom = qs.momentum
     actx = qs.mass.int.array_context
 
-    normal = thaw(actx, discr.normal(q_tpair.dd))
-
     qint = flat_obj_array(mass.int, energy.int, mom.int)
     qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
 
@@ -200,6 +198,7 @@ def _facial_flux(discr, eos, q_tpair):
         _get_wavespeed(dim, eos=eos, q=qint),
         _get_wavespeed(dim, eos=eos, q=qext))
 
+    normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = flux_avg @ normal + make_obj_array([0.5 * lam]) * (qext - qint)
 
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
