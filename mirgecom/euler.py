@@ -152,7 +152,7 @@ def inviscid_flux(discr, eos, q):
     p = eos.get_pressure(q)
 
     flux = np.zeros((ndim + 2, ndim), dtype=object)
-    flux[0] = mom * make_obj_array([1.0])
+    flux[0] = mom
     flux[1] = mom * make_obj_array([(energy + p) / mass])
     for i in range(ndim):
         for j in range(ndim):
