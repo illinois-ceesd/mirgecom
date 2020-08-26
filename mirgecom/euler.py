@@ -65,6 +65,7 @@ State Vector Handling
 RHS Evaluation
 ^^^^^^^^^^^^^^
 
+.. autofunction:: inviscid_flux
 .. autofunction:: inviscid_operator
 
 Time Step Computation
@@ -134,7 +135,7 @@ def split_conserved(dim, q):
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def _inviscid_flux(discr, eos, q):
+def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*
 
     The inviscid fluxes are
@@ -150,24 +151,14 @@ def _inviscid_flux(discr, eos, q):
 
     p = eos.get_pressure(q)
 
-    # Fluxes:
-    # [ rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    #    momflux = np.empty(shape=(ndim, ndim), dtype=object)
-    #    for j in range(ndim):
-    #        for i in range(ndim):
-    #            momflux[j][i] = mom[j] * mom[i] / mass + (p if i == j else 0)
+    flux = np.zeros((ndim + 2, ndim), dtype=object)
+    flux[0] = mom * make_obj_array([1.0])
+    flux[1] = mom * make_obj_array([(energy + p) / mass])
+    for i in range(ndim):
+        for j in range(ndim):
+            flux[i+2, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
 
-    momflux = make_obj_array(
-        [
-            (mom[i] * mom[j] / mass + (p if i == j else 0))
-            for i in range(ndim)
-            for j in range(ndim)
-        ]
-    )
-    massflux = mom * make_obj_array([1.0])
-    energyflux = mom * make_obj_array([(energy + p) / mass])
-
-    return flat_obj_array(massflux, energyflux, momflux)
+    return flux
 
 
 def _get_wavespeed(dim, eos, q):
@@ -195,44 +186,21 @@ def _facial_flux(discr, eos, q_tpair):
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
-    # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    #    qint = q_tpair.int
-    #    qext = q_tpair.ext
     qint = flat_obj_array(mass.int, energy.int, mom.int)
     qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
 
-    # Jump in soln
-    qjump = qext - qint
-
-    flux_int = _inviscid_flux(discr, eos, qint)
-    flux_ext = _inviscid_flux(discr, eos, qext)
+    flux_int = inviscid_flux(discr, eos, qint)
+    flux_ext = inviscid_flux(discr, eos, qext)
 
     # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
     # DOI: 10.1007/978-0-387-72067-8
-    flux_aver = (flux_int + flux_ext) * 0.5
+    flux_avg = 0.5*(flux_int + flux_ext)
 
-    # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = [_get_wavespeed(dim, eos=eos, q=qint),
-                  _get_wavespeed(dim, eos=eos, q=qext)]
+    lam = actx.np.maximum(
+        _get_wavespeed(dim, eos=eos, q=qint),
+        _get_wavespeed(dim, eos=eos, q=qext))
 
-    lam = actx.np.maximum(*wavespeeds)
-    lfr = qjump * make_obj_array([0.5 * lam])
-
-    # Surface fluxes should be inviscid flux .dot. normal
-    # rhoV .dot. normal
-    # (rhoE + p)V  .dot. normal
-    # (rhoV.x.V)_1 .dot. normal
-    # (rhoV.x.V)_2 .dot. normal
-    numeqns = number_of_equations(dim, qint)
-    num_flux = flat_obj_array(
-        [
-            np.dot(flux_aver[(i * dim): ((i + 1) * dim)], normal)
-            for i in range(numeqns)
-        ]
-    )
-
-    # add Lax/Friedrichs jump penalty
-    flux_weak = num_flux + lfr
+    flux_weak = flux_avg @ normal + make_obj_array([0.5 * lam]) * (qext - qint)
 
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
@@ -265,15 +233,8 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
         returning pressure and temperature as a function of the state q.
     """
 
-    ndim = discr.dim
-
-    vol_flux = _inviscid_flux(discr, eos, q)
-    dflux = flat_obj_array(
-        [
-            discr.weak_div(vol_flux[(i * ndim): (i + 1) * ndim])
-            for i in range(ndim + 2)
-        ]
-    )
+    vol_flux = inviscid_flux(discr, eos, q)
+    dflux = discr.weak_div(vol_flux)
 
     interior_face_flux = _facial_flux(
         discr, eos=eos, q_tpair=interior_trace_pair(discr, q))

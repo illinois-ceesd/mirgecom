@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux(ctx_factory, dim):
     """Identity test - directly check inviscid flux
-    routine (_inviscid_flux) against the exact
+    routine :func:`mirgecom.euler.inviscid_flux` against the exact
     expected result. This test is designed to fail
     if the flux routine is broken.
     The expected inviscid flux is:
@@ -106,40 +106,29 @@ def test_inviscid_flux(ctx_factory, dim):
 
     q = flat_obj_array(mass, energy, mom)
 
-    # Create the expected result
+    # {{{ create the expected result
+
     p = eos.get_pressure(q)
     escale = (energy + p) / mass
-    expected_mass_flux = mom
-    expected_energy_flux = mom * make_obj_array([escale])
 
-    #    expected_mom_flux = np.empty(shape=(dim, dim), dtype=object)
-    #    for i in range(dim):
-    #        for j in range(dim):
-    #            expected_mom_flux[i][j] = (mom[i] * mom[j] / mass +
-    #    (p if i == j else 0))
-    expected_mom_flux = make_obj_array(
-        [
-            (mom[i] * mom[j] / mass + (p if i == j else 0))
-            for i in range(dim)
-            for j in range(dim)
-        ]
-    )
+    expected_flux = np.zeros((dim + 2, dim), dtype=object)
+    expected_flux[0] = mom
+    expected_flux[1] = mom * make_obj_array([escale])
 
-    #    expected_flux = make_obj_array([expected_mass_flux,
-    #                                   expected_energy_flux,
-    #                                    expected_mom_flux])
+    for i in range(dim):
+        for j in range(dim):
+            expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
 
-    expected_flux = flat_obj_array(
-        expected_mass_flux, expected_energy_flux, expected_mom_flux
-    )
+    # }}}
 
-    from mirgecom.euler import _inviscid_flux
+    from mirgecom.euler import inviscid_flux
 
-    flux = _inviscid_flux(discr, eos, q)
+    flux = inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
-    for i in range((dim + 2) * dim):
-        assert (la.norm(flux_resid[i].get())) == 0.0
+    for i in range(dim + 2, dim):
+        for j in range(dim):
+            assert (la.norm(flux_resid[i, j].get())) == 0.0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -147,7 +136,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
     """Uniform pressure test
 
     Checks that the Euler-internal inviscid flux
-    routine (_inviscid_flux) returns exactly the
+    routine :func:`mirgecom.euler.inviscid_flux` returns exactly the
     expected result with a constant pressure and
     no flow.
     Expected inviscid flux is:
@@ -167,7 +156,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
         def __init__(self, dim=1):
             self.dim = dim
 
-    from mirgecom.euler import _inviscid_flux
+    from mirgecom.euler import inviscid_flux
 
     p0 = 1.0
 
@@ -204,14 +193,14 @@ def test_inviscid_flux_components(ctx_factory, dim):
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
         q = flat_obj_array(mass, energy, mom)
         p = eos.get_pressure(q)
-        flux = _inviscid_flux(fake_dis, eos, q)
+        flux = inviscid_flux(fake_dis, eos, q)
 
         logger.info(f"{dim}d flux = {flux}")
 
         # for velocity zero, these components should be == zero
-        for i in range(2 * dim):
-            for j in range(ntestnodes):
-                assert flux[i][j].get() == 0.0
+        for i in range(2):
+            for j in range(dim):
+                assert (flux[i, j].get() == 0.0).all()
 
         # The momentum diagonal should be p
         # Off-diagonal should be identically 0
@@ -219,21 +208,10 @@ def test_inviscid_flux_components(ctx_factory, dim):
             for j in range(dim):
                 print(f"(i,j) = ({i},{j})")
                 if i != j:
-                    for n in range(ntestnodes):
-                        assert (
-                            flux[(2 + i) * dim + j][n].get() == 0.0
-                        )
+                    assert (flux[2 + i, j].get() == 0.0).all()
                 else:
-                    for n in range(ntestnodes):
-                        assert (
-                            flux[(2 + i) * dim + j][n].get() == p[n]
-                        )
-                        assert (
-                            np.abs(
-                                flux[(2 + i) * dim + j][n].get()
-                                - p0
-                            ) < tolerance
-                        )
+                    assert (flux[2 + i, j] == p).get().all()
+                    assert (np.abs(flux[2 + i, j] - p0) < tolerance).all()
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -261,7 +239,7 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
 
     p0 = 1.0
 
-    from mirgecom.euler import _inviscid_flux
+    from mirgecom.euler import inviscid_flux
 
     tolerance = 1e-15
     for livedim in range(dim):
@@ -297,7 +275,7 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
             )
             q = flat_obj_array(mass, energy, mom)
             p = eos.get_pressure(q)
-            flux = _inviscid_flux(fake_dis, eos, q)
+            flux = inviscid_flux(fake_dis, eos, q)
 
             logger.info(f"{dim}d flux = {flux}")
 
@@ -305,30 +283,22 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
             expected_flux = mom
             logger.info("Testing continuity")
             for i in range(dim):
-                assert (
-                    la.norm((flux[i] - expected_flux[i]).get())
-                    == 0.0
-                )
+                assert la.norm((flux[0, i] - expected_flux[i]).get()) == 0.0
                 if i != livedim:
-                    assert la.norm(flux[i].get()) == 0.0
+                    assert la.norm(flux[0, i].get()) == 0.0
                 else:
-                    assert la.norm(flux[i].get()) > 0.0
+                    assert la.norm(flux[0, i].get()) > 0.0
 
             logger.info("Testing energy")
             expected_flux = mom * make_obj_array(
                 [(energy + p) / mass]
             )
             for i in range(dim):
-                assert (
-                    la.norm(
-                        (flux[dim + i] - expected_flux[i]).get()
-                    )
-                    == 0.0
-                )
+                assert la.norm((flux[1, i] - expected_flux[i]).get()) == 0.0
                 if i != livedim:
-                    assert la.norm(flux[dim + i].get()) == 0.0
+                    assert la.norm(flux[1, i].get()) == 0.0
                 else:
-                    assert la.norm(flux[dim + i].get()) > 0.0
+                    assert la.norm(flux[1, i].get()) > 0.0
 
             logger.info("Testing momentum")
             xpmomflux = make_obj_array(
@@ -341,38 +311,21 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
 
             for i in range(dim):
                 expected_flux = xpmomflux[i * dim: (i + 1) * dim]
-                fluxindex = (2 + i) * dim
                 for j in range(dim):
-                    assert (
-                        la.norm(
-                            (
-                                flux[fluxindex + j]
-                                - expected_flux[j]
-                            ).get()
-                        )
-                        == 0
-                    )
+                    assert la.norm((flux[2+i, j] - expected_flux[j]).get()) == 0
                     if i == j:
                         if i == livedim:
                             assert (
-                                la.norm(flux[fluxindex + j].get())
+                                la.norm(flux[2+i, j].get())
                                 > 0.0
                             )
                         else:
                             # just for sanity - make sure the flux recovered the
                             # prescribed value of p0 (within fp tol)
                             for k in range(ntestnodes):
-                                assert (
-                                    np.abs(
-                                        flux[fluxindex + j][k] - p0
-                                    )
-                                    < tolerance
-                                )
+                                assert np.abs(flux[2+i, j][k] - p0) < tolerance
                     else:
-                        assert (
-                            la.norm(flux[fluxindex + j].get())
-                            == 0.0
-                        )
+                        assert la.norm(flux[2+i, j].get()) == 0.0
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
