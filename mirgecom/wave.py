@@ -43,20 +43,15 @@ def _flux(discr, c, w_tpair):
 
     normal = thaw(actx, discr.normal(w_tpair.dd))
 
-    def normal_times(scalar):
-        # workaround for object array behavior
-        return make_obj_array([ni*scalar for ni in normal])
-
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),
-        normal_times(u.avg),
+        normal*make_obj_array([u.avg]),
         )
 
     # upwind
-    v_jump = np.dot(normal, v.int-v.ext)
     flux_weak += flat_obj_array(
-        0.5*(u.int-u.ext),
-        0.5*normal_times(v_jump),
+        0.5*(u.ext-u.int),
+        0.5*normal*make_obj_array([np.dot(normal, v.ext-v.int)]),
         )
 
     return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
@@ -89,7 +84,7 @@ def wave_operator(discr, c, w):
             +  # noqa: W504
             discr.face_mass(
                 _flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
-                + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
-                dir_bc))
+                + _flux(discr, c=c,
+                    w_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc))
                 ))
         )
