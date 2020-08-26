@@ -25,10 +25,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
