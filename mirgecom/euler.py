@@ -178,28 +178,23 @@ def _facial_flux(discr, eos, q_tpair):
     """Return the flux across a face given the solution on both sides *q_tpair*"""
     dim = discr.dim
 
-    qs = split_conserved(dim, q_tpair)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-    actx = qs.mass.int.array_context
+    actx = q_tpair[0].int.array_context
 
-    qint = flat_obj_array(mass.int, energy.int, mom.int)
-    qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
-
-    flux_int = inviscid_flux(discr, eos, qint)
-    flux_ext = inviscid_flux(discr, eos, qext)
+    flux_int = inviscid_flux(discr, eos, q_tpair.int)
+    flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
 
     # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
     # DOI: 10.1007/978-0-387-72067-8
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
-        _get_wavespeed(dim, eos=eos, q=qint),
-        _get_wavespeed(dim, eos=eos, q=qext))
+        _get_wavespeed(dim, eos=eos, q=q_tpair.int),
+        _get_wavespeed(dim, eos=eos, q=q_tpair.ext))
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
-    flux_weak = flux_avg @ normal + make_obj_array([0.5 * lam]) * (qext - qint)
+    flux_weak = (
+        flux_avg @ normal
+        - make_obj_array([0.5 * lam]) * (q_tpair.ext - q_tpair.int))
 
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
