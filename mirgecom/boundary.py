@@ -56,7 +56,7 @@ class PrescribedBoundary:
         nodes = thaw(actx, boundary_discr.nodes())
         ext_soln = self._userfunc(t, nodes)
         int_soln = discr.project("vol", btag, q)
-        return TracePair(btag, int_soln, ext_soln)
+        return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
 
 class DummyBoundary:
@@ -70,4 +70,4 @@ class DummyBoundary:
         self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
         dir_soln = discr.project("vol", btag, q)
-        return TracePair(btag, dir_soln, dir_soln)
+        return TracePair(btag, interior=dir_soln, exterior=dir_soln)
