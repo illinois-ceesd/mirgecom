@@ -74,11 +74,9 @@ Time Step Computation
 
 
 @dataclass
-class ConservedVars:
-    r"""
-    Resolve the canonical conserved quantities,
-    (mass, energy, momentum) per unit volume =
-    :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
+class ConservedVars:  # FIXME: Name?
+    r"""Resolve the canonical conserved quantities, (mass, energy, momentum)
+    per unit volume = :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
     object array.
 
     .. attribute:: mass
@@ -116,46 +114,69 @@ def split_fields(ndim, q):
     ]
 
 
-def number_of_equations(ndim, q):
+def _aux_shape(ary, leading_shape):
     """
-    Return the number of equations (i.e. number of dofs) in the soln
+    :arg leading_shape: a tuple with which ``ary.shape`` is expected to begin.
+
     """
-    return len(q)
+    from meshmode.dof_array import DOFArray
+    if isinstance(ary, DOFArray):
+        return ()
+    elif isinstance(ary, np.ndarray) and ary.dtype == np.object:
+        naxes = len(leading_shape)
+        if ary.shape[:naxes] != leading_shape:
+            raise ValueError("array shape does not start with expected leading "
+                    "dimensions")
+        return ary.shape[naxes:]
+    else:
+        raise TypeError("expected DOFArray or object array, not '%s'"
+                % type(ary).__name__)
 
 
 def split_conserved(dim, q):
     """
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
-    mass, energy, and momentum from the agglomerated object array representing
-    the state, q.
+    mass, energy, and momentum from the agglomerated object array extracted
+    from the state vector *q*.
     """
+
+    assert len(q) == 2+dim
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
+def join_conserved(dim, mass, energy, momentum):
+    from pytools import single_valued
+    aux_shape = single_valued([
+        _aux_shape(mass, ()),
+        _aux_shape(energy, ()),
+        _aux_shape(momentum, (dim,))])
+
+    result = np.zeros((2+dim,) + aux_shape, dtype=object)
+    result[0] = mass
+    result[1] = energy
+    result[2:] = momentum
+    return result
+
+
+def scalar(s):
+    return make_obj_array([s])
+
+
 def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*
+    r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
     :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
     """
-    ndim = discr.dim
-
-    # q = [ rho rhoE rhoV ]
-    qs = split_conserved(ndim, q)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-
+    dim = discr.dim
+    qs = split_conserved(dim, q)
     p = eos.get_pressure(q)
 
-    flux = np.zeros((ndim + 2, ndim), dtype=object)
-    flux[0] = mom
-    flux[1] = mom * make_obj_array([(energy + p) / mass])
-    for i in range(ndim):
-        for j in range(ndim):
-            flux[i+2, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
-
-    return flux
+    mom = qs.momentum
+    return join_conserved(dim,
+            mass=mom,
+            energy=mom * scalar((qs.energy + p) / qs.mass),
+            momentum=np.outer(mom, mom)/scalar(qs.mass) + np.eye(dim)*scalar(p))
 
 
 def _get_wavespeed(dim, eos, q):
@@ -165,7 +186,7 @@ def _get_wavespeed(dim, eos, q):
     mom = qs.momentum
     actx = mass.array_context
 
-    v = mom * make_obj_array([1.0 / mass])
+    v = mom * scalar(1.0 / mass)
 
     sos = eos.get_sound_speed(q)
     return actx.np.sqrt(np.dot(v, v)) + sos
@@ -191,7 +212,7 @@ def _facial_flux(discr, eos, q_tpair):
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
-        - make_obj_array([0.5 * lam]) * (q_tpair.ext - q_tpair.int))
+        - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
 
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
