@@ -29,6 +29,10 @@ import loopy as lp
 import numpy as np
 from dataclasses import dataclass
 
+__doc__ = """
+.. autoclass:: PyOpenCLProfilingArrayContext
+"""
+
 
 @dataclass
 class ProfileEvent:
