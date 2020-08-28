@@ -142,4 +142,3 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
         maxerr = max(err_norms)
         if maxerr > exittol:
             raise ExactSolutionMismatch(step, t=t, state=q)
-
