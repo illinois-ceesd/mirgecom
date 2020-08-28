@@ -23,8 +23,7 @@ THE SOFTWARE.
 """
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from mirgecom.euler import split_fields
+from mirgecom.euler import split_conserved
 
 
 __doc__ = """
@@ -53,7 +52,7 @@ def make_io_fields(dim, state, dependent_vars, eos):
         Equation of state utility for resolving the dependent
         fields.
     """
-    io_fields = split_fields(dim, state)
+    io_fields = [("cv", split_conserved(dim, state))]
     io_fields += eos.split_fields(dim, dependent_vars)
     return io_fields
 
@@ -79,7 +78,7 @@ def make_init_message(*, dim, order, dt, t_final,
 def make_status_message(*, t, step, dt, cfl, dependent_vars):
     r"""Make simulation status and health message
     """
-    # FIXME: Bring back field stats
+
     statusmsg = (
         f"Status: Step({step}) Time({t})\n"
         f"------   dt,cfl = ({dt},{cfl})"

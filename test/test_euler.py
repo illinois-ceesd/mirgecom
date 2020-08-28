@@ -55,7 +55,6 @@ from pyopencl.tools import (  # noqa
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
-from mirgecom.euler import split_fields
 from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
@@ -737,7 +736,7 @@ def _euler_flow_stepper(actx, parameters):
             )
             logger.info(statusmsg)
 
-        io_fields = split_fields(dim, fields)
+        io_fields = ["cv", split_conserved(dim, fields)]
         io_fields += eos.split_fields(dim, dv)
         io_fields.append(("exact_soln", expected_result))
         io_fields.append(("residual", result_resid))

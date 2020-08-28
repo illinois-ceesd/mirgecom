@@ -96,24 +96,6 @@ class ConservedVars:  # FIXME: Name?
     momentum: np.ndarray
 
 
-def split_fields(ndim, q):
-    """
-    Create list of named flow variables in
-    an agglomerated flow solution. Useful for specifying
-    named data arrays to helper functions (e.g. I/O).
-    """
-    qs = split_conserved(ndim, q)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-
-    return [
-        ("mass", mass),
-        ("energy", energy),
-        ("momentum", mom),
-    ]
-
-
 def _aux_shape(ary, leading_shape):
     """
     :arg leading_shape: a tuple with which ``ary.shape`` is expected to begin.
