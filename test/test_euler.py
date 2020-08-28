@@ -363,7 +363,8 @@ def test_facial_flux(actx_factory, order, dim):
             [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-        fields = join_conserved(dim, mass=mass_input, energy=energy_input, momentum=mom_input)
+        fields = join_conserved(dim, mass=mass_input, energy=energy_input,
+                                momentum=mom_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -465,7 +466,8 @@ def test_uniform_rhs(actx_factory, dim, order):
         mom_input = make_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
-        fields = join_conserved(dim, mass=mass_input, energy=energy_input, momentum=mom_input)
+        fields = join_conserved(dim, mass=mass_input, energy=energy_input,
+                                momentum=mom_input)
 
         expected_rhs = make_obj_array(
             [discr.zeros(actx) for i in range(len(fields))]
