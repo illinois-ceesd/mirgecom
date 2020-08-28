@@ -182,7 +182,7 @@ def _facial_flux(discr, eos, q_tpair):
     flux_int = inviscid_flux(discr, eos, q_tpair.int)
     flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
 
-    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
+    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, Section 6.6
     # DOI: 10.1007/978-0-387-72067-8
     flux_avg = 0.5*(flux_int + flux_ext)
 

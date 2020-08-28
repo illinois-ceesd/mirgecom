@@ -46,7 +46,7 @@ class Vortex2D:
     r"""Implement the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
           (https://doi.org/10.1016/S0021-9991(03)00206-7)
-        - JSH/TW Nodal DG Methods, p. 209
+        - JSH/TW Nodal DG Methods, Section 6.6
           DOI: 10.1007/978-0-387-72067-8
 
     The isentropic vortex is defined by:
