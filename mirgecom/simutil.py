@@ -104,14 +104,17 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
         #        if constant_cfl is False:
         #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
         #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(t=t, step=step, dt=dt,
+        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
                                          cfl=cfl, dependent_vars=dependent_vars)
-        max_errors = discr.norm(q-expected_state, np.inf)
-        statusmesg += f"\n------   Err({max_errors})"
+        err = q-expected_state
+        err_norms = [discr.norm(v, np.inf) for v in err]
+        statusmesg += (
+            "\n------- errors="
+            + ", ".join("%.3g" % en for en in err_norms))
         if rank == 0:
             logger.info(statusmesg)
 
-        maxerr = np.max(max_errors)
+        maxerr = max(err_norms)
         if maxerr > exittol:
             logger.error("Solution failed to follow expected result.")
             checkpoint_status = 1
