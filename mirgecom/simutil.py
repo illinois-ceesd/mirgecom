@@ -42,6 +42,7 @@ building simulation applications.
 
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
+.. autoexception:: ExactSolutionMismatch
 .. autofunction:: exact_sim_checkpoint
 """
 
@@ -76,6 +77,18 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
+class ExactSolutionMismatch(Exception):
+    """
+    .. attribute:: step
+    .. attribute:: t
+    .. attribute:: state
+    """
+    def __init__(self, step, t, state):
+        self.step = step
+        self.t = t
+        self.state = state
+
+
 def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
                          vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
                          nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
@@ -95,12 +108,22 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
 
     if comm is not None:
         rank = comm.Get_rank()
-    checkpoint_status = 0
 
     from mirgecom.euler import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
     expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+
+    if do_viz:
+        from mirgecom.euler import split_conserved
+        io_fields = [
+            ("cv", split_conserved(discr.dim, q)),
+            ("dv", dependent_vars),
+            ("exact_soln", expected_state),
+            ("residual", q - expected_state)
+        ]
+        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
+                            comm=comm, step=step, t=t, overwrite=True)
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -118,17 +141,5 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
 
         maxerr = max(err_norms)
         if maxerr > exittol:
-            logger.error("Solution failed to follow expected result.")
-            checkpoint_status = 1
+            raise ExactSolutionMismatch(step, t=t, state=q)
 
-    if do_viz:
-        io_fields = [
-            ("cv", split_conserved(discr.dim, q)),
-            ("dv", dependent_vars),
-            ("exact_soln", expected_state),
-            ("residual", q - expected_state)
-        ]
-        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                            comm=comm, step=step, t=t, overwrite=True)
-
-    return checkpoint_status

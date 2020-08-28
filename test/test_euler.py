@@ -363,8 +363,9 @@ def test_facial_flux(actx_factory, order, dim):
             [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-        fields = join_conserved(dim, mass=mass_input, energy=energy_input,
-                                momentum=mom_input)
+
+        fields = join_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -444,11 +445,11 @@ def test_uniform_rhs(actx_factory, dim, order):
     tolerance = 1e-9
     maxxerr = 0.0
 
-    #            from pytools.convergence import EOCRecorder
-    #            eoc_rec0 = EOCRecorder()
-    #            eoc_rec1 = EOCRecorder()
-    #            for nel_1d in [4, 8, 12]:
-    for nel_1d in [8]:
+    from pytools.convergence import EOCRecorder
+    eoc_rec0 = EOCRecorder()
+    eoc_rec1 = EOCRecorder()
+    # for nel_1d in [4, 8, 12]:
+    for nel_1d in [4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
@@ -466,8 +467,8 @@ def test_uniform_rhs(actx_factory, dim, order):
         mom_input = make_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
-        fields = join_conserved(dim, mass=mass_input, energy=energy_input,
-                                momentum=mom_input)
+        fields = join_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
         expected_rhs = make_obj_array(
             [discr.zeros(actx) for i in range(len(fields))]
@@ -501,7 +502,7 @@ def test_uniform_rhs(actx_factory, dim, order):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
 
             err_max = discr.norm(rhs_resid[i], np.inf)
-            #                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
+            eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
@@ -526,24 +527,25 @@ def test_uniform_rhs(actx_factory, dim, order):
         for i in range(dim):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
             err_max = discr.norm(rhs_resid[i], np.inf)
-            #                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
+            eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
 
-    #            message = (
-    #                f"{iotag}V == 0 Errors:\n{eoc_rec0}"
-    #                f"{iotag}V != 0 Errors:\n{eoc_rec1}"
-    #            )
-    #            print(message)
-    #            assert (
-    #                eoc_rec0.order_estimate() >= order - 0.5
-    #                or eoc_rec0.max_error() < 1e-9
-    #            )
-    #            assert (
-    #                eoc_rec1.order_estimate() >= order - 0.5
-    #                or eoc_rec1.max_error() < 1e-9
-    #            )
+    message = (
+        f"V == 0 Errors:\n{eoc_rec0}"
+        f"V != 0 Errors:\n{eoc_rec1}"
+    )
+    print(message)
+
+    assert (
+        eoc_rec0.order_estimate() >= order - 0.5
+        or eoc_rec0.max_error() < 1e-9
+    )
+    assert (
+        eoc_rec1.order_estimate() >= order - 0.5
+        or eoc_rec1.max_error() < 1e-9
+    )
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
