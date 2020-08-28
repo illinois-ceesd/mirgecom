@@ -40,12 +40,9 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
-from mirgecom.euler import inviscid_operator
-from mirgecom.euler import split_conserved
-from mirgecom.initializers import Vortex2D
-from mirgecom.initializers import Lump
-from mirgecom.boundary import PrescribedBoundary
-from mirgecom.boundary import DummyBoundary
+from mirgecom.euler import inviscid_operator, split_conserved, join_conserved
+from mirgecom.initializers import Vortex2D, Lump
+from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
@@ -101,7 +98,7 @@ def test_inviscid_flux(actx_factory, dim):
         ]
     )
 
-    q = flat_obj_array(mass, energy, mom)
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     # {{{ create the expected result
 
