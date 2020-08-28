@@ -184,7 +184,7 @@ def test_inviscid_flux_components(actx_factory, dim):
             for j in range(dim):
                 mom[j][i] = 0.0 * mass[i]
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
-        q = flat_obj_array(mass, energy, mom)
+        q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(q)
         flux = inviscid_flux(fake_dis, eos, q)
 
@@ -265,7 +265,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
                 p / (eos.gamma() - 1.0)
                 + 0.5 * np.dot(mom, mom) / mass
             )
-            q = flat_obj_array(mass, energy, mom)
+            q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
             p = eos.pressure(q)
             flux = inviscid_flux(fake_dis, eos, q)
 
@@ -359,9 +359,7 @@ def test_facial_flux(actx_factory, order, dim):
             [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-        fields = flat_obj_array(
-            mass_input, energy_input, mom_input
-        )
+        fields = join_conserved(dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -396,8 +394,8 @@ def test_facial_flux(actx_factory, order, dim):
         dir_e = discr.interp("vol", BTAG_ALL, energy_input)
         dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
 
-        dir_bval = flat_obj_array(dir_mass, dir_e, dir_mom)
-        dir_bc = flat_obj_array(dir_mass, dir_e, dir_mom)
+        dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom)
+        dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
@@ -463,12 +461,10 @@ def test_uniform_rhs(actx_factory, dim, order):
         mom_input = make_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
-        fields = flat_obj_array(
-            mass_input, energy_input, mom_input
-        )
+        fields = join_conserved(dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
         expected_rhs = make_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim + 2)]
+            [discr.zeros(actx) for i in range(len(fields))]
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
