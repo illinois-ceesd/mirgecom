@@ -165,6 +165,6 @@ def test_shock_init(ctx_factory):
     tol = 1e-15
     nodes_x = nodes[0]
     eos = IdealSingleGas()
-    p = eos.get_pressure(initsoln)
+    p = eos.pressure(initsoln)
 
     assert discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol

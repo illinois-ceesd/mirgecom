@@ -152,7 +152,7 @@ def inviscid_flux(discr, eos, q):
     """
     dim = discr.dim
     qs = split_conserved(dim, q)
-    p = eos.get_pressure(q)
+    p = eos.pressure(q)
 
     mom = qs.momentum
     return join_conserved(dim,
@@ -170,7 +170,7 @@ def _get_wavespeed(dim, eos, q):
 
     v = mom * scalar(1.0 / mass)
 
-    sos = eos.get_sound_speed(q)
+    sos = eos.sound_speed(q)
     return actx.np.sqrt(np.dot(v, v)) + sos
 
 

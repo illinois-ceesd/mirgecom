@@ -26,7 +26,6 @@ import logging
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import (
-    make_io_fields,
     make_status_message,
     make_output_dump,
 )
@@ -98,7 +97,7 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
         rank = comm.Get_rank()
     checkpoint_status = 0
 
-    dependent_vars = eos(q=q)
+    dependent_vars = eos.dependent_vars(q=q)
     expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
 
     if do_status is True:
@@ -117,13 +116,15 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
             logger.error("Solution failed to follow expected result.")
             checkpoint_status = 1
 
-        if do_viz:
-            dim = discr.dim
-            io_fields = make_io_fields(dim, q, dependent_vars, eos)
-            io_fields.append(("exact_soln", expected_state))
-            result_resid = q - expected_state
-            io_fields.append(("residual", result_resid))
-            make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                             comm=comm, step=step, t=t, overwrite=True)
+    if do_viz:
+        from mirgecom.euler import split_conserved
+        io_fields = [
+            ("cv", split_conserved(discr.dim, q)),
+            ("dv", dependent_vars),
+            ("exact_soln", expected_state),
+            ("residual", q - expected_state)
+        ]
+        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
+                            comm=comm, step=step, t=t, overwrite=True)
 
-        return checkpoint_status
+    return checkpoint_status

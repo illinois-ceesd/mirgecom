@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 import numpy as np
-from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 __doc__ = """
@@ -32,9 +32,23 @@ Equations of State
 This module is designed provide Equation of State objects used to compute and
 manage the relationships between and among state and thermodynamic variables.
 
+.. autoclass:: EOSDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: IdealSingleGas
 """
+
+
+@dataclass
+class EOSDependentVars:
+    """State-dependent quantities computed by the :class:`GasEOS`
+    interface. Prefer individual methods for model use, use
+    this structure for visualization or probing.
+
+    .. attribute:: temperature
+    .. attribute:: pressure
+    """
+    temperature: np.ndarray
+    pressure: np.ndarray
 
 
 class GasEOS:
@@ -46,31 +60,15 @@ class GasEOS:
     contains the relevant simulation state quantities. Each
     EOS class should document its own state data requirements.
 
-    .. automethod:: __call__
-    .. automethod:: get_pressure
-    .. automethod:: get_temperature
-    .. automethod:: get_sound_speed
-    .. automethod:: get_internal_energy
-    .. automethod:: get_gas_const
+    .. automethod:: pressure
+    .. automethod:: temperature
+    .. automethod:: sound_speed
+    .. automethod:: internal_energy
+    .. automethod:: gas_const
+    .. automethod:: dependent_vars
     """
 
-    def __call__(self, q=None):
-        r"""Call to object
-
-        Parameters
-        ----------
-        q
-            Agglomerated object array representing state data
-
-        Returns
-        -------
-        object array of floating point arrays with the
-        EOS-specific dependent variables.
-        (e.g. [ pressure, temperature ] for an ideal gas)
-        """
-        raise NotImplementedError()
-
-    def get_pressure(self, q=None):
+    def pressure(self, q=None):
         r"""Get gas pressure
 
         Parameters
@@ -85,7 +83,7 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def get_temperature(self, q=None):
+    def temperature(self, q=None):
         r"""Get gas temperature
 
         Parameters
@@ -100,7 +98,7 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def get_sound_speed(self, q=None):
+    def sound_speed(self, q=None):
         r"""
         Parameters
         ----------
@@ -114,7 +112,7 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def get_gas_const(self, q=None):
+    def gas_const(self, q=None):
         r"""Get specific gas constant (R)
 
         Parameters
@@ -130,7 +128,7 @@ class GasEOS:
         """
         raise NotImplementedError()
 
-    def get_internal_energy(self, q=None):
+    def internal_energy(self, q=None):
         r"""
         Parameters
         ----------
@@ -144,8 +142,19 @@ class GasEOS:
         """
         raise NotImplementedError()
 
+    def dependent_vars(self, q):
+        """
+        Returns
+        -------
+        EOSDependentVars
+        """
+        return EOSDependentVars(
+            pressure=self.pressure(q),
+            temperature=self.temperature(q),
+            )
 
-class IdealSingleGas:
+
+class IdealSingleGas(GasEOS):
     r"""Implement the ideal gas law (:math:`p = \rho{R}{T}`)
     for a single monatomic gas.
 
@@ -159,26 +168,22 @@ class IdealSingleGas:
     momentum (:math:`\rho\vec{V}`).
 
     .. automethod:: __init__
-    .. automethod:: get_gamma
-    .. automethod:: get_gas_const
-    .. automethod:: get_pressure
-    .. automethod:: get_sound_speed
-    .. automethod:: get_temperature
-    .. automethod:: __call__
-    .. automethod:: split_fields
+    .. automethod:: gamma
+
+    Inherits from (and implements) :class:`GasEOS`.
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1):
         self._gamma = gamma
         self._gas_const = gas_const
 
-    def get_gamma(self):
+    def gamma(self):
         return self._gamma
 
-    def get_gas_const(self):
+    def gas_const(self):
         return self._gas_const
 
-    def get_internal_energy(self, q):
+    def internal_energy(self, q):
         r"""Get internal energy
 
         The internal energy (e) is calculated as:
@@ -192,7 +197,7 @@ class IdealSingleGas:
 
         return (energy - 0.5 * np.dot(mom, mom) / mass)
 
-    def get_pressure(self, q):
+    def pressure(self, q):
         r"""The thermodynmic pressure (p) is calculated from
         the internal energy (e) as:
 
@@ -200,9 +205,9 @@ class IdealSingleGas:
 
             p = (\gamma - 1)e
         """
-        return self.get_internal_energy(q) * (self._gamma - 1.0)
+        return self.internal_energy(q) * (self._gamma - 1.0)
 
-    def get_sound_speed(self, q):
+    def sound_speed(self, q):
         r"""
         The speed of sound (c) is calculated as:
 
@@ -213,11 +218,11 @@ class IdealSingleGas:
         mass = q[0]
         actx = mass.array_context
 
-        p = self.get_pressure(q)
+        p = self.pressure(q)
         c2 = self._gamma / mass * p
         return actx.np.sqrt(c2)
 
-    def get_temperature(self, q):
+    def temperature(self, q):
         r"""
         The thermodynmic temperature (T) is calculated from
         the internal energy (e) and specific gas constant (R)
@@ -230,16 +235,5 @@ class IdealSingleGas:
         mass = q[0]
         return (
             (((self._gamma - 1.0) / self._gas_const)
-            * self.get_internal_energy(q) / mass)
+            * self.internal_energy(q) / mass)
         )
-
-    def __call__(self, q):
-        """Get the dimensional pressure and temperature
-        """
-        return flat_obj_array(self.get_pressure(q), self.get_temperature(q))
-
-    def split_fields(self, ndim, dependent_vars):
-        return [
-            ("pressure", dependent_vars[0]),
-            ("temperature", dependent_vars[1]),
-        ]

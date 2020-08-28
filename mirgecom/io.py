@@ -23,38 +23,15 @@ THE SOFTWARE.
 """
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import split_conserved
 
 
 __doc__ = """
-.. autofunction:: make_io_fields
 .. autofunction:: make_status_message
 .. autofunction:: make_serial_fname
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
 .. autofunction:: make_output_dump
 """
-
-
-def make_io_fields(dim, state, dependent_vars, eos):
-    r"""Create io field dictionary for VTK I/O interface.
-
-    Parameters
-    ----------
-    dim
-        Dimensionality of solution
-    state
-        Solution state
-    dependent_vars
-        EOS-specific dependent quantities
-        (e.g. pressure, temperature, for ideal monatomic gas)
-    eos
-        Equation of state utility for resolving the dependent
-        fields.
-    """
-    io_fields = [("cv", split_conserved(dim, state))]
-    io_fields += eos.split_fields(dim, dependent_vars)
-    return io_fields
 
 
 def make_init_message(*, dim, order, dt, t_final,

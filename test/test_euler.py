@@ -107,7 +107,7 @@ def test_inviscid_flux(ctx_factory, dim):
 
     # {{{ create the expected result
 
-    p = eos.get_pressure(q)
+    p = eos.pressure(q)
     escale = (energy + p) / mass
 
     expected_flux = np.zeros((dim + 2, dim), dtype=object)
@@ -191,7 +191,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
                 mom[j][i] = 0.0 * mass[i]
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
         q = flat_obj_array(mass, energy, mom)
-        p = eos.get_pressure(q)
+        p = eos.pressure(q)
         flux = inviscid_flux(fake_dis, eos, q)
 
         logger.info(f"{dim}d flux = {flux}")
@@ -269,11 +269,11 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
                     mom[j][i] = 0.0 * mass[i]
                     mom[livedim][i] = mass[i]
             energy = (
-                p / (eos.get_gamma() - 1.0)
+                p / (eos.gamma() - 1.0)
                 + 0.5 * np.dot(mom, mom) / mass
             )
             q = flat_obj_array(mass, energy, mom)
-            p = eos.get_pressure(q)
+            p = eos.pressure(q)
             flux = inviscid_flux(fake_dis, eos, q)
 
             logger.info(f"{dim}d flux = {flux}")
@@ -719,7 +719,7 @@ def _euler_flow_stepper(actx, parameters):
     vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
     def write_soln(write_status=True):
-        dv = eos(fields)
+        dv = eos.dependent_vars(fields)
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
