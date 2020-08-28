@@ -458,7 +458,7 @@ def test_facial_flux(ctx_factory, order, dim):
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
-            q_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc)
+            q_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
         )
 
         bf_split = split_conserved(dim, boundary_flux)

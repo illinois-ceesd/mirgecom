@@ -89,7 +89,7 @@ def wave_operator(discr, c, w):
             +  # noqa: W504
             discr.face_mass(
                 _flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
-                + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, dir_bval,
-                dir_bc))
+                + _flux(discr, c=c, w_tpair=TracePair(BTAG_ALL, interior=dir_bval,
+                exterior=dir_bc))
                 ))
         )
