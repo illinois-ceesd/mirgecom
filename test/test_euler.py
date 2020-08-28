@@ -35,7 +35,6 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.array_context import PyOpenCLArrayContext
 # from meshmode.dof_array import thaw, unflatten
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -49,9 +48,10 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.boundary import DummyBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux(ctx_factory, dim):
+def test_inviscid_flux(actx_factory, dim):
     """Identity test - directly check inviscid flux
     routine :func:`mirgecom.euler.inviscid_flux` against the exact
     expected result. This test is designed to fail
@@ -69,9 +69,7 @@ def test_inviscid_flux(ctx_factory, dim):
     The expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 16
 
@@ -89,15 +87,15 @@ def test_inviscid_flux(ctx_factory, dim):
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
     mass = cl.clrandom.rand(
-        queue, (mesh.nelements,), dtype=np.float64
+        actx.queue, (mesh.nelements,), dtype=np.float64
     )
     energy = cl.clrandom.rand(
-        queue, (mesh.nelements,), dtype=np.float64
+        actx.queue, (mesh.nelements,), dtype=np.float64
     )
     mom = make_obj_array(
         [
             cl.clrandom.rand(
-                queue, (mesh.nelements,), dtype=np.float64
+                actx.queue, (mesh.nelements,), dtype=np.float64
             )
             for i in range(dim)
         ]
@@ -131,7 +129,7 @@ def test_inviscid_flux(ctx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux_components(ctx_factory, dim):
+def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
 
     Checks that the Euler-internal inviscid flux
@@ -146,8 +144,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
     are non-zero and return the correctly calculated p.
     """
 
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
+    queue = actx_factory().queue
 
     eos = IdealSingleGas()
 
@@ -221,14 +218,13 @@ def test_inviscid_flux_components(ctx_factory, dim):
     (3, 1),
     (3, 2),
     ])
-def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
+def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     r"""Constant pressure, V != 0:
     Checks that the flux terms are returned in the proper
     order by running only 1 non-zero velocity component at-a-time.
     """
 
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
+    queue = actx_factory().queue
 
     eos = IdealSingleGas()
 
@@ -329,7 +325,7 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_facial_flux(ctx_factory, order, dim):
+def test_facial_flux(actx_factory, order, dim):
     """Check the flux across element faces by
     prescribing states (q) with known fluxes. Only
     uniform states are tested currently - ensuring
@@ -340,9 +336,7 @@ def test_facial_flux(ctx_factory, order, dim):
     has been interpolated to-and-from the element
     faces, this test is grid-dependent.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     tolerance = 1e-14
     p0 = 1.0
@@ -439,15 +433,13 @@ def test_facial_flux(ctx_factory, order, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_uniform_rhs(ctx_factory, dim, order):
+def test_uniform_rhs(actx_factory, dim, order):
     """Tests the inviscid rhs using a trivial
     constant/uniform state which should
     yield rhs = 0 to FP.  The test is performed
     for 1, 2, and 3 dimensions.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     tolerance = 1e-9
     maxxerr = 0.0
@@ -556,16 +548,14 @@ def test_uniform_rhs(ctx_factory, dim, order):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_vortex_rhs(ctx_factory, order):
+def test_vortex_rhs(actx_factory, order):
     """Tests the inviscid rhs using the non-trivial
     2D isentropic vortex case configured to yield
     rhs = 0. Checks several different orders
     and refinement levels to check error
     behavior.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 2
 
@@ -613,15 +603,13 @@ def test_vortex_rhs(ctx_factory, order):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lump_rhs(ctx_factory, dim, order):
+def test_lump_rhs(actx_factory, dim, order):
     """Tests the inviscid rhs using the non-trivial
     1, 2, and 3D mass lump case against the analytic
     expressions of the RHS. Checks several different
     orders and refinement levels to check error behavior.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     tolerance = 1e-10
     maxxerr = 0.0
@@ -781,7 +769,7 @@ def _euler_flow_stepper(actx, parameters):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_isentropic_vortex(ctx_factory, order):
+def test_isentropic_vortex(actx_factory, order):
     """Advance the 2D isentropic vortex case in
     time with non-zero velocities using an RK4
     timestepping scheme. Check the advanced field
@@ -791,9 +779,7 @@ def test_isentropic_vortex(ctx_factory, order):
     together, with results converging at the expected
     rates vs. the order.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 2
 
