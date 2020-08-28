@@ -525,19 +525,19 @@ def test_uniform_rhs(actx_factory, dim, order):
             if err_max > maxxerr:
                 maxxerr = err_max
 
-    #            message = (
-    #                f"{iotag}V == 0 Errors:\n{eoc_rec0}"
-    #                f"{iotag}V != 0 Errors:\n{eoc_rec1}"
-    #            )
-    #            print(message)
-    #            assert (
-    #                eoc_rec0.order_estimate() >= order - 0.5
-    #                or eoc_rec0.max_error() < 1e-9
-    #            )
-    #            assert (
-    #                eoc_rec1.order_estimate() >= order - 0.5
-    #                or eoc_rec1.max_error() < 1e-9
-    #            )
+                message = (
+                    f"{iotag}V == 0 Errors:\n{eoc_rec0}"
+                    f"{iotag}V != 0 Errors:\n{eoc_rec1}"
+                )
+                print(message)
+                assert (
+                    eoc_rec0.order_estimate() >= order - 0.5
+                    or eoc_rec0.max_error() < 1e-9
+                )
+                assert (
+                    eoc_rec1.order_estimate() >= order - 0.5
+                    or eoc_rec1.max_error() < 1e-9
+                )
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
