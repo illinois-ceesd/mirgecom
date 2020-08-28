@@ -86,7 +86,7 @@ def make_par_fname(basename, step=0, t=0):
 
 
 def make_output_dump(visualizer, basename, io_fields,
-                     comm=None, step=0, t=0, overwrite=True):
+                     comm=None, step=0, t=0, overwrite=False):
     r"""Make VTK output dump for visualization
     """
     rank = 0
@@ -97,8 +97,8 @@ def make_output_dump(visualizer, basename, io_fields,
     if nproc > 1:
         rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
         visualizer.write_parallel_vtk_file(
-            comm, rank_fn, io_fields, overwrite=True,
+            comm, rank_fn, io_fields, overwrite=overwrite,
             par_manifest_filename=make_par_fname(basename=basename, step=step, t=t))
     else:
         fname = make_serial_fname(basename=basename, step=step, t=t)
-        visualizer.write_vtk_file(fname, io_fields, overwrite=True)
+        visualizer.write_vtk_file(fname, io_fields, overwrite=overwrite)
