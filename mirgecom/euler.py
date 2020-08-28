@@ -101,7 +101,8 @@ def _aux_shape(ary, leading_shape):
 
     """
     from meshmode.dof_array import DOFArray
-    if isinstance(ary, np.ndarray) and ary.dtype == np.object and not isinstance(ary, DOFArray):
+    if (isinstance(ary, np.ndarray) and ary.dtype == np.object
+            and not isinstance(ary, DOFArray)):
         naxes = len(leading_shape)
         if ary.shape[:naxes] != leading_shape:
             raise ValueError("array shape does not start with expected leading "
