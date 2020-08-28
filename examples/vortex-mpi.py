@@ -149,10 +149,16 @@ def main(ctx_factory=cl.create_some_context):
                             nstatus=nstatus, nviz=nviz, exittol=exittol,
                             constant_cfl=constant_cfl, comm=comm)
 
-    (current_step, current_t, current_state) = \
-        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=get_timestep, state=current_state,
-                    t=current_t, t_final=t_final)
+    try:
+        (current_step, current_t, current_state) = \
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          checkpoint=my_checkpoint,
+                          get_timestep=get_timestep, state=current_state,
+                          t=current_t, t_final=t_final)
+    except ExactSolutionMismatch as ex:
+        current_step = ex.step
+        current_t = ex.t
+        current_state = ex.state
 
     #    if current_t != checkpoint_t:
     if rank == 0:
