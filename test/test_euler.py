@@ -363,7 +363,6 @@ def test_facial_flux(actx_factory, order, dim):
             [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
