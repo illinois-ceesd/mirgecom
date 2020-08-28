@@ -79,7 +79,7 @@ def test_lump_init(ctx_factory):
     lump_soln = lump(0, nodes)
 
     cv = split_conserved(dim, lump_soln)
-    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.mom, cv.mom) / cv.mass)
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
 
@@ -117,7 +117,7 @@ def test_vortex_init(ctx_factory):
     vortex_soln = vortex(0, nodes)
     gamma = 1.4
     cv = split_conserved(dim, vortex_soln)
-    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.mom, cv.mom) / cv.mass)
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 
