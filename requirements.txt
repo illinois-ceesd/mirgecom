@@ -4,8 +4,8 @@ pytest
 pyvisfile
 pymetis
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
-# git+https://github.com/inducer/islpy.git#egg=islpy
-# git+https://github.com/inducer/pyopencl.git#egg=pyopencl
+git+https://github.com/inducer/islpy.git#egg=islpy
+git+https://github.com/inducer/pyopencl.git#egg=pyopencl
 git+https://github.com/inducer/loopy.git#egg=loo.py
 git+https://github.com/inducer/dagrt.git#egg=dagrt
 git+https://github.com/inducer/leap.git#egg=leap
