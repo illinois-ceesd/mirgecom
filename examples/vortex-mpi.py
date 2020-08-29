@@ -38,7 +38,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    exact_sim_checkpoint,
+    ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
 
@@ -149,10 +150,16 @@ def main(ctx_factory=cl.create_some_context):
                             nstatus=nstatus, nviz=nviz, exittol=exittol,
                             constant_cfl=constant_cfl, comm=comm)
 
-    (current_step, current_t, current_state) = \
-        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=get_timestep, state=current_state,
-                    t=current_t, t_final=t_final)
+    try:
+        (current_step, current_t, current_state) = \
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          checkpoint=my_checkpoint,
+                          get_timestep=get_timestep, state=current_state,
+                          t=current_t, t_final=t_final)
+    except ExactSolutionMismatch as ex:
+        current_step = ex.step
+        current_t = ex.t
+        current_state = ex.state
 
     #    if current_t != checkpoint_t:
     if rank == 0:

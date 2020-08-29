@@ -30,7 +30,6 @@ __doc__ = """
 .. autofunction:: make_serial_fname
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
-.. autofunction:: make_output_dump
 """
 
 
@@ -69,12 +68,6 @@ def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
     return statusmsg
 
 
-def make_serial_fname(basename, step=0, t=0):
-    r"""Make serial visualization file name
-    """
-    return f"{basename}-{step:06d}.vtu"
-
-
 def make_rank_fname(basename, rank=0, step=0, t=0):
     return f"{basename}-{step:06d}-{{rank:04d}}.vtu"
 
@@ -83,22 +76,3 @@ def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename
     """
     return f"{basename}-{step:06d}.pvtu"
-
-
-def make_output_dump(visualizer, basename, io_fields,
-                     comm=None, step=0, t=0, overwrite=False):
-    r"""Make VTK output dump for visualization
-    """
-    rank = 0
-    nproc = 1
-    if comm is not None:
-        rank = comm.Get_rank()
-        nproc = comm.Get_size()
-    if nproc > 1:
-        rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
-        visualizer.write_parallel_vtk_file(
-            comm, rank_fn, io_fields, overwrite=overwrite,
-            par_manifest_filename=make_par_fname(basename=basename, step=step, t=t))
-    else:
-        fname = make_serial_fname(basename=basename, step=step, t=t)
-        visualizer.write_vtk_file(fname, io_fields, overwrite=overwrite)
