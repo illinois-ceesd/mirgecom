@@ -44,9 +44,14 @@ building simulation applications.
 """
 
 
+
 def check_step(step, interval):
     """
-    Check step number against a user-specified interval.
+    Check step number against a user-specified interval,
+    typically for visualization.
+
+    - Negative numbers mean 'never visualize'.
+    - Zero means 'always visualize'.
 
     Useful for checking whether the current step is an output step,
     or anyting else that occurs on fixed intervals.
