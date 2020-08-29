@@ -44,7 +44,6 @@ building simulation applications.
 """
 
 
-
 def check_step(step, interval):
     """
     Check step number against a user-specified interval,
