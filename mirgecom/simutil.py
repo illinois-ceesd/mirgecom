@@ -25,10 +25,7 @@ import logging
 
 import numpy as np
 from meshmode.dof_array import thaw
-from mirgecom.io import (
-    make_status_message,
-    make_output_dump,
-)
+from mirgecom.io import make_status_message
 from mirgecom.euler import (
     get_inviscid_timestep,
 )
@@ -91,7 +88,8 @@ class ExactSolutionMismatch(Exception):
 
 def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
                          vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
-                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
+                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None,
+                         overwrite=False):
     r"""
     Check simulation health, status, viz dumps, and restart
     """
@@ -120,8 +118,11 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
             ("exact_soln", expected_state),
             ("residual", q - expected_state)
         ]
-        make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                            comm=comm, step=step, t=t, overwrite=True)
+        from mirgecom.io import make_rank_fname, make_par_fname
+        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields, overwrite=overwrite,
+            par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
 
     if do_status is True:
         #        if constant_cfl is False:
