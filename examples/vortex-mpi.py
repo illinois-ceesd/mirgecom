@@ -38,7 +38,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    exact_sim_checkpoint,
+    ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
 
