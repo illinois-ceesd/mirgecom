@@ -151,27 +151,22 @@ def inviscid_flux(discr, eos, q):
     :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
     """
     dim = discr.dim
-    qs = split_conserved(dim, q)
-    p = eos.pressure(q)
+    cv = split_conserved(dim, q)
+    p = eos.pressure(cv)
 
-    mom = qs.momentum
+    mom = cv.momentum
     return join_conserved(dim,
             mass=mom,
-            energy=mom * scalar((qs.energy + p) / qs.mass),
-            momentum=np.outer(mom, mom)/scalar(qs.mass) + np.eye(dim)*scalar(p))
+            energy=mom * scalar((cv.energy + p) / cv.mass),
+            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p))
 
 
-def _get_wavespeed(dim, eos, q):
+def _get_wavespeed(dim, eos, cv: ConservedVars):
     """Return the maximum wavespeed in for flow solution *q*"""
-    qs = split_conserved(dim, q)
-    mass = qs.mass
-    mom = qs.momentum
-    actx = mass.array_context
+    actx = cv.mass.array_context
 
-    v = mom * scalar(1.0 / mass)
-
-    sos = eos.sound_speed(q)
-    return actx.np.sqrt(np.dot(v, v)) + sos
+    v = cv.momentum / scalar(cv.mass)
+    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
 def _facial_flux(discr, eos, q_tpair):
@@ -188,8 +183,8 @@ def _facial_flux(discr, eos, q_tpair):
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
-        _get_wavespeed(dim, eos=eos, q=q_tpair.int),
-        _get_wavespeed(dim, eos=eos, q=q_tpair.ext))
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (

@@ -111,7 +111,9 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
     if comm is not None:
         rank = comm.Get_rank()
 
-    dependent_vars = eos.dependent_vars(q=q)
+    from mirgecom.euler import split_conserved
+    cv = split_conserved(discr.dim, q)
+    dependent_vars = eos.dependent_vars(cv)
     expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
 
     if do_viz:

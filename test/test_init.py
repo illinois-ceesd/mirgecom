@@ -78,11 +78,8 @@ def test_lump_init(ctx_factory):
     lump = Lump(center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
-    qs = split_conserved(dim, lump_soln)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-    p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
+    cv = split_conserved(dim, lump_soln)
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
 
@@ -119,12 +116,9 @@ def test_vortex_init(ctx_factory):
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     gamma = 1.4
-    qs = split_conserved(dim, vortex_soln)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-    p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
-    exp_p = mass ** gamma
+    cv = split_conserved(dim, vortex_soln)
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
+    exp_p = cv.mass ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"vortex_soln = {vortex_soln}")
@@ -165,6 +159,7 @@ def test_shock_init(ctx_factory):
     tol = 1e-15
     nodes_x = nodes[0]
     eos = IdealSingleGas()
-    p = eos.pressure(initsoln)
+    cv = split_conserved(dim, initsoln)
+    p = eos.pressure(cv)
 
     assert discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol

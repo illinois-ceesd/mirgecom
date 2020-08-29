@@ -27,7 +27,6 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 __doc__ = """
 .. autofunction:: make_status_message
-.. autofunction:: make_serial_fname
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
 """

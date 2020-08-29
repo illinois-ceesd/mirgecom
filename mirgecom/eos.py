@@ -25,6 +25,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from mirgecom.euler import ConservedVars
 
 __doc__ = """
 Equations of State
@@ -68,86 +69,23 @@ class GasEOS:
     .. automethod:: dependent_vars
     """
 
-    def pressure(self, q=None):
-        r"""Get gas pressure
-
-        Parameters
-        ----------
-        q
-            Agglomerated object array representing state data
-
-        Returns
-        -------
-        floating point array with the thermodynamic
-        pressure at each point
-        """
+    def pressure(self, cv: ConservedVars):
         raise NotImplementedError()
 
-    def temperature(self, q=None):
-        r"""Get gas temperature
-
-        Parameters
-        ----------
-        q
-            Agglomerated object array representing state data
-
-        Returns
-        -------
-        floating point array with the thermodynamic
-        temperature at each point
-        """
+    def temperature(self, cv: ConservedVars):
         raise NotImplementedError()
 
-    def sound_speed(self, q=None):
-        r"""
-        Parameters
-        ----------
-        q
-            Agglomerated object array representing state data
-
-        Returns
-        -------
-        floating point number or array with the speed of sound
-        for each point
-        """
+    def sound_speed(self, cv: ConservedVars):
         raise NotImplementedError()
 
-    def gas_const(self, q=None):
-        r"""Get specific gas constant (R)
-
-        Parameters
-        ----------
-        q
-            Agglomerated object array representing state data
-
-        Returns
-        -------
-        floating point number or array with the specific
-        gas constant for the domain, or at each point for
-        mixture-type EOS.
-        """
+    def gas_const(self, cv: ConservedVars):
+        r"""Get the specific gas constant (:math:`R`)"""
         raise NotImplementedError()
 
-    def internal_energy(self, q=None):
-        r"""
-        Parameters
-        ----------
-        q
-            Agglomerated object array representing state data
-
-        Returns
-        -------
-        floating point array with the internal
-        energy at each point.
-        """
+    def internal_energy(self, cv: ConservedVars):
         raise NotImplementedError()
 
-    def dependent_vars(self, q):
-        """
-        Returns
-        -------
-        EOSDependentVars
-        """
+    def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
         return EOSDependentVars(
             pressure=self.pressure(q),
             temperature=self.temperature(q),
@@ -156,7 +94,7 @@ class GasEOS:
 
 class IdealSingleGas(GasEOS):
     r"""Implement the ideal gas law (:math:`p = \rho{R}{T}`)
-    for a single monatomic gas.
+    for a single component gas.
 
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
@@ -183,7 +121,7 @@ class IdealSingleGas(GasEOS):
     def gas_const(self):
         return self._gas_const
 
-    def internal_energy(self, q):
+    def internal_energy(self, cv: ConservedVars):
         r"""Get internal energy
 
         The internal energy (e) is calculated as:
@@ -191,13 +129,10 @@ class IdealSingleGas(GasEOS):
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
         """
-        mass = q[0]
-        energy = q[1]
-        mom = q[2:]
+        mom = cv.momentum
+        return (cv.energy - 0.5 * np.dot(mom, mom) / cv.mass)
 
-        return (energy - 0.5 * np.dot(mom, mom) / mass)
-
-    def pressure(self, q):
+    def pressure(self, cv):
         r"""The thermodynmic pressure (p) is calculated from
         the internal energy (e) as:
 
@@ -205,9 +140,9 @@ class IdealSingleGas(GasEOS):
 
             p = (\gamma - 1)e
         """
-        return self.internal_energy(q) * (self._gamma - 1.0)
+        return self.internal_energy(cv) * (self._gamma - 1.0)
 
-    def sound_speed(self, q):
+    def sound_speed(self, cv):
         r"""
         The speed of sound (c) is calculated as:
 
@@ -215,14 +150,13 @@ class IdealSingleGas(GasEOS):
 
             c = \sqrt{\frac{\gamma{p}}{\rho}}
         """
-        mass = q[0]
-        actx = mass.array_context
+        actx = cv.mass.array_context
 
-        p = self.pressure(q)
-        c2 = self._gamma / mass * p
+        p = self.pressure(cv)
+        c2 = self._gamma / cv.mass * p
         return actx.np.sqrt(c2)
 
-    def temperature(self, q):
+    def temperature(self, cv):
         r"""
         The thermodynmic temperature (T) is calculated from
         the internal energy (e) and specific gas constant (R)
@@ -232,8 +166,7 @@ class IdealSingleGas(GasEOS):
 
             T = \frac{(\gamma - 1)e}{R\rho}
         """
-        mass = q[0]
         return (
             (((self._gamma - 1.0) / self._gas_const)
-            * self.internal_energy(q) / mass)
+            * self.internal_energy(cv) / cv.mass)
         )
