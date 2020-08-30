@@ -38,7 +38,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    exact_sim_checkpoint,
+    ExactSolutionMismatch
 )
 from mirgecom.io import make_init_message
 
@@ -49,14 +50,14 @@ from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
 
-def main(ctx_factory=cl.create_some_context):
+logger = logging.getLogger(__name__)
 
+
+def main(ctx_factory=cl.create_some_context):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
-    logger = logging.getLogger(__name__)
 
     dim = 3
     nel_1d = 16
@@ -143,15 +144,21 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
+        return exact_sim_checkpoint(discr, initializer, visualizer, eos,
                             q=state, vizname=casename, step=step, t=t, dt=dt,
                             nstatus=nstatus, nviz=nviz, exittol=exittol,
                             constant_cfl=constant_cfl, comm=comm)
 
-    (current_step, current_t, current_state) = \
-        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=get_timestep, state=current_state,
-                    t=current_t, t_final=t_final)
+    try:
+        (current_step, current_t, current_state) = \
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          checkpoint=my_checkpoint,
+                          get_timestep=get_timestep, state=current_state,
+                          t=current_t, t_final=t_final)
+    except ExactSolutionMismatch as ex:
+        current_step = ex.step
+        current_t = ex.t
+        current_state = ex.state
 
     #    if current_t != checkpoint_t:
     if rank == 0:

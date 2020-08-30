@@ -35,44 +35,38 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.array_context import PyOpenCLArrayContext
 # from meshmode.dof_array import thaw, unflatten
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
-from mirgecom.euler import inviscid_operator
-from mirgecom.euler import split_conserved
-from mirgecom.initializers import Vortex2D
-from mirgecom.initializers import Lump
-from mirgecom.boundary import PrescribedBoundary
-from mirgecom.boundary import DummyBoundary
+from mirgecom.euler import inviscid_operator, split_conserved, join_conserved
+from mirgecom.initializers import Vortex2D, Lump
+from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
-from mirgecom.euler import split_fields
 from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux(ctx_factory, dim):
+def test_inviscid_flux(actx_factory, dim):
     """Identity test - directly check inviscid flux
-    routine (_inviscid_flux) against the exact
+    routine :func:`mirgecom.euler.inviscid_flux` against the exact
     expected result. This test is designed to fail
     if the flux routine is broken.
     The expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 16
 
@@ -90,64 +84,54 @@ def test_inviscid_flux(ctx_factory, dim):
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
     mass = cl.clrandom.rand(
-        queue, (mesh.nelements,), dtype=np.float64
+        actx.queue, (mesh.nelements,), dtype=np.float64
     )
     energy = cl.clrandom.rand(
-        queue, (mesh.nelements,), dtype=np.float64
+        actx.queue, (mesh.nelements,), dtype=np.float64
     )
     mom = make_obj_array(
         [
             cl.clrandom.rand(
-                queue, (mesh.nelements,), dtype=np.float64
+                actx.queue, (mesh.nelements,), dtype=np.float64
             )
             for i in range(dim)
         ]
     )
 
-    q = flat_obj_array(mass, energy, mom)
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = split_conserved(dim, q)
 
-    # Create the expected result
-    p = eos.get_pressure(q)
+    # {{{ create the expected result
+
+    p = eos.pressure(cv)
     escale = (energy + p) / mass
-    expected_mass_flux = mom
-    expected_energy_flux = mom * make_obj_array([escale])
 
-    #    expected_mom_flux = np.empty(shape=(dim, dim), dtype=object)
-    #    for i in range(dim):
-    #        for j in range(dim):
-    #            expected_mom_flux[i][j] = (mom[i] * mom[j] / mass +
-    #    (p if i == j else 0))
-    expected_mom_flux = make_obj_array(
-        [
-            (mom[i] * mom[j] / mass + (p if i == j else 0))
-            for i in range(dim)
-            for j in range(dim)
-        ]
-    )
+    expected_flux = np.zeros((dim + 2, dim), dtype=object)
+    expected_flux[0] = mom
+    expected_flux[1] = mom * make_obj_array([escale])
 
-    #    expected_flux = make_obj_array([expected_mass_flux,
-    #                                   expected_energy_flux,
-    #                                    expected_mom_flux])
+    for i in range(dim):
+        for j in range(dim):
+            expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
 
-    expected_flux = flat_obj_array(
-        expected_mass_flux, expected_energy_flux, expected_mom_flux
-    )
+    # }}}
 
-    from mirgecom.euler import _inviscid_flux
+    from mirgecom.euler import inviscid_flux
 
-    flux = _inviscid_flux(discr, eos, q)
+    flux = inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
-    for i in range((dim + 2) * dim):
-        assert (la.norm(flux_resid[i].get())) == 0.0
+    for i in range(dim + 2, dim):
+        for j in range(dim):
+            assert (la.norm(flux_resid[i, j].get())) == 0.0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux_components(ctx_factory, dim):
+def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
 
     Checks that the Euler-internal inviscid flux
-    routine (_inviscid_flux) returns exactly the
+    routine :func:`mirgecom.euler.inviscid_flux` returns exactly the
     expected result with a constant pressure and
     no flow.
     Expected inviscid flux is:
@@ -158,8 +142,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
     are non-zero and return the correctly calculated p.
     """
 
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
+    queue = actx_factory().queue
 
     eos = IdealSingleGas()
 
@@ -167,7 +150,7 @@ def test_inviscid_flux_components(ctx_factory, dim):
         def __init__(self, dim=1):
             self.dim = dim
 
-    from mirgecom.euler import _inviscid_flux
+    from mirgecom.euler import inviscid_flux
 
     p0 = 1.0
 
@@ -202,16 +185,17 @@ def test_inviscid_flux_components(ctx_factory, dim):
             for j in range(dim):
                 mom[j][i] = 0.0 * mass[i]
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
-        q = flat_obj_array(mass, energy, mom)
-        p = eos.get_pressure(q)
-        flux = _inviscid_flux(fake_dis, eos, q)
+        q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+        cv = split_conserved(dim, q)
+        p = eos.pressure(cv)
+        flux = inviscid_flux(fake_dis, eos, q)
 
         logger.info(f"{dim}d flux = {flux}")
 
         # for velocity zero, these components should be == zero
-        for i in range(2 * dim):
-            for j in range(ntestnodes):
-                assert flux[i][j].get() == 0.0
+        for i in range(2):
+            for j in range(dim):
+                assert (flux[i, j].get() == 0.0).all()
 
         # The momentum diagonal should be p
         # Off-diagonal should be identically 0
@@ -219,21 +203,10 @@ def test_inviscid_flux_components(ctx_factory, dim):
             for j in range(dim):
                 print(f"(i,j) = ({i},{j})")
                 if i != j:
-                    for n in range(ntestnodes):
-                        assert (
-                            flux[(2 + i) * dim + j][n].get() == 0.0
-                        )
+                    assert (flux[2 + i, j].get() == 0.0).all()
                 else:
-                    for n in range(ntestnodes):
-                        assert (
-                            flux[(2 + i) * dim + j][n].get() == p[n]
-                        )
-                        assert (
-                            np.abs(
-                                flux[(2 + i) * dim + j][n].get()
-                                - p0
-                            ) < tolerance
-                        )
+                    assert (flux[2 + i, j] == p).get().all()
+                    assert (np.abs(flux[2 + i, j] - p0) < tolerance).all()
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -244,14 +217,13 @@ def test_inviscid_flux_components(ctx_factory, dim):
     (3, 1),
     (3, 2),
     ])
-def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
+def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     r"""Constant pressure, V != 0:
     Checks that the flux terms are returned in the proper
     order by running only 1 non-zero velocity component at-a-time.
     """
 
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
+    queue = actx_factory().queue
 
     eos = IdealSingleGas()
 
@@ -261,7 +233,7 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
 
     p0 = 1.0
 
-    from mirgecom.euler import _inviscid_flux
+    from mirgecom.euler import inviscid_flux
 
     tolerance = 1e-15
     for livedim in range(dim):
@@ -292,12 +264,14 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
                     mom[j][i] = 0.0 * mass[i]
                     mom[livedim][i] = mass[i]
             energy = (
-                p / (eos.get_gamma() - 1.0)
+                p / (eos.gamma() - 1.0)
                 + 0.5 * np.dot(mom, mom) / mass
             )
-            q = flat_obj_array(mass, energy, mom)
-            p = eos.get_pressure(q)
-            flux = _inviscid_flux(fake_dis, eos, q)
+            q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+            cv = split_conserved(dim, q)
+            p = eos.pressure(cv)
+
+            flux = inviscid_flux(fake_dis, eos, q)
 
             logger.info(f"{dim}d flux = {flux}")
 
@@ -305,30 +279,22 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
             expected_flux = mom
             logger.info("Testing continuity")
             for i in range(dim):
-                assert (
-                    la.norm((flux[i] - expected_flux[i]).get())
-                    == 0.0
-                )
+                assert la.norm((flux[0, i] - expected_flux[i]).get()) == 0.0
                 if i != livedim:
-                    assert la.norm(flux[i].get()) == 0.0
+                    assert la.norm(flux[0, i].get()) == 0.0
                 else:
-                    assert la.norm(flux[i].get()) > 0.0
+                    assert la.norm(flux[0, i].get()) > 0.0
 
             logger.info("Testing energy")
             expected_flux = mom * make_obj_array(
                 [(energy + p) / mass]
             )
             for i in range(dim):
-                assert (
-                    la.norm(
-                        (flux[dim + i] - expected_flux[i]).get()
-                    )
-                    == 0.0
-                )
+                assert la.norm((flux[1, i] - expected_flux[i]).get()) == 0.0
                 if i != livedim:
-                    assert la.norm(flux[dim + i].get()) == 0.0
+                    assert la.norm(flux[1, i].get()) == 0.0
                 else:
-                    assert la.norm(flux[dim + i].get()) > 0.0
+                    assert la.norm(flux[1, i].get()) > 0.0
 
             logger.info("Testing momentum")
             xpmomflux = make_obj_array(
@@ -341,43 +307,26 @@ def test_inviscid_mom_flux_components(ctx_factory, dim, livedim):
 
             for i in range(dim):
                 expected_flux = xpmomflux[i * dim: (i + 1) * dim]
-                fluxindex = (2 + i) * dim
                 for j in range(dim):
-                    assert (
-                        la.norm(
-                            (
-                                flux[fluxindex + j]
-                                - expected_flux[j]
-                            ).get()
-                        )
-                        == 0
-                    )
+                    assert la.norm((flux[2+i, j] - expected_flux[j]).get()) == 0
                     if i == j:
                         if i == livedim:
                             assert (
-                                la.norm(flux[fluxindex + j].get())
+                                la.norm(flux[2+i, j].get())
                                 > 0.0
                             )
                         else:
                             # just for sanity - make sure the flux recovered the
                             # prescribed value of p0 (within fp tol)
                             for k in range(ntestnodes):
-                                assert (
-                                    np.abs(
-                                        flux[fluxindex + j][k] - p0
-                                    )
-                                    < tolerance
-                                )
+                                assert np.abs(flux[2+i, j][k] - p0) < tolerance
                     else:
-                        assert (
-                            la.norm(flux[fluxindex + j].get())
-                            == 0.0
-                        )
+                        assert la.norm(flux[2+i, j].get()) == 0.0
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_facial_flux(ctx_factory, order, dim):
+def test_facial_flux(actx_factory, order, dim):
     """Check the flux across element faces by
     prescribing states (q) with known fluxes. Only
     uniform states are tested currently - ensuring
@@ -388,9 +337,7 @@ def test_facial_flux(ctx_factory, order, dim):
     has been interpolated to-and-from the element
     faces, this test is grid-dependent.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     tolerance = 1e-14
     p0 = 1.0
@@ -416,9 +363,8 @@ def test_facial_flux(ctx_factory, order, dim):
             [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-        fields = flat_obj_array(
-            mass_input, energy_input, mom_input
-        )
+        fields = join_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -453,8 +399,8 @@ def test_facial_flux(ctx_factory, order, dim):
         dir_e = discr.interp("vol", BTAG_ALL, energy_input)
         dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
 
-        dir_bval = flat_obj_array(dir_mass, dir_e, dir_mom)
-        dir_bc = flat_obj_array(dir_mass, dir_e, dir_mom)
+        dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom)
+        dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
@@ -487,24 +433,22 @@ def test_facial_flux(ctx_factory, order, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_uniform_rhs(ctx_factory, dim, order):
+def test_uniform_rhs(actx_factory, dim, order):
     """Tests the inviscid rhs using a trivial
     constant/uniform state which should
     yield rhs = 0 to FP.  The test is performed
     for 1, 2, and 3 dimensions.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     tolerance = 1e-9
     maxxerr = 0.0
 
-    #            from pytools.convergence import EOCRecorder
-    #            eoc_rec0 = EOCRecorder()
-    #            eoc_rec1 = EOCRecorder()
-    #            for nel_1d in [4, 8, 12]:
-    for nel_1d in [8]:
+    from pytools.convergence import EOCRecorder
+    eoc_rec0 = EOCRecorder()
+    eoc_rec1 = EOCRecorder()
+    # for nel_1d in [4, 8, 12]:
+    for nel_1d in [4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
@@ -522,12 +466,11 @@ def test_uniform_rhs(ctx_factory, dim, order):
         mom_input = make_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
-        fields = flat_obj_array(
-            mass_input, energy_input, mom_input
-        )
+        fields = join_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input)
 
         expected_rhs = make_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim + 2)]
+            [discr.zeros(actx) for i in range(len(fields))]
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -558,7 +501,7 @@ def test_uniform_rhs(ctx_factory, dim, order):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
 
             err_max = discr.norm(rhs_resid[i], np.inf)
-            #                eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
+            eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
@@ -583,37 +526,36 @@ def test_uniform_rhs(ctx_factory, dim, order):
         for i in range(dim):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
             err_max = discr.norm(rhs_resid[i], np.inf)
-            #                eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
+            eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
 
-    #            message = (
-    #                f"{iotag}V == 0 Errors:\n{eoc_rec0}"
-    #                f"{iotag}V != 0 Errors:\n{eoc_rec1}"
-    #            )
-    #            print(message)
-    #            assert (
-    #                eoc_rec0.order_estimate() >= order - 0.5
-    #                or eoc_rec0.max_error() < 1e-9
-    #            )
-    #            assert (
-    #                eoc_rec1.order_estimate() >= order - 0.5
-    #                or eoc_rec1.max_error() < 1e-9
-    #            )
+    message = (
+        f"V == 0 Errors:\n{eoc_rec0}"
+        f"V != 0 Errors:\n{eoc_rec1}"
+    )
+    print(message)
+
+    assert (
+        eoc_rec0.order_estimate() >= order - 0.5
+        or eoc_rec0.max_error() < 1e-9
+    )
+    assert (
+        eoc_rec1.order_estimate() >= order - 0.5
+        or eoc_rec1.max_error() < 1e-9
+    )
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_vortex_rhs(ctx_factory, order):
+def test_vortex_rhs(actx_factory, order):
     """Tests the inviscid rhs using the non-trivial
     2D isentropic vortex case configured to yield
     rhs = 0. Checks several different orders
     and refinement levels to check error
     behavior.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 2
 
@@ -661,15 +603,13 @@ def test_vortex_rhs(ctx_factory, order):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lump_rhs(ctx_factory, dim, order):
+def test_lump_rhs(actx_factory, dim, order):
     """Tests the inviscid rhs using the non-trivial
     1, 2, and 3D mass lump case against the analytic
     expressions of the RHS. Checks several different
     orders and refinement levels to check error behavior.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     tolerance = 1e-10
     maxxerr = 0.0
@@ -767,7 +707,8 @@ def _euler_flow_stepper(actx, parameters):
     vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
     def write_soln(write_status=True):
-        dv = eos(fields)
+        cv = split_conserved(dim, fields)
+        dv = eos.dependent_vars(cv)
         expected_result = initializer(t, nodes)
         result_resid = fields - expected_result
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
@@ -784,7 +725,7 @@ def _euler_flow_stepper(actx, parameters):
             )
             logger.info(statusmsg)
 
-        io_fields = split_fields(dim, fields)
+        io_fields = ["cv", split_conserved(dim, fields)]
         io_fields += eos.split_fields(dim, dv)
         io_fields.append(("exact_soln", expected_result))
         io_fields.append(("residual", result_resid))
@@ -829,7 +770,7 @@ def _euler_flow_stepper(actx, parameters):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_isentropic_vortex(ctx_factory, order):
+def test_isentropic_vortex(actx_factory, order):
     """Advance the 2D isentropic vortex case in
     time with non-zero velocities using an RK4
     timestepping scheme. Check the advanced field
@@ -839,9 +780,7 @@ def test_isentropic_vortex(ctx_factory, order):
     together, with results converging at the expected
     rates vs. the order.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 2
 

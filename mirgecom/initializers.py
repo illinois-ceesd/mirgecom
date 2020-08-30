@@ -31,11 +31,22 @@ from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 
 
+__doc__ = """
+Initial Conditions
+^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: Vortex2D
+.. autoclass:: SodShock1D
+.. autoclass:: Lump
+.. autoclass:: Uniform
+"""
+
+
 class Vortex2D:
     r"""Implement the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
           (https://doi.org/10.1016/S0021-9991(03)00206-7)
-        - JSH/TW Nodal DG Methods, p. 209
+        - JSH/TW Nodal DG Methods, Section 6.6
           DOI: 10.1007/978-0-387-72067-8
 
     The isentropic vortex is defined by:
@@ -53,6 +64,9 @@ class Vortex2D:
     the isentropic vortex solution at a given time (t)
     relative to the configured origin (center) and
     background flow velocity (velocity).
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(
@@ -64,10 +78,10 @@ class Vortex2D:
         ----------
         beta : float
             vortex amplitude
-        center : 2-dimensional float array
-            center of vortex
-        velocity : 2-dimensional float array
-            fixed flow velocity used for exact solution at t != 0
+        center : numpy.ndarray
+            center of vortex, shape ``(2,)``
+        velocity : numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0, shape ``(2,)``
         """
 
         self._beta = beta
@@ -81,7 +95,7 @@ class Vortex2D:
         x_rel = x_vec[0] - vortex_loc[0]
         y_rel = x_vec[1] - vortex_loc[1]
         actx = x_vec[0].array_context
-        gamma = eos.get_gamma()
+        gamma = eos.gamma()
         r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
         expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
@@ -109,10 +123,12 @@ class SodShock1D:
          {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
          {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
 
-    A call to this object after creation/init creates
-    Sod's shock solution at a given time (t)
-    relative to the configured origin (center) and
-    background flow velocity (velocity).
+    A call to this object after creation/init creates Sod's shock solution at a
+    given time (t) relative to the configured origin (center) and background
+    flow velocity (velocity).
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(
@@ -122,7 +138,7 @@ class SodShock1D:
 
         Parameters
         ----------
-        dim: integer
+        dim: int
            dimension of domain
         x0: float
            location of shock
@@ -147,7 +163,7 @@ class SodShock1D:
             self._xdir = self._dim - 1
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        gm1 = eos.get_gamma() - 1.0
+        gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
         actx = x_rel.array_context
@@ -199,6 +215,10 @@ class Lump:
     This object also supplies the exact expected RHS
     terms from the analytic expression in the
     "expected_rhs" method.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: exact_rhs
     """
 
     def __init__(
@@ -209,7 +229,7 @@ class Lump:
 
         Parameters
         ----------
-        numdim : integer
+        numdim : int
             specify the number of dimensions for the lump
         rho0 : float
             specifies the value of :math:`\rho_0`
@@ -217,10 +237,11 @@ class Lump:
             specifies the value of :math:`\rho_a`
         p0 : float
             specifies the value of :math:`p_0`
-        center : 2-dimensional float array
-            center of lump
-        velocity : 2-dimensional float array
-            fixed flow velocity used for exact solution at t != 0
+        center : numpy.ndarray
+            center of lump, shape ``(2,)``
+        velocity : numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(2,)``
         """
 
         if len(center) == numdim:
@@ -261,7 +282,7 @@ class Lump:
         actx = x_vec[0].array_context
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
-        gamma = eos.get_gamma()
+        gamma = eos.gamma()
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
         mom = self._velocity * make_obj_array([mass])
@@ -301,6 +322,10 @@ class Uniform:
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: exact_rhs
     """
 
     def __init__(
@@ -310,7 +335,7 @@ class Uniform:
 
         Parameters
         ----------
-        numdim : integer
+        numdim : int
             specify the number of dimensions for the lump
         rho : float
             specifies the density
@@ -318,7 +343,7 @@ class Uniform:
             specifies the pressure
         e : float
             specifies the internal energy
-        velocity : float array
+        velocity : numpy.ndarray
             specifies the flow velocity
         """
 
@@ -338,7 +363,7 @@ class Uniform:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        gamma = eos.get_gamma()
+        gamma = eos.gamma()
         mass = x_vec[0].copy()
         mom = self._velocity * make_obj_array([mass])
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)

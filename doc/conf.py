@@ -84,8 +84,11 @@ intersphinx_mapping = {
     'https://documen.tician.de/grudge/': None,
     'https://documen.tician.de/pytato/': None,
     'http://documen.tician.de/loopy/': None,
-    'http://documen.tician.de/pytato': None,
+    'http://documen.tician.de/pymbolic': None,
     }
-autoclass_content = "both"
+
+autoclass_content = "class"
 
 todo_include_todos = True
+
+nitpicky = True

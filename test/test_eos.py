@@ -55,8 +55,6 @@ def test_idealsingle_lump(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    # logger = logging.getLogger(__name__)
-
     dim = 2
     nel_1d = 4
 
@@ -81,7 +79,8 @@ def test_idealsingle_lump(ctx_factory):
     eos = IdealSingleGas()
     lump_soln = lump(0, nodes)
 
-    p = eos.get_pressure(lump_soln)
+    cv = split_conserved(dim, lump_soln)
+    p = eos.pressure(cv)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
 
@@ -101,8 +100,6 @@ def test_idealsingle_vortex(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    # logger = logging.getLogger(__name__)
-
     dim = 2
     nel_1d = 4
 
@@ -121,10 +118,10 @@ def test_idealsingle_vortex(ctx_factory):
     # Init soln with Vortex
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
-    rho = split_conserved(dim, vortex_soln).mass
-    gamma = eos.get_gamma()
-    p = eos.get_pressure(vortex_soln)
-    exp_p = rho ** gamma
+    cv = split_conserved(dim, vortex_soln)
+    gamma = eos.gamma()
+    p = eos.pressure(cv)
+    exp_p = cv.mass ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"vortex_soln = {vortex_soln}")

@@ -23,6 +23,11 @@ THE SOFTWARE.
 """
 
 
+__doc__ = """
+.. autofunction:: advance_state
+"""
+
+
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0):
     """
@@ -30,32 +35,36 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
     Parameters
     ----------
-    rhs: function
+    rhs
         Function that should return the time derivative of the state
-    timestepper: function
+    timestepper
         Function that advances the state from t=time to t=(time+dt), and
         returns the advanced state.
-    checkpoint: function
+    checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
         indicates that this function should stop gracefully.
-    get_timestep: function
+    get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
         the stepper should stop gracefully.
-    state: obj array
+    state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
     t_final: float
         Simulated time at which to stop
     t: float
         Time at which to start
-    istep: integer
+    istep: int
         Step number from which to start
 
     Returns
     -------
-    istep, t, state: the current step number, time, and state, respectively
+    istep: int
+        the current step number
+    t: float
+        the current time
+    state: numpy.ndarray
     """
     if t_final <= t:
         return istep, t, state
@@ -66,9 +75,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         if dt < 0:
             return istep, t, state
 
-        status = checkpoint(state=state, step=istep, t=t, dt=dt)
-        if status != 0:
-            return istep, t, state
+        checkpoint(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 

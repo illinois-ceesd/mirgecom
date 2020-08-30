@@ -25,6 +25,7 @@ import logging
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
+from mpi4py import MPI
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -36,7 +37,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    exact_sim_checkpoint,
+    ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
 
@@ -47,14 +49,14 @@ from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
 
-def main(ctx_factory=cl.create_some_context):
+logger = logging.getLogger(__name__)
 
+
+def main(ctx_factory=cl.create_some_context):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
-    logger = logging.getLogger(__name__)
 
     dim = 1
     nel_1d = 24
@@ -76,14 +78,42 @@ def main(ctx_factory=cl.create_some_context):
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
+    box_ll = -5.0
+    box_ur = 5.0
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
+    comm = MPI.COMM_WORLD
+    nproc = comm.Get_size()
+    rank = comm.Get_rank()
+    num_parts = nproc
 
-    mesh = generate_regular_rect_mesh(
-        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+    from meshmode.distributed import (
+        MPIMeshDistributor,
+        get_partition_by_pymetis,
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    mesh_dist = MPIMeshDistributor(comm)
+    global_nelements = 0
+    local_nelements = 0
+    if mesh_dist.is_mananger_rank():
+
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
+        )
+        global_nelements = mesh.nelements
+        logging.info(f"Total {dim}d elements: {global_nelements}")
+
+        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+        del mesh
+
+    else:
+        local_mesh = mesh_dist.receive_mesh_part()
+    local_nelements = local_mesh.nelements
+
+    discr = EagerDGDiscretization(
+        actx, local_mesh, order=order, mpi_communicator=comm
+    )
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
@@ -91,7 +121,9 @@ def main(ctx_factory=cl.create_some_context):
                                  if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order, nelements=mesh.nelements,
+    init_message = make_init_message(dim=dim, order=order,
+                                     nelements=local_nelements,
+                                     global_nelements=global_nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
@@ -108,15 +140,21 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
+        return exact_sim_checkpoint(discr, initializer, visualizer, eos,
                             q=state, vizname=casename, step=step, t=t, dt=dt,
                             nstatus=nstatus, nviz=nviz, exittol=exittol,
-                            constant_cfl=constant_cfl)
+                            constant_cfl=constant_cfl, comm=comm)
 
-    (current_step, current_t, current_state) = \
-        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=get_timestep, state=current_state,
-                    t=current_t, t_final=t_final)
+    try:
+        (current_step, current_t, current_state) = \
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          checkpoint=my_checkpoint,
+                          get_timestep=get_timestep, state=current_state,
+                          t=current_t, t_final=t_final)
+    except ExactSolutionMismatch as ex:
+        current_step = ex.step
+        current_t = ex.t
+        current_state = ex.state
 
     #    if current_t != checkpoint_t:
     if rank == 0:

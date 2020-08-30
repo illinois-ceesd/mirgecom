@@ -22,32 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import os
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from mirgecom.euler import split_fields
-from mirgecom.checkstate import get_field_stats
 
-
-def make_io_fields(dim, state, dependent_vars, eos):
-    r"""Create io field dictionary for VTK I/O interface.
-
-    Parameters
-    ----------
-    dim
-        Dimensionality of solution
-    state
-        Solution state
-    dependent_vars
-        EOS-specific dependent quantities
-        (e.g. pressure, temperature, for ideal monatomic gas)
-    eos
-        Equation of state utility for resolving the dependent
-        fields.
-    """
-    io_fields = split_fields(dim, state)
-    io_fields += eos.split_fields(dim, dependent_vars)
-    return io_fields
+__doc__ = """
+.. autofunction:: make_status_message
+.. autofunction:: make_rank_fname
+.. autofunction:: make_par_fname
+"""
 
 
 def make_init_message(*, dim, order, dt, t_final,
@@ -68,23 +50,21 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, t, step, dt, cfl, dependent_vars):
+def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
     r"""Make simulation status and health message
     """
-    dvxt = get_field_stats(dependent_vars)
+
+    dv = dependent_vars
+    from functools import partial
+    _min = partial(discr.nodal_min, "vol")
+    _max = partial(discr.nodal_max, "vol")
     statusmsg = (
-        f"Status: Step({step}) Time({t})\n"
-        f"------   P({dvxt[0]},{dvxt[2]})\n"
-        f"------   T({dvxt[1]},{dvxt[3]})\n"
-        f"------   dt,cfl = ({dt},{cfl})"
+        f"Status: {step=} {t=}\n"
+        f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"
+        f"------- T({_min(dv.temperature):.3g}, {_max(dv.temperature):.3g})\n"
+        f"------- {dt=} {cfl=}"
     )
     return statusmsg
-
-
-def make_serial_fname(basename, step=0, t=0):
-    r"""Make serial visualization file name
-    """
-    return f"{basename}-{step:06d}.vtu"
 
 
 def make_rank_fname(basename, rank=0, step=0, t=0):
@@ -95,23 +75,3 @@ def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename
     """
     return f"{basename}-{step:06d}.pvtu"
-
-
-def make_output_dump(visualizer, basename, io_fields,
-                     comm=None, step=0, t=0, overwrite=True):
-    r"""Make VTK output dump for visualization
-    """
-    rank = 0
-    nproc = 1
-    if comm is not None:
-        rank = comm.Get_rank()
-        nproc = comm.Get_size()
-    if nproc > 1:
-        rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
-        par_fn = make_par_fname(basename=basename, step=step, t=t)
-        visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields, overwrite=True)
-        if rank == 0:
-            os.rename(rank_fn.format(rank=rank).replace("vtu", "pvtu"), par_fn)
-    else:
-        fname = make_serial_fname(basename=basename, step=step, t=t)
-        visualizer.write_vtk_file(fname, io_fields, overwrite=True)

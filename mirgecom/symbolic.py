@@ -69,7 +69,10 @@ def grad(dim, func):
 
 
 class EvaluationMapper(ev.EvaluationMapper):
-    """Evaluates symbolic expressions given a mapping from variables to values"""
+    """Evaluates symbolic expressions given a mapping from variables to values.
+
+    Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
+    """
 
     def map_call(self, expr):
         assert isinstance(expr.function, prim.Variable)

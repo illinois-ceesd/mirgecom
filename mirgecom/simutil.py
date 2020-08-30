@@ -21,28 +21,36 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import logging
 
 import numpy as np
 from meshmode.dof_array import thaw
-from mirgecom.io import (
-    make_io_fields,
-    make_status_message,
-    make_output_dump,
-)
-from mirgecom.checkstate import compare_states
+from mirgecom.io import make_status_message
 from mirgecom.euler import (
     get_inviscid_timestep,
 )
 
-r"""
+logger = logging.getLogger(__name__)
+
+
+__doc__ = r"""
 This module provides some convenient utilities for
 building simulation applications.
+
+.. autofunction:: check_step
+.. autofunction:: inviscid_sim_timestep
+.. autoexception:: ExactSolutionMismatch
+.. autofunction:: exact_sim_checkpoint
 """
 
 
 def check_step(step, interval):
     """
-    Check step number against a user-specified interval.
+    Check step number against a user-specified interval,
+    typically for visualization.
+
+    - Negative numbers mean 'never visualize'.
+    - Zero means 'always visualize'.
 
     Useful for checking whether the current step is an output step,
     or anyting else that occurs on fixed intervals.
@@ -70,14 +78,26 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
-def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
+class ExactSolutionMismatch(Exception):
+    """
+    .. attribute:: step
+    .. attribute:: t
+    .. attribute:: state
+    """
+    def __init__(self, step, t, state):
+        self.step = step
+        self.t = t
+        self.state = state
+
+
+def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
                          vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
-                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None):
+                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None,
+                         overwrite=False):
     r"""
     Check simulation health, status, viz dumps, and restart
-
-    TODO: Add restart
     """
+    # TODO: Add restart
 
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
@@ -90,34 +110,40 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, logger, q,
 
     if comm is not None:
         rank = comm.Get_rank()
-    checkpoint_status = 0
 
-    dependent_vars = eos(q=q)
+    from mirgecom.euler import split_conserved
+    cv = split_conserved(discr.dim, q)
+    dependent_vars = eos.dependent_vars(cv)
     expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+
+    if do_viz:
+        from mirgecom.euler import split_conserved
+        io_fields = [
+            ("cv", split_conserved(discr.dim, q)),
+            ("dv", dependent_vars),
+            ("exact_soln", expected_state),
+            ("residual", q - expected_state)
+        ]
+        from mirgecom.io import make_rank_fname, make_par_fname
+        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields, overwrite=overwrite,
+            par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
 
     if do_status is True:
         #        if constant_cfl is False:
         #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
         #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(t=t, step=step, dt=dt,
+        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
                                          cfl=cfl, dependent_vars=dependent_vars)
-        max_errors = compare_states(red_state=q, blue_state=expected_state)
-        statusmesg += f"\n------   Err({max_errors})"
+        err = q-expected_state
+        err_norms = [discr.norm(v, np.inf) for v in err]
+        statusmesg += (
+            "\n------- errors="
+            + ", ".join("%.3g" % en for en in err_norms))
         if rank == 0:
             logger.info(statusmesg)
 
-        maxerr = np.max(max_errors)
+        maxerr = max(err_norms)
         if maxerr > exittol:
-            logger.error("Solution failed to follow expected result.")
-            checkpoint_status = 1
-
-        if do_viz:
-            dim = discr.dim
-            io_fields = make_io_fields(dim, q, dependent_vars, eos)
-            io_fields.append(("exact_soln", expected_state))
-            result_resid = q - expected_state
-            io_fields.append(("residual", result_resid))
-            make_output_dump(visualizer, basename=vizname, io_fields=io_fields,
-                             comm=comm, step=step, t=t, overwrite=True)
-
-        return checkpoint_status
+            raise ExactSolutionMismatch(step, t=t, state=q)
