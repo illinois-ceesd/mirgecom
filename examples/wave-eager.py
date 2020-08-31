@@ -32,7 +32,6 @@ from mirgecom.integrators import rk4_step
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 import pyopencl.tools as cl_tools
-from tqdm import tqdm
 
 
 def bump(actx, discr, t=0):
