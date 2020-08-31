@@ -48,7 +48,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     .. automethod:: finish_profile_events
     .. automethod:: print_profiling_data
     .. automethod:: call_loopy
-    """
+    
+    Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`."""
 
     def __init__(self, queue, allocator=None) -> None:
         super().__init__(queue, allocator)
