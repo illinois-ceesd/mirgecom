@@ -1,4 +1,4 @@
-__copyright__ = "Copyright (C) 2020 CEESD Developers"
+__copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -69,6 +69,7 @@ def main(use_profiling=False):
     dim = 2
     nel_1d = 16
     from meshmode.mesh.generation import generate_regular_rect_mesh
+
     mesh = generate_regular_rect_mesh(
         a=(-0.5,)*dim,
         b=(0.5,)*dim,
@@ -78,10 +79,10 @@ def main(use_profiling=False):
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
-        dt = 0.75/(nel_1d*order**2)
+        dt = 0.75 / (nel_1d * order ** 2)
     elif dim == 3:
         # no deep meaning here, just a fudge factor
-        dt = 0.45/(nel_1d*order**2)
+        dt = 0.45 / (nel_1d * order ** 2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
@@ -94,7 +95,7 @@ def main(use_profiling=False):
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-    vis = make_visualizer(discr, discr.order+3 if dim == 2 else discr.order)
+    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)

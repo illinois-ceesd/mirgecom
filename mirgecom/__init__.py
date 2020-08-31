@@ -1,4 +1,6 @@
-__copyright__ = "Copyright (C) 2020 CEESD Developers"
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
