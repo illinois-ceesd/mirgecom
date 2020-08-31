@@ -66,7 +66,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     def finish_profile_events(self) -> None:
         # First, wait for event completion
         if self.profile_events:
-            cl.wait_for_events([t.cl_event for t in self.profile_events])
+            cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
 
         for t in self.profile_events:
             program = t.program
