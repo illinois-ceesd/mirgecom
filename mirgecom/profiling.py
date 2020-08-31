@@ -55,7 +55,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         super().__init__(queue, allocator)
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
-            raise RuntimeError("Profiling was not enabled in the command queue."
+            raise RuntimeError("Profiling was not enabled in the command queue. "
                  "Please create the queue with "
                  "cl.command_queue_properties.PROFILING_ENABLE.")
 
