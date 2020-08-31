@@ -24,7 +24,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-from pytools.obj_array import join_fields
+from pytools.obj_array import flat_obj_array
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
@@ -32,6 +32,7 @@ from mirgecom.integrators import rk4_step
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 import pyopencl.tools as cl_tools
+from tqdm import tqdm
 
 
 def bump(actx, discr, t=0):
@@ -40,7 +41,7 @@ def bump(actx, discr, t=0):
     source_omega = 3
 
     nodes = thaw(actx, discr.nodes())
-    center_dist = join_fields([
+    center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
         ])
@@ -82,12 +83,12 @@ def main():
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    fields = join_fields(
+    fields = flat_obj_array(
         bump(actx, discr),
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
+    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
