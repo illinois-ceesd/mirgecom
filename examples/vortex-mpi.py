@@ -39,7 +39,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    create_parallel_box_grid,
+    create_parallel_grid,
     ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
@@ -89,8 +89,10 @@ def main(ctx_factory=cl.create_some_context):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
-    local_mesh, global_nelements = create_parallel_box_grid(comm, dim, box_ll,
-                                                            box_ur, nel_1d)
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    grid_generator = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
+    local_mesh, global_nelements = create_parallel_grid(comm, grid_generator)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(

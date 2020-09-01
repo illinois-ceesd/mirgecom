@@ -41,7 +41,7 @@ building simulation applications.
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
 .. autofunction:: sim_checkpoint
-.. autofunction:: create_parallel_box_grid
+.. autofunction:: create_parallel_grid
 """
 
 
@@ -171,7 +171,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         raise ExactSolutionMismatch(step, t=t, state=q)
 
 
-def create_parallel_box_grid(comm, dim=2, box_ll=-0.5, box_ur=0.5, npoints_side=2):
+def create_parallel_grid(comm, grid_generator):
 
     from meshmode.distributed import (
         MPIMeshDistributor,
@@ -182,11 +182,9 @@ def create_parallel_box_grid(comm, dim=2, box_ll=-0.5, box_ur=0.5, npoints_side=
     global_nelements = 0
 
     if mesh_dist.is_mananger_rank():
-        from meshmode.mesh.generation import generate_regular_rect_mesh
 
-        mesh = generate_regular_rect_mesh(
-            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(npoints_side,) * dim
-        )
+        mesh = grid_generator()
+
         global_nelements = mesh.nelements
 
         part_per_element = get_partition_by_pymetis(mesh, num_parts)
