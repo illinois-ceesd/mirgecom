@@ -40,7 +40,8 @@ building simulation applications.
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
-.. autofunction:: exact_sim_checkpoint
+.. autofunction:: sim_checkpoint
+.. autofunction:: create_parallel_box_grid
 """
 
 
