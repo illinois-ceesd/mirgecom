@@ -24,7 +24,6 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-from mpi4py import mpi_communicator # noqa
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.euler import (
@@ -165,7 +164,8 @@ def create_parallel_grid(comm, generate_grid):
 
     Parameters
     ----------
-    comm: :class:mpi_communicator
+    comm:
+        MPI communicator over which to partition the grid
 
     generate_grid:
         Grid generation function should return a :class:meshmode.mesh
