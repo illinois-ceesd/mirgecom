@@ -24,6 +24,7 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
+from mpi4py import mpi_communicator # noqa
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.euler import (
