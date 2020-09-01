@@ -90,10 +90,9 @@ class ExactSolutionMismatch(Exception):
         self.state = state
 
 
-def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
-                         vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
-                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None,
-                         overwrite=False):
+def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
+                   constant_cfl=False, comm=None, overwrite=False, profiler=None):
     r"""
     Check simulation health, status, viz dumps, and restart
     """
@@ -104,31 +103,51 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
     if do_viz is False and do_status is False:
         return 0
 
-    actx = q[0].array_context
-    nodes = thaw(actx, discr.nodes())
-    rank = 0
-
-    if comm is not None:
-        rank = comm.Get_rank()
+    if profiler is not None:
+        profiler.StartTimer(f"checkpoint_{step}")
 
     from mirgecom.euler import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
-    expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
+
+    maxerr = 0.0
+    if exact_soln is not None:
+        if profiler is not None:
+            profiler.StartTimer(f"checkpoint_soln_{step}")
+        actx = cv.mass.array_context
+        nodes = thaw(actx, discr.nodes())
+        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+        exp_resid = q - expected_state
+        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
+        maxerr = max(err_norms)
+        if profiler is not None:
+            profiler.EndTimer(f"checkpoint_soln_{step}")
 
     if do_viz:
-        from mirgecom.euler import split_conserved
+        if profiler is not None:
+            profiler.StartTimer(f"checkpoint_viz_{step}")
         io_fields = [
-            ("cv", split_conserved(discr.dim, q)),
-            ("dv", dependent_vars),
-            ("exact_soln", expected_state),
-            ("residual", q - expected_state)
+            ("cv", cv),
+            ("dv", dependent_vars)
         ]
+        if exact_soln is not None:
+            exact_list = [
+                ("exact_soln", expected_state),
+                ("residual", exp_resid)
+            ]
+            io_fields.extend(exact_list)
+
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
         visualizer.write_parallel_vtk_file(
             comm, rank_fn, io_fields, overwrite=overwrite,
             par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
+        if profiler is not None:
+            profiler.EndTimer(f"checkpoint_viz_{step}")
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -136,14 +155,44 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
         #                                           eos=eos, dt=dt)
         statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
                                          cfl=cfl, dependent_vars=dependent_vars)
-        err = q-expected_state
-        err_norms = [discr.norm(v, np.inf) for v in err]
-        statusmesg += (
-            "\n------- errors="
-            + ", ".join("%.3g" % en for en in err_norms))
+        if exact_soln is not None:
+            statusmesg += (
+                "\n------- errors="
+                + ", ".join("%.3g" % en for en in err_norms))
+
         if rank == 0:
             logger.info(statusmesg)
 
-        maxerr = max(err_norms)
-        if maxerr > exittol:
-            raise ExactSolutionMismatch(step, t=t, state=q)
+    if profiler is not None:
+        profiler.EndTimer(f"checkpoint_{step}")
+
+    if maxerr > exittol:
+        raise ExactSolutionMismatch(step, t=t, state=q)
+
+
+def create_parallel_box_grid(comm, dim=2, box_ll=-0.5, box_ur=0.5, npoints_side=2):
+
+    from meshmode.distributed import (
+        MPIMeshDistributor,
+        get_partition_by_pymetis,
+    )
+    num_parts = comm.Get_size()
+    mesh_dist = MPIMeshDistributor(comm)
+    global_nelements = 0
+
+    if mesh_dist.is_mananger_rank():
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+
+        mesh = generate_regular_rect_mesh(
+            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(npoints_side,) * dim
+        )
+        global_nelements = mesh.nelements
+
+        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+        del mesh
+
+    else:
+        local_mesh = mesh_dist.receive_mesh_part()
+
+    return local_mesh, global_nelements
