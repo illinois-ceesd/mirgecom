@@ -93,7 +93,7 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, overwrite=False, profiler=None):
+                   constant_cfl=False, comm=None, overwrite=False):
     r"""
     Check simulation health, status, viz dumps, and restart
     """
@@ -103,9 +103,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     do_status = check_step(step=step, interval=nstatus)
     if do_viz is False and do_status is False:
         return 0
-
-    if profiler is not None:
-        profiler.StartTimer(f"checkpoint_{step}")
 
     from mirgecom.euler import split_conserved
     cv = split_conserved(discr.dim, q)
@@ -117,20 +114,14 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
     maxerr = 0.0
     if exact_soln is not None:
-        if profiler is not None:
-            profiler.StartTimer(f"checkpoint_soln_{step}")
         actx = cv.mass.array_context
         nodes = thaw(actx, discr.nodes())
         expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
         exp_resid = q - expected_state
         err_norms = [discr.norm(v, np.inf) for v in exp_resid]
         maxerr = max(err_norms)
-        if profiler is not None:
-            profiler.EndTimer(f"checkpoint_soln_{step}")
 
     if do_viz:
-        if profiler is not None:
-            profiler.StartTimer(f"checkpoint_viz_{step}")
         io_fields = [
             ("cv", cv),
             ("dv", dependent_vars)
@@ -138,7 +129,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         if exact_soln is not None:
             exact_list = [
                 ("exact_soln", expected_state),
-                ("residual", exp_resid)
             ]
             io_fields.extend(exact_list)
 
@@ -147,8 +137,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         visualizer.write_parallel_vtk_file(
             comm, rank_fn, io_fields, overwrite=overwrite,
             par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
-        if profiler is not None:
-            profiler.EndTimer(f"checkpoint_viz_{step}")
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -164,15 +152,31 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         if rank == 0:
             logger.info(statusmesg)
 
-    if profiler is not None:
-        profiler.EndTimer(f"checkpoint_{step}")
-
     if maxerr > exittol:
         raise ExactSolutionMismatch(step, t=t, state=q)
 
 
-def create_parallel_grid(comm, grid_generator):
+def create_parallel_grid(comm, generate_grid):
+    """
+    Create a grid using the grid generator specified by (generate_grid)
+    partition, and distribute it to every rank in the provided MPI
+    communicator (comm).
 
+    Parameters
+    ----------
+    comm: :class:mpi_communicator
+
+    generate_grid:
+        Grid generation function should return a :class:meshmode.mesh
+
+    Returns
+    -------
+    local_mesh: :class:meshmode.mesh
+        The local partition of the grid
+
+    global_nelements: int
+        The number of elements in the serial grid
+    """
     from meshmode.distributed import (
         MPIMeshDistributor,
         get_partition_by_pymetis,
@@ -183,7 +187,7 @@ def create_parallel_grid(comm, grid_generator):
 
     if mesh_dist.is_mananger_rank():
 
-        mesh = grid_generator()
+        mesh = generate_grid()
 
         global_nelements = mesh.nelements
 
