@@ -18,3 +18,22 @@ cache files in directories that are private to each rank by using the ``XDG_CACH
 environment variable, such as in the following example::
 
    $ srun -n 512 bash -c 'XDG_CACHE_HOME=/p/lscratchh/diener3/xdg-scratch$SLURM_PROCID python examples/wave-eager-mpi.py'
+
+
+Profiling kernel execution
+--------------------------
+
+You can use :class:`mirgecom.profiling.PyOpenCLProfilingArrayContext` instead of
+:class:`meshmode.array_context.PyOpenCLArrayContext` to profile kernel executions.
+In addition to using this array context, you also need to enable profiling in the underlying
+:class:`pyopencl.CommandQueue`, like this:
+
+.. code:: python
+
+   queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+
+Note that profiling has a performance impact (~20%) and should therefore not be used
+for production runs.
+
+.. automodule:: mirgecom.profiling
