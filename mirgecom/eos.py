@@ -67,6 +67,7 @@ class GasEOS:
     .. automethod:: internal_energy
     .. automethod:: gas_const
     .. automethod:: dependent_vars
+    .. automethod:: total_energy
     """
 
     def pressure(self, cv: ConservedVars):
@@ -170,3 +171,19 @@ class IdealSingleGas(GasEOS):
             (((self._gamma - 1.0) / self._gas_const)
             * self.internal_energy(cv) / cv.mass)
         )
+
+    def total_energy(self, cv, pressure):
+        r"""
+        Gas total energy from mass, pressure, momentum
+
+        The total energy density (rhoE) is calculated from
+        the mass density (rho) , pressure (p) , and
+        momentum (rhoV) as:
+
+        .. :math::
+
+            \rhoE = \frac{p}{(\gamma - 1)} +
+            \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
+        """
+        return (pressure / (self._gamma - 1.0)
+                + 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
