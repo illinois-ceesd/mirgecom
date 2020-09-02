@@ -102,10 +102,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 max(flops), min(bytes_accessed), int(mean(bytes_accessed)),
                 max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3)])
 
-        if hasattr(pytools.Table, 'github_markdown'):
-            print(tbl.github_markdown())
-        else:
-            print(tbl)
+        print(tbl)
 
     def call_loopy(self, program, **kwargs) -> dict:
         program = self.transform_loopy_program(program)
