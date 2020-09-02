@@ -124,32 +124,26 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             kernel = executor.get_typed_and_scheduled_kernel(
                 executor.arg_to_dtype_set(kwargs))
 
-            data = info.implemented_data_info
+            idi = info.implemented_data_info
 
             # Generate the wrapper code
             wrapper = executor.get_wrapper_generator()
 
             gen = PythonCodeGenerator()
 
-            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, data)
-            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, data)
-            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, data)
+            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
-            types = {}
-            param_dict = {}
+            types = {k: v for k, v in kwargs.items()
+                if hasattr(v, 'dtype') and not v.dtype == object}
 
-            for key, value in kwargs.items():
-                if hasattr(value, 'dtype') and not value.dtype == object:
-                    types[key] = value.dtype
-                param_dict[key] = value
+            param_dict = {**kwargs}
+            param_dict.update({k: None for k, value in kernel.arg_dict.items()
+                if k not in param_dict})
 
-            for key, value in kernel.arg_dict.items():
-                if key not in param_dict:
-                    param_dict[key] = None
-
-            for d in data:
-                if d.name not in param_dict:
-                    param_dict[d.name] = None
+            param_dict.update(
+                {d.name: None for d in idi if d.name not in param_dict})
 
             # Run the wrapper code, save argument values in param_dict
             exec(gen.get(), param_dict)
