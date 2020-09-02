@@ -39,7 +39,47 @@ Initial Conditions
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
 .. autoclass:: Uniform
+.. automethod: make_pulse
 """
+
+
+def make_pulse(amp, r0, w, r):
+    r"""
+    Calculates a Gaussian pulse
+
+    The Gaussian pulse is defined by:
+
+    .. math::
+
+        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
+
+    Where :math:`\vec{r}` is the nodal position, and the parameters are
+    the pulse amplitude :math:`a_0`, the pulse location :math:`\vec{r_0}`, and the
+    RMS width of the pulse, :math:`w`.
+
+    Parameters
+    ----------
+    amp : float
+        specifies the value of :math:`\a_0`, the pulse amplitude
+    r0 : float array
+        specifies the value of :math:`\r_0`, the pulse location
+    w : float
+        specifies the value of :math:`w`, the rms pulse width
+    r : Object array of DOFArrays
+        specifies the nodal coordinates
+    """
+
+    dim = len(r)
+    r_0 = np.zeros(dim)
+    r_0 = r_0 + r0
+    # coordinates relative to pulse center
+    rel_center = make_obj_array(
+        [r[i] - r_0[i] for i in range(dim)]
+    )
+    actx = r[0].array_context
+    rms2 = w * w
+    r2 = np.dot(rel_center, rel_center) / rms2
+    return amp * actx.np.exp(-.5 * r2)
 
 
 class Vortex2D:
