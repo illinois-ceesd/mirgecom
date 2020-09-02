@@ -195,15 +195,17 @@ def test_uniform(ctx_factory, dim):
     #    initr = Uniform(numdim=dim)
     #    initsoln = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
+    # TODO: Fix Uniform iniitalizer class
     from mirgecom.initializers import set_uniform_solution
-    initsoln = set_uniform_solution(t=0.0, x_vec=nodes)
+    initsoln = set_uniform_solution(x_vec=nodes)
     ssoln = split_conserved(dim, initsoln)
     assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
     assert discr.norm(ssoln.energy - 2.5, np.inf) < tol
 
     print(f"Uniform Soln:{initsoln}")
     eos = IdealSingleGas()
-    p = eos.pressure(initsoln)
+    cv = split_conserved(dim, initsoln)
+    p = eos.pressure(cv)
     print(f"Press:{p}")
 
     assert discr.norm(p - 1.0, np.inf) < tol

@@ -44,8 +44,30 @@ Initial Conditions
 """
 
 
-def set_uniform_solution(self, t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
+def set_uniform_solution(x_vec, mass=1.0, energy=2.5, pressure=1.0,
                          velocity=None, eos=IdealSingleGas()):
+    r"""
+    Set a uniform, constant solution from mass, energy, pressure, and
+    an EOS object.
+
+    Parameters
+    ----------
+    x_vec: np.ndarray
+        Nodal positions
+    mass: float
+        Value to set `:math:\rho`
+    energy: float
+        Optional value to set `:math:\rho{E}`
+    pressure: float
+        Value to use for calculating `:math:\rho{E}`
+    velocity: np.ndarray
+        Optional constant velocity to set `:math:\rho\vec{V}`
+
+    Returns
+    -------
+    q: Object array of DOFArrays
+        Agglomerated object array with the uniform flow
+    """
 
     dim = len(x_vec)
     if velocity is None:
@@ -94,6 +116,11 @@ def make_pulse(amp, r0, w, r):
         specifies the value of :math:`w`, the rms pulse width
     r : Object array of DOFArrays
         specifies the nodal coordinates
+
+    Returns
+    -------
+    G : float array
+        The values of the exponential function
     """
 
     dim = len(r)
