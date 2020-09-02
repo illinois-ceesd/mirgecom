@@ -40,7 +40,34 @@ Initial Conditions
 .. autoclass:: Lump
 .. autoclass:: Uniform
 .. automethod: make_pulse
+.. automethod: set_uniform_solution
 """
+
+
+def set_uniform_solution(self, t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
+                         velocity=None, eos=IdealSingleGas()):
+
+    dim = len(x_vec)
+    if velocity is None:
+        velocity = np.zeros(shape=(dim,))
+
+    _rho = mass
+    _p = pressure
+    _velocity = velocity
+    _gamma = eos.gamma()
+
+    mom0 = _rho * _velocity
+    e0 = _p / (_gamma - 1.0)
+    ke = 0.5 * np.dot(_velocity, _velocity) / _rho
+    x_rel = x_vec[0]
+    zeros = 0.0*x_rel
+    ones = zeros + 1.0
+
+    mass = zeros + _rho
+    mom = make_obj_array([mom0 * ones for i in range(dim)])
+    energy = e0 + ke + zeros
+
+    return flat_obj_array(mass, energy, mom)
 
 
 def make_pulse(amp, r0, w, r):
