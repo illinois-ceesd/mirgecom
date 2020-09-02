@@ -35,8 +35,17 @@ __doc__ = """
 
 
 @dataclass
+class ProfileResult:
+    """Class to hold the results of a single kernel execution."""
+    time: int
+    flops: int
+    bytes_accessed: int
+    footprint_bytes: int
+
+
+@dataclass
 class ProfileEvent:
-    """Class to hold a profile event that (potentially) has not completed yet."""
+    """Class to hold a profile event that has not been seen by the profiler yet."""
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
     args_tuple: tuple
@@ -70,11 +79,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         for t in self.profile_events:
             program = t.program
-            (flops, bytes_accessed) = self.kernel_stats[program][t.args_tuple]
-            time = t.cl_event.profile.end - t.cl_event.profile.start
+            res = self.kernel_stats[program][t.args_tuple]
+            res.time = t.cl_event.profile.end - t.cl_event.profile.start
 
-            self.profile_results.setdefault(program, []).append(
-                dict(time=time, flops=flops, bytes_accessed=bytes_accessed))
+            self.profile_results.setdefault(program, []).append(res)
 
         self.profile_events = []
 
@@ -86,21 +94,24 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         tbl = pytools.Table()
 
         tbl.add_row(['Function', 'Calls', 'T_min', 'T_avg', 'T_max',
-            'F_min', 'F_avg', 'F_max', 'M_min', 'M_avg', 'M_max', 'BW_avg'])
+            'F_min', 'F_avg', 'F_max', 'M_min', 'M_avg', 'M_max', 'BW_avg',
+            'Footprint_avg'])
 
         from statistics import mean
 
         for key, value in self.profile_results.items():
             num_values = len(value)
 
-            times = [v['time'] for v in value]
-            flops = [v['flops'] for v in value]
-            bytes_accessed = [v['bytes_accessed'] for v in value]
+            times = [v.time for v in value]
+            flops = [v.flops for v in value]
+            bytes_accessed = [v.bytes_accessed for v in value]
+            footprint_bytes = [v.footprint_bytes for v in value]
 
             tbl.add_row([key.name, num_values, min(times),
                 int(mean(times)), max(times), min(flops), int(mean(flops)),
                 max(flops), min(bytes_accessed), int(mean(bytes_accessed)),
-                max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3)])
+                max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3),
+                mean(footprint_bytes)])
 
         print(tbl)
 
@@ -157,8 +168,19 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
                 param_dict)
 
-            self.kernel_stats.setdefault(program, {})[args_tuple] = (
-                flops, bytes_accessed)
+            footprint_bytes = 0
+            try:
+                footprint = lp.gather_access_footprint_bytes(kernel)
+
+                for k, v in footprint.items():
+                    footprint_bytes += footprint[k].eval_with_dict(param_dict)
+
+            except lp.symbolic.UnableToDetermineAccessRange:
+                pass
+
+            self.kernel_stats.setdefault(program, {})[args_tuple] = ProfileResult(
+                time=0, flops=flops, bytes_accessed=bytes_accessed,
+                footprint_bytes=footprint_bytes)
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
