@@ -24,6 +24,22 @@ jobs:
             python -m pip install flake8 pep8-naming
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples && echo "Flake8 found no errors."
 
+    pydocstyle:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        -
+          uses: actions/setup-python@v1
+          with:
+            python-version: '3.x'
+        - name: Lint
+          run: |
+            python3 -m venv myenv
+            source myenv/bin/activate
+            python -m pip install wheel
+            python -m pip install pydocstyle
+            python -m pydocstyle "$(basename $GITHUB_REPOSITORY)" && echo "pydocstyle found no errors."
+
     pytest:
         name: Pytest ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
