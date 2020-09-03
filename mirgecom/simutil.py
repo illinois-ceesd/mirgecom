@@ -158,24 +158,23 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
 def create_parallel_grid(comm, generate_grid):
     """
-    Create a grid using the grid generator specified by (generate_grid)
+    Create a grid using the grid generator specified by *generate_grid*,
     partition, and distribute it to every rank in the provided MPI
-    communicator (comm).
+    communicator *comm*.
 
     Parameters
     ----------
     comm:
         MPI communicator over which to partition the grid
-
     generate_grid:
-        Grid generation function should return a :class:meshmode.mesh
+        Callable of zero arguments returning a :class:`meshmode.mesh.Mesh`.
+        Will only be called on one (undetermined) rank.
 
     Returns
     -------
-    local_mesh: :class:meshmode.mesh
-        The local partition of the grid
-
-    global_nelements: int
+    local_mesh : :class:`meshmode.mesh.Mesh`
+        The local partition of the the mesh returned by *generate_grid*.
+    global_nelements : :class:`int`
         The number of elements in the serial grid
     """
     from meshmode.distributed import (
