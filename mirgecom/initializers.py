@@ -29,7 +29,7 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-
+from mirgecom.euler import split_conserved, join_conserved
 
 __doc__ = """
 Initial Conditions
@@ -39,13 +39,14 @@ Initial Conditions
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
 .. autoclass:: Uniform
-.. automethod: make_pulse
-.. automethod: set_uniform_solution
+.. autoclass:: AcousticPulse
+.. automethod: _make_pulse
+.. automethod: _set_uniform_solution
 """
 
 
-def set_uniform_solution(x_vec, mass=1.0, energy=2.5, pressure=1.0,
-                         velocity=None, eos=IdealSingleGas()):
+def _set_uniform_solution(x_vec, mass=1.0, energy=2.5, pressure=1.0,
+                          velocity=None, eos=IdealSingleGas()):
     r"""
     Set a uniform, constant solution from mass, energy, pressure, and
     an EOS object.
@@ -92,7 +93,7 @@ def set_uniform_solution(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     return flat_obj_array(mass, energy, mom)
 
 
-def make_pulse(amp, r0, w, r):
+def _make_pulse(amp, r0, w, r):
     r"""
     Calculates a Gaussian pulse
 
@@ -283,7 +284,8 @@ class SodShock1D:
 
 
 class Lump:
-    r"""Implement an N-dimensional Gaussian lump of mass.
+    r"""
+    Create an N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
@@ -411,6 +413,65 @@ class Lump:
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
+class AcousticPulse:
+    r"""
+    Create an N-dimensional Gaussian acoustic pulse.
+
+    The Gaussian pulse is defined by:
+
+    .. math::
+
+        {\rho}E(\vec{r}) = {\rho}E + amplitude * G(\vec{r})\\
+        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}
+
+    Where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
+    :math:`amplitude`, and :math:`w`, are the the user-specified pulse location,
+    amplitude, and width, respectively.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(self, numdim=1, amplitude=1,
+                 center=None, width=1):
+        r"""
+        Initialize acoustic pulse parameters.
+
+        Parameters
+        ----------
+        numdim : int
+            specify the number of dimensions for the pulse
+        amplitude : float
+            specifies the value of :math:`amplitude`
+        width: float
+            specifies the rms width of the pulse
+        center : numpy.ndarray
+            pulse location, shape ``(numdim,)``
+        """
+
+        if len(center) == numdim:
+            self._center = center
+        elif len(center) > numdim:
+            numdim = len(center)
+            self._center = center
+        else:
+            self._center = np.zeros(shape=(numdim,))
+
+        assert len(self._center) == numdim
+
+        self._amp = amplitude
+        self._width = width
+        self._dim = numdim
+
+    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+        assert len(x_vec) == self._dim
+        cv = split_conserved(self._dim, q)
+        cv.energy = cv.energy + _make_pulse(amp=self._amp, w=self._width,
+                                            r0=self._center, r=x_vec)
+        return join_conserved(dim=self._dim, mass=cv.mass, energy=cv.energy,
+                              momentum=cv.momentum)
+
+
 class Uniform:
     r"""Implement initialization to a uniform flow
 
@@ -425,7 +486,8 @@ class Uniform:
     def __init__(
             self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
     ):
-        r"""Initialize uniform flow parameters
+        r"""
+        Initialize uniform flow parameters
 
         Parameters
         ----------

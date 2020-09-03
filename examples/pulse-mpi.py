@@ -54,7 +54,7 @@ from mirgecom.boundary import (
 )
 from mirgecom.initializers import (
     Lump,
-    make_pulse
+    AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
 
@@ -118,10 +118,10 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
-    #    cv = split_conserved(dim, current_state)
-    #    cv.energy = cv.energy + make_pulse(amp=1.0, w=.2, r0=orig, r=nodes)
-    current_state[1] = current_state[1] + make_pulse(amp=1.0, w=.1, r0=orig, r=nodes)
+    uniform_state = initializer(0, nodes)
+    acoustic_pulse = AcousticPulse(numdim=dim, amplitude=1.0, width=.1,
+                                   center=orig)
+    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
