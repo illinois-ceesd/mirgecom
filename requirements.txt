@@ -2,6 +2,7 @@ mpi4py
 numpy
 pytest
 pyvisfile
+pymetis
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/islpy.git#egg=islpy
 git+https://github.com/inducer/pyopencl.git#egg=pyopencl
