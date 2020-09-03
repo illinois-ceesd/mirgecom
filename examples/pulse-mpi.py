@@ -68,16 +68,16 @@ def main(ctx_factory=cl.create_some_context):
     logger = logging.getLogger(__name__)
 
     dim = 2
-    nel_1d = 32
+    nel_1d = 16
     order = 1
     exittol = 2e-2
     exittol = 100.0
-    t_final = .0001
+    t_final = 0.1
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     #    vel[:dim] = 1.0
-    current_dt = .00001
+    current_dt = .01
     current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
