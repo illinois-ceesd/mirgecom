@@ -41,19 +41,22 @@ manage the relationships between and among state and thermodynamic variables.
 
 @dataclass
 class EOSDependentVars:
-    """State-dependent quantities computed by the :class:`GasEOS`
+    """
+    State-dependent quantities computed by the :class:`GasEOS`
     interface. Prefer individual methods for model use, use
     this structure for visualization or probing.
 
     .. attribute:: temperature
     .. attribute:: pressure
     """
+
     temperature: np.ndarray
     pressure: np.ndarray
 
 
 class GasEOS:
-    r"""An abstract interface designed to compute relations between
+    r"""
+    An abstract interface designed to compute relations between
     fluid or gas state variables.
 
     Each interface call expects that the agglomerated
@@ -80,10 +83,13 @@ class GasEOS:
         raise NotImplementedError()
 
     def gas_const(self, cv: ConservedVars):
-        r"""Get the specific gas constant (:math:`R`)"""
+        r"""Get the specific gas constant (:math:`R`)."""
         raise NotImplementedError()
 
     def internal_energy(self, cv: ConservedVars):
+        raise NotImplementedError()
+
+    def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
         raise NotImplementedError()
 
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
@@ -123,7 +129,8 @@ class IdealSingleGas(GasEOS):
         return self._gas_const
 
     def internal_energy(self, cv: ConservedVars):
-        r"""Get internal energy
+        r"""
+        Get internal energy.
 
         The internal energy (e) is calculated as:
         .. :math::
@@ -134,7 +141,10 @@ class IdealSingleGas(GasEOS):
         return (cv.energy - 0.5 * np.dot(mom, mom) / cv.mass)
 
     def pressure(self, cv):
-        r"""The thermodynmic pressure (p) is calculated from
+        r"""
+        Get gas pressure.
+
+        The thermodynmic pressure (p) is calculated from
         the internal energy (e) as:
 
         .. :math::
@@ -145,6 +155,8 @@ class IdealSingleGas(GasEOS):
 
     def sound_speed(self, cv):
         r"""
+        Get gas sound speed.
+
         The speed of sound (c) is calculated as:
 
         .. :math::
@@ -159,6 +171,8 @@ class IdealSingleGas(GasEOS):
 
     def temperature(self, cv):
         r"""
+        Get gas temperature.
+
         The thermodynmic temperature (T) is calculated from
         the internal energy (e) and specific gas constant (R)
         as:
@@ -174,7 +188,7 @@ class IdealSingleGas(GasEOS):
 
     def total_energy(self, cv, pressure):
         r"""
-        Gas total energy from mass, pressure, momentum
+        Get gas total energy from mass, pressure, and momentum.
 
         The total energy density (rhoE) is calculated from
         the mass density (rho) , pressure (p) , and
