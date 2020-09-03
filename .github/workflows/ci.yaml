@@ -45,7 +45,7 @@ jobs:
             python -m pip install wheel
             python -m pip install pylint pyyaml
             curl -L -O https://raw.githubusercontent.com/inducer/ci-support/master/run-pylint.py
-            python run-pylint.py --yaml-rcfile=.pylintrc.yml
+            python run-pylint.py --yaml-rcfile=.pylintrc.yml mirgecom test examples
 
     pytest:
         name: Pytest ${{ matrix.os }}
