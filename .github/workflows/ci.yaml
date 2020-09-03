@@ -40,12 +40,12 @@ jobs:
 
         - name: Pylint
           run: |
-            python3 -m venv myenv
-            source myenv/bin/activate
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             python -m pip install wheel
             python -m pip install pylint pyyaml
             curl -L -O https://raw.githubusercontent.com/inducer/ci-support/master/run-pylint.py
-            python run-pylint.py --yaml-rcfile=.pylintrc.yml mirgecom test examples
+            python run-pylint.py --yaml-rcfile=.pylintrc.yml "$(basename $GITHUB_REPOSITORY)" test examples && echo "Pylint found no errors."
 
     pytest:
         name: Pytest ${{ matrix.os }}
