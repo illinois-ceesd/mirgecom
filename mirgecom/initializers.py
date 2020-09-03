@@ -473,7 +473,8 @@ class AcousticPulse:
 
 
 class Uniform:
-    r"""Implement initialization to a uniform flow
+    r"""
+    Initialize to a uniform state.
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
@@ -487,7 +488,7 @@ class Uniform:
             self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
     ):
         r"""
-        Initialize uniform flow parameters
+        Initialize uniform flow parameters.
 
         Parameters
         ----------
@@ -519,12 +520,9 @@ class Uniform:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        gamma = eos.gamma()
-        mass = x_vec[0].copy()
-        mom = self._velocity * make_obj_array([mass])
-        energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-
-        return flat_obj_array(mass, energy, mom)
+        return _set_uniform_solution(x_vec=x_vec, mass=self._rho,
+                                     pressure=self._p, energy=self._e,
+                                     eos=eos)
 
     def exact_rhs(self, discr, q, t=0.0):
         actx = q[0].array_context

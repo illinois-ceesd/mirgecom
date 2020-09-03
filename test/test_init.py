@@ -192,13 +192,12 @@ def test_uniform(ctx_factory, dim):
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
-    #    initr = Uniform(numdim=dim)
-    #    initsoln = initr(t=0.0, x_vec=nodes)
+    from mirgecom.initializers import Uniform
+    initr = Uniform(numdim=dim)
+    initsoln = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
-    # TODO: Fix Uniform iniitalizer class
-    from mirgecom.initializers import _set_uniform_solution
-    initsoln = _set_uniform_solution(x_vec=nodes)
     ssoln = split_conserved(dim, initsoln)
+
     assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
     assert discr.norm(ssoln.energy - 2.5, np.inf) < tol
 
