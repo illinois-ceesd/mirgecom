@@ -40,7 +40,8 @@ building simulation applications.
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
-.. autofunction:: exact_sim_checkpoint
+.. autofunction:: sim_checkpoint
+.. autofunction:: create_parallel_grid
 """
 
 
@@ -90,10 +91,9 @@ class ExactSolutionMismatch(Exception):
         self.state = state
 
 
-def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
-                         vizname, step=0, t=0, dt=0, cfl=1.0, nstatus=-1,
-                         nviz=-1, exittol=1e-16, constant_cfl=False, comm=None,
-                         overwrite=False):
+def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
+                   constant_cfl=False, comm=None, overwrite=False):
     r"""
     Check simulation health, status, viz dumps, and restart
     """
@@ -104,26 +104,34 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
     if do_viz is False and do_status is False:
         return 0
 
-    actx = q[0].array_context
-    nodes = thaw(actx, discr.nodes())
-    rank = 0
-
-    if comm is not None:
-        rank = comm.Get_rank()
-
     from mirgecom.euler import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
-    expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
+
+    maxerr = 0.0
+    if exact_soln is not None:
+        actx = cv.mass.array_context
+        nodes = thaw(actx, discr.nodes())
+        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+        exp_resid = q - expected_state
+        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
+        maxerr = max(err_norms)
 
     if do_viz:
-        from mirgecom.euler import split_conserved
         io_fields = [
-            ("cv", split_conserved(discr.dim, q)),
-            ("dv", dependent_vars),
-            ("exact_soln", expected_state),
-            ("residual", q - expected_state)
+            ("cv", cv),
+            ("dv", dependent_vars)
         ]
+        if exact_soln is not None:
+            exact_list = [
+                ("exact_soln", expected_state),
+            ]
+            io_fields.extend(exact_list)
+
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
         visualizer.write_parallel_vtk_file(
@@ -136,14 +144,58 @@ def exact_sim_checkpoint(discr, exact_soln, visualizer, eos, q,
         #                                           eos=eos, dt=dt)
         statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
                                          cfl=cfl, dependent_vars=dependent_vars)
-        err = q-expected_state
-        err_norms = [discr.norm(v, np.inf) for v in err]
-        statusmesg += (
-            "\n------- errors="
-            + ", ".join("%.3g" % en for en in err_norms))
+        if exact_soln is not None:
+            statusmesg += (
+                "\n------- errors="
+                + ", ".join("%.3g" % en for en in err_norms))
+
         if rank == 0:
             logger.info(statusmesg)
 
-        maxerr = max(err_norms)
-        if maxerr > exittol:
-            raise ExactSolutionMismatch(step, t=t, state=q)
+    if maxerr > exittol:
+        raise ExactSolutionMismatch(step, t=t, state=q)
+
+
+def create_parallel_grid(comm, generate_grid):
+    """
+    Create a grid using the grid generator specified by *generate_grid*,
+    partition, and distribute it to every rank in the provided MPI
+    communicator *comm*.
+
+    Parameters
+    ----------
+    comm:
+        MPI communicator over which to partition the grid
+    generate_grid:
+        Callable of zero arguments returning a :class:`meshmode.mesh.Mesh`.
+        Will only be called on one (undetermined) rank.
+
+    Returns
+    -------
+    local_mesh : :class:`meshmode.mesh.Mesh`
+        The local partition of the the mesh returned by *generate_grid*.
+    global_nelements : :class:`int`
+        The number of elements in the serial grid
+    """
+    from meshmode.distributed import (
+        MPIMeshDistributor,
+        get_partition_by_pymetis,
+    )
+    num_parts = comm.Get_size()
+    mesh_dist = MPIMeshDistributor(comm)
+    global_nelements = 0
+
+    if mesh_dist.is_mananger_rank():
+
+        mesh = generate_grid()
+
+        global_nelements = mesh.nelements
+
+        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+        del mesh
+
+    else:
+        local_mesh = mesh_dist.receive_mesh_part()
+
+    return local_mesh, global_nelements
