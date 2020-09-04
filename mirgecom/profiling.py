@@ -25,10 +25,9 @@ THE SOFTWARE.
 from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl as cl
 from pytools.py_codegen import PythonCodeGenerator
-from pytools import memoize_method
 import loopy as lp
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -49,7 +48,7 @@ class ProfileEvent:
     """Class to hold a profile event that has not been seen by the profiler yet."""
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
-    args_tuple: tuple
+    kwargs: dict
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
@@ -80,7 +79,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         for t in self.profile_events:
             program = t.program
-            res = self._get_kernel_stats(program, t.args_tuple)
+            res = self._get_kernel_stats(program, t.kwargs)
             res.time = t.cl_event.profile.end - t.cl_event.profile.start
 
             self.profile_results.setdefault(program, []).append(res)
@@ -116,82 +115,80 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         print(tbl)
 
-    @memoize_method
-    def _get_kernel_stats(self, program, kwargs: dict):
-        kwargs = dict(kwargs)
-        executor = program.target.get_kernel_executor(program, self.queue)
-        info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
+    def _get_kernel_stats(self, program, kwargs: dict) -> ProfileResult:
+        args_tuple = self._kernel_kwargs_to_tuple(kwargs)
 
-        kernel = executor.get_typed_and_scheduled_kernel(
-            executor.arg_to_dtype_set(kwargs))
+        if (program not in self.kernel_stats
+                or args_tuple not in self.kernel_stats[program]):
+            kwargs = dict(kwargs)
+            executor = program.target.get_kernel_executor(program, self.queue)
+            info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
-        idi = info.implemented_data_info
+            kernel = executor.get_typed_and_scheduled_kernel(
+                executor.arg_to_dtype_set(kwargs))
 
-        # Generate the wrapper code
-        wrapper = executor.get_wrapper_generator()
+            idi = info.implemented_data_info
 
-        gen = PythonCodeGenerator()
+            # Generate the wrapper code
+            wrapper = executor.get_wrapper_generator()
 
-        wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
-        wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
-        wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
+            gen = PythonCodeGenerator()
 
-        types = {k: v for k, v in kwargs.items()
-            if hasattr(v, 'dtype') and not v.dtype == object}
+            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
-        param_dict = {**kwargs}
-        param_dict.update({k: None for k, value in kernel.arg_dict.items()
-            if k not in param_dict})
+            types = {k: v for k, v in kwargs.items()
+                if hasattr(v, 'dtype') and not v.dtype == object}
 
-        param_dict.update(
-            {d.name: None for d in idi if d.name not in param_dict})
+            param_dict = {**kwargs}
+            param_dict.update({k: None for k, value in kernel.arg_dict.items()
+                if k not in param_dict})
 
-        # Run the wrapper code, save argument values in param_dict
-        exec(gen.get(), param_dict)
+            param_dict.update(
+                {d.name: None for d in idi if d.name not in param_dict})
 
-        # Get flops/memory statistics
-        kernel = lp.add_and_infer_dtypes(kernel, types)
-        op_map = lp.get_op_map(kernel, subgroup_size='guess')
-        bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size='guess') \
-          .to_bytes().eval_and_sum(param_dict)
+            # Run the wrapper code, save argument values in param_dict
+            exec(gen.get(), param_dict)
 
-        flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
-            param_dict)
+            # Get flops/memory statistics
+            kernel = lp.add_and_infer_dtypes(kernel, types)
+            op_map = lp.get_op_map(kernel, subgroup_size='guess')
+            bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size='guess') \
+              .to_bytes().eval_and_sum(param_dict)
 
-        footprint_bytes = 0
-        try:
-            footprint = lp.gather_access_footprint_bytes(kernel)
+            flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
+                param_dict)
 
-            for k, v in footprint.items():
-                footprint_bytes += footprint[k].eval_with_dict(param_dict)
+            footprint_bytes = 0
+            try:
+                footprint = lp.gather_access_footprint_bytes(kernel)
 
-        except lp.symbolic.UnableToDetermineAccessRange:
-            pass
+                for k, v in footprint.items():
+                    footprint_bytes += footprint[k].eval_with_dict(param_dict)
 
-        return ProfileResult(
-            time=0, flops=flops, bytes_accessed=bytes_accessed,
-            footprint_bytes=footprint_bytes)
+            except lp.symbolic.UnableToDetermineAccessRange:
+                pass
 
-    def _kernel_kwargs_to_tuple(self, **kwargs) -> tuple:
-        return tuple((key,value) for key, value in kwargs.items())
-        # return tuple(
-        #     (key, value.shape) if hasattr(value, 'shape') else (key, value)
-        #     for key, value in kwargs.items())
+            self.kernel_stats.setdefault(program, {})[args_tuple] = ProfileResult(
+                time=0, flops=flops, bytes_accessed=bytes_accessed,
+                footprint_bytes=footprint_bytes)
+
+        return self.kernel_stats[program][args_tuple]
+
+    def _kernel_kwargs_to_tuple(self, kwargs: dict) -> tuple:
+        # return tuple((key,value) for key, value in kwargs.items())
+        return tuple(
+            (key, value.shape) if hasattr(value, 'shape') else (key, value)
+            for key, value in kwargs.items())
 
     def call_loopy(self, program, **kwargs) -> dict:
         program = self.transform_loopy_program(program)
         assert program.options.return_dict
         assert program.options.no_numpy
 
-        args_tuple = self._kernel_kwargs_to_tuple(**kwargs)
-
-        for k, v in kwargs.items():
-            print(type(k), type(v))
-
-        s = self._get_kernel_stats(program, args_tuple)
-
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
-        self.profile_events.append(ProfileEvent(evt, program, args_tuple))
+        self.profile_events.append(ProfileEvent(evt, program, kwargs))
 
         return result
