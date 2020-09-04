@@ -121,6 +121,11 @@ def main(use_profiling=False):
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description='Wave-eager (non-MPI version)')
+    parser.add_argument('--profile', action='store_true')
+    args = parser.parse_args()
+
+    main(use_profiling=args.profile)
 
 # vim: foldmethod=marker
