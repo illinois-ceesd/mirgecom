@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl as cl
-from pytools.py_codegen import PythonCodeGenerator
+from pytools.py_codegen import PythonFunctionGenerator
 import loopy as lp
 import numpy as np
 from dataclasses import dataclass
@@ -132,15 +132,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             idi = info.implemented_data_info
 
-            # Generate the wrapper code
-            wrapper = executor.get_wrapper_generator()
-
-            gen = PythonCodeGenerator()
-
-            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
-            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
-            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
-
             types = {k: v for k, v in kwargs.items()
                 if hasattr(v, 'dtype') and not v.dtype == object}
 
@@ -151,8 +142,25 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             param_dict.update(
                 {d.name: None for d in idi if d.name not in param_dict})
 
+            # Generate the wrapper code
+            wrapper = executor.get_wrapper_generator()
+
+            gen = PythonFunctionGenerator('my_gen_args', ["param_dict"])
+
+            # Unpack dict items to local variables
+            for k, v in param_dict.items():
+                gen(f"{k}=param_dict['{k}']")
+
+            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
+
+            # Pack modified variables back into dict
+            for k, v in param_dict.items():
+                gen(f"param_dict['{k}']={k}")
+
             # Run the wrapper code, save argument values in param_dict
-            exec(gen.get(), param_dict)
+            gen.get_picklable_function()(param_dict)
 
             # Get flops/memory statistics
             kernel = lp.add_and_infer_dtypes(kernel, types)
@@ -166,7 +174,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             footprint_bytes = 0
             try:
                 footprint = lp.gather_access_footprint_bytes(kernel)
-
                 for k, v in footprint.items():
                     footprint_bytes += footprint[k].eval_with_dict(param_dict)
 
