@@ -38,7 +38,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint,
+    sim_checkpoint,
+    create_parallel_grid,
     ExactSolutionMismatch
 )
 from mirgecom.io import make_init_message
@@ -85,34 +86,12 @@ def main(ctx_factory=cl.create_some_context):
     box_ur = 5.0
 
     comm = MPI.COMM_WORLD
-    nproc = comm.Get_size()
     rank = comm.Get_rank()
-    num_parts = nproc
 
-    from meshmode.distributed import (
-        MPIMeshDistributor,
-        get_partition_by_pymetis,
-    )
-
-    mesh_dist = MPIMeshDistributor(comm)
-    global_nelements = 0
-    local_nelements = 0
-    if mesh_dist.is_mananger_rank():
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-
-        mesh = generate_regular_rect_mesh(
-            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
-        )
-        global_nelements = mesh.nelements
-        logging.info(f"Total {dim}d elements: {global_nelements}")
-
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-        del mesh
-
-    else:
-        local_mesh = mesh_dist.receive_mesh_part()
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
@@ -144,10 +123,10 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos,
-                            q=state, vizname=casename, step=step, t=t, dt=dt,
-                            nstatus=nstatus, nviz=nviz, exittol=exittol,
-                            constant_cfl=constant_cfl, comm=comm)
+        return sim_checkpoint(discr, visualizer, eos, q=state,
+                              exact_soln=initializer, vizname=casename, step=step,
+                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
 
     try:
         (current_step, current_t, current_state) = \
