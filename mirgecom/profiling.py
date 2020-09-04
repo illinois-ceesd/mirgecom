@@ -116,7 +116,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         print(tbl)
 
     def _get_kernel_stats(self, program, kwargs: dict) -> ProfileResult:
-        args_tuple = self._kernel_kwargs_to_tuple(kwargs)
+        # We need a tuple to index the cache
+        args_tuple = tuple(
+            (key, value.shape) if hasattr(value, 'shape') else (key, value)
+            for key, value in kwargs.items())
 
         if (program not in self.kernel_stats
                 or args_tuple not in self.kernel_stats[program]):
@@ -175,12 +178,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 footprint_bytes=footprint_bytes)
 
         return self.kernel_stats[program][args_tuple]
-
-    def _kernel_kwargs_to_tuple(self, kwargs: dict) -> tuple:
-        # return tuple((key,value) for key, value in kwargs.items())
-        return tuple(
-            (key, value.shape) if hasattr(value, 'shape') else (key, value)
-            for key, value in kwargs.items())
 
     def call_loopy(self, program, **kwargs) -> dict:
         program = self.transform_loopy_program(program)
