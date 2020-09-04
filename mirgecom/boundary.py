@@ -36,6 +36,7 @@ Boundary Conditions
 
 .. autoclass:: PrescribedBoundary
 .. autoclass:: DummyBoundary
+.. autoclass:: AdiabaticSlipBoundary
 """
 
 
@@ -79,7 +80,16 @@ class DummyBoundary:
 
 class AdiabaticSlipBoundary:
     """
-    Adiabatic slipwall boundary for inviscid flows
+    Adiabatic slip boundary for inviscid flows.
+    a.k.a. Reflective inviscid wall boundary
+
+    This class implements an adiabatic reflective slip boundary
+    wherein the normal component of velocity at the wall is 0, and
+    tangential components are preserved. These perfectly reflecting
+    conditions are used by the forward-facing step case in
+    JSH/TW Nodal DG Methods, Section 6.6 DOI: 10.1007/978-0-387-72067-8 and
+    described in detail by Poinsot and Lele's JCP paper
+    http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf
 
     .. automethod:: boundary_pair
     """
@@ -100,21 +110,21 @@ class AdiabaticSlipBoundary:
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
         bndry_cv = split_conserved(dim, int_soln)
-        bpressure = eos.pressure(bndry_cv)
+        # bpressure = eos.pressure(bndry_cv)
 
-        # Subtract out the wall-normal component
-        # of velocity from the velocity at the wall, setting
-        # the proper exterior soln to induce the desired flux
+        # Subtract out the 2*wall-normal component
+        # of velocity from the velocity at the wall to
+        # induce an equal but opposite wall-normal (reflected) wave
+        # preserving the tangential component
         wall_velocity = bndry_cv.momentum / make_obj_array([bndry_cv.mass])
-        wnorm_vel = 1.0 * wall_velocity
-        nvelhat = np.dot(wall_velocity, nhat)
-        wnorm_vel = nhat * make_obj_array([nvelhat])
-        wall_velocity = wall_velocity - 2.0 * wnorm_vel
+        nvel_comp = np.dot(wall_velocity, nhat)  # part of velocity normal to wall
+        wnorm_vel = nhat * make_obj_array([nvel_comp])  # wall-normal velocity vec
+        wall_velocity = wall_velocity - 2.0 * wnorm_vel  # prescribed ext velocity
 
         # Re-calculate the boundary solution with the new
         # momentum
         bndry_cv.momentum = wall_velocity * make_obj_array([bndry_cv.mass])
-        bndry_cv.energy = eos.total_energy(bndry_cv, bpressure)
+        # bndry_cv.energy = eos.total_energy(bndry_cv, bpressure)
         bndry_soln = join_conserved(dim=dim, mass=bndry_cv.mass,
                                     energy=bndry_cv.energy,
                                     momentum=bndry_cv.momentum)

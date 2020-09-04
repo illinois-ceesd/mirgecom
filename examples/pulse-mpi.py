@@ -101,8 +101,6 @@ def main(ctx_factory=cl.create_some_context):
     rank = comm.Get_rank()
     num_parts = nproc
 
-    global_nelements = 0
-    local_nelements = 0
     from meshmode.mesh.generation import generate_regular_rect_mesh
     if num_parts > 1:
         generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,

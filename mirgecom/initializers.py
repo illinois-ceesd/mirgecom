@@ -41,14 +41,14 @@ Initial Conditions
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
 .. automethod: _make_pulse
-.. automethod: _set_uniform_solution
+.. automethod: _make_uniform_flow
 """
 
 
-def _set_uniform_solution(x_vec, mass=1.0, energy=2.5, pressure=1.0,
-                          velocity=None, eos=IdealSingleGas()):
+def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
+                       velocity=None, eos=IdealSingleGas()):
     r"""
-    Set a uniform, constant solution from mass, energy, pressure, and
+    Construct a uniform, constant flow from mass, energy, pressure, and
     an EOS object.
 
     Parameters
@@ -520,9 +520,9 @@ class Uniform:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        return _set_uniform_solution(x_vec=x_vec, mass=self._rho,
-                                     pressure=self._p, energy=self._e,
-                                     eos=eos)
+        return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
+                                  pressure=self._p, energy=self._e,
+                                  eos=eos)
 
     def exact_rhs(self, discr, q, t=0.0):
         actx = q[0].array_context
