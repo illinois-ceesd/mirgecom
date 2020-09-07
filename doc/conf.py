@@ -26,7 +26,7 @@ with open(_ver_file) as ver_file:
     ver_src = ver_file.read()
 
 ver_dic = {}
-exec(compile(ver_src, _ver_file, 'exec'), ver_dic)
+exec(compile(ver_src, _ver_file, "exec"), ver_dic)
 version = ".".join(str(x) for x in ver_dic["VERSION"])
 
 # The full version, including alpha/beta/rc tags.
@@ -39,21 +39,21 @@ release = ver_dic["VERSION_TEXT"]
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-        "sphinx.ext.intersphinx",
-        "sphinx.ext.autodoc",
-        "sphinx.ext.doctest",
-        "sphinx.ext.napoleon",
-        "sphinx.ext.graphviz",
-        "sphinx.ext.todo",
-        ]
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.graphviz",
+    "sphinx.ext.todo",
+    ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -61,14 +61,14 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = "alabaster"
 
 html_theme_options = {
-        "extra_nav_links": {
-            "🚀 Github": "https://github.com/illinois-ceesd/mirgecom",
-            "💾 Download Releases": "https://pypi.org/project/mirgecom",
-            }
+    "extra_nav_links": {
+        "🚀 Github": "https://github.com/illinois-ceesd/mirgecom",
+        "💾 Download Releases": "https://pypi.org/project/mirgecom",
         }
+    }
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
