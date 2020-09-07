@@ -105,18 +105,21 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             times = [v.time / 1e9 for v in value]
             flops = [v.flops / 1e9 for v in value]
             bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
-            footprint_bytes = [v.footprint_bytes / 1e9
-                if v.footprint_bytes is not None else 0 for v in value]
+            footprint_bytes = [v.footprint_bytes / 1e9 for v in value
+                if v.footprint_bytes is not None]
 
             g = ".4g"
 
-            tbl.add_row([key.name, num_values, f"{min(times):{g}}",
-                f"{mean(times):{g}}", f"{max(times):{g}}", f"{min(flops):{g}}",
-                f"{mean(flops):{g}}", f"{max(flops):{g}}",
+            mean_footprint_bytes = f"{mean(footprint_bytes):{g}}" \
+                if len(footprint_bytes) > 0 else "n/a"
+
+            tbl.add_row([key.name, num_values,
+                f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
+                f"{min(flops):{g}}", f"{mean(flops):{g}}", f"{max(flops):{g}}",
                 f"{min(bytes_accessed):{g}}", f"{mean(bytes_accessed):{g}}",
                 f"{max(bytes_accessed):{g}}",
                 f"{round(mean(bytes_accessed)/mean(times), 3):{g}}",
-                f"{mean(footprint_bytes):{g}}"])
+                f"{mean_footprint_bytes}"])
 
         return tbl
 
