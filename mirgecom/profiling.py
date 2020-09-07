@@ -146,7 +146,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             # Generate the wrapper code
             wrapper = executor.get_wrapper_generator()
 
-            gen = PythonFunctionGenerator("my_gen_args", ["param_dict"])
+            gen = PythonFunctionGenerator("_my_gen_args_profiling", ["param_dict"])
 
             # Unpack dict items to local variables
             for k, v in param_dict.items():
