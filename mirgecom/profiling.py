@@ -56,7 +56,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """An array context that profiles kernel executions.
 
     .. automethod:: finish_profile_events
-    .. automethod:: print_profiling_data
+    .. automethod:: table_profiling_data
     .. automethod:: call_loopy
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`."""
