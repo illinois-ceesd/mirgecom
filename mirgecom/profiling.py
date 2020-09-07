@@ -92,8 +92,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         tbl = pytools.Table()
 
-        tbl.add_row(["Function", "Calls", "Time_min (s)", "Time_avg (s)", "Time_max (s)",
-            "GFlops_min", "GFlops_avg", "GFlops_max", "GMemAcc_min", "GMemAcc_avg", "GMemAcc_max", "Bandwidth (GByte/s)",
+        tbl.add_row(["Function", "Calls", "Time_min (s)", "Time_avg (s)",
+            "Time_max (s)", "GFlops_min", "GFlops_avg", "GFlops_max", "GMemAcc_min",
+            "GMemAcc_avg", "GMemAcc_max", "Bandwidth (GByte/s)",
             "Footprint (GByte)"])
 
         from statistics import mean
@@ -104,8 +105,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             times = [v.time / 1e9 for v in value]
             flops = [v.flops / 1e9 for v in value]
             bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
-            footprint_bytes = [v.footprint_bytes / 1e9 if v.footprint_bytes is not None
-                else 0 for v in value]
+            footprint_bytes = [v.footprint_bytes / 1e9
+                if v.footprint_bytes is not None else 0 for v in value]
 
             tbl.add_row([key.name, num_values, min(times),
                 mean(times), max(times), min(flops), mean(flops),
