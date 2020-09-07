@@ -64,7 +64,7 @@ def div(vector_func):
 
 def grad(dim, func):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
-    coords = prim.make_sym_vector('x', dim)
+    coords = prim.make_sym_vector("x", dim)
     return [diff(coords[i])(func) for i in range(dim)]
 
 
