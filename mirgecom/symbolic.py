@@ -55,7 +55,7 @@ def diff(var):
 def div(vector_func):
     """Return the symbolic divergence of *vector_func*."""
     dim = len(vector_func)
-    coords = prim.make_sym_vector('x', dim)
+    coords = prim.make_sym_vector("x", dim)
     div = 0
     for i in range(dim):
         div += diff(coords[i])(vector_func[i])
