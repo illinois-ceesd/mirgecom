@@ -104,7 +104,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             times = [v.time for v in value]
             flops = [v.flops for v in value]
             bytes_accessed = [v.bytes_accessed for v in value]
-            footprint_bytes = [v.footprint_bytes for v in value]
+            footprint_bytes = [v.footprint_bytes if v.footprint_bytes is not None
+                else 0 for v in value]
 
             tbl.add_row([key.name, num_values, min(times),
                 int(mean(times)), max(times), min(flops), int(mean(flops)),
@@ -177,7 +178,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                     footprint_bytes += footprint[k].eval_with_dict(param_dict)
 
             except lp.symbolic.UnableToDetermineAccessRange:
-                pass
+                footprint_bytes = None
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = ProfileResult(
                 time=0, flops=flops, bytes_accessed=bytes_accessed,
