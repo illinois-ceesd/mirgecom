@@ -169,7 +169,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # Generate the wrapper code
         wrapper = executor.get_wrapper_generator()
 
-        gen = PythonFunctionGenerator("_my_gen_args_profiling", list(param_dict))
+        gen = PythonFunctionGenerator("_mcom_gen_args_profiling", list(param_dict))
 
         wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
         wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
