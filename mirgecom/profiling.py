@@ -153,37 +153,33 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # Generate the wrapper code
         wrapper = executor.get_wrapper_generator()
 
-        gen = PythonFunctionGenerator("_my_gen_args_profiling", ["param_dict"])
-
-        # Unpack the param_dict items to local variables
-        for k, v in param_dict.items():
-            gen(f"{k}=param_dict['{k}']")
+        gen = PythonFunctionGenerator("_my_gen_args_profiling", list(param_dict))
 
         wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
         wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
         wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
-        # Pack modified variables back into param_dict
-        for k, v in param_dict.items():
-            gen(f"param_dict['{k}']={k}")
+        param_names = program.all_params()
+        gen("return {%s}" % ", ".join(
+            f"{repr(name)}: {name}" for name in param_names))
 
         # Run the wrapper code, save argument values in param_dict
-        gen.get_picklable_function()(param_dict)
+        domain_params = gen.get_picklable_function()(**param_dict)
 
         # Get flops/memory statistics
         kernel = lp.add_and_infer_dtypes(kernel, types)
         op_map = lp.get_op_map(kernel, subgroup_size="guess")
         bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
-          .to_bytes().eval_and_sum(param_dict)
+          .to_bytes().eval_and_sum(domain_params)
 
         flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
-            param_dict)
+            domain_params)
 
         footprint_bytes = 0
         try:
             footprint = lp.gather_access_footprint_bytes(kernel)
             for k, v in footprint.items():
-                footprint_bytes += footprint[k].eval_with_dict(param_dict)
+                footprint_bytes += footprint[k].eval_with_dict(domain_params)
 
         except lp.symbolic.UnableToDetermineAccessRange:
             footprint_bytes = None
