@@ -55,7 +55,7 @@ class ProfileEvent:
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """An array context that profiles kernel executions.
 
-    .. automethod:: table_profiling_data
+    .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`."""
@@ -86,7 +86,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events = []
 
-    def table_profiling_data(self) -> pytools.Table:
+    def tabulate_profiling_data(self) -> pytools.Table:
         """Returns a :class:`pytools.Table` with the profiling results."""
         self._finish_profile_events()
 
