@@ -92,3 +92,5 @@ autoclass_content = "class"
 todo_include_todos = True
 
 nitpicky = True
+
+nitpick_ignore = [('py:class', 'pytools.Table')]

@@ -55,7 +55,6 @@ class ProfileEvent:
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """An array context that profiles kernel executions.
 
-    .. automethod:: finish_profile_events
     .. automethod:: table_profiling_data
     .. automethod:: call_loopy
 
@@ -73,7 +72,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_results = {}
         self.kernel_stats = {}
 
-    def finish_profile_events(self) -> None:
+    def _finish_profile_events(self) -> None:
         # First, wait for event completion
         if self.profile_events:
             cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
@@ -88,7 +87,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_events = []
 
     def table_profiling_data(self) -> pytools.Table:
-        self.finish_profile_events()
+        """Returns a :class:`pytools.Table` with the profiling results."""
+        self._finish_profile_events()
 
         tbl = pytools.Table()
 
