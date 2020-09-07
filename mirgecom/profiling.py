@@ -180,9 +180,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             except lp.symbolic.UnableToDetermineAccessRange:
                 footprint_bytes = None
 
-            self.kernel_stats.setdefault(program, {})[args_tuple] = ProfileResult(
+            res = ProfileResult(
                 time=0, flops=flops, bytes_accessed=bytes_accessed,
                 footprint_bytes=footprint_bytes)
+
+            self.kernel_stats.setdefault(program, {})[args_tuple] = res
+            return res
 
         return self.kernel_stats[program][args_tuple]
 
