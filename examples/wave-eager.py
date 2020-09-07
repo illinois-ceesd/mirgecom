@@ -108,7 +108,7 @@ def main(use_profiling=False):
 
         if istep % 10 == 0:
             if use_profiling:
-                actx.print_profiling_data()
+                print(actx.table_profiling_data())
             print(istep, t, discr.norm(fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [

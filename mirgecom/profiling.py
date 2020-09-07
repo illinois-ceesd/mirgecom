@@ -28,6 +28,7 @@ from pytools.py_codegen import PythonFunctionGenerator
 import loopy as lp
 import numpy as np
 from dataclasses import dataclass
+import pytools
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -86,10 +87,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events = []
 
-    def print_profiling_data(self) -> None:
+    def table_profiling_data(self) -> pytools.Table:
         self.finish_profile_events()
-
-        import pytools
 
         tbl = pytools.Table()
 
@@ -113,7 +112,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3),
                 mean(footprint_bytes)])
 
-        print(tbl)
+        return tbl
 
     def _get_kernel_stats(self, program, kwargs: dict) -> ProfileResult:
         # We need a tuple to index the cache
