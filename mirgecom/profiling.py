@@ -108,11 +108,15 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             footprint_bytes = [v.footprint_bytes / 1e9
                 if v.footprint_bytes is not None else 0 for v in value]
 
-            tbl.add_row([key.name, num_values, min(times),
-                mean(times), max(times), min(flops), mean(flops),
-                max(flops), min(bytes_accessed), mean(bytes_accessed),
-                max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3),
-                mean(footprint_bytes)])
+            g = ".4g"
+
+            tbl.add_row([key.name, num_values, f"{min(times):{g}}",
+                f"{mean(times):{g}}", f"{max(times):{g}}", f"{min(flops):{g}}",
+                f"{mean(flops):{g}}", f"{max(flops):{g}}",
+                f"{min(bytes_accessed):{g}}", f"{mean(bytes_accessed):{g}}",
+                f"{max(bytes_accessed):{g}}",
+                f"{round(mean(bytes_accessed)/mean(times), 3):{g}}",
+                f"{mean(footprint_bytes):{g}}"])
 
         return tbl
 
@@ -151,7 +155,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         gen = PythonFunctionGenerator("_my_gen_args_profiling", ["param_dict"])
 
-        # Unpack dict items to local variables
+        # Unpack the param_dict items to local variables
         for k, v in param_dict.items():
             gen(f"{k}=param_dict['{k}']")
 
@@ -159,7 +163,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
         wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
-        # Pack modified variables back into dict
+        # Pack modified variables back into param_dict
         for k, v in param_dict.items():
             gen(f"param_dict['{k}']={k}")
 
