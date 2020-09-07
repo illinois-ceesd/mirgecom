@@ -76,16 +76,16 @@ html_theme_options = {
 # html_static_path = ['_static']
 
 intersphinx_mapping = {
-    'https://docs.python.org/': None,
-    'https://docs.scipy.org/doc/numpy/': None,
-    'https://documen.tician.de/pyopencl/': None,
-    'https://documen.tician.de/modepy/': None,
-    'https://documen.tician.de/meshmode/': None,
-    'https://documen.tician.de/grudge/': None,
-    'https://documen.tician.de/pytato/': None,
-    'https://documen.tician.de/loopy/': None,
-    'https://documen.tician.de/pymbolic/': None,
-    'https://documen.tician.de/pytools/': None,
+    "https://docs.python.org/": None,
+    "https://docs.scipy.org/doc/numpy/": None,
+    "https://documen.tician.de/pyopencl/": None,
+    "https://documen.tician.de/modepy/": None,
+    "https://documen.tician.de/meshmode/": None,
+    "https://documen.tician.de/grudge/": None,
+    "https://documen.tician.de/pytato/": None,
+    "https://documen.tician.de/loopy/": None,
+    "https://documen.tician.de/pymbolic/": None,
+    "https://documen.tician.de/pytools/": None,
     }
 
 autoclass_content = "class"

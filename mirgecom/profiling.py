@@ -92,10 +92,13 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         tbl = pytools.Table()
 
-        tbl.add_row(["Function", "Calls", "Time_min [s]", "Time_avg [s]",
-            "Time_max [s]", "GFlops_min", "GFlops_avg", "GFlops_max", "GMemAcc_min",
-            "GMemAcc_avg", "GMemAcc_max", "Bandwidth [GByte/s]",
-            "Footprint [GByte]"])
+        tbl.add_row(["Function", "Calls",
+            "Time_min [s]", "Time_avg [s]", "Time_max [s]",
+            "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
+            "BWAcc_min [GByte/s]", "BWAcc_mean [GByte/s]", "BWAcc_max [GByte/s]",
+            "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]"])
+
+        g = ".4g"
 
         from statistics import mean
 
@@ -104,22 +107,32 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             times = [v.time / 1e9 for v in value]
             flops = [v.flops / 1e9 for v in value]
+
+            flops_per_sec = [f / t for f, t in zip(flops, times)]
+
             bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
             footprint_bytes = [v.footprint_bytes / 1e9 for v in value
                 if v.footprint_bytes is not None]
 
-            g = ".4g"
+            bandwidth_access = [b / t for b, t in zip(bytes_accessed, times)]
 
-            mean_footprint_bytes = f"{mean(footprint_bytes):{g}}" \
-                if len(footprint_bytes) > 0 else "n/a"
+            if len(footprint_bytes) > 0:
+                bandwidth_footprint = [b / t for b, t in zip(footprint_bytes, times)]
+                bandwidth_footprint_val = {"min": f"{min(bandwidth_footprint):{g}}",
+                    "mean": f"{mean(bandwidth_footprint):{g}}",
+                    "max": f"{max(bandwidth_footprint):{g}}"}
+            else:
+                bandwidth_footprint_val = {"min": "n/a", "mean": "n/a", "max": "n/a"}
 
             tbl.add_row([key.name, num_values,
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
-                f"{min(flops):{g}}", f"{mean(flops):{g}}", f"{max(flops):{g}}",
-                f"{min(bytes_accessed):{g}}", f"{mean(bytes_accessed):{g}}",
-                f"{max(bytes_accessed):{g}}",
-                f"{round(mean(bytes_accessed)/mean(times), 3):{g}}",
-                f"{mean_footprint_bytes}"])
+                f"{min(flops_per_sec):{g}}", f"{mean(flops_per_sec):{g}}",
+                f"{max(flops_per_sec):{g}}",
+                f"{min(bandwidth_access):{g}}", f"{mean(bandwidth_access):{g}}",
+                f"{max(bandwidth_access):{g}}",
+                f"{bandwidth_footprint_val['min']}",
+                f"{bandwidth_footprint_val['mean']}",
+                f"{bandwidth_footprint_val['max']}"])
 
         return tbl
 
