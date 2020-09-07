@@ -163,7 +163,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         gen("return {%s}" % ", ".join(
             f"{repr(name)}: {name}" for name in param_names))
 
-        # Run the wrapper code, save argument values in param_dict
+        # Run the wrapper code, save argument values in domain_params
         domain_params = gen.get_picklable_function()(**param_dict)
 
         # Get flops/memory statistics
