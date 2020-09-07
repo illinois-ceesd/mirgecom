@@ -92,10 +92,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         tbl = pytools.Table()
 
-        tbl.add_row(["Function", "Calls", "Time_min (s)", "Time_avg (s)",
-            "Time_max (s)", "GFlops_min", "GFlops_avg", "GFlops_max", "GMemAcc_min",
-            "GMemAcc_avg", "GMemAcc_max", "Bandwidth (GByte/s)",
-            "Footprint (GByte)"])
+        tbl.add_row(["Function", "Calls", "Time_min [s]", "Time_avg [s]",
+            "Time_max [s]", "GFlops_min", "GFlops_avg", "GFlops_max", "GMemAcc_min",
+            "GMemAcc_avg", "GMemAcc_max", "Bandwidth [GByte/s]",
+            "Footprint [GByte]"])
 
         from statistics import mean
 
