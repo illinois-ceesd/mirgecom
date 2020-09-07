@@ -33,7 +33,6 @@ In addition to using this array context, you also need to enable profiling in th
    queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
 
-Note that profiling has a performance impact (~20%) and should therefore not be used
-for production runs.
+Note that profiling has a performance impact (~20% at the time of this writing).
 
 .. automodule:: mirgecom.profiling
