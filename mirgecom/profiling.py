@@ -122,73 +122,74 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             (key, value.shape) if hasattr(value, "shape") else (key, value)
             for key, value in kwargs.items())
 
-        if (program not in self.kernel_stats
-                or args_tuple not in self.kernel_stats[program]):
-            kwargs = dict(kwargs)
-            executor = program.target.get_kernel_executor(program, self.queue)
-            info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
+        # Are kernel stats already in the cache?
+        if program in self.kernel_stats and args_tuple in self.kernel_stats[program]:
+            return self.kernel_stats[program][args_tuple]
 
-            kernel = executor.get_typed_and_scheduled_kernel(
-                executor.arg_to_dtype_set(kwargs))
+        # If not, calculate and cache the stats
+        kwargs = dict(kwargs)
+        executor = program.target.get_kernel_executor(program, self.queue)
+        info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
-            idi = info.implemented_data_info
+        kernel = executor.get_typed_and_scheduled_kernel(
+            executor.arg_to_dtype_set(kwargs))
 
-            types = {k: v for k, v in kwargs.items()
-                if hasattr(v, "dtype") and not v.dtype == object}
+        idi = info.implemented_data_info
 
-            param_dict = {**kwargs}
-            param_dict.update({k: None for k, value in kernel.arg_dict.items()
-                if k not in param_dict})
+        types = {k: v for k, v in kwargs.items()
+            if hasattr(v, "dtype") and not v.dtype == object}
 
-            param_dict.update(
-                {d.name: None for d in idi if d.name not in param_dict})
+        param_dict = {**kwargs}
+        param_dict.update({k: None for k, value in kernel.arg_dict.items()
+            if k not in param_dict})
 
-            # Generate the wrapper code
-            wrapper = executor.get_wrapper_generator()
+        param_dict.update(
+            {d.name: None for d in idi if d.name not in param_dict})
 
-            gen = PythonFunctionGenerator("_my_gen_args_profiling", ["param_dict"])
+        # Generate the wrapper code
+        wrapper = executor.get_wrapper_generator()
 
-            # Unpack dict items to local variables
-            for k, v in param_dict.items():
-                gen(f"{k}=param_dict['{k}']")
+        gen = PythonFunctionGenerator("_my_gen_args_profiling", ["param_dict"])
 
-            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
-            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
-            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
+        # Unpack dict items to local variables
+        for k, v in param_dict.items():
+            gen(f"{k}=param_dict['{k}']")
 
-            # Pack modified variables back into dict
-            for k, v in param_dict.items():
-                gen(f"param_dict['{k}']={k}")
+        wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
+        wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
+        wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
-            # Run the wrapper code, save argument values in param_dict
-            gen.get_picklable_function()(param_dict)
+        # Pack modified variables back into dict
+        for k, v in param_dict.items():
+            gen(f"param_dict['{k}']={k}")
 
-            # Get flops/memory statistics
-            kernel = lp.add_and_infer_dtypes(kernel, types)
-            op_map = lp.get_op_map(kernel, subgroup_size="guess")
-            bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
-              .to_bytes().eval_and_sum(param_dict)
+        # Run the wrapper code, save argument values in param_dict
+        gen.get_picklable_function()(param_dict)
 
-            flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
-                param_dict)
+        # Get flops/memory statistics
+        kernel = lp.add_and_infer_dtypes(kernel, types)
+        op_map = lp.get_op_map(kernel, subgroup_size="guess")
+        bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
+          .to_bytes().eval_and_sum(param_dict)
 
-            footprint_bytes = 0
-            try:
-                footprint = lp.gather_access_footprint_bytes(kernel)
-                for k, v in footprint.items():
-                    footprint_bytes += footprint[k].eval_with_dict(param_dict)
+        flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
+            param_dict)
 
-            except lp.symbolic.UnableToDetermineAccessRange:
-                footprint_bytes = None
+        footprint_bytes = 0
+        try:
+            footprint = lp.gather_access_footprint_bytes(kernel)
+            for k, v in footprint.items():
+                footprint_bytes += footprint[k].eval_with_dict(param_dict)
 
-            res = ProfileResult(
-                time=0, flops=flops, bytes_accessed=bytes_accessed,
-                footprint_bytes=footprint_bytes)
+        except lp.symbolic.UnableToDetermineAccessRange:
+            footprint_bytes = None
 
-            self.kernel_stats.setdefault(program, {})[args_tuple] = res
-            return res
+        res = ProfileResult(
+            time=0, flops=flops, bytes_accessed=bytes_accessed,
+            footprint_bytes=footprint_bytes)
 
-        return self.kernel_stats[program][args_tuple]
+        self.kernel_stats.setdefault(program, {})[args_tuple] = res
+        return res
 
     def call_loopy(self, program, **kwargs) -> dict:
         program = self.transform_loopy_program(program)
