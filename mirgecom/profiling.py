@@ -92,24 +92,24 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         tbl = pytools.Table()
 
-        tbl.add_row(["Function", "Calls", "T_min", "T_avg", "T_max",
-            "F_min", "F_avg", "F_max", "M_min", "M_avg", "M_max", "BW_avg",
-            "Footprint_avg"])
+        tbl.add_row(["Function", "Calls", "Time_min", "Time (s)", "Time_max",
+            "GFlops_min", "GFlops_avg", "GFlops_max", "GMemAcc_min", "GMemAcc_avg", "GMemAcc_max", "Bandwidth (GByte/s)",
+            "Footprint (GByte)"])
 
         from statistics import mean
 
         for key, value in self.profile_results.items():
             num_values = len(value)
 
-            times = [v.time for v in value]
-            flops = [v.flops for v in value]
-            bytes_accessed = [v.bytes_accessed for v in value]
-            footprint_bytes = [v.footprint_bytes if v.footprint_bytes is not None
+            times = [v.time / 1e9 for v in value]
+            flops = [v.flops / 1e9 for v in value]
+            bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
+            footprint_bytes = [v.footprint_bytes / 1e9 if v.footprint_bytes is not None
                 else 0 for v in value]
 
             tbl.add_row([key.name, num_values, min(times),
-                int(mean(times)), max(times), min(flops), int(mean(flops)),
-                max(flops), min(bytes_accessed), int(mean(bytes_accessed)),
+                mean(times), max(times), min(flops), mean(flops),
+                max(flops), min(bytes_accessed), mean(bytes_accessed),
                 max(bytes_accessed), round(mean(bytes_accessed)/mean(times), 3),
                 mean(footprint_bytes)])
 
