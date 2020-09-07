@@ -74,7 +74,7 @@ def main(ctx_factory=cl.create_some_context):
     current_t = 0
     eos = IdealSingleGas()
     initializer = Vortex2D(center=orig, velocity=vel)
-    casename = 'vortex'
+    casename = "vortex"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
     nstatus = 10
