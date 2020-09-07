@@ -122,9 +122,9 @@ def main(use_profiling=False):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description='Wave-eager (non-MPI version)')
-    parser.add_argument('--profile', action='store_true',
-        help='enable kernel profiling')
+    parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
+    parser.add_argument("--profile", action="store_true",
+        help="enable kernel profiling")
     args = parser.parse_args()
 
     main(use_profiling=args.profile)

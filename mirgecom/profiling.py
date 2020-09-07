@@ -93,9 +93,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         tbl = pytools.Table()
 
-        tbl.add_row(['Function', 'Calls', 'T_min', 'T_avg', 'T_max',
-            'F_min', 'F_avg', 'F_max', 'M_min', 'M_avg', 'M_max', 'BW_avg',
-            'Footprint_avg'])
+        tbl.add_row(["Function", "Calls", "T_min", "T_avg", "T_max",
+            "F_min", "F_avg", "F_max", "M_min", "M_avg", "M_max", "BW_avg",
+            "Footprint_avg"])
 
         from statistics import mean
 
@@ -118,7 +118,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     def _get_kernel_stats(self, program, kwargs: dict) -> ProfileResult:
         # We need a tuple to index the cache
         args_tuple = tuple(
-            (key, value.shape) if hasattr(value, 'shape') else (key, value)
+            (key, value.shape) if hasattr(value, "shape") else (key, value)
             for key, value in kwargs.items())
 
         if (program not in self.kernel_stats
@@ -133,7 +133,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             idi = info.implemented_data_info
 
             types = {k: v for k, v in kwargs.items()
-                if hasattr(v, 'dtype') and not v.dtype == object}
+                if hasattr(v, "dtype") and not v.dtype == object}
 
             param_dict = {**kwargs}
             param_dict.update({k: None for k, value in kernel.arg_dict.items()
@@ -145,7 +145,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             # Generate the wrapper code
             wrapper = executor.get_wrapper_generator()
 
-            gen = PythonFunctionGenerator('my_gen_args', ["param_dict"])
+            gen = PythonFunctionGenerator("my_gen_args", ["param_dict"])
 
             # Unpack dict items to local variables
             for k, v in param_dict.items():
@@ -164,8 +164,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             # Get flops/memory statistics
             kernel = lp.add_and_infer_dtypes(kernel, types)
-            op_map = lp.get_op_map(kernel, subgroup_size='guess')
-            bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size='guess') \
+            op_map = lp.get_op_map(kernel, subgroup_size="guess")
+            bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
               .to_bytes().eval_and_sum(param_dict)
 
             flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
