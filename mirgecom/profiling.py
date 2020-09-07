@@ -79,10 +79,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         for t in self.profile_events:
             program = t.program
-            res = self._get_kernel_stats(program, t.kwargs)
-            res.time = t.cl_event.profile.end - t.cl_event.profile.start
+            r = self._get_kernel_stats(program, t.kwargs)
+            time = t.cl_event.profile.end - t.cl_event.profile.start
 
-            self.profile_results.setdefault(program, []).append(res)
+            new = ProfileResult(time, r.flops, r.bytes_accessed, r.footprint_bytes)
+
+            self.profile_results.setdefault(program, []).append(new)
 
         self.profile_events = []
 
