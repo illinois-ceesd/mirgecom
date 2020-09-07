@@ -73,10 +73,11 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.kernel_stats = {}
 
     def _finish_profile_events(self) -> None:
-        # First, wait for event completion
+        # First, wait for completion of all events
         if self.profile_events:
             cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
 
+        # Then, collect all events and store them
         for t in self.profile_events:
             program = t.program
             r = self._get_kernel_stats(program, t.kwargs)
@@ -100,6 +101,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             "BWAcc_min [GByte/s]", "BWAcc_mean [GByte/s]", "BWAcc_max [GByte/s]",
             "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]"])
 
+        # Precision of results
         g = ".4g"
 
         from statistics import mean
