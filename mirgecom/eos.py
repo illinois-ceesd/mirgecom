@@ -28,6 +28,8 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import ConservedVars
 
 __doc__ = """
+:mod:`mirgecom.eos` provides implementations of gas equations of state.
+
 Equations of State
 ^^^^^^^^^^^^^^^^^^
 This module is designed provide Equation of State objects used to compute and

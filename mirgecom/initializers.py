@@ -32,9 +32,10 @@ from mirgecom.eos import IdealSingleGas
 
 
 __doc__ = """
+:mod:`mirgecom.initializers` helps intialize and compute flow solution fields.
+
 Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
-
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
@@ -95,8 +96,17 @@ class Vortex2D:
 
         Parameters
         ----------
+        t: float
+            Current time at which the solution is desired.
+        x_vec: np.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+
         Returns
         -------
+        Agglomerated object array with requested flow solution
+
         """
         vortex_loc = self._center + t * self._velocity
 
@@ -171,6 +181,23 @@ class SodShock1D:
             self._xdir = self._dim - 1
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create the 1D Sod's shock solution at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: np.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+
+        Returns
+        -------
+        Agglomerated object array with requested flow solution
+
+        """
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
@@ -280,6 +307,25 @@ class Lump:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create the lump-of-mass solution at time *t* and locations *x_vec*.
+
+        Note that *t* is used to advect the mass lump under the assumption of
+        constant, and uniform velocity.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired
+        x_vec: np.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+
+        Returns
+        -------
+        Agglomerated object array with requested flow solution
+        """
         lump_loc = self._center + t * self._velocity
         assert len(x_vec) == self._dim
         # coordinates relative to lump center
@@ -298,6 +344,24 @@ class Lump:
         return flat_obj_array(mass, energy, mom)
 
     def exact_rhs(self, discr, q, t=0.0):
+        """
+        Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
+
+        Note that this routine is only useful for testing under the condition of
+        uniform, and constant velocity field.
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point.
+        t: float
+            Time at which RHS is desired
+
+        Returns
+        -------
+        Agglomerated object array with RHS of flow solution
+        """
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
         lump_loc = self._center + t * self._velocity
@@ -369,6 +433,23 @@ class Uniform:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create a uniform flow solution at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: np.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (unused)
+
+        Returns
+        -------
+        Agglomerated object array with requested flow solution
+
+        """
         gamma = eos.gamma()
         mass = x_vec[0].copy()
         mom = self._velocity * make_obj_array([mass])
@@ -377,6 +458,21 @@ class Uniform:
         return flat_obj_array(mass, energy, mom)
 
     def exact_rhs(self, discr, q, t=0.0):
+        """
+        Create the RHS for the uniform solution. (Hint - it should be all zero).
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point. (unused)
+        t: float
+            Time at which RHS is desired (unused)
+
+        Returns
+        -------
+        Agglomerated object array with RHS of flow solution
+        """
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
         mass = nodes[0].copy()
