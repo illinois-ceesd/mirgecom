@@ -126,11 +126,11 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     from modepy import vandermonde
     for group in vol_discr.groups:
         mode_ids = group.mode_ids()
-        #        print(f'mode_ids = {mode_ids}')
+        #        print(f"mode_ids = {mode_ids}")
         #        for mode_index, mode_id in enumerate(mode_ids):
         #            mode = sum(modelist)
-        #            print(f'mode = {mode}')
-        #            print(f'list(mode) = {list(mode)}')
+        #            print(f"mode = {mode}")
+        #            print(f"list(mode) = {list(mode)}")
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
         filter_coeff = make_spectral_filter(group, cutoff=cutoff,
@@ -200,7 +200,7 @@ def test_filter_class(ctx_factory, dim, order):
 
     tol = 1e-14
 
-    logger.info(f'Max Errors (uniform field) = {max_errors}')
+    logger.info(f"Max Errors (uniform field) = {max_errors}")
     assert(np.max(max_errors) < tol)
 
     # construct polynomial field:
@@ -221,9 +221,9 @@ def test_filter_class(ctx_factory, dim, order):
     filtered_field = spectral_filter(vol_discr, field)
     soln_resid = field - filtered_field
     max_errors = [discr.norm(v, np.inf) for v in soln_resid]
-    logger.info(f'Field = {field}')
-    logger.info(f'Filtered = {filtered_field}')
-    logger.info(f'Max Errors (poly) = {max_errors}')
+    logger.info(f"Field = {field}")
+    logger.info(f"Filtered = {filtered_field}")
+    logger.info(f"Max Errors (poly) = {max_errors}")
     assert(np.max(max_errors) < tol)
 
     # Any order > cutoff fields should have higher modes attenuated
@@ -252,7 +252,7 @@ def test_filter_class(ctx_factory, dim, order):
             #   ('filtered_spectrum', filtered_spectrum),
             #   ('residual', spectrum_resid)
             # ]
-            # vis.write_vtk_file(f'filter_test_{field_order}.vtu', io_fields)
+            # vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
             field_resid = unfiltered_spectrum - filtered_spectrum
             max_errors = [discr.norm(v, np.inf) for v in field_resid]
             # fields should be different, but not too different
