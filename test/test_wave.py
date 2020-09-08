@@ -60,7 +60,7 @@ def get_standing_wave(dim):
             b=(0.5*np.pi,)*dim,
             n=(n,)*dim)
     c = 2.
-    sym_coords = prim.make_sym_vector('x', dim)
+    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
@@ -81,7 +81,7 @@ def get_manufactured_cubic(dim):
             a=(-1.,)*dim,
             b=(1.,)*dim,
             n=(n,)*dim)
-    sym_coords = prim.make_sym_vector('x', dim)
+    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(sym_t - np.pi/4)
@@ -98,7 +98,7 @@ def sym_wave(dim, sym_phi):
     """
 
     sym_c = pmbl.var("c")
-    sym_coords = prim.make_sym_vector('x', dim)
+    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
 
     # f = phi_tt - c^2 * div(grad(phi))

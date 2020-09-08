@@ -9,6 +9,7 @@ dependencies:
 - clinfo
 - islpy
 - pyopencl
+- pymetis
 - python=3
 - gmsh
 - pip

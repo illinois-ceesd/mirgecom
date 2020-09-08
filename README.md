@@ -8,4 +8,4 @@ Center for Exascale-Enabled Scramjet Design at the University
 of Illinois.
 
 - [Documentation](https://mirgecom.readthedocs.io/en/latest/)
-- [Center Homepage](https://ceesd.illinois.edu) (FIXME: does not exist yet)
+- [Center Homepage](https://ceesd.ncsa.illinois.edu)

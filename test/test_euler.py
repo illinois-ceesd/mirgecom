@@ -666,19 +666,19 @@ def _euler_flow_stepper(actx, parameters):
     """
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
-    mesh = parameters['mesh']
-    t = parameters['time']
-    order = parameters['order']
-    t_final = parameters['tfinal']
-    initializer = parameters['initializer']
-    exittol = parameters['exittol']
-    casename = parameters['casename']
-    boundaries = parameters['boundaries']
-    eos = parameters['eos']
-    cfl = parameters['cfl']
-    dt = parameters['dt']
-    constantcfl = parameters['constantcfl']
-    nstepstatus = parameters['nstatus']
+    mesh = parameters["mesh"]
+    t = parameters["time"]
+    order = parameters["order"]
+    t_final = parameters["tfinal"]
+    initializer = parameters["initializer"]
+    exittol = parameters["exittol"]
+    casename = parameters["casename"]
+    boundaries = parameters["boundaries"]
+    eos = parameters["eos"]
+    cfl = parameters["cfl"]
+    dt = parameters["dt"]
+    constantcfl = parameters["constantcfl"]
+    nstepstatus = parameters["nstatus"]
 
     if t_final <= t:
         return(0.0)
@@ -805,15 +805,15 @@ def test_isentropic_vortex(actx_factory, order):
         vel[:dim] = 1.0
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
-        casename = 'Vortex'
+        casename = "Vortex"
         boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
         eos = IdealSingleGas()
         t = 0
-        flowparams = {'dim': dim, 'dt': dt, 'order': order, 'time': t,
-                      'boundaries': boundaries, 'initializer': initializer,
-                      'eos': eos, 'casename': casename, 'mesh': mesh,
-                      'tfinal': t_final, 'exittol': exittol, 'cfl': cfl,
-                      'constantcfl': False, 'nstatus': 0}
+        flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,
+                      "boundaries": boundaries, "initializer": initializer,
+                      "eos": eos, "casename": casename, "mesh": mesh,
+                      "tfinal": t_final, "exittol": exittol, "cfl": cfl,
+                      "constantcfl": False, "nstatus": 0}
         maxerr = _euler_flow_stepper(actx, flowparams)
         eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
