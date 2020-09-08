@@ -129,7 +129,8 @@ class Vortex2D:
 
 
 class SodShock1D:
-    r"""Implement a 1D Sod Shock
+    r"""Implement a 1D Sod Shock.
+
         - JSH/TW Nodal DG Methods, p. 209
 
     The Sod Shock setup is defined by:
@@ -260,7 +261,7 @@ class Lump:
             self, numdim=1, rho0=1.0, rhoamp=1.0,
             p0=1.0, center=[0], velocity=[0]
     ):
-        r"""Initialize Lump parameters
+        r"""Initialize Lump parameters.
 
         Parameters
         ----------
@@ -402,7 +403,7 @@ class Uniform:
     def __init__(
             self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
     ):
-        r"""Initialize uniform flow parameters
+        r"""Initialize uniform flow parameters.
 
         Parameters
         ----------
