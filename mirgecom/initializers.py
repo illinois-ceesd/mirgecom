@@ -1,3 +1,14 @@
+"""
+:mod:`mirgecom.initializers` helps intialize and compute flow solution fields.
+
+Solution Initializers
+^^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: Vortex2D
+.. autoclass:: SodShock1D
+.. autoclass:: Lump
+.. autoclass:: Uniform
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -31,19 +42,10 @@ from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 
 
-__doc__ = """
-Initial Conditions
-^^^^^^^^^^^^^^^^^^
-
-.. autoclass:: Vortex2D
-.. autoclass:: SodShock1D
-.. autoclass:: Lump
-.. autoclass:: Uniform
-"""
-
-
 class Vortex2D:
-    r"""Implement the isentropic vortex after
+    r"""Create the isentropic vortex solution.
+
+    Implements the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
           (https://doi.org/10.1016/S0021-9991(03)00206-7)
         - JSH/TW Nodal DG Methods, Section 6.6
@@ -72,7 +74,7 @@ class Vortex2D:
     def __init__(
         self, beta=5, center=[0, 0], velocity=[0, 0],
     ):
-        """Initialize vortex parameters
+        """Initialize vortex parameters.
 
         Parameters
         ----------
@@ -83,12 +85,23 @@ class Vortex2D:
         velocity : numpy.ndarray
             fixed flow velocity used for exact solution at t != 0, shape ``(2,)``
         """
-
         self._beta = beta
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create the isentropic vortex solution at time *t* at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired.
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
@@ -110,7 +123,8 @@ class Vortex2D:
 
 
 class SodShock1D:
-    r"""Implement a 1D Sod Shock
+    r"""Implement a 1D Sod Shock.
+
         - JSH/TW Nodal DG Methods, p. 209
 
     The Sod Shock setup is defined by:
@@ -134,7 +148,7 @@ class SodShock1D:
     def __init__(
             self, dim=2, xdir=0, x0=0.5, rhol=1.0, rhor=0.125, pleft=1.0, pright=0.1,
     ):
-        """Initialize shock parameters
+        """Initialize shock parameters.
 
         Parameters
         ----------
@@ -151,7 +165,6 @@ class SodShock1D:
         pright: float
            pressure to right of shock
         """
-
         self._x0 = x0
         self._rhol = rhol
         self._rhor = rhor
@@ -163,6 +176,18 @@ class SodShock1D:
             self._xdir = self._dim - 1
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create the 1D Sod's shock solution at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
@@ -225,7 +250,7 @@ class Lump:
             self, numdim=1, rho0=1.0, rhoamp=1.0,
             p0=1.0, center=[0], velocity=[0]
     ):
-        r"""Initialize Lump parameters
+        r"""Initialize Lump parameters.
 
         Parameters
         ----------
@@ -243,7 +268,6 @@ class Lump:
             fixed flow velocity used for exact solution at t != 0,
             shape ``(2,)``
         """
-
         if len(center) == numdim:
             self._center = center
         elif len(center) > numdim:
@@ -273,6 +297,21 @@ class Lump:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create the lump-of-mass solution at time *t* and locations *x_vec*.
+
+        Note that *t* is used to advect the mass lump under the assumption of
+        constant, and uniform velocity.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
         lump_loc = self._center + t * self._velocity
         assert len(x_vec) == self._dim
         # coordinates relative to lump center
@@ -291,6 +330,20 @@ class Lump:
         return flat_obj_array(mass, energy, mom)
 
     def exact_rhs(self, discr, q, t=0.0):
+        """
+        Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
+
+        Note that this routine is only useful for testing under the condition of
+        uniform, and constant velocity field.
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point.
+        t: float
+            Time at which RHS is desired
+        """
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
         lump_loc = self._center + t * self._velocity
@@ -318,7 +371,7 @@ class Lump:
 
 
 class Uniform:
-    r"""Implement initialization to a uniform flow
+    r"""Implement initialization to a uniform flow.
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
@@ -331,7 +384,7 @@ class Uniform:
     def __init__(
             self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
     ):
-        r"""Initialize uniform flow parameters
+        r"""Initialize uniform flow parameters.
 
         Parameters
         ----------
@@ -346,7 +399,6 @@ class Uniform:
         velocity : numpy.ndarray
             specifies the flow velocity
         """
-
         if len(velocity) == numdim:
             self._velocity = velocity
         elif len(velocity) > numdim:
@@ -363,6 +415,18 @@ class Uniform:
         self._dim = numdim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create a uniform flow solution at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (unused)
+        """
         gamma = eos.gamma()
         mass = x_vec[0].copy()
         mom = self._velocity * make_obj_array([mass])
@@ -371,6 +435,17 @@ class Uniform:
         return flat_obj_array(mass, energy, mom)
 
     def exact_rhs(self, discr, q, t=0.0):
+        """
+        Create the RHS for the uniform solution. (Hint - it should be all zero).
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point. (unused)
+        t: float
+            Time at which RHS is desired (unused)
+        """
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
         mass = nodes[0].copy()

@@ -1,3 +1,12 @@
+"""Utilities and functions for symbolic code expressions.
+
+.. autofunction:: diff
+.. autofunction:: div
+.. autofunction:: grad
+
+.. autoclass:: EvaluationMapper
+"""
+
 __copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
@@ -26,15 +35,6 @@ import numpy.linalg as la # noqa
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
-
-
-__doc__ = """
-.. autofunction:: diff
-.. autofunction:: div
-.. autofunction:: grad
-
-.. autoclass:: EvaluationMapper
-"""
 
 
 def diff(var):
@@ -75,6 +75,7 @@ class EvaluationMapper(ev.EvaluationMapper):
     """
 
     def map_call(self, expr):
+        """Map a symbolic code expression to actual function call."""
         assert isinstance(expr.function, prim.Variable)
         if expr.function.name == "sin":
             par, = expr.parameters

@@ -1,4 +1,11 @@
-__copyright__ = "Copyright (C) 2020 CEESD Developers"
+""":mod:`mirgecom.wave` computes the rhs of the wave equation.
+
+.. autofunction:: wave_operator
+"""
+
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees"
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,11 +37,6 @@ from grudge.symbolic.primitives import TracePair
 from grudge.eager import interior_trace_pair
 
 
-__doc__ = """
-.. autofunction:: wave_operator
-"""
-
-
 def _flux(discr, c, w_tpair):
     u = w_tpair[0]
     v = w_tpair[1:]
@@ -58,7 +60,8 @@ def _flux(discr, c, w_tpair):
 
 
 def wave_operator(discr, c, w):
-    """
+    """Compute the RHS of the wave equation.
+
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
