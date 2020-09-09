@@ -1,3 +1,5 @@
+"""Demonstrate wave-eager MPI example."""
+
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
@@ -41,6 +43,7 @@ from mpi4py import MPI
 
 
 def bump(actx, discr, t=0):
+    """Create a bump."""
     source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
     source_width = 0.05
     source_omega = 3
@@ -59,6 +62,7 @@ def bump(actx, discr, t=0):
 
 
 def main():
+    """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
