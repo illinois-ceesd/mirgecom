@@ -1,3 +1,13 @@
+"""Boundary condition implementations.
+
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: PrescribedBoundary
+.. autoclass:: DummyBoundary
+.. autoclass:: AdiabaticSlipBoundary
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -30,30 +40,29 @@ from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import split_conserved, join_conserved
 
-__doc__ = """
-Boundary Conditions
-^^^^^^^^^^^^^^^^^^^
-
-.. autoclass:: PrescribedBoundary
-.. autoclass:: DummyBoundary
-.. autoclass:: AdiabaticSlipBoundary
-"""
-
 
 class PrescribedBoundary:
-    """
-    Boundary condition assigns the boundary solution with a
-    user-specified function
+    """Assign the boundary solution with a user-specified function.
 
     .. automethod:: __init__
     .. automethod:: boundary_pair
     """
+
     def __init__(self, userfunc):
+        """Set the boundary function.
+
+        Parameters
+        ----------
+        userfunc
+            User function must take two parameters: time and nodal
+            coordinates, and produce the solution at each node.
+        """
         self._userfunc = userfunc
 
     def boundary_pair(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
 
         boundary_discr = discr.discr_from_dd(btag)
@@ -64,23 +73,22 @@ class PrescribedBoundary:
 
 
 class DummyBoundary:
-    """
-    Simple example boundary condition that interpolates the
-    boundary-adjacent volume solution to both sides of a boundary
-    face.
+    """Use the boundary-adjacent solution as the boundary solution.
 
     .. automethod:: boundary_pair
     """
+
     def boundary_pair(
         self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
 
 class AdiabaticSlipBoundary:
-    """
-    Adiabatic slip boundary for inviscid flows.
+    """Adiabatic slip boundary for inviscid flows
+    
     a.k.a. Reflective inviscid wall boundary
 
     This class implements an adiabatic reflective slip boundary
@@ -96,6 +104,7 @@ class AdiabaticSlipBoundary:
     def boundary_pair(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+      """Get the interior and exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)

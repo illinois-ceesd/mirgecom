@@ -1,3 +1,16 @@
+"""
+:mod:`mirgecom.eos` provides implementations of gas equations of state.
+
+Equations of State
+^^^^^^^^^^^^^^^^^^
+This module is designed provide Equation of State objects used to compute and
+manage the relationships between and among state and thermodynamic variables.
+
+.. autoclass:: EOSDependentVars
+.. autoclass:: GasEOS
+.. autoclass:: IdealSingleGas
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -27,24 +40,13 @@ import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import ConservedVars
 
-__doc__ = """
-Equations of State
-^^^^^^^^^^^^^^^^^^
-This module is designed provide Equation of State objects used to compute and
-manage the relationships between and among state and thermodynamic variables.
-
-.. autoclass:: EOSDependentVars
-.. autoclass:: GasEOS
-.. autoclass:: IdealSingleGas
-"""
-
 
 @dataclass
 class EOSDependentVars:
-    """
-    State-dependent quantities computed by the :class:`GasEOS`
-    interface. Prefer individual methods for model use, use
-    this structure for visualization or probing.
+    """State-dependent quantities for :class:`GasEOS`.
+
+    Prefer individual methods for model use, use this
+    structure for visualization or probing.
 
     .. attribute:: temperature
     .. attribute:: pressure
@@ -55,9 +57,10 @@ class EOSDependentVars:
 
 
 class GasEOS:
-    r"""
-    An abstract interface designed to compute relations between
-    fluid or gas state variables.
+    r"""Abstract interface to equation of state class.
+
+    Equation of state (EOS) classes are responsible for
+    computing relations between fluid or gas state variables.
 
     Each interface call expects that the agglomerated
     object array representing the state vector (:math:`q`),
@@ -74,12 +77,15 @@ class GasEOS:
     """
 
     def pressure(self, cv: ConservedVars):
+        """Get the gas pressure."""
         raise NotImplementedError()
 
     def temperature(self, cv: ConservedVars):
+        """Get the gas temperature."""
         raise NotImplementedError()
 
     def sound_speed(self, cv: ConservedVars):
+        """Get the gas sound speed."""
         raise NotImplementedError()
 
     def gas_const(self, cv: ConservedVars):
@@ -87,12 +93,14 @@ class GasEOS:
         raise NotImplementedError()
 
     def internal_energy(self, cv: ConservedVars):
+        """Get the thermal energy of the gas."""
         raise NotImplementedError()
 
     def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
         raise NotImplementedError()
 
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
+        """Get an agglomerated array of the depedent variables."""
         return EOSDependentVars(
             pressure=self.pressure(q),
             temperature=self.temperature(q),
@@ -100,8 +108,7 @@ class GasEOS:
 
 
 class IdealSingleGas(GasEOS):
-    r"""Implement the ideal gas law (:math:`p = \rho{R}{T}`)
-    for a single component gas.
+    r"""Ideal gas law single-component gas (:math:`p = \rho{R}{T}`).
 
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
@@ -119,18 +126,21 @@ class IdealSingleGas(GasEOS):
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1):
+        """Initialize Ideal Gas EOS parameters."""
         self._gamma = gamma
         self._gas_const = gas_const
 
     def gamma(self):
+        """Get specific heat ratio Cp/Cv."""
         return self._gamma
 
     def gas_const(self):
+        """Get specific gas constant R."""
         return self._gas_const
 
     def internal_energy(self, cv: ConservedVars):
-        r"""
-        Get internal energy.
+
+        r"""Get internal thermal energy of gas.
 
         The internal energy (e) is calculated as:
         .. :math::
@@ -140,12 +150,10 @@ class IdealSingleGas(GasEOS):
         mom = cv.momentum
         return (cv.energy - 0.5 * np.dot(mom, mom) / cv.mass)
 
-    def pressure(self, cv):
-        r"""
-        Get gas pressure.
+    def pressure(self, cv: ConservedVars):
+        r"""Get thermodynamic pressure of the gas.
 
-        The thermodynmic pressure (p) is calculated from
-        the internal energy (e) as:
+        Gas pressure (p) is calculated from the internal energy (e) as:
 
         .. :math::
 
@@ -153,9 +161,8 @@ class IdealSingleGas(GasEOS):
         """
         return self.internal_energy(cv) * (self._gamma - 1.0)
 
-    def sound_speed(self, cv):
-        r"""
-        Get gas sound speed.
+    def sound_speed(self, cv: ConservedVars):
+        r"""Get the speed of sound in the gas.
 
         The speed of sound (c) is calculated as:
 
@@ -169,11 +176,10 @@ class IdealSingleGas(GasEOS):
         c2 = self._gamma / cv.mass * p
         return actx.np.sqrt(c2)
 
-    def temperature(self, cv):
-        r"""
-        Get gas temperature.
+    def temperature(self, cv: ConservedVars):
+        r"""Get the thermodynamic temperature of the gas.
 
-        The thermodynmic temperature (T) is calculated from
+        The thermodynamic temperature (T) is calculated from
         the internal energy (e) and specific gas constant (R)
         as:
 
