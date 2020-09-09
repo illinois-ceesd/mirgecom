@@ -97,15 +97,10 @@ class Vortex2D:
         ----------
         t: float
             Current time at which the solution is desired.
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
-
-        Returns
-        -------
-        Agglomerated object array with requested flow solution
-
         """
         vortex_loc = self._center + t * self._velocity
 
@@ -188,15 +183,10 @@ class SodShock1D:
         ----------
         t: float
             Current time at which the solution is desired (unused)
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
-
-        Returns
-        -------
-        Agglomerated object array with requested flow solution
-
         """
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
@@ -317,14 +307,10 @@ class Lump:
         ----------
         t: float
             Current time at which the solution is desired
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
-
-        Returns
-        -------
-        Agglomerated object array with requested flow solution
         """
         lump_loc = self._center + t * self._velocity
         assert len(x_vec) == self._dim
@@ -357,10 +343,6 @@ class Lump:
             (mass, energy, momentum) for the fluid at each point.
         t: float
             Time at which RHS is desired
-
-        Returns
-        -------
-        Agglomerated object array with RHS of flow solution
         """
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
@@ -440,15 +422,10 @@ class Uniform:
         ----------
         t: float
             Current time at which the solution is desired (unused)
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
-
-        Returns
-        -------
-        Agglomerated object array with requested flow solution
-
         """
         gamma = eos.gamma()
         mass = x_vec[0].copy()
@@ -468,10 +445,6 @@ class Uniform:
             (mass, energy, momentum) for the fluid at each point. (unused)
         t: float
             Time at which RHS is desired (unused)
-
-        Returns
-        -------
-        Agglomerated object array with RHS of flow solution
         """
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
