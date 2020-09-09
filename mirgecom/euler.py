@@ -1,3 +1,41 @@
+r""":mod:`mirgecom.euler` helps solve Euler's equations of gas dynamics.
+
+Euler's equations of gas dynamics:
+
+.. math::
+
+    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
+    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
+
+where:
+
+-   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+-   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+-   domain boundary :math:`\partial_{\Omega}`,
+-   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+    {(\partial_t{\rho\vec{V}})}_s]`
+
+
+State Vector Handling
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ConservedVars
+.. autofunction:: split_conserved
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
+.. autofunction:: inviscid_flux
+.. autofunction:: inviscid_operator
+
+Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: get_inviscid_timestep
+.. autofunction:: get_inviscid_cfl
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -34,47 +72,11 @@ from grudge.eager import (
 )
 
 
-__doc__ = r"""
-:mod:`mirgecom.euler` helps solve Euler's equations of gas dynamics:
-
-.. math::
-
-    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
-
-where:
-
--   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
--   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
--   domain boundary :math:`\partial_{\Omega}`,
--   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-    {(\partial_t{\rho\vec{V}})}_s]`
-
-
-State Vector Handling
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autoclass:: ConservedVars
-.. autofunction:: split_conserved
-
-RHS Evaluation
-^^^^^^^^^^^^^^
-
-.. autofunction:: inviscid_flux
-.. autofunction:: inviscid_operator
-
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: get_inviscid_timestep
-.. autofunction:: get_inviscid_cfl
-"""
-
-
 @dataclass
 class ConservedVars:  # FIXME: Name?
-    r"""Resolve the canonical conserved quantities, (mass, energy, momentum)
+    r"""Resolve the canonical conserved quantities.
+
+    Get the canonical conserved quantities (mass, energy, momentum)
     per unit volume = :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
     object array.
 
@@ -90,16 +92,14 @@ class ConservedVars:  # FIXME: Name?
 
         Momentum vector per unit volume
     """
+
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
 
 
 def _aux_shape(ary, leading_shape):
-    """
-    :arg leading_shape: a tuple with which ``ary.shape`` is expected to begin.
-
-    """
+    """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
     from meshmode.dof_array import DOFArray
     if (isinstance(ary, np.ndarray) and ary.dtype == np.object
             and not isinstance(ary, DOFArray)):
@@ -116,17 +116,18 @@ def _aux_shape(ary, leading_shape):
 
 
 def split_conserved(dim, q):
-    """
+    """Get the canonical conserved quantities.
+
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*.
     """
-
     assert len(q) == 2+dim
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
 def join_conserved(dim, mass, energy, momentum):
+    """Create an agglomerated solution array from the conserved quantities."""
     from pytools import single_valued
     aux_shape = single_valued([
         _aux_shape(mass, ()),
@@ -141,6 +142,7 @@ def join_conserved(dim, mass, energy, momentum):
 
 
 def scalar(s):
+    """Create an object array for a scalar."""
     return make_obj_array([s])
 
 
@@ -162,7 +164,7 @@ def inviscid_flux(discr, eos, q):
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
-    """Return the maximum wavespeed in for flow solution *q*"""
+    """Return the maximum wavespeed in for flow solution *q*."""
     actx = cv.mass.array_context
 
     v = cv.momentum / scalar(cv.mass)
@@ -170,7 +172,7 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
 
 
 def _facial_flux(discr, eos, q_tpair):
-    """Return the flux across a face given the solution on both sides *q_tpair*"""
+    """Return the flux across a face given the solution on both sides *q_tpair*."""
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context
@@ -195,8 +197,7 @@ def _facial_flux(discr, eos, q_tpair):
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    r"""
-    Compute RHS of the Euler flow equations
+    r"""Compute RHS of the Euler flow equations.
 
     Returns
     -------
@@ -221,7 +222,6 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     """
-
     vol_flux = inviscid_flux(discr, eos, q)
     dflux = discr.weak_div(vol_flux)
 
@@ -255,16 +255,14 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
-    """
-    Calculate and return CFL based on current state and timestep
-    """
+    """Calculate and return CFL based on current state and timestep."""
     wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):
-    """
-    Routine (will) return the (local) maximum stable inviscid timestep.
+    """Routine (will) return the (local) maximum stable inviscid timestep.
+
     Currently, it's a hack waiting for the geometric_factor helpers port
     from grudge.
     """

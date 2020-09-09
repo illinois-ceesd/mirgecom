@@ -1,3 +1,14 @@
+"""
+:mod:`mirgecom.initializers` helps intialize and compute flow solution fields.
+
+Solution Initializers
+^^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: Vortex2D
+.. autoclass:: SodShock1D
+.. autoclass:: Lump
+.. autoclass:: Uniform
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -29,18 +40,6 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-
-
-__doc__ = """
-:mod:`mirgecom.initializers` helps intialize and compute flow solution fields.
-
-Solution Initializers
-^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: Vortex2D
-.. autoclass:: SodShock1D
-.. autoclass:: Lump
-.. autoclass:: Uniform
-"""
 
 
 class Vortex2D:

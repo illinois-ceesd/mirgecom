@@ -1,3 +1,8 @@
+"""Helper functions for advancing a gas state.
+
+.. autofunction:: advance_state
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -23,15 +28,9 @@ THE SOFTWARE.
 """
 
 
-__doc__ = """
-.. autofunction:: advance_state
-"""
-
-
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0):
-    """
-    Advance state from some time (t) to some time (t_final)
+    """Advance state from some time (t) to some time (t_final).
 
     Parameters
     ----------

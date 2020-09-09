@@ -1,3 +1,5 @@
+"""Mirgecom high-speed reactive flow simulation package for scramjet design."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
