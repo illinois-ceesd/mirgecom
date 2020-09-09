@@ -1,3 +1,12 @@
+""":mod:`mirgecom.filter` is for filters and filter-related constructs.
+
+.. automethod: exponential_mode_response_function
+.. automethod: make_spectral_filter
+.. automethod: linear_operator_kernel
+.. automethod: apply_linear_operator
+.. autoclass: SpectralFilter
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -28,6 +37,7 @@ from pytools.obj_array import obj_array_vectorized_n_args
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
+    """Return the filter coefficient for the user-provided *mode*."""
     return np.exp(-1.0 * alpha * ((mode - cutoff) / nfilt)
                   ** (2*filter_order))
 
@@ -80,6 +90,7 @@ def make_spectral_filter(element_group, cutoff, mode_response_function):
 
 
 def linear_operator_kernel():
+    """Apply linear operator to all elements."""
     from meshmode.array_context import make_loopy_program
     knl = make_loopy_program(
         """{[iel,idof,j]:
@@ -93,11 +104,17 @@ def linear_operator_kernel():
 
 
 class SpectralFilter:
-    r"""
+    r"""Encapsulate spectral filter operator.
+
     Encapsulates the simulation-static filter operators and
     provides the methods to apply filtering to input fields.
+
+    .. automethod: __init__
+    .. automethod: __call__
     """
+
     def __init__(self, discr, filter_mat):
+        """Initialize spectral filter parameters."""
         self._filter_operators = []
         from modepy import vandermonde
         for group in discr.groups:
@@ -109,6 +126,7 @@ class SpectralFilter:
 
     @obj_array_vectorized_n_args
     def __call__(self, discr, fields):
+        """Apply spectral filter to specified *fields*."""
         actx = fields.array_context
         result = discr.empty(fields.array_context, dtype=fields.entry_dtype)
         for group_index, group in enumerate(discr.groups):
@@ -123,6 +141,7 @@ class SpectralFilter:
 
 @obj_array_vectorized_n_args
 def apply_linear_operator(discr, operator, fields):
+    """Apply *operator* matrix to *fields*."""
     actx = fields.array_context
     result = discr.empty(actx, dtype=fields.entry_dtype)
     for group in discr.groups:
