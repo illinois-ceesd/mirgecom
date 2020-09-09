@@ -97,6 +97,7 @@ class GasEOS:
         raise NotImplementedError()
 
     def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
+        """Get the total (thermal + kinetic) energy for the gas."""
         raise NotImplementedError()
 
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
@@ -139,7 +140,6 @@ class IdealSingleGas(GasEOS):
         return self._gas_const
 
     def internal_energy(self, cv: ConservedVars):
-
         r"""Get internal thermal energy of gas.
 
         The internal energy (e) is calculated as:

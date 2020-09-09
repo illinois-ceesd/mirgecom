@@ -71,7 +71,6 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     q: Object array of DOFArrays
         Agglomerated object array with the uniform flow
     """
-
     dim = len(x_vec)
     if velocity is None:
         velocity = np.zeros(shape=(dim,))
@@ -124,7 +123,6 @@ def _make_pulse(amp, r0, w, r):
     G : float array
         The values of the exponential function
     """
-
     dim = len(r)
     r_0 = np.zeros(dim)
     r_0 = r_0 + r0
@@ -502,7 +500,6 @@ class AcousticPulse:
         center : numpy.ndarray
             pulse location, shape ``(numdim,)``
         """
-
         if len(center) == numdim:
             self._center = center
         elif len(center) > numdim:
@@ -518,6 +515,18 @@ class AcousticPulse:
         self._dim = numdim
 
     def __call__(self, x_vec, q, eos=IdealSingleGas()):
+        """
+        Create the acoustic pulse at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (unused)
+        """
         assert len(x_vec) == self._dim
         cv = split_conserved(self._dim, q)
         cv.energy = cv.energy + _make_pulse(amp=self._amp, w=self._width,

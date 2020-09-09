@@ -87,8 +87,8 @@ class DummyBoundary:
 
 
 class AdiabaticSlipBoundary:
-    """Adiabatic slip boundary for inviscid flows
-    
+    """Adiabatic slip boundary for inviscid flows.
+
     a.k.a. Reflective inviscid wall boundary
 
     This class implements an adiabatic reflective slip boundary
@@ -101,10 +101,11 @@ class AdiabaticSlipBoundary:
 
     .. automethod:: boundary_pair
     """
+
     def boundary_pair(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
-      """Get the interior and exterior solution on the boundary."""
+        """Get the interior and exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)
