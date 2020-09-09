@@ -1,3 +1,5 @@
+"""Demonstrate acoustic pulse, and adiabatic slip wall."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -61,7 +63,7 @@ from mirgecom.eos import IdealSingleGas
 
 
 def main(ctx_factory=cl.create_some_context):
-
+    """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
@@ -82,7 +84,7 @@ def main(ctx_factory=cl.create_some_context):
     current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
-    casename = 'pulse'
+    casename = "pulse"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
