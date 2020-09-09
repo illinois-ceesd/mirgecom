@@ -1,3 +1,5 @@
+"""An array context with profiling capabilities."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -38,6 +40,7 @@ __doc__ = """
 @dataclass
 class ProfileResult:
     """Class to hold the results of a single kernel execution."""
+
     time: int
     flops: int
     bytes_accessed: int
@@ -47,6 +50,7 @@ class ProfileResult:
 @dataclass
 class ProfileEvent:
     """Class to hold a profile event that has not been seen by the profiler yet."""
+
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
     kwargs: dict
@@ -58,7 +62,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
 
-    Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`."""
+    Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
+    """
 
     def __init__(self, queue, allocator=None) -> None:
         super().__init__(queue, allocator)
@@ -90,7 +95,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_events = []
 
     def tabulate_profiling_data(self) -> pytools.Table:
-        """Returns a :class:`pytools.Table` with the profiling results."""
+        """Return a :class:`pytools.Table` with the profiling results."""
         self._finish_profile_events()
 
         tbl = pytools.Table()
@@ -212,6 +217,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         return res
 
     def call_loopy(self, program, **kwargs) -> dict:
+        """Execute the loopy kernel."""
         program = self.transform_loopy_program(program)
         assert program.options.return_dict
         assert program.options.no_numpy
