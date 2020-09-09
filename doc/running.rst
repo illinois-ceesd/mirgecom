@@ -4,6 +4,30 @@ Running MirgeCOM
 Running with large numbers of ranks and nodes
 ---------------------------------------------
 
+Running MirgeCOM on large systems can be challenging due to the startup overheads of
+Python and the MirgeCOM-related packages, as well as due to caching effects of kernels.
+As a general rule, make sure to execute MirgeCOM on a parallel file system, not on
+NFS-based file systems. On Quartz and Lassen, for example, this would mean running on the
+`/p/lscratchh/` and `/p/gpfs1/` file systems, respectively.
+
+
+Avoiding the startup overhead of Python
+***************************************
+
+On large systems, the file system can become a bottleneck for loading Python
+packages, especially when not running on a parallel file system. To avoid this
+overhead, it is possible to create a zip file with the Python modules
+to speed up the startup process. Emirge contains a helper script to create such
+a zip file. This can be done by specifying the `--modules` parameter to
+`install.sh` when installing emirge, or by running `makezip.sh` after
+installation.
+
+Please see https://github.com/illinois-ceesd/planning/issues/26 for more information.
+
+Avoiding overheads due to caching of kernels
+********************************************
+
+
 Several packages used in MirgeCOM cache generated files on the hard
 disk in order to speed up multiple executions of the same kernel. This can lead
 to slowdowns on startup when executing on many ranks and/or nodes due to concurrent
@@ -18,3 +42,5 @@ cache files in directories that are private to each rank by using the ``XDG_CACH
 environment variable, such as in the following example::
 
    $ srun -n 512 bash -c 'XDG_CACHE_HOME=/p/lscratchh/diener3/xdg-scratch$SLURM_PROCID python examples/wave-eager-mpi.py'
+
+Please see https://github.com/illinois-ceesd/planning/issues/27 for more information.
