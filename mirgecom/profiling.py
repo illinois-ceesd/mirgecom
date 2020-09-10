@@ -123,7 +123,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
             bandwidth_access = [b / t for b, t in zip(bytes_accessed, times)]
 
-            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in value], None)
+            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in value],
+                None)
             fprint_mean = f"{np.mean(fprint_bytes) / 1e9:{g}}"
 
             # pylint: disable=E1101
