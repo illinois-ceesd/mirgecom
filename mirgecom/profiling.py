@@ -125,7 +125,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             bandwidth_access = [b / t for b, t in zip(bytes_accessed, times)]
 
             fprint_bytes = ma.masked_equal([v.footprint_bytes for v in value], None)
-            fprint_mean = np.mean(fprint_bytes) / 1e9
+            fprint_mean = f"{np.mean(fprint_bytes) / 1e9:{g}}"
             if len(fprint_bytes.compressed()) > 0:
                 fprint_min = f"{np.min(fprint_bytes.compressed() / 1e9):{g}}"
                 fprint_max = f"{np.max(fprint_bytes.compressed() / 1e9):{g}}"
