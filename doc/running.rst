@@ -19,7 +19,7 @@ packages, especially when not running on a parallel file system. To avoid this
 overhead, it is possible to create a zip file with the Python modules
 to speed up the startup process. `Emirge <https://github.com/illinois-ceesd/emirge/>`__ contains a helper script to create such
 a zip file. This can be used by specifying the ``--modules`` parameter to
-`install.sh` when installing emirge, or by running `makezip.sh` after
+``install.sh`` when installing emirge, or by running ``makezip.sh`` after
 installation.
 
 Please see https://github.com/illinois-ceesd/planning/issues/26 for more information.
