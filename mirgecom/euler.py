@@ -13,8 +13,9 @@ where:
 -   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
     (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y_s}\vec{V}]`,
 -   domain boundary :math:`\partial_{\Omega}`,
--   sources :math:`\mathbf{\phi} = [{(\partial_t{\rho})}_\phi, {(\partial_t{\rho{E}})}_\phi,
-    {(\partial_t{\rho\vec{V}})}_\phi, {(\partial_t{\rho{mathbf{Y_s}}})}_\phi]`
+-   sources :math:`\mathbf{\phi} = [{(\partial_t{\rho})}_\phi, \\
+                   {(\partial_t{\rho{E}})}_\phi,{(\partial_t{\rho\vec{V}})}_\phi, \\
+                   {(\partial_t{\rho{mathbf{Y_s}}})}_\phi]`
 
 
 State Vector Handling
@@ -124,38 +125,51 @@ def get_num_species(dim, q):
     """Return number of mixture species."""
     return len(q) - (dim + 2)
 
-    
+
 def get_num_conserved(dim, q):
     """Return number of conserved quantities."""
     return dim + 2 + get_num_species(dim, q)
 
-   
+
 def split_conserved(dim, q):
     """Get the canonical conserved quantities.
 
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
     mass, energy, and momentum from the agglomerated object array extracted
-    from the state vector *q*.
+    from the state vector *q*. If present, species mass fractions are included.
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
-    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
+    nspec = get_num_species(dim, q)
+    if nspec > 0:
+        return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
+                             massfrac=q[2+dim:2+dim+nspec])
+    else:
+        return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def join_conserved(dim, mass, energy, momentum, massfrac):
+def join_conserved(dim, mass, energy, momentum, massfrac=None):
     """Create an agglomerated solution array from the conserved quantities."""
     from pytools import single_valued
-    nspec = get_num_species(dim,q)
-    aux_shape = single_valued([
-        _aux_shape(mass, ()),
-        _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,)),
-        _aux_shape(massfrac, (nspec,))])
+    nspec = 0
+    if massfrac is not None:
+        nspec = len(massfrac)
+        aux_shape = single_valued([
+            _aux_shape(mass, ()),
+            _aux_shape(energy, ()),
+            _aux_shape(momentum, (dim,)),
+            _aux_shape(massfrac, (nspec,))])
+    else:
+        aux_shape = single_valued([
+            _aux_shape(mass, ()),
+            _aux_shape(energy, ()),
+            _aux_shape(momentum, (dim,))])
 
     result = np.zeros((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
     result[1] = energy
-    result[2:dim+1] = momentum
-    result[dim+2:] = massfrac
+    result[2:dim+2] = momentum
+    if nspec > 0:
+        result[dim+2:] = massfrac
     return result
 
 
