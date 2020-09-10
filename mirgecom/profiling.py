@@ -168,7 +168,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         types = {k: v for k, v in kwargs.items()
             if hasattr(v, "dtype") and not v.dtype == object}
 
-        param_dict = {**kwargs}
+        param_dict = kwargs.copy()
         param_dict.update({k: None for k, value in kernel.arg_dict.items()
             if k not in param_dict})
 
