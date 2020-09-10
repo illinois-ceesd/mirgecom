@@ -104,7 +104,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             "Time_min [s]", "Time_avg [s]", "Time_max [s]",
             "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
             "BWAcc_min [GByte/s]", "BWAcc_mean [GByte/s]", "BWAcc_max [GByte/s]",
-            "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]"])
+            "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]", "Intensity (flops/byte)"])
 
         # Precision of results
         g = ".4g"
@@ -133,6 +133,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             else:
                 bandwidth_footprint_val = {"min": "n/a", "mean": "n/a", "max": "n/a"}
 
+
+            bytes_per_flop = [f / b for f, b in zip(flops, bytes_accessed)]
+
             tbl.add_row([key.name, num_values,
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 f"{min(flops_per_sec):{g}}", f"{mean(flops_per_sec):{g}}",
@@ -141,7 +144,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 f"{max(bandwidth_access):{g}}",
                 f"{bandwidth_footprint_val['min']}",
                 f"{bandwidth_footprint_val['mean']}",
-                f"{bandwidth_footprint_val['max']}"])
+                f"{bandwidth_footprint_val['max']}",
+                f"{mean(bytes_per_flop):{g}}"])
 
         return tbl
 
@@ -202,7 +206,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         try:
             footprint = lp.gather_access_footprint_bytes(kernel)
-            footprint_bytes = sum(footprint[k].eval_with_dict(domain_params) for k in footprint)
+            footprint_bytes = sum(footprint[k].eval_with_dict(domain_params)
+                for k in footprint)
 
         except lp.symbolic.UnableToDetermineAccessRange:
             footprint_bytes = None
