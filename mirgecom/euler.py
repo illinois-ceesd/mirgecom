@@ -5,17 +5,16 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{\phi}
+    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{\phi}_{source}
 
 where:
 
 -   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y_s}]`
 -   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
     (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y_s}\vec{V}]`,
--   domain boundary :math:`\partial_{\Omega}`,
--   sources :math:`\mathbf{\phi} = [{(\partial_t{\rho})}_\phi, \\
-                   {(\partial_t{\rho{E}})}_\phi,{(\partial_t{\rho\vec{V}})}_\phi, \\
-                   {(\partial_t{\rho{mathbf{Y_s}}})}_\phi]`
+-   unit normal :math:`\hat{n}` to the domain boundary :math:`\partial_{\Omega}`,
+-   sources :math:`\mathbf{\phi}_{source} = [{\Delta}_t{\rho}, {\Delta}_t(\rho{E}),
+    {\Delta}_t(\rho\vec{V}), {\Delta}_t(\rho{Y_s})]`
 
 
 State Vector Handling
@@ -23,6 +22,7 @@ State Vector Handling
 
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
+.. autofunction:: join_conserved
 
 RHS Evaluation
 ^^^^^^^^^^^^^^
@@ -77,9 +77,9 @@ from grudge.eager import (
 class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
-    Get the canonical conserved quantities (mass, energy, momentum)
-    per unit volume = :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
-    object array.
+    Get the canonical conserved quantities (mass, energy, momentum,
+    mass_fraction) per unit volume = :math:`(\rho,\rho{E},\rho\vec{V},
+    \rho{Y_s})` from an agglomerated object array.
 
     .. attribute:: mass
 
@@ -182,8 +182,8 @@ def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})\\
-    +p\mathbf{I}, \rho\mathbf{Y_s}\vec{V}))`
+    :math:`(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
+    +p\mathbf{I}, \rho{Y_s}\vec{V})`
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -238,12 +238,10 @@ def _facial_flux(discr, eos, q_tpair):
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     r"""Compute RHS of the Euler flow equations.
 
-    Returns
-    -------
-    The right-hand-side of the Euler flow equations:
+    The RHS (:math:`\dot{\mathbf{Q}}`) is computed as:
 
-    :math:`\dot\mathbf{q} = \mathbf{S} - \nabla\cdot\mathbf{F} +
-          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega}`
+    :math:`\dot{\mathbf{Q}} = \mathbf{\phi}_{source} - \nabla\cdot\mathbf{F} +
+    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}}`
 
     Parameters
     ----------
@@ -260,6 +258,12 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     eos : mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
+
+    Returns
+    -------
+    numpy.ndarray
+        Agglomerated object array of DOF arrays representing the RHS of the Euler
+        flow equations.
     """
     vol_flux = inviscid_flux(discr, eos, q)
     dflux = discr.weak_div(vol_flux)
