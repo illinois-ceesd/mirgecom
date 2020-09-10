@@ -8,7 +8,9 @@ Running MirgeCOM on large systems can be challenging due to the startup overhead
 Python and the MirgeCOM-related packages, as well as due to caching effects of kernels.
 As a general rule, make sure to execute MirgeCOM on a parallel file system, not on
 NFS-based file systems. On Quartz and Lassen, for example, this would mean running on the
-`/p/lscratchh/` and `/p/gpfs1/` file systems, respectively.
+`/p/lscratchh/` and `/p/gpfs1/` file systems, respectively. See the
+`Livermore documentation <https://computing.llnl.gov/tutorials/lc_resources/>`__
+for more information.
 
 
 Avoiding the startup overhead of Python
@@ -17,12 +19,11 @@ Avoiding the startup overhead of Python
 On large systems, the file system can become a bottleneck for loading Python
 packages, especially when not running on a parallel file system. To avoid this
 overhead, it is possible to create a zip file with the Python modules
-to speed up the startup process. `Emirge <https://github.com/illinois-ceesd/emirge/>`__ contains a helper script to create such
-a zip file. This can be used by specifying the ``--modules`` parameter to
-``install.sh`` when installing emirge, or by running ``makezip.sh`` after
-installation.
-
-Please see https://github.com/illinois-ceesd/planning/issues/26 for more information.
+to speed up the startup process. `Emirge
+<https://github.com/illinois-ceesd/emirge/>`__ contains a helper script to
+create such a zip file. This can be used by specifying the ``--modules``
+parameter to ``install.sh`` when installing emirge, or by running
+``makezip.sh`` after installation.
 
 Avoiding overheads due to caching of kernels
 ********************************************
@@ -42,5 +43,3 @@ cache files in directories that are private to each rank by using the ``XDG_CACH
 environment variable, such as in the following example::
 
    $ srun -n 512 bash -c 'XDG_CACHE_HOME=/p/lscratchh/diener3/xdg-scratch$SLURM_PROCID python examples/wave-eager-mpi.py'
-
-Please see https://github.com/illinois-ceesd/planning/issues/27 for more information.
