@@ -125,7 +125,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             bandwidth_access = [b / t for b, t in zip(bytes_accessed, times)]
 
-            if len(footprint_bytes) > 0:
+            if footprint_bytes:
                 bandwidth_footprint = [b / t for b, t in zip(footprint_bytes, times)]
                 bandwidth_footprint_val = {"min": f"{min(bandwidth_footprint):{g}}",
                     "mean": f"{mean(bandwidth_footprint):{g}}",
