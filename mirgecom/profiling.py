@@ -104,35 +104,34 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             "Time_min [s]", "Time_avg [s]", "Time_max [s]",
             "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
             "BWAcc_min [GByte/s]", "BWAcc_mean [GByte/s]", "BWAcc_max [GByte/s]",
-            "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]", "Intensity (flops/byte)"])
+            "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]",
+            "Intensity (flops/byte)"])
 
         # Precision of results
         g = ".4g"
 
         from statistics import mean
+        import numpy.ma as ma
 
         for key, value in self.profile_results.items():
             num_values = len(value)
 
             times = [v.time / 1e9 for v in value]
-            flops = [v.flops / 1e9 for v in value]
 
+            flops = [v.flops / 1e9 for v in value]
             flops_per_sec = [f / t for f, t in zip(flops, times)]
 
             bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
-            footprint_bytes = [v.footprint_bytes / 1e9 for v in value
-                if v.footprint_bytes is not None]
-
             bandwidth_access = [b / t for b, t in zip(bytes_accessed, times)]
 
-            if footprint_bytes:
-                bandwidth_footprint = [b / t for b, t in zip(footprint_bytes, times)]
-                bandwidth_footprint_val = {"min": f"{min(bandwidth_footprint):{g}}",
-                    "mean": f"{mean(bandwidth_footprint):{g}}",
-                    "max": f"{max(bandwidth_footprint):{g}}"}
+            fprint_bytes = ma.masked_equal([v.footprint_bytes for v in value], None)
+            fprint_mean = np.mean(fprint_bytes) / 1e9
+            if len(fprint_bytes.compressed()) > 0:
+                fprint_min = f"{np.min(fprint_bytes.compressed() / 1e9):{g}}"
+                fprint_max = f"{np.max(fprint_bytes.compressed() / 1e9):{g}}"
             else:
-                bandwidth_footprint_val = {"min": "n/a", "mean": "n/a", "max": "n/a"}
-
+                fprint_min = "--"
+                fprint_max = "--"
 
             bytes_per_flop = [f / b for f, b in zip(flops, bytes_accessed)]
 
@@ -142,9 +141,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 f"{max(flops_per_sec):{g}}",
                 f"{min(bandwidth_access):{g}}", f"{mean(bandwidth_access):{g}}",
                 f"{max(bandwidth_access):{g}}",
-                f"{bandwidth_footprint_val['min']}",
-                f"{bandwidth_footprint_val['mean']}",
-                f"{bandwidth_footprint_val['max']}",
+                fprint_min, fprint_mean, fprint_max,
                 f"{mean(bytes_per_flop):{g}}"])
 
         return tbl
@@ -156,68 +153,68 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             for key, value in kwargs.items())
 
         # Are kernel stats already in the cache?
-        if program in self.kernel_stats and args_tuple in self.kernel_stats[program]:
-            return self.kernel_stats[program][args_tuple]
-
-        # If not, calculate and cache the stats
-        kwargs = dict(kwargs)
-        executor = program.target.get_kernel_executor(program, self.queue)
-        info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
-
-        kernel = executor.get_typed_and_scheduled_kernel(
-            executor.arg_to_dtype_set(kwargs))
-
-        idi = info.implemented_data_info
-
-        types = {k: v for k, v in kwargs.items()
-            if hasattr(v, "dtype") and not v.dtype == object}
-
-        param_dict = kwargs.copy()
-        param_dict.update({k: None for k in kernel.arg_dict.keys()
-            if k not in param_dict})
-
-        param_dict.update(
-            {d.name: None for d in idi if d.name not in param_dict})
-
-        # Generate the wrapper code
-        wrapper = executor.get_wrapper_generator()
-
-        gen = PythonFunctionGenerator("_mcom_gen_args_profiling", list(param_dict))
-
-        wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
-        wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
-        wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
-
-        param_names = program.all_params()
-        gen("return {%s}" % ", ".join(
-            f"{repr(name)}: {name}" for name in param_names))
-
-        # Run the wrapper code, save argument values in domain_params
-        domain_params = gen.get_picklable_function()(**param_dict)
-
-        # Get flops/memory statistics
-        kernel = lp.add_and_infer_dtypes(kernel, types)
-        op_map = lp.get_op_map(kernel, subgroup_size="guess")
-        bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
-          .to_bytes().eval_and_sum(domain_params)
-
-        flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
-            domain_params)
-
         try:
-            footprint = lp.gather_access_footprint_bytes(kernel)
-            footprint_bytes = sum(footprint[k].eval_with_dict(domain_params)
-                for k in footprint)
+            return self.kernel_stats[program][args_tuple]
+        except KeyError:
+            # If not, calculate and cache the stats
+            kwargs = dict(kwargs)
+            executor = program.target.get_kernel_executor(program, self.queue)
+            info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
-        except lp.symbolic.UnableToDetermineAccessRange:
-            footprint_bytes = None
+            kernel = executor.get_typed_and_scheduled_kernel(
+                executor.arg_to_dtype_set(kwargs))
 
-        res = ProfileResult(
-            time=0, flops=flops, bytes_accessed=bytes_accessed,
-            footprint_bytes=footprint_bytes)
+            idi = info.implemented_data_info
 
-        self.kernel_stats.setdefault(program, {})[args_tuple] = res
-        return res
+            types = {k: v for k, v in kwargs.items()
+                if hasattr(v, "dtype") and not v.dtype == object}
+
+            param_dict = kwargs.copy()
+            param_dict.update({k: None for k in kernel.arg_dict.keys()
+                if k not in param_dict})
+
+            param_dict.update(
+                {d.name: None for d in idi if d.name not in param_dict})
+
+            # Generate the wrapper code
+            wrapper = executor.get_wrapper_generator()
+
+            gen = PythonFunctionGenerator("_mcom_gen_args_profile", list(param_dict))
+
+            wrapper.generate_integer_arg_finding_from_shapes(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
+            wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
+
+            param_names = program.all_params()
+            gen("return {%s}" % ", ".join(
+                f"{repr(name)}: {name}" for name in param_names))
+
+            # Run the wrapper code, save argument values in domain_params
+            domain_params = gen.get_picklable_function()(**param_dict)
+
+            # Get flops/memory statistics
+            kernel = lp.add_and_infer_dtypes(kernel, types)
+            op_map = lp.get_op_map(kernel, subgroup_size="guess")
+            bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
+              .to_bytes().eval_and_sum(domain_params)
+
+            flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
+                domain_params)
+
+            try:
+                footprint = lp.gather_access_footprint_bytes(kernel)
+                footprint_bytes = sum(footprint[k].eval_with_dict(domain_params)
+                    for k in footprint)
+
+            except lp.symbolic.UnableToDetermineAccessRange:
+                footprint_bytes = None
+
+            res = ProfileResult(
+                time=0, flops=flops, bytes_accessed=bytes_accessed,
+                footprint_bytes=footprint_bytes)
+
+            self.kernel_stats.setdefault(program, {})[args_tuple] = res
+            return res
 
     def call_loopy(self, program, **kwargs) -> dict:
         """Execute the loopy kernel."""
