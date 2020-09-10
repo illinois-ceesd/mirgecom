@@ -83,8 +83,9 @@ intersphinx_mapping = {
     "https://documen.tician.de/meshmode/": None,
     "https://documen.tician.de/grudge/": None,
     "https://documen.tician.de/pytato/": None,
-    "http://documen.tician.de/loopy/": None,
-    "http://documen.tician.de/pymbolic": None,
+    "https://documen.tician.de/loopy/": None,
+    "https://documen.tician.de/pymbolic/": None,
+    "https://documen.tician.de/pytools/": None,
     }
 
 autoclass_content = "class"
