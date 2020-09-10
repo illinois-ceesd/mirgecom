@@ -101,7 +101,7 @@ class ConservedVars:  # FIXME: Name?
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
-    massfrac: np.ndarray
+    massfrac: np.ndarray = None
 
 
 def _aux_shape(ary, leading_shape):
@@ -190,11 +190,16 @@ def inviscid_flux(discr, eos, q):
     p = eos.pressure(cv)
 
     mom = cv.momentum
+
+    massfrac = None
+    if cv.massfrac is not None:
+        massfrac = mom * scalar(cv.massfrac) / cv.mass
+
     return join_conserved(dim,
             mass=mom,
             energy=mom * scalar((cv.energy + p) / cv.mass),
             momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p),
-            massfrac=mom * scalar(cv.massfrac) / cv.mass)
+            massfrac=massfrac)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
