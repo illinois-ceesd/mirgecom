@@ -200,11 +200,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
             domain_params)
 
-        footprint_bytes = 0
         try:
             footprint = lp.gather_access_footprint_bytes(kernel)
-            for k, v in footprint.items():
-                footprint_bytes += footprint[k].eval_with_dict(domain_params)
+            footprint_bytes = sum(footprint[k].eval_with_dict(domain_params) for k in footprint)
 
         except lp.symbolic.UnableToDetermineAccessRange:
             footprint_bytes = None
