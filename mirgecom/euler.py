@@ -5,16 +5,16 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
+    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{\phi}
 
 where:
 
--   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+-   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y_s}]`
 -   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y_s}\vec{V}]`,
 -   domain boundary :math:`\partial_{\Omega}`,
--   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-    {(\partial_t{\rho\vec{V}})}_s]`
+-   sources :math:`\mathbf{\phi} = [{(\partial_t{\rho})}_\phi, {(\partial_t{\rho{E}})}_\phi,
+    {(\partial_t{\rho\vec{V}})}_\phi, {(\partial_t{\rho{mathbf{Y_s}}})}_\phi]`
 
 
 State Vector Handling
@@ -91,11 +91,16 @@ class ConservedVars:  # FIXME: Name?
     .. attribute:: momentum
 
         Momentum vector per unit volume
+
+    .. attribute:: massfrac
+
+        Species mass fraction per unit volume
     """
 
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
+    massfrac: np.ndarray
 
 
 def _aux_shape(ary, leading_shape):
@@ -115,6 +120,16 @@ def _aux_shape(ary, leading_shape):
         return ()
 
 
+def get_num_species(dim, q):
+    """Return number of mixture species."""
+    return len(q) - (dim + 2)
+
+    
+def get_num_conserved(dim, q):
+    """Return number of conserved quantities."""
+    return dim + 2 + get_num_species(dim, q)
+
+   
 def split_conserved(dim, q):
     """Get the canonical conserved quantities.
 
@@ -122,22 +137,25 @@ def split_conserved(dim, q):
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*.
     """
-    assert len(q) == 2+dim
+    #    assert len(q) == dim + 2 + get_num_species(dim, q)
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def join_conserved(dim, mass, energy, momentum):
+def join_conserved(dim, mass, energy, momentum, massfrac):
     """Create an agglomerated solution array from the conserved quantities."""
     from pytools import single_valued
+    nspec = get_num_species(dim,q)
     aux_shape = single_valued([
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,))])
+        _aux_shape(momentum, (dim,)),
+        _aux_shape(massfrac, (nspec,))])
 
-    result = np.zeros((2+dim,) + aux_shape, dtype=object)
+    result = np.zeros((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
     result[1] = energy
-    result[2:] = momentum
+    result[2:dim+1] = momentum
+    result[dim+2:] = massfrac
     return result
 
 
@@ -150,7 +168,8 @@ def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
+    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})\\
+    +p\mathbf{I}, \rho\mathbf{Y_s}\vec{V}))`
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -160,7 +179,8 @@ def inviscid_flux(discr, eos, q):
     return join_conserved(dim,
             mass=mom,
             energy=mom * scalar((cv.energy + p) / cv.mass),
-            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p))
+            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p),
+            massfrac=mom * scalar(cv.massfrac) / cv.mass)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
