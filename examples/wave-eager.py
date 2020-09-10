@@ -31,9 +31,11 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
+from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
+
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 
 def bump(actx, discr, t=0):
@@ -55,12 +57,18 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main():
+def main(use_profiling=False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
@@ -103,6 +111,8 @@ def main():
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
+            if use_profiling:
+                print(actx.tabulate_profiling_data())
             print(istep, t, discr.norm(fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
@@ -115,6 +125,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
+    parser.add_argument("--profile", action="store_true",
+        help="enable kernel profiling")
+    args = parser.parse_args()
+
+    main(use_profiling=args.profile)
 
 # vim: foldmethod=marker

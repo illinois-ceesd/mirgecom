@@ -27,13 +27,13 @@ depend on each other as illustrated in this graph:
         loopy -> pymbolic;
    }
 
-What do these pacakges do?
+What do these packages do?
 
 .. todo::
 
    Write this.
 
-The source repository (and current branch) of each of these pacakges
+The source repository (and current branch) of each of these packages
 in use is determined by the file
 `requirements.txt in mirgecom <https://github.com/illinois-ceesd/mirgecom/blob/master/requirements.txt>`__.
 
