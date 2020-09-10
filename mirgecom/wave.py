@@ -34,7 +34,7 @@ from pytools.obj_array import (
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.symbolic.primitives import TracePair
-from grudge.eager import interior_trace_pair
+from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 
 
 def _flux(discr, c, w_tpair):
@@ -95,5 +95,9 @@ def wave_operator(discr, c, w):
                 _flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
                 + _flux(discr, c=c,
                     w_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc))
-                ))
+                + sum(
+                    _flux(discr, c=c, w_tpair=tpair)
+                    for tpair in cross_rank_trace_pairs(discr, w))
+                )
+            )
         )
