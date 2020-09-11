@@ -37,7 +37,7 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from pytools.log import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info, IntervalTimer,
-        LogQuantity, set_dt)
+        set_dt)
 
 
 def bump(actx, discr, t=0):
@@ -67,7 +67,6 @@ def main(use_profiling=False):
     vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
     logmgr.add_quantity(vis_timer)
     logmgr.add_watches(["step.max", "t_sim.max", "t_step.max"])
-
 
     cl_ctx = cl.create_some_context()
     if use_profiling:
