@@ -9,6 +9,7 @@ manage the relationships between and among state and thermodynamic variables.
 .. autoclass:: EOSDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: IdealSingleGas
+.. autoclass:: CPMixture
 """
 
 __copyright__ = """
@@ -186,3 +187,27 @@ class IdealSingleGas(GasEOS):
             (((self._gamma - 1.0) / self._gas_const)
             * self.internal_energy(cv) / cv.mass)
         )
+
+
+class CPMixture(GasEOS):
+    """Calorically perfect mixture EOS."""
+
+    def __init__(self):
+        """Initialize cpmixture parameters."""
+        raise NotImplementedError
+
+    def internal_energy(self, cv: ConservedVars):
+        """Get internal thermal energy of gas mixture."""
+        raise NotImplementedError
+
+    def pressure(self, cv: ConservedVars):
+        """Get thermodynamic pressure of the gas mixture."""
+        raise NotImplementedError
+
+    def sound_speed(self, cv: ConservedVars):
+        """Get the speed of sound in the gas mixture."""
+        raise NotImplementedError
+
+    def temperature(self, cv: ConservedVars):
+        """Get the thermodynamic temperature of the gas mixture."""
+        raise NotImplementedError
