@@ -4,6 +4,8 @@
 .. automethod: make_spectral_filter
 .. automethod: linear_operator_kernel
 .. automethod: apply_linear_operator
+.. automethod: create_group_filter_operator
+.. automethod: filter_modally
 .. autoclass: SpectralFilter
 """
 
@@ -33,7 +35,13 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
-from pytools.obj_array import obj_array_vectorized_n_args
+from grudge import sym
+from meshmode.dof_array import DOFArray
+from pytools import memoize_in
+from pytools.obj_array import (
+    obj_array_vectorized_n_args,
+    obj_array_vectorize
+)
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
@@ -150,4 +158,41 @@ def apply_linear_operator(discr, operator, fields):
             mat=actx.from_numpy(operator),
             result=result[group.index],
             vec=fields[group.index])
+    return result
+
+
+def create_group_filter_operator(group, filter_mat):
+    """Create spectral filter operator for *group*."""
+    from modepy import vandermonde
+    vander = vandermonde(group.basis(), group.unit_nodes)
+    vanderm1 = np.linalg.inv(vander)
+    filter_operator = vander @ filter_mat @ vanderm1
+    return filter_operator
+
+
+@obj_array_vectorize
+def filter_modally(discrwb, dd, field):
+    """Stand-alone procedural interface to spectral filtering."""
+    dd = sym.as_dofdesc(dd)
+    discr = discrwb.discr_from_dd(dd)
+
+    assert isinstance(field, DOFArray)
+
+    @memoize_in(field.array_context, (filter_modally, "get_kernel"))
+    def get_kernel():
+        return linear_operator_kernel()
+
+    @memoize_in(discrwb, (filter_modally, "get_matrix"))
+    def get_matrix(group):
+        return create_group_filter_operator(group)
+
+    actx = field.array_context
+    result = discr.empty(actx, dtype=field.entry_dtype)
+    for group in discr.groups:
+        operator = get_matrix(group)
+        actx.call_loopy(
+            get_kernel(),
+            mat=actx.from_numpy(operator),
+            result=result[group.index],
+            vec=field[group.index])
     return result
