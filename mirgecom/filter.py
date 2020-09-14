@@ -161,8 +161,10 @@ def apply_linear_operator(discr, operator, fields):
     return result
 
 
-def create_group_filter_operator(group, filter_mat):
+def create_group_filter_operator(group, cutoff, response_func):
     """Create spectral filter operator for *group*."""
+    filter_mat = make_spectral_filter(group, cutoff,
+                                      mode_response_function=response_func)
     from modepy import vandermonde
     vander = vandermonde(group.basis(), group.unit_nodes)
     vanderm1 = np.linalg.inv(vander)
@@ -171,7 +173,7 @@ def create_group_filter_operator(group, filter_mat):
 
 
 @obj_array_vectorize
-def filter_modally(discrwb, dd, field):
+def filter_modally(discrwb, dd, field, cutoff, mode_resp_func):
     """Stand-alone procedural interface to spectral filtering."""
     dd = sym.as_dofdesc(dd)
     discr = discrwb.discr_from_dd(dd)
@@ -184,7 +186,7 @@ def filter_modally(discrwb, dd, field):
 
     @memoize_in(discrwb, (filter_modally, "get_matrix"))
     def get_matrix(group):
-        return create_group_filter_operator(group)
+        return create_group_filter_operator(group, cutoff, mode_resp_func)
 
     actx = field.array_context
     result = discr.empty(actx, dtype=field.entry_dtype)
