@@ -40,7 +40,7 @@ from meshmode.dof_array import DOFArray
 from pytools import memoize_in
 from pytools.obj_array import (
     obj_array_vectorized_n_args,
-    obj_array_vectorize
+    #    obj_array_vectorize
 )
 
 
@@ -172,7 +172,7 @@ def create_group_filter_operator(group, cutoff, response_func):
     return filter_operator
 
 
-@obj_array_vectorize
+@obj_array_vectorized_n_args
 def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
     """Stand-alone procedural interface to spectral filtering."""
     dd = sym.as_dofdesc(dd)
