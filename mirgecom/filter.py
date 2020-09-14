@@ -173,7 +173,7 @@ def create_group_filter_operator(group, cutoff, response_func):
 
 
 @obj_array_vectorize
-def filter_modally(discrwb, dd, field, cutoff, mode_resp_func):
+def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
     """Stand-alone procedural interface to spectral filtering."""
     dd = sym.as_dofdesc(dd)
     discr = discrwb.discr_from_dd(dd)
