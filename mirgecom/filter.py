@@ -147,7 +147,7 @@ def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
 
     Parameters
     ----------
-    discrwb: :class:`grudge.discrwb`
+    discrwb: :class:`grudge.DGDiscretizationWithBoundaries`
         Grudge discretization with boundaries object
     dd: :class:`grudge.sym.DOFDesc` or as accepted by :func:`grudge.sym.as_dof_desc`
         Describe the type of DOF vector on which to operate.
