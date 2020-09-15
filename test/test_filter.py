@@ -28,41 +28,35 @@ import logging
 import math
 import pytest
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from grudge.eager import EagerDGDiscretization
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
 from pytools.obj_array import (
     make_obj_array
 )
 from meshmode.dof_array import thaw  # noqa
-from mirgecom.filter import (
-    make_spectral_filter,
-    apply_linear_operator,
-)
+from mirgecom.filter import make_spectral_filter
 from pytools.obj_array import obj_array_vectorized_n_args
-# Uncomment if you want to inspect results in VTK
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("filter_order", [1, 2, 3])
-def test_filter_coeff(ctx_factory, filter_order, order, dim):
+def test_filter_coeff(actx_factory, filter_order, order, dim):
     """
     Test the construction of filter coefficients.
 
-    Tests that the filter coefficients have the right shape
-    and a quick check that the values at the filter
-    band limits have the expected values.
+    Tests that the filter coefficients have the right values
+    at the imposed band limits of the filter.  Also tests that
+    the created filter operator has the expected shape:
+    (nummodes x nummodes) matrix, and the filter coefficients
+    in the expected positions corresponding to mode ids.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 16
 
@@ -75,7 +69,7 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     vol_discr = discr.discr_from_dd("vol")
 
-    eta = .5
+    eta = .5  # just filter half the modes
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
@@ -171,20 +165,18 @@ def _apply_linear_operator(discr, operator, fields):
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_filter_function(ctx_factory, dim, order, do_viz=False):
+def test_filter_function(actx_factory, dim, order, do_viz=False):
     """
     Test the stand-alone procedural interface to spectral filtering.
 
     Tests that filtered fields have expected attenuated higher modes.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     logger = logging.getLogger(__name__)
     filter_order = 1
     nel_1d = 2
-    eta = .5
+    eta = .5   # filter half the modes
     # Alpha value suggested by:
     # JSH/TW Nodal DG Methods, Seciton 5.3
     # DOI: 10.1007/978-0-387-72067-8
@@ -272,8 +264,8 @@ def test_filter_function(ctx_factory, dim, order, do_viz=False):
         for group in vol_discr.groups:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
-            unfiltered_spectrum = apply_linear_operator(vol_discr, vanderm1, field)
-            filtered_spectrum = apply_linear_operator(vol_discr, vanderm1,
+            unfiltered_spectrum = _apply_linear_operator(vol_discr, vanderm1, field)
+            filtered_spectrum = _apply_linear_operator(vol_discr, vanderm1,
                                                       filtered_field)
             if do_viz is True:
                 spectrum_resid = unfiltered_spectrum - filtered_spectrum
