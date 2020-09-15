@@ -109,7 +109,7 @@ def linear_operator_kernel():
 
 def create_group_filter_operator(group, cutoff, response_func):
     """Create spectral filter operator for *group*.
-    
+
     Parameters
     ----------
     group: :class:`meshmode.mesh.MeshElementGroup`
@@ -149,7 +149,7 @@ def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
     ----------
     discrwb: :class:`grudge.discrwb`
         Grudge discretization with boundaries object
-    dd: :class:`grudge.sym.DOFDesc` or similar, as accepted by :func:`grudge.sym.as_dof_desc`
+    dd: :class:`grudge.sym.DOFDesc` or as accepted by :func:`grudge.sym.as_dof_desc`
         Describe the type of DOF vector on which to operate.
     cutoff: integer
         Mode below which *field* will not be filtered
