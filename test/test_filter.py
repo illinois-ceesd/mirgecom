@@ -43,7 +43,6 @@ from pytools.obj_array import (
 from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import (
     make_spectral_filter,
-    SpectralFilter,
     apply_linear_operator,
 )
 # Uncomment if you want to inspect results in VTK
@@ -148,121 +147,6 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
                 assert(filter_coeff[mode_index][mode_index] == expected_cutoff_coeff)
             if mode == order:
                 assert(filter_coeff[mode_index][mode_index] == expected_high_coeff)
-
-
-@pytest.mark.parametrize("dim", [2, 3])
-@pytest.mark.parametrize("order", [2, 3, 4])
-def test_filter_class(ctx_factory, dim, order):
-    """
-    Test the class interface for spectral filtering.
-
-    Tests that the SpectralFilter class performs the
-    correct operation on the input fields. Several
-    test polynomial input fields are (will be) tested.
-    """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
-
-    logger = logging.getLogger(__name__)
-    filter_order = 1
-    nel_1d = 2
-    eta = .5
-    alpha = -1.0*np.log(np.finfo(float).eps)
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-
-    mesh = generate_regular_rect_mesh(
-        a=(0.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
-    )
-
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-
-    nummodes = int(1)
-    for i in range(dim):
-        nummodes *= int(order + dim + 1)
-    nummodes /= math.factorial(int(dim))
-    cutoff = int(eta * order)
-
-    from mirgecom.filter import exponential_mode_response_function as xmrfunc
-    frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
-
-    vol_discr = discr.discr_from_dd("vol")
-    groups = vol_discr.groups
-    group = groups[0]
-    filter_mat = make_spectral_filter(group, cutoff, mode_response_function=frfunc)
-    spectral_filter = SpectralFilter(vol_discr, filter_mat)
-
-    # First test a uniform field, which should pass through
-    # the filter unharmed.
-    from mirgecom.initializers import Uniform
-    initr = Uniform(numdim=dim)
-    uniform_soln = initr(t=0, x_vec=nodes)
-
-    filtered_soln = spectral_filter(discr=vol_discr, fields=uniform_soln)
-    soln_resid = uniform_soln - filtered_soln
-    max_errors = [discr.norm(v, np.inf) for v in soln_resid]
-
-    tol = 1e-14
-
-    logger.info(f"Max Errors (uniform field) = {max_errors}")
-    assert(np.max(max_errors) < tol)
-
-    # construct polynomial field:
-    # a0 + a1*x + a2*x*x + ....
-    def polyfn(coeff):  # , x_vec):
-        #        r = actx.np.sqrt(np.dot(nodes, nodes))
-        r = nodes[0]
-        result = 0
-        for n, a in enumerate(coeff):
-            result += a * r ** n
-        return make_obj_array([result])
-
-    # Any order {cutoff} and below fields should be unharmed
-    tol = 1e-14
-    field_order = int(cutoff)
-    coeff = [1.0 / (i + 1) for i in range(field_order + 1)]
-    field = polyfn(coeff=coeff)
-    filtered_field = spectral_filter(vol_discr, field)
-    soln_resid = field - filtered_field
-    max_errors = [discr.norm(v, np.inf) for v in soln_resid]
-    logger.info(f"Field = {field}")
-    logger.info(f"Filtered = {filtered_field}")
-    logger.info(f"Max Errors (poly) = {max_errors}")
-    assert(np.max(max_errors) < tol)
-
-    # Any order > cutoff fields should have higher modes attenuated
-    threshold = 1e-3
-    tol = 1e-1
-    # Uncomment for visualization/inspection of test fields and spectra
-    #    vis = make_visualizer(discr, discr.order)
-    from modepy import vandermonde
-    for field_order in range(cutoff+1, cutoff+4):
-        coeff = [1.0 / (i + 1) for i in range(field_order+1)]
-        field = polyfn(coeff=coeff)
-        filtered_field = spectral_filter(vol_discr, field)
-        for group in vol_discr.groups:
-            vander = vandermonde(group.basis(), group.unit_nodes)
-            vanderm1 = np.linalg.inv(vander)
-            unfiltered_spectrum = apply_linear_operator(vol_discr, vanderm1, field)
-            filtered_spectrum = apply_linear_operator(vol_discr, vanderm1,
-                                                      filtered_field)
-            # Uncomment judiciously to visually inspect fields & spectra
-            # spectrum_resid = unfiltered_spectrum - filtered_spectrum
-            # spectrum_scale = filtered_spectrum / unfiltered_spectrum
-            # io_fields = [
-            #   ('unfiltered', field),
-            #   ('filtered', filtered_field),
-            #   ('unfiltered_spectrum', unfiltered_spectrum),
-            #   ('filtered_spectrum', filtered_spectrum),
-            #   ('residual', spectrum_resid)
-            # ]
-            # vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
-            field_resid = unfiltered_spectrum - filtered_spectrum
-            max_errors = [discr.norm(v, np.inf) for v in field_resid]
-            # fields should be different, but not too different
-            assert(tol > np.max(max_errors) > threshold)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
