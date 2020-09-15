@@ -1,3 +1,5 @@
+"""Test the Euler gas dynamics module."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -29,6 +31,8 @@ import pyopencl.clrandom
 import pyopencl.clmath
 import logging
 import pytest
+import math
+from functools import partial
 
 from pytools.obj_array import (
     flat_obj_array,
@@ -59,7 +63,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux(actx_factory, dim):
-    """Identity test - directly check inviscid flux
+    """Implement the flux identity test.
+
+    Identity test - directly check inviscid flux
     routine :func:`mirgecom.euler.inviscid_flux` against the exact
     expected result. This test is designed to fail
     if the flux routine is broken.
@@ -128,7 +134,7 @@ def test_inviscid_flux(actx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux_components(actx_factory, dim):
-    """Uniform pressure test
+    """Test uniform pressure case.
 
     Checks that the Euler-internal inviscid flux
     routine :func:`mirgecom.euler.inviscid_flux` returns exactly the
@@ -141,7 +147,6 @@ def test_inviscid_flux_components(actx_factory, dim):
       [ rho(V.x.V) + pI ]
     are non-zero and return the correctly calculated p.
     """
-
     queue = actx_factory().queue
 
     eos = IdealSingleGas()
@@ -218,11 +223,11 @@ def test_inviscid_flux_components(actx_factory, dim):
     (3, 2),
     ])
 def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
-    r"""Constant pressure, V != 0:
+    r"""Test constant pressure, V != 0.
+
     Checks that the flux terms are returned in the proper
     order by running only 1 non-zero velocity component at-a-time.
     """
-
     queue = actx_factory().queue
 
     eos = IdealSingleGas()
@@ -327,7 +332,9 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_facial_flux(actx_factory, order, dim):
-    """Check the flux across element faces by
+    """Test inviscid flux at element boundaries.
+
+    Check the flux across element faces by
     prescribing states (q) with known fluxes. Only
     uniform states are tested currently - ensuring
     that the Lax-Friedrichs flux terms which are
@@ -371,7 +378,6 @@ def test_facial_flux(actx_factory, order, dim):
         interior_face_flux = _facial_flux(
             discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
 
-        from functools import partial
         fnorm = partial(discr.norm, p=np.inf, dd="all_faces")
 
         iff_split = split_conserved(dim, interior_face_flux)
@@ -434,8 +440,9 @@ def test_facial_flux(actx_factory, order, dim):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_uniform_rhs(actx_factory, dim, order):
-    """Tests the inviscid rhs using a trivial
-    constant/uniform state which should
+    """Tests the inviscid rhs for uniform state.
+
+    Using a trivial constant/uniform state which should
     yield rhs = 0 to FP.  The test is performed
     for 1, 2, and 3 dimensions.
     """
@@ -549,7 +556,9 @@ def test_uniform_rhs(actx_factory, dim, order):
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_vortex_rhs(actx_factory, order):
-    """Tests the inviscid rhs using the non-trivial
+    """Test non-trivial vortex RHS.
+
+    The inviscid rhs using the non-trivial
     2D isentropic vortex case configured to yield
     rhs = 0. Checks several different orders
     and refinement levels to check error
@@ -604,10 +613,11 @@ def test_vortex_rhs(actx_factory, order):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_lump_rhs(actx_factory, dim, order):
-    """Tests the inviscid rhs using the non-trivial
-    1, 2, and 3D mass lump case against the analytic
-    expressions of the RHS. Checks several different
-    orders and refinement levels to check error behavior.
+    """Tests the non-trival mass lump inviscid rhs.
+
+    Using the 1, 2, and 3D mass lump case against the analytic
+    expressions of the RHS. Checks several different orders and
+    refinement levels to check error behavior.
     """
     actx = actx_factory()
 
@@ -661,9 +671,7 @@ def test_lump_rhs(actx_factory, dim, order):
 
 
 def _euler_flow_stepper(actx, parameters):
-    """
-    Implements a generic time stepping loop for testing an inviscid flow.
-    """
+    """Implement a generic time stepping loop for testing an inviscid flow."""
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     mesh = parameters["mesh"]
@@ -738,6 +746,21 @@ def _euler_flow_stepper(actx, parameters):
     def rhs(t, q):
         return inviscid_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
 
+    filter_order = 8
+    eta = .5
+    alpha = -1.0*np.log(np.finfo(float).eps)
+    nummodes = int(1)
+    for i in range(dim):
+        nummodes *= int(order + dim + 1)
+    nummodes /= math.factorial(int(dim))
+    cutoff = int(eta * order)
+
+    from mirgecom.filter import (
+        exponential_mode_response_function as xmrfunc,
+        filter_modally
+    )
+    frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
+
     while t < t_final:
 
         if constantcfl is True:
@@ -750,6 +773,9 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
+        fields = filter_modally(discr, "vol", cutoff=cutoff,
+                                       mode_resp_func=frfunc, field=fields)
+
         t += dt
         istep += 1
 
@@ -769,9 +795,11 @@ def _euler_flow_stepper(actx, parameters):
     return(maxerr)
 
 
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [2, 3, 4])
 def test_isentropic_vortex(actx_factory, order):
-    """Advance the 2D isentropic vortex case in
+    """Test that isentropic vortex solution matches exact soln.
+
+    Advance the 2D isentropic vortex case in
     time with non-zero velocities using an RK4
     timestepping scheme. Check the advanced field
     values against the exact/analytic expressions.
