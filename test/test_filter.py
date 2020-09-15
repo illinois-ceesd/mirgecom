@@ -45,8 +45,8 @@ from mirgecom.filter import (
     make_spectral_filter,
     apply_linear_operator,
 )
+from pytools.obj_array import obj_array_vectorized_n_args
 # Uncomment if you want to inspect results in VTK
-# from grudge.shortcuts import make_visualizer
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -76,7 +76,9 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     vol_discr = discr.discr_from_dd("vol")
 
     eta = .5
-    # number of points
+    # number of modes see e.g.:
+    # JSH/TW Nodal DG Methods, Section 10.1
+    # DOI: 10.1007/978-0-387-72067-8
     nmodes = 1
     for d in range(1, dim+1):
         nmodes *= (order + d)
@@ -88,6 +90,9 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     # number of filtered modes
     nfilt = order - cutoff
     # alpha = f(machine eps)
+    # Alpha value suggested by:
+    # JSH/TW Nodal DG Methods, Section 5.3
+    # DOI: 10.1007/978-0-387-72067-8
     alpha = -1.0*np.log(np.finfo(float).eps)
 
     # expected values @ filter band limits
@@ -129,11 +134,6 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
     from modepy import vandermonde
     for group in vol_discr.groups:
         mode_ids = group.mode_ids()
-        #        print(f"mode_ids = {mode_ids}")
-        #        for mode_index, mode_id in enumerate(mode_ids):
-        #            mode = sum(modelist)
-        #            print(f"mode = {mode}")
-        #            print(f"list(mode) = {list(mode)}")
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
         filter_coeff = make_spectral_filter(group, cutoff=cutoff,
@@ -149,9 +149,29 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
                 assert(filter_coeff[mode_index][mode_index] == expected_high_coeff)
 
 
+@obj_array_vectorized_n_args
+def _apply_linear_operator(discr, operator, fields):
+    """Apply *operator* matrix to *fields*.
+
+    This is a utility used in testing only. It assumes
+    a one-group discretization.
+    """
+    assert(len(discr.groups) == 1)
+    from mirgecom.filter import linear_operator_kernel
+    actx = fields.array_context
+    result = discr.empty(actx, dtype=fields.entry_dtype)
+    for group in discr.groups:
+        actx.call_loopy(
+            linear_operator_kernel(),
+            mat=actx.from_numpy(operator),
+            result=result[group.index],
+            vec=fields[group.index])
+    return result
+
+
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_filter_function(ctx_factory, dim, order):
+def test_filter_function(ctx_factory, dim, order, do_viz=False):
     """
     Test the stand-alone procedural interface to spectral filtering.
 
@@ -165,6 +185,9 @@ def test_filter_function(ctx_factory, dim, order):
     filter_order = 1
     nel_1d = 2
     eta = .5
+    # Alpha value suggested by:
+    # JSH/TW Nodal DG Methods, Seciton 5.3
+    # DOI: 10.1007/978-0-387-72067-8
     alpha = -1.0*np.log(np.finfo(float).eps)
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -176,6 +199,9 @@ def test_filter_function(ctx_factory, dim, order):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
+    # number of modes see e.g.:
+    # JSH/TW Nodal DG Methods, Section 10.1
+    # DOI: 10.1007/978-0-387-72067-8
     nummodes = int(1)
     for i in range(dim):
         nummodes *= int(order + dim + 1)
@@ -198,7 +224,6 @@ def test_filter_function(ctx_factory, dim, order):
     from mirgecom.filter import filter_modally
     filtered_soln = filter_modally(discr, "vol", cutoff=cutoff,
                                    mode_resp_func=frfunc, field=uniform_soln)
-    #    filtered_soln = spectral_filter(discr=vol_discr, fields=uniform_soln)
     soln_resid = uniform_soln - filtered_soln
     max_errors = [discr.norm(v, np.inf) for v in soln_resid]
 
@@ -210,7 +235,7 @@ def test_filter_function(ctx_factory, dim, order):
     # construct polynomial field:
     # a0 + a1*x + a2*x*x + ....
     def polyfn(coeff):  # , x_vec):
-        #        r = actx.np.sqrt(np.dot(nodes, nodes))
+        # r = actx.np.sqrt(np.dot(nodes, nodes))
         r = nodes[0]
         result = 0
         for n, a in enumerate(coeff):
@@ -224,7 +249,6 @@ def test_filter_function(ctx_factory, dim, order):
     field = polyfn(coeff=coeff)
     filtered_field = filter_modally(discr, "vol", cutoff=cutoff,
                                     mode_resp_func=frfunc, field=field)
-    #    filtered_field = spectral_filter(vol_discr, field)
     soln_resid = field - filtered_field
     max_errors = [discr.norm(v, np.inf) for v in soln_resid]
     logger.info(f"Field = {field}")
@@ -235,32 +259,32 @@ def test_filter_function(ctx_factory, dim, order):
     # Any order > cutoff fields should have higher modes attenuated
     threshold = 1e-3
     tol = 1e-1
-    # Uncomment for visualization/inspection of test fields and spectra
-    #    vis = make_visualizer(discr, discr.order)
+    if do_viz is True:
+        from grudge.shortcuts import make_visualizer
+        vis = make_visualizer(discr, discr.order)
+
     from modepy import vandermonde
     for field_order in range(cutoff+1, cutoff+4):
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]
         field = polyfn(coeff=coeff)
         filtered_field = filter_modally(discr, "vol", cutoff=cutoff,
                                         mode_resp_func=frfunc, field=field)
-        #        filtered_field = spectral_filter(vol_discr, field)
         for group in vol_discr.groups:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
             unfiltered_spectrum = apply_linear_operator(vol_discr, vanderm1, field)
             filtered_spectrum = apply_linear_operator(vol_discr, vanderm1,
                                                       filtered_field)
-            # Uncomment judiciously to visually inspect fields & spectra
-            # spectrum_resid = unfiltered_spectrum - filtered_spectrum
-            # spectrum_scale = filtered_spectrum / unfiltered_spectrum
-            # io_fields = [
-            #   ('unfiltered', field),
-            #   ('filtered', filtered_field),
-            #   ('unfiltered_spectrum', unfiltered_spectrum),
-            #   ('filtered_spectrum', filtered_spectrum),
-            #   ('residual', spectrum_resid)
-            # ]
-            # vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
+            if do_viz is True:
+                spectrum_resid = unfiltered_spectrum - filtered_spectrum
+                io_fields = [
+                    ("unfiltered", field),
+                    ("filtered", filtered_field),
+                    ("unfiltered_spectrum", unfiltered_spectrum),
+                    ("filtered_spectrum", filtered_spectrum),
+                    ("residual", spectrum_resid)
+                ]
+                vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
             field_resid = unfiltered_spectrum - filtered_spectrum
             max_errors = [discr.norm(v, np.inf) for v in field_resid]
             # fields should be different, but not too different
