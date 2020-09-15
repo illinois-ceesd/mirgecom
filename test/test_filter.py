@@ -1,3 +1,5 @@
+"""Test filter-related functions and constructs."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -53,6 +55,8 @@ from mirgecom.filter import (
 @pytest.mark.parametrize("filter_order", [1, 2, 3])
 def test_filter_coeff(ctx_factory, filter_order, order, dim):
     """
+    Test the construction of filter coefficients.
+
     Tests that the filter coefficients have the right shape
     and a quick check that the values at the filter
     band limits have the expected values.
@@ -150,6 +154,8 @@ def test_filter_coeff(ctx_factory, filter_order, order, dim):
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_filter_class(ctx_factory, dim, order):
     """
+    Test the class interface for spectral filtering.
+
     Tests that the SpectralFilter class performs the
     correct operation on the input fields. Several
     test polynomial input fields are (will be) tested.
@@ -263,8 +269,9 @@ def test_filter_class(ctx_factory, dim, order):
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_filter_function(ctx_factory, dim, order):
     """
-    Tests that the stand-alone filter interface 
-    performs the correct operation on the input fields.
+    Test the stand-alone procedural interface to spectral filtering.
+
+    Tests that filtered fields have expected attenuated higher modes.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -297,8 +304,6 @@ def test_filter_function(ctx_factory, dim, order):
     vol_discr = discr.discr_from_dd("vol")
     groups = vol_discr.groups
     group = groups[0]
-    #    filter_mat = make_spectral_filter(group, cutoff, mode_response_function=frfunc)
-    #    spectral_filter = SpectralFilter(vol_discr, filter_mat)
 
     # First test a uniform field, which should pass through
     # the filter unharmed.
