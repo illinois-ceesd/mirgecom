@@ -1,12 +1,14 @@
 """:mod:`mirgecom.filter` is for filters and filter-related constructs.
 
+Discussion of the spectral filter design can be found in:
+JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
+
 .. automethod: exponential_mode_response_function
 .. automethod: make_spectral_filter
 .. automethod: linear_operator_kernel
 .. automethod: apply_linear_operator
 .. automethod: create_group_filter_operator
 .. automethod: filter_modally
-.. autoclass: SpectralFilter
 """
 
 __copyright__ = """
@@ -45,7 +47,7 @@ from pytools.obj_array import (
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
-    """Return the filter coefficient for the user-provided *mode*."""
+    """Return an exponential filter coefficient for the user-provided *mode*."""
     return np.exp(-1.0 * alpha * ((mode - cutoff) / nfilt)
                   ** (2*filter_order))
 
@@ -54,8 +56,6 @@ def make_spectral_filter(element_group, cutoff, mode_response_function):
     r"""
     Create a spectral filter with the provided *mode_response_function*.
 
-    Discussion of the spectral filter design can be found in:
-    JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
     This routine returns a filter operator in the modal basis designed to
     apply the user-provided *mode_response_function* to the spectral modes
     beyond the user-provided *cutoff*.
@@ -111,42 +111,6 @@ def linear_operator_kernel():
     return knl
 
 
-class SpectralFilter:
-    r"""Encapsulate spectral filter operator.
-
-    Encapsulates the simulation-static filter operators and
-    provides the methods to apply filtering to input fields.
-
-    .. automethod: __init__
-    .. automethod: __call__
-    """
-
-    def __init__(self, discr, filter_mat):
-        """Initialize spectral filter parameters."""
-        self._filter_operators = []
-        from modepy import vandermonde
-        for group in discr.groups:
-            vander = vandermonde(group.basis(), group.unit_nodes)
-            vanderm1 = np.linalg.inv(vander)
-            filter_operator = vander @ filter_mat @ vanderm1
-            self._filter_operators.append(filter_operator)
-        self._knl = linear_operator_kernel()
-
-    @obj_array_vectorized_n_args
-    def __call__(self, discr, fields):
-        """Apply spectral filter to specified *fields*."""
-        actx = fields.array_context
-        result = discr.empty(fields.array_context, dtype=fields.entry_dtype)
-        for group_index, group in enumerate(discr.groups):
-            # FIXME Do the transfer once, not repeatedly
-            filter_operator = actx.from_numpy(self._filter_operators[group_index])
-            actx.call_loopy(self._knl,
-                    mat=filter_operator,
-                    result=result[group_index],
-                    vec=fields[group_index])
-        return result
-
-
 @obj_array_vectorized_n_args
 def apply_linear_operator(discr, operator, fields):
     """Apply *operator* matrix to *fields*."""
@@ -174,7 +138,37 @@ def create_group_filter_operator(group, cutoff, response_func):
 
 @obj_array_vectorized_n_args
 def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
-    """Stand-alone procedural interface to spectral filtering."""
+    """Stand-alone procedural interface to spectral filtering.
+
+    For each element group in the discretization, and restriction,
+    This routine generates:
+    * a filter operator:
+        - *cutoff* filters only modes above this mode id
+        - *mode_resp_func* function returns a filter coefficient
+        for a given mode
+        - memoized into the discretization
+    * a kernel to apply the operator
+        - memoized into the array context
+    * a filtered solution wherein the filter is applied to *field*.
+
+    Parameters
+    ----------
+    discrwb: :class:`grudge.discrwb`
+        Grudge discretization with boundaries object
+    dd:
+        Discretization restriction
+    cutoff: integer
+        Mode below which *field* will not be filtered
+    mode_resp_func:
+        Modal response function returns a filter coefficient for input mode id
+    field: numpy.ndarray
+        DOFArray or object array of DOFArrays
+
+    Returns
+    -------
+    result: numpy.ndarray
+        Filtered *field* like *field*.
+    """
     dd = sym.as_dofdesc(dd)
     discr = discrwb.discr_from_dd(dd)
 
