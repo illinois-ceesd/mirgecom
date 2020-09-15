@@ -6,7 +6,6 @@ JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
 .. automethod: exponential_mode_response_function
 .. automethod: make_spectral_filter
 .. automethod: linear_operator_kernel
-.. automethod: apply_linear_operator
 .. automethod: create_group_filter_operator
 .. automethod: filter_modally
 """
@@ -40,10 +39,7 @@ import loopy as lp
 from grudge import sym
 from meshmode.dof_array import DOFArray
 from pytools import memoize_in
-from pytools.obj_array import (
-    obj_array_vectorized_n_args,
-    #    obj_array_vectorize
-)
+from pytools.obj_array import obj_array_vectorized_n_args
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
@@ -52,7 +48,7 @@ def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order)
                   ** (2*filter_order))
 
 
-def make_spectral_filter(element_group, cutoff, mode_response_function):
+def make_spectral_filter(group, cutoff, mode_response_function):
     r"""
     Create a spectral filter with the provided *mode_response_function*.
 
@@ -76,9 +72,9 @@ def make_spectral_filter(element_group, cutoff, mode_response_function):
     filter: np.ndarray
         filter operator in the modal basis
     """
-    mode_ids = element_group.mode_ids()
-    order = element_group.order
-    dim = element_group.dim
+    mode_ids = group.mode_ids()
+    order = group.order
+    dim = group.dim
 
     nmodes = len(mode_ids)
     filter = np.identity(nmodes)
@@ -111,22 +107,20 @@ def linear_operator_kernel():
     return knl
 
 
-@obj_array_vectorized_n_args
-def apply_linear_operator(discr, operator, fields):
-    """Apply *operator* matrix to *fields*."""
-    actx = fields.array_context
-    result = discr.empty(actx, dtype=fields.entry_dtype)
-    for group in discr.groups:
-        actx.call_loopy(
-            linear_operator_kernel(),
-            mat=actx.from_numpy(operator),
-            result=result[group.index],
-            vec=fields[group.index])
-    return result
-
-
 def create_group_filter_operator(group, cutoff, response_func):
-    """Create spectral filter operator for *group*."""
+    """Create spectral filter operator for *group*.
+    
+    Parameters
+    ----------
+    group: :class:`meshmode.mesh.MeshElementGroup`
+        A :class:`meshmode.mesh.MeshElementGroup` from which the mode ids,
+        element order, and dimension may be retrieved.
+    cutoff: integer
+        Mode cutoff beyond which the filter will be applied, and below which
+        the filter will preserve.
+    response_func:
+        A function that returns a filter weight for for each mode id.
+    """
     filter_mat = make_spectral_filter(group, cutoff,
                                       mode_response_function=response_func)
     from modepy import vandermonde
