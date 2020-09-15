@@ -155,8 +155,8 @@ def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
     ----------
     discrwb: :class:`grudge.discrwb`
         Grudge discretization with boundaries object
-    dd:
-        Discretization restriction
+    dd: :class:`grudge.sym.DOFDesc` or similar, as accepted by :func:`grudge.sym.as_dof_desc`
+        Describe the type of DOF vector on which to operate.
     cutoff: integer
         Mode below which *field* will not be filtered
     mode_resp_func:
@@ -167,7 +167,7 @@ def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
     Returns
     -------
     result: numpy.ndarray
-        Filtered *field* like *field*.
+        Filtered version of *field*.
     """
     dd = sym.as_dofdesc(dd)
     discr = discrwb.discr_from_dd(dd)
