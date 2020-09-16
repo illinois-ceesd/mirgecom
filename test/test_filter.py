@@ -41,6 +41,18 @@ from pytools.obj_array import (
 from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import make_spectral_filter
 from pytools.obj_array import obj_array_vectorized_n_args
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from mirgecom.eos import IdealSingleGas
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+from mirgecom.euler import get_inviscid_timestep
+from mirgecom.integrators import rk4_step
+from mirgecom.initializers import Vortex2D
+from mirgecom.boundary import PrescribedBoundary
+from mirgecom.euler import inviscid_operator
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -70,9 +82,9 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     vol_discr = discr.discr_from_dd("vol")
 
     eta = .5  # just filter half the modes
-    # number of modes see e.g.:
+    # counting modes (see
     # JSH/TW Nodal DG Methods, Section 10.1
-    # DOI: 10.1007/978-0-387-72067-8
+    # DOI: 10.1007/978-0-387-72067-8)
     nmodes = 1
     for d in range(1, dim+1):
         nmodes *= (order + d)
@@ -191,12 +203,12 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
-    # number of modes see e.g.:
+    # number of modes (see
     # JSH/TW Nodal DG Methods, Section 10.1
-    # DOI: 10.1007/978-0-387-72067-8
+    # DOI: 10.1007/978-0-387-72067-8)
     nummodes = int(1)
     for i in range(dim):
-        nummodes *= int(order + dim + 1)
+        nummodes *= int(order + i + 1)
     nummodes /= math.factorial(int(dim))
     cutoff = int(eta * order)
 
@@ -281,3 +293,137 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
             max_errors = [discr.norm(v, np.inf) for v in field_resid]
             # fields should be different, but not too different
             assert(tol > np.max(max_errors) > threshold)
+
+
+def _euler_flow_stepper(actx, parameters):
+    """Implement a generic time stepping loop for testing an inviscid flow."""
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+
+    mesh = parameters["mesh"]
+    t = parameters["time"]
+    order = parameters["order"]
+    t_final = parameters["tfinal"]
+    initializer = parameters["initializer"]
+    boundaries = parameters["boundaries"]
+    eos = parameters["eos"]
+    cfl = parameters["cfl"]
+    dt = parameters["dt"]
+    constantcfl = parameters["constantcfl"]
+    filteron = parameters["filteron"]
+
+    if t_final <= t:
+        return(0.0)
+
+    dim = mesh.dim
+    istep = 0
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    fields = initializer(0, nodes)
+    sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
+
+    def rhs(t, q):
+        return inviscid_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
+
+    filter_order = 4
+    # alpha = -1.0*np.log(np.finfo(float).eps)
+    alpha = .01
+    nummodes = int(1)
+    for i in range(dim):
+        nummodes *= int(order + i + 1)
+    nummodes /= math.factorial(int(dim))
+    cutoff = nummodes / 2 + 1
+    print(f"nummodes={nummodes}, cutoff={cutoff}")
+
+    from mirgecom.filter import (
+        exponential_mode_response_function as xmrfunc,
+        filter_modally
+    )
+    frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
+
+    while t < t_final:
+
+        if constantcfl is True:
+            dt = sdt
+        else:
+            cfl = dt / sdt
+
+        fields = rk4_step(fields, t, dt, rhs)
+        if filteron > 0:
+            fields = filter_modally(discr, "vol", cutoff=cutoff,
+                                    mode_resp_func=frfunc, field=fields)
+
+        t += dt
+        istep += 1
+
+        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
+
+    expected_result = initializer(t, nodes)
+    resid = fields - expected_result
+    err2 = [discr.norm(resid[i], 2) for i in range(dim+2)]
+
+    return(err2)
+
+
+def test_filter_eoc(actx_factory):
+    """Test the effect of filtering on Vortex2D EOC.
+
+    Advance the 2D isentropic vortex case in
+    time with zero velocities using an RK4
+    timestepping scheme. Check the advanced field
+    values against the exact/analytic expressions and
+    estimate EOC.  Repeat with filtering enabled, to
+    see that design order is still achieved - but at
+    slightly lower rate.
+    """
+    actx = actx_factory()
+
+    dim = 2
+    order = 5
+
+    from pytools.convergence import EOCRecorder
+
+    for filteron in range(2):
+        eoc_rec = EOCRecorder()
+        for nel_1d in [16, 24, 32]:
+            from meshmode.mesh.generation import (
+                generate_regular_rect_mesh,
+            )
+
+            mesh = generate_regular_rect_mesh(
+                a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+            )
+
+            exittol = 2.0
+            t_final = 0.000001
+            cfl = 1.0
+            vel = np.zeros(shape=(dim,))
+            orig = np.zeros(shape=(dim,))
+            # vel[:dim] = 1.0
+            dt = .000001
+            initializer = Vortex2D(center=orig, velocity=vel)
+            casename = "Vortex"
+            boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+            eos = IdealSingleGas()
+            t = 0
+            flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,
+                        "boundaries": boundaries, "initializer": initializer,
+                          "eos": eos, "casename": casename, "mesh": mesh,
+                          "tfinal": t_final, "exittol": exittol, "cfl": cfl,
+                          "constantcfl": False, "nstatus": 0, "filteron": filteron}
+            err2 = _euler_flow_stepper(actx, flowparams)
+            h = 10.0 / (nel_1d - 1)
+            eoc_rec.add_data_point(h, err2[0])
+            print(f"h={h}, err={err2}, filter={filteron}")
+        message = (
+            f"Error for (dim,order) = ({dim},{order}):\n"
+            f"{eoc_rec}"
+        )
+        logger.info(message)
+        order_estimate = eoc_rec.order_estimate()
+        #        assert (
+        #            eoc_rec.order_estimate() >= order - 0.5
+        #            or eoc_rec.max_error() < 1e-11
+        #        )
+        print(f"order_estimate{filteron} = {order_estimate}")
+    assert(False)
