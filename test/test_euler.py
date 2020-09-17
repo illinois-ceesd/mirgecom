@@ -448,7 +448,7 @@ def test_uniform_rhs(actx_factory, dim, order):
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
     # for nel_1d in [4, 8, 12]:
-    for nel_1d in [4, 8]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
@@ -587,18 +587,20 @@ def test_vortex_rhs(actx_factory, order):
             q=vortex_soln, t=0.0)
 
         err_max = discr.norm(inviscid_rhs, np.inf)
-        eoc_rec.add_data_point(1.0 / nel_1d, err_max)
+        eoc_rec.add_data_point(10.0 / (nel_1d - 1), err_max)
 
     message = (
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
+    print(message)
     logger.info(message)
 
     assert (
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < 1e-11
     )
+    assert(False)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
