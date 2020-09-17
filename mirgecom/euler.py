@@ -193,7 +193,7 @@ def inviscid_flux(discr, eos, q):
 
     massfrac = None
     if cv.massfrac is not None:
-        massfrac = mom * scalar(cv.massfrac) / cv.mass
+        massfrac = mom * cv.massfrac.reshape(-1,1) / scalar(cv.mass)
 
     return join_conserved(dim,
             mass=mom,
