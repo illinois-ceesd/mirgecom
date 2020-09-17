@@ -564,7 +564,7 @@ def test_vortex_rhs(actx_factory, order):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    for nel_1d in [16, 32, 64]:
+    for nel_1d in [16, 32, 64, 128, 256, 512]:
 
         mesh = generate_regular_rect_mesh(
             a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
@@ -576,6 +576,7 @@ def test_vortex_rhs(actx_factory, order):
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
+        vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -585,9 +586,11 @@ def test_vortex_rhs(actx_factory, order):
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
             q=vortex_soln, t=0.0)
-
         err_max = discr.norm(inviscid_rhs, np.inf)
         eoc_rec.add_data_point(10.0 / (nel_1d - 1), err_max)
+        io_fields = [("rhs", split_conserved(dim, inviscid_rhs))]
+        visfilename = f"vortex_error_{order}_{nel_1d}.vtu"
+        vis.write_vtk_file(visfilename, io_fields)
 
     message = (
         f"Error for (dim,order) = ({dim},{order}):\n"
@@ -600,6 +603,7 @@ def test_vortex_rhs(actx_factory, order):
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < 1e-11
     )
+
     assert(False)
 
 
