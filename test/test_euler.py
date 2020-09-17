@@ -127,6 +127,87 @@ def test_inviscid_flux(actx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
+def test_inviscid_scalar_flux(actx_factory, dim):
+    """Identity test - directly check inviscid flux
+    routine :func:`mirgecom.euler.inviscid_flux` against the exact
+    expected result. This test is designed to fail
+    if the flux routine is broken.
+    The expected inviscid flux is:
+      F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
+    """
+    actx = actx_factory()
+
+    nel_1d = 16
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    #    for dim in [1, 2, 3]:
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 3
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    eos = IdealSingleGas()
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+
+    mass = cl.clrandom.rand(
+        actx.queue, (mesh.nelements,), dtype=np.float64
+    )
+    energy = cl.clrandom.rand(
+        actx.queue, (mesh.nelements,), dtype=np.float64
+    )
+    mom = make_obj_array(
+        [
+            cl.clrandom.rand(
+                actx.queue, (mesh.nelements,), dtype=np.float64
+            )
+            for i in range(dim)
+        ]
+    )
+    numspecies = 5
+    massfracs = make_obj_array(
+        [
+            cl.clrandom.rand(
+                actx.queue, (mesh.nelements,), dtype=np.float64
+            )
+            for i in range(numspecies)
+        ]
+    )
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                       massfrac=massfracs)
+    cv = split_conserved(dim, q)
+
+    # {{{ create the expected result
+
+    p = eos.pressure(cv)
+    escale = (energy + p) / mass
+
+    expected_flux = np.zeros((dim + 2 + numspecies, dim), dtype=object)
+    expected_flux[0] = mom
+    expected_flux[1] = mom * make_obj_array([escale])
+
+    for i in range(dim):
+        for j in range(dim):
+            expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
+
+    for i in range(numspecies):
+        expected_flux[dim+2+i] = mom * make_obj_array([massfracs[i] / mass])
+
+    # }}}
+
+    from mirgecom.euler import inviscid_flux
+
+    flux = inviscid_flux(discr, eos, q)
+    flux_resid = flux - expected_flux
+
+    for i in range(dim + 2 + numspecies, dim):
+        for j in range(dim):
+            assert (la.norm(flux_resid[i, j].get())) == 0.0
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
 
@@ -607,6 +688,66 @@ def test_lump_rhs(actx_factory, dim, order):
     """Tests the inviscid rhs using the non-trivial
     1, 2, and 3D mass lump case against the analytic
     expressions of the RHS. Checks several different
+    orders and refinement levels to check error behavior.
+    """
+    actx = actx_factory()
+
+    tolerance = 1e-10
+    maxxerr = 0.0
+
+    from pytools.convergence import EOCRecorder
+
+    eoc_rec = EOCRecorder()
+
+    for nel_1d in [4, 8, 12]:
+        from meshmode.mesh.generation import (
+            generate_regular_rect_mesh,
+        )
+
+        mesh = generate_regular_rect_mesh(
+            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
+        )
+
+        logger.info(f"Number of elements: {mesh.nelements}")
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+
+        # Init soln with Lump and expected RHS = 0
+        center = np.zeros(shape=(dim,))
+        velocity = np.zeros(shape=(dim,))
+        lump = Lump(center=center, velocity=velocity)
+        lump_soln = lump(0, nodes)
+        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+        inviscid_rhs = inviscid_operator(
+            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
+        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+
+        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
+        if err_max > maxxerr:
+            maxxerr = err_max
+
+        eoc_rec.add_data_point(1.0 / nel_1d, err_max)
+    logger.info(f"Max error: {maxxerr}")
+
+    message = (
+        f"Error for (dim,order) = ({dim},{order}):\n"
+        f"{eoc_rec}"
+    )
+    logger.info(message)
+    assert (
+        eoc_rec.order_estimate() >= order - 0.5
+        or eoc_rec.max_error() < tolerance
+    )
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 3])
+def test_multilump_rhs(actx_factory, dim, order):
+    """Test the inviscid rhs using multiple scalar components.
+
+    Test 1, 2, and 3D mass lumps in each component against the
+    analytic expressions of the RHS. Checks several different
     orders and refinement levels to check error behavior.
     """
     actx = actx_factory()
