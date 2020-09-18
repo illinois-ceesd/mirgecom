@@ -2,3 +2,6 @@ version: 2
 
 conda:
   environment: .rtd-env-py3.yml
+
+python:
+  setup_py_install: true
