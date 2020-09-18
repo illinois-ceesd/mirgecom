@@ -560,14 +560,16 @@ def test_vortex_rhs(actx_factory, order):
     dim = 2
 
     from pytools.convergence import EOCRecorder
-    eoc_rec = EOCRecorder()
+    mass_eoc_rec = EOCRecorder()
+    mom_eoc_rec = EOCRecorder()
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    for nel_1d in [16, 32, 64, 128, 256, 512]:
+    #    for nel_1d in [16, 32, 64, 128, 256, 512]:
+    for nel_1d in [11, 21, 41]:
 
         mesh = generate_regular_rect_mesh(
-            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
+            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim, order=order+1
         )
 
         logger.info(
@@ -586,22 +588,24 @@ def test_vortex_rhs(actx_factory, order):
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
             q=vortex_soln, t=0.0)
-        err_max = discr.norm(inviscid_rhs, np.inf)
-        eoc_rec.add_data_point(10.0 / (nel_1d - 1), err_max)
+        err2 = [discr.norm(inviscid_rhs[i], 2) for i in range(dim+2)]
+        mass_eoc_rec.add_data_point(10.0 / (nel_1d - 1), err2[0])
+        mom_eoc_rec.add_data_point(10.0 / (nel_1d - 1), err2[2])
         io_fields = [("rhs", split_conserved(dim, inviscid_rhs))]
         visfilename = f"vortex_error_{order}_{nel_1d}.vtu"
-        vis.write_vtk_file(visfilename, io_fields)
+        vis.write_vtk_file(visfilename, io_fields, overwrite=True)
 
     message = (
-        f"Error for (dim,order) = ({dim},{order}):\n"
-        f"{eoc_rec}"
+        f"EOC for (dim,order) = ({dim},{order}):\n"
+        f"MASS:\n{mass_eoc_rec}\n"
+        f"XMOM:\n{mom_eoc_rec}"
     )
     print(message)
     logger.info(message)
 
     assert (
-        eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < 1e-11
+        mass_eoc_rec.order_estimate() >= order - 0.5
+        or mass_eoc_rec.max_error() < 1e-11
     )
 
     assert(False)
@@ -677,69 +681,21 @@ def _euler_flow_stepper(actx, parameters):
     order = parameters["order"]
     t_final = parameters["tfinal"]
     initializer = parameters["initializer"]
-    exittol = parameters["exittol"]
-    casename = parameters["casename"]
     boundaries = parameters["boundaries"]
     eos = parameters["eos"]
     cfl = parameters["cfl"]
     dt = parameters["dt"]
     constantcfl = parameters["constantcfl"]
-    nstepstatus = parameters["nstatus"]
 
     if t_final <= t:
         return(0.0)
 
-    rank = 0
-    dim = mesh.dim
     istep = 0
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     fields = initializer(0, nodes)
     sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
-
-    initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
-    message = (
-        f"Num {dim}d order-{order} elements: {mesh.nelements}\n"
-        f"Timestep:        {dt}\n"
-        f"Final time:      {t_final}\n"
-        f"Status freq:     {nstepstatus}\n"
-        f"Initialization:  {initname}\n"
-        f"EOS:             {eosname}"
-    )
-    logger.info(message)
-
-    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
-
-    def write_soln(write_status=True):
-        cv = split_conserved(dim, fields)
-        dv = eos.dependent_vars(cv)
-        expected_result = initializer(t, nodes)
-        result_resid = fields - expected_result
-        maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
-        mindv = [np.min(dvfld.get()) for dvfld in dv]
-        maxdv = [np.max(dvfld.get()) for dvfld in dv]
-
-        if write_status is True:
-            statusmsg = (
-                f"Status: Step({istep}) Time({t})\n"
-                f"------   P({mindv[0]},{maxdv[0]})\n"
-                f"------   T({mindv[1]},{maxdv[1]})\n"
-                f"------   dt,cfl = ({dt},{cfl})\n"
-                f"------   Err({maxerr})"
-            )
-            logger.info(statusmsg)
-
-        io_fields = ["cv", split_conserved(dim, fields)]
-        io_fields += eos.split_fields(dim, dv)
-        io_fields.append(("exact_soln", expected_result))
-        io_fields.append(("residual", result_resid))
-        nameform = casename + "-{iorank:04d}-{iostep:06d}.vtu"
-        visfilename = nameform.format(iorank=rank, iostep=istep)
-        vis.write_vtk_file(visfilename, io_fields)
-
-        return maxerr
 
     def rhs(t, q):
         return inviscid_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
@@ -751,26 +707,18 @@ def _euler_flow_stepper(actx, parameters):
         else:
             cfl = dt / sdt
 
-        if nstepstatus > 0:
-            if istep % nstepstatus == 0:
-                write_soln()
-
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
         istep += 1
 
         sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
 
-    if nstepstatus > 0:
-        logger.info("Writing final dump.")
-        maxerr = max(write_soln(False))
-    else:
-        expected_result = initializer(t, nodes)
-        maxerr = discr.norm(fields - expected_result, np.inf)
+    expected_result = initializer(t, nodes)
+    relative_error = (fields - expected_result) / expected_result
+
+    maxerr = discr.norm(relative_error, 2)
 
     logger.info(f"Max Error: {maxerr}")
-    if maxerr > exittol:
-        raise ValueError("Solution failed to follow expected result.")
 
     return(maxerr)
 
@@ -794,7 +742,8 @@ def test_isentropic_vortex(actx_factory, order):
 
     eoc_rec = EOCRecorder()
 
-    for nel_1d in [16, 32, 64]:
+    for nel_1d in [16, 32, 64, 128, 256]:
+
         from meshmode.mesh.generation import (
             generate_regular_rect_mesh,
         )
@@ -804,12 +753,12 @@ def test_isentropic_vortex(actx_factory, order):
         )
 
         exittol = 1.0
-        t_final = 0.001
+        t_final = 0.0000001
         cfl = 1.0
         vel = np.zeros(shape=(dim,))
         orig = np.zeros(shape=(dim,))
         vel[:dim] = 1.0
-        dt = .0001
+        dt = .00000001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
         boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
@@ -821,14 +770,16 @@ def test_isentropic_vortex(actx_factory, order):
                       "tfinal": t_final, "exittol": exittol, "cfl": cfl,
                       "constantcfl": False, "nstatus": 0}
         maxerr = _euler_flow_stepper(actx, flowparams)
-        eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
+        eoc_rec.add_data_point(10.0 / (nel_1d - 1), maxerr)
 
     message = (
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
+    print(message)
     logger.info(message)
     assert (
-        eoc_rec.order_estimate() >= order - 0.5
+        eoc_rec.order_estimate() >= (order + .5) 
         or eoc_rec.max_error() < 1e-11
     )
+    assert(False)
