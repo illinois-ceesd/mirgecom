@@ -4,4 +4,6 @@ conda:
   environment: .rtd-env-py3.yml
 
 python:
-  setup_py_install: true
+  install:
+    - method: pip
+      path: .
