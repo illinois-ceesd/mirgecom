@@ -5,5 +5,5 @@ conda:
 
 python:
   install:
-    - method: setuptools
-      path: .
+    - method: pip
+      path: git+https://github.com/inducer/meshmode.git
