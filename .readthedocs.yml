@@ -7,5 +7,3 @@ python:
   install:
     - method: pip
       path: .
-      extra_requirements:
-        - meshmode @ git+https://github.com/inducer/meshmode.git#egg=meshmode

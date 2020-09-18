@@ -4,3 +4,5 @@ channels:
 - nodefaults
 dependencies:
 - mpi4py
+- pip:
+  - "git+https://github.com/inducer/meshmode.git#egg=meshmode"
