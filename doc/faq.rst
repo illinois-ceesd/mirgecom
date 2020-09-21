@@ -36,3 +36,35 @@ Arrays are the central large-scale data structure that :mod:`mirgecom` operates 
 created (and which ones we use) just by changing which array context we run with.
 Some array types you might choose include :class:`pyopencl.array.Array`\ s on the GPU
 through OpenCL, or lazily-evaluated :class:`pytato.Array`\ s.
+
+
+Installation questions
+----------------------
+
+What is anaconda/conda/conda-forge/miniconda/miniforge?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To install binary packages (including python and pocl), we use the ``conda`` package
+management system by default. ``conda`` was developed as part of the ``anaconda`` Python
+distribution, but is now a separate project. ``conda`` can use different channels to install
+packages from. By default, we use the ``conda-forge`` channel. ``miniconda`` is a minimal distribution
+of packages (including Python and conda) to bootstrap installation of the other packages.
+``miniforge`` is a version of miniconda that uses the conda-forge channel by default.
+
+Note that using conda is not strictly required for running mirgecom, but simplifies the installation
+considerably.
+
+Why are we installing binary packages?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Many of the packages required by mirgecom are installed as binary packages by default, via conda.
+These packages (python, pocl, pyopencl, and islpy, among others) are difficult or time-consuming
+to install by source.
+
+How can I install pocl from source?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In some cases, it can be helpful to install certain packages from source, for debugging or to install
+a git version. Most packages are straightforward to install from source. For pocl, you can follow this
+installation script: https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777
+ 
