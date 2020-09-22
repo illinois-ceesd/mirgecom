@@ -59,7 +59,7 @@ Why are we installing binary packages?
 
 Many of the packages required by mirgecom are installed as binary packages by default, via conda.
 These packages (python, pocl, pyopencl, and islpy, among others) are difficult or time-consuming
-to install by source.
+to install from source, and source builds are more easily impacted by other software present on the system.
 
 How can I install pocl from source?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
