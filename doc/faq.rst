@@ -66,5 +66,5 @@ How can I install pocl from source?
 
 In some cases, it can be helpful to install certain packages from source, for debugging or to install
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
-installation script: https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777
+`installation script: <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__
  
