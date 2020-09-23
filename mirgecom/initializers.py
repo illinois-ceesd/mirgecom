@@ -40,6 +40,7 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
+from mirgecom.euler import join_conserved
 
 
 class Vortex2D:
@@ -220,7 +221,7 @@ class Lump:
 
     .. math::
 
-         {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+         {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{-\alpha~r^{2})}\\
          {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
          {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
@@ -247,8 +248,8 @@ class Lump:
     """
 
     def __init__(
-            self, numdim=1, rho0=1.0, rhoamp=1.0,
-            p0=1.0, center=[0], velocity=[0]
+            self, numdim=1, rho0=1.0, rhoamp=1.0, p0=1.0,
+            center=None, velocity=None, nspecies=1, alpha=0.1
     ):
         r"""Initialize Lump parameters.
 
@@ -267,24 +268,34 @@ class Lump:
         velocity : numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(2,)``
+        nspecies : int 
+            number of species in the state vector
+        alpha : float
+            specifies the value of :math:`alpha`
         """
-        if len(center) == numdim:
-            self._center = center
-        elif len(center) > numdim:
-            numdim = len(center)
-            self._center = center
+        if center is not None:
+            if len(center) == numdim:
+                self._center = center
+            elif len(center) > numdim:
+                numdim = len(center)
+                self._center = center
+            else:
+                self._center = np.zeros(shape=(numdim,))
         else:
             self._center = np.zeros(shape=(numdim,))
 
-        if len(velocity) == numdim:
-            self._velocity = velocity
-        elif len(velocity) > numdim:
-            numdim = len(velocity)
-            self._velocity = velocity
-            new_center = np.zeros(shape=(numdim,))
-            for i in range(len(self._center)):
-                new_center[i] = self._center[i]
-            self._center = new_center
+        if velocity is not None:
+            if len(velocity) == numdim:
+                self._velocity = velocity
+            elif len(velocity) > numdim:
+                numdim = len(velocity)
+                self._velocity = velocity
+                new_center = np.zeros(shape=(numdim,))
+                for i in range(len(self._center)):
+                    new_center[i] = self._center[i]
+                    self._center = new_center
+            else:
+                self._velocity = np.zeros(shape=(numdim,))
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
@@ -295,6 +306,8 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
         self._dim = numdim
+        self._alpha = alpha
+        self._nspecies = nspecies
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         """
@@ -322,12 +335,16 @@ class Lump:
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
         gamma = eos.gamma()
-        expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
+        expterm = self._rhoamp * actx.np.exp(-1.0*self._alpha*(r ** 2))
         mass = expterm + self._rho0
         mom = self._velocity * make_obj_array([mass])
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+        massfrac = None
+        if self._nspecies > 1:
+            y = [1 / self._nspecies for i in range(self._nspecies)]
+            massfrac = y * make_obj_array([mass])
 
-        return flat_obj_array(mass, energy, mom)
+        return join_conserved(self._dim, mass, energy, mom, massfrac)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -354,20 +371,26 @@ class Lump:
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
         # The expected rhs is:
-        # rhorhs  = -2*rho*(r.dot.v)
-        # rhoerhs = -rho*v^2*(r.dot.v)
-        # rhovrhs = -2*rho*(r.dot.v)*v
-        expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
+        # rhorhs  = 2*alpha*rho*(r.dot.v)
+        # rhoerhs = alpha*rho*v^2*(r.dot.v)
+        # rhovrhs = 2*alpha*rho*(r.dot.v)*v
+        expterm = self._rhoamp * actx.np.exp(- self._alpha * r ** 2)
         mass = expterm + self._rho0
+        mom = self._velocity * make_obj_array([mass])
 
         v = self._velocity * make_obj_array([1.0 / mass])
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
-        massrhs = -2 * rdotv * mass
-        energyrhs = -v2 * rdotv * mass
+        massrhs = 2 * self._alpha * rdotv * mass
+        energyrhs = self._alpha * v2 * rdotv * mass
         momrhs = v * make_obj_array([-2 * mass * rdotv])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        massfrac = None
+        if self._nspecies > 1:
+            y = [1 / self._nspecies for i in range(self._nspecies)]
+            massfrac = y * make_obj_array([massrhs])
+
+        return join_conserved(self._dim, massrhs, energyrhs, momrhs, massfrac)
 
 
 class Uniform:

@@ -553,8 +553,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             assert(err_max < tolerance)
             if err_max > maxxerr:
                 maxxerr = err_max
-        # set a non-zero, but uniform velocity component
 
+        # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
             mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
@@ -567,9 +567,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         rho_resid = resid_split.mass
         rhoe_resid = resid_split.energy
         mom_resid = resid_split.momentum
+        massfrac_resid = resid_split.massfrac
 
         assert discr.norm(rho_resid, np.inf) < tolerance
         assert discr.norm(rhoe_resid, np.inf) < tolerance
+        if massfrac_resid is not None:
+            for i in range(nspecies):
+                assert discr.norm(massfrac_resid[i], np.inf) < tolerance
 
         for i in range(dim):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
@@ -592,6 +596,157 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     assert (
         eoc_rec1.order_estimate() >= order - 0.5
         or eoc_rec1.max_error() < 1e-9
+    )
+
+
+def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
+    actx = ncoords[0].array_context
+
+    if velocity is None:
+        velocity = np.zeros(shape=(sdim,))
+        velocity[:] = 1.0
+
+    v2 = np.dot(velocity, velocity)
+    soln_mass = sum([(i + 1.0) * np.power(ncoords[i], morder)
+                     for i in range(sdim)])
+    soln_energy = 0.5 * v2 * soln_mass + 2.5
+    soln_mom = velocity * make_obj_array([soln_mass])
+    soln_vel = soln_mom / make_obj_array([soln_mass])
+    soln_v2 = np.dot(soln_vel, soln_vel)
+
+    soln_massfrac = None
+    if nspecies > 1:
+        soln_y = [(i + 1.0) for i in range(sdim)]
+        soln_massfrac = soln_y * make_obj_array([soln_mass])
+
+    soln = join_conserved(sdim, soln_mass, soln_energy, soln_mom, soln_massfrac)
+
+    massgrad = make_obj_array([(i + 1.0) * morder * np.power(ncoords[i], morder - 1)
+                for i in range(sdim)])
+    print(f"massgrad = {massgrad}")
+    rhsterm = np.dot(massgrad, soln_vel)
+    rhs_mass = rhsterm
+    rhs_energy = .5 * soln_v2 * rhsterm
+    rhs_mom = make_obj_array([(soln_vel[i] * rhsterm) for i in range(sdim)])
+
+    rhs_massfrac = None
+    if nspecies > 1:
+        rhs_massfrac = soln_y * rhs_mass
+
+    soln_rhs = join_conserved(sdim, rhs_mass, rhs_energy, rhs_mom, rhs_massfrac)
+
+    return soln, soln_rhs
+
+
+@pytest.mark.parametrize("nspecies", [1])
+@pytest.mark.parametrize("dim", [1, 2])
+@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("morder", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
+    """Tests the inviscid rhs using a trivial
+    constant/uniform state which should
+    yield rhs = 0 to FP.  The test is performed
+    for 1, 2, and 3 dimensions.
+    """
+    actx = actx_factory()
+
+    tolerance = 1e-9
+    maxxerr = 0.0
+
+    from pytools.convergence import EOCRecorder
+    eoc = EOCRecorder()
+
+    # for nel_1d in [4, 8, 12]:
+    for nel_1d in [8, 12, 16, 24]:
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(1,) * dim, b=(2,) * dim, n=(nel_1d,) * dim
+        )
+
+        logger.info(
+            f"Number of {dim}d elements: {mesh.nelements}"
+        )
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+
+        # create_morder_soln(nodes, dim, morder, velocity=None, nspecies=1):
+        xsoln, xrhs = _create_morder_soln(nodes, dim, morder)
+        soln_split = split_conserved(dim, xsoln)
+        rho_soln = soln_split.mass
+        rhoe_soln = soln_split.energy
+        rhov_soln = soln_split.momentum
+        spec_soln = soln_split.massfrac
+
+        message = (
+            f"rho_soln  = {rho_soln}\n"
+            f"rhoe_soln = {rhoe_soln}\n"
+            f"rhov_soln = {rhov_soln}\n"
+        )
+        print(message)
+
+        xrhs_split = split_conserved(dim, xrhs)
+        rho_xrhs = xrhs_split.mass
+        rhoe_xrhs = xrhs_split.energy
+        mom_xrhs = xrhs_split.momentum
+        spec_xrhs = xrhs_split.massfrac
+
+        message = (
+            f"rho_xrhs  = {rho_xrhs}\n"
+            f"rhoe_xrhs = {rhoe_xrhs}\n"
+            f"mom_xrhs = {mom_xrhs}\n"
+        )
+        print(message)
+
+        eos = IdealSingleGas()
+        from mirgecom.euler import inviscid_flux
+        inviscid_fluxes = inviscid_flux(discr, eos, xsoln)
+        message = (
+            f"massflux = {inviscid_fluxes[0]}\n"
+            f"eflux = {inviscid_fluxes[1]}\n"
+            f"momflux = {inviscid_fluxes[2]}"
+        )
+        print(message)
+
+        boundaries = {BTAG_ALL: DummyBoundary()}
+        inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
+                                         boundaries=boundaries, q=xsoln, t=0.0)
+
+        rhs_split = split_conserved(dim, inviscid_rhs)
+        rho_rhs = rhs_split.mass
+        rhoe_rhs = rhs_split.energy
+        rhov_rhs = rhs_split.momentum
+        spec_rhs = rhs_split.massfrac
+
+        message = (
+            f"rho_rhs  = {rho_rhs}\n"
+            f"rhoe_rhs = {rhoe_rhs}\n"
+            f"rhov_rhs = {rhov_rhs}\n"
+        )
+        print(message)
+
+        rhs_resid = inviscid_rhs + xrhs
+        resid_split = split_conserved(dim, rhs_resid)
+        rho_resid = resid_split.mass
+        rhoe_resid = resid_split.energy
+        mom_resid = resid_split.momentum
+        spec_resid = resid_split.massfrac
+
+        assert discr.norm(rho_resid, np.inf) < tolerance
+        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        for i in range(dim):
+            assert discr.norm(mom_resid[i], np.inf) < tolerance
+
+        err_max = discr.norm(rhs_resid[i], np.inf)
+        eoc.add_data_point(1.0 / (nel_1d - 1), err_max)
+        assert(err_max < tolerance)
+        if err_max > maxxerr:
+            maxxerr = err_max
+
+    print(f"EOC({order}, {morder}): {eoc}")
+    assert (
+        eoc.order_estimate() >= order - 0.5
+        or eoc.max_error() < tolerance
     )
 
 
@@ -649,9 +804,10 @@ def test_vortex_rhs(actx_factory, order):
     )
 
 
+@pytest.mark.parametrize("nspecies", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lump_rhs(actx_factory, dim, order):
+def test_lump_rhs(actx_factory, nspecies, dim, order):
     """Tests the inviscid rhs using the non-trivial
     1, 2, and 3D mass lump case against the analytic
     expressions of the RHS. Checks several different
@@ -680,10 +836,10 @@ def test_lump_rhs(actx_factory, dim, order):
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
 
-        # Init soln with Lump and expected RHS = 0
+        # Init soln with Lump and exact lump RHS = 0
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
-        lump = Lump(center=center, velocity=velocity)
+        lump = Lump(center=center, velocity=velocity, nspecies=nspecies)
         lump_soln = lump(0, nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = inviscid_operator(
@@ -695,12 +851,23 @@ def test_lump_rhs(actx_factory, dim, order):
             maxxerr = err_max
 
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
+        
+        vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
+
+        io_fields = [("rhs", split_conserved(dim, inviscid_rhs))]
+        io_fields.append(("lump", split_conserved(dim, lump_soln)))
+        io_fields.append(("expected_rhs", split_conserved(dim, expected_rhs)))
+        io_fields.append(("residual", inviscid_rhs - expected_rhs))
+        visfilename = (f"test_{nspecies}_{dim}_{nel_1d}_{order}.vtu")
+        vis.write_vtk_file(visfilename, io_fields, overwrite=True)
+
     logger.info(f"Max error: {maxxerr}")
 
     message = (
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
+    print(f"EOCRecorder: {eoc_rec}")
     logger.info(message)
     assert (
         eoc_rec.order_estimate() >= order - 0.5

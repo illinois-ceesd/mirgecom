@@ -138,7 +138,6 @@ def split_conserved(dim, q):
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*. If present, species mass fractions are included.
     """
-    #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
     if nspec > 0:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
@@ -228,6 +227,8 @@ def _facial_flux(discr, eos, q_tpair):
     lam = actx.np.maximum(
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
+
+    print(f"lam = {lam}")
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (

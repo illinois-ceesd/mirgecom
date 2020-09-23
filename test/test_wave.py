@@ -140,7 +140,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for n in [8, 10, 12] if dim == 3 else [4, 8, 16]:
+    for n in [8, 10, 12, 16, 24] if dim == 3 else [4, 8, 16]:
         mesh = mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
@@ -181,10 +181,9 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
                             ("rhs_v_expected", expected_rhs[1:]),
                             ])
 
-    print("Approximation error:")
-    print(eoc_rec)
+    print(f"Approximation error({order}): {eoc_rec}")
     assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
-
+    assert(False)
 
 @pytest.mark.parametrize(("problem", "timestep_scale"),
     [
