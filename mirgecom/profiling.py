@@ -96,6 +96,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_events = []
 
     def clear_profiling_data(self) -> None:
+        """Clear all profiling data."""
         self._finish_profile_events()
         self.profile_results = {}
 
