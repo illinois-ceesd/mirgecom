@@ -59,7 +59,6 @@ class ProfileEvent:
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """An array context that profiles kernel executions.
 
-    .. automethod:: clear_profiling_data
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
 
@@ -94,11 +93,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.profile_results.setdefault(program, []).append(new)
 
         self.profile_events = []
-
-    def clear_profiling_data(self) -> None:
-        """Clear all profiling data."""
-        self._finish_profile_events()
-        self.profile_results = {}
 
     def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
