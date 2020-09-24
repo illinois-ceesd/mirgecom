@@ -99,7 +99,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self._finish_profile_events()
         self.profile_results = {}
 
-
     def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
         self._finish_profile_events()
