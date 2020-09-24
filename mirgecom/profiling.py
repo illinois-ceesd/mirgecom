@@ -59,6 +59,7 @@ class ProfileEvent:
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """An array context that profiles kernel executions.
 
+    .. automethod:: clear_profiling_data
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
 
@@ -94,6 +95,11 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events = []
 
+    def clear_profiling_data(self) -> None:
+        self._finish_profile_events()
+        self.profile_results = {}
+
+
     def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
         self._finish_profile_events()
@@ -125,7 +131,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in value],
                 None)
-            fprint_mean = f"{np.mean(fprint_bytes) / 1e9:{g}}"
+            fprint_mean = np.mean(fprint_bytes) / 1e9
 
             # pylint: disable=E1101
             if len(fprint_bytes.compressed()) > 0:
@@ -143,7 +149,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 f"{max(flops_per_sec):{g}}",
                 f"{min(bandwidth_access):{g}}", f"{mean(bandwidth_access):{g}}",
                 f"{max(bandwidth_access):{g}}",
-                fprint_min, fprint_mean, fprint_max,
+                fprint_min, f"{fprint_mean:{g}}", fprint_max,
                 f"{mean(bytes_per_flop):{g}}"])
 
         return tbl
