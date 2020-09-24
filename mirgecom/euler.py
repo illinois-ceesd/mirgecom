@@ -149,19 +149,14 @@ def split_conserved(dim, q):
 def join_conserved(dim, mass, energy, momentum, massfrac=None):
     """Create an agglomerated solution array from the conserved quantities."""
     from pytools import single_valued
-    nspec = 0
+    aux_shapes = [
+        _aux_shape(mass, ()),
+        _aux_shape(energy, ()),
+        _aux_shape(momentum, (dim,))])
     if massfrac is not None:
         nspec = len(massfrac)
-        aux_shape = single_valued([
-            _aux_shape(mass, ()),
-            _aux_shape(energy, ()),
-            _aux_shape(momentum, (dim,)),
-            _aux_shape(massfrac, (nspec,))])
-    else:
-        aux_shape = single_valued([
-            _aux_shape(mass, ()),
-            _aux_shape(energy, ()),
-            _aux_shape(momentum, (dim,))])
+        aux_shapes.append(_aux_shape(massfrac, (nspec,)))
+    aux_shape = single_valued(aux_shapes)
 
     result = np.zeros((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
@@ -192,8 +187,7 @@ def inviscid_flux(discr, eos, q):
 
     massfrac = None
     if cv.massfrac is not None:
-        # mass fractions require a reshape here to get the right numpy
-        # broadcast behavior. Reshaped to [numspecies x 1] object.
+        # massfrac shape: (numspecies, dim)
         massfrac = mom * cv.massfrac.reshape(-1, 1) / scalar(cv.mass)
 
     return join_conserved(dim,
