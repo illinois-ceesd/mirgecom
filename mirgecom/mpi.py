@@ -1,4 +1,7 @@
-""":mod:`mirgecom.mpi` contains MPI helper functionality."""
+""":mod:`mirgecom.mpi` contains MPI helper functionality.
+
+.. autofunction:: mpi_entry_point
+"""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -31,11 +34,11 @@ import sys
 
 def mpi_entry_point(func):
     """
-    Designate a function as the "main" function for MPI.
+    Return a decorator that designates a function as the "main" function for MPI.
 
-    In other words, declares that all MPI code that will be executed on the current
-    process is contained within *func*. Calls `MPI_Init()`/`MPI_Init_thread()` and
-    sets up a hook to call `MPI_Finalize()` on exit.
+    Declares that all MPI code that will be executed on the current process is
+    contained within *func*. Calls `MPI_Init()`/`MPI_Init_thread()` and sets up a
+    hook to call `MPI_Finalize()` on exit.
     """
     @wraps(func)
     def wrapped_func(*args, **kwargs):
