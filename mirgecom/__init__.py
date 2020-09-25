@@ -23,22 +23,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-import os
-from warnings import warn
-
-from mpi4py import MPI
-
-# This code avoids slow startups due to file system locking when running with
-# large numbers of ranks. See
-# https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes
-# for more details
-
-size = MPI.COMM_WORLD.Get_size()
-rank = MPI.COMM_WORLD.Get_rank()
-
-if size > 1 and rank == 0 and "XDG_CACHE_HOME" not in os.environ:
-    warn("Please set the XDG_CACHE_HOME variable in your job script to "
-         "avoid file system overheads when running on large numbers of ranks. "
-         "See https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes"  # noqa: E501
-         " for more information.")
