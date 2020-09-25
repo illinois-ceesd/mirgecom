@@ -41,7 +41,7 @@ def mpi_entry_point(func):
     def wrapped_func(*args, **kwargs):
         if "mpi4py.MPI" in sys.modules:
             raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
-                        "point.")
+                        "point. Check for prior imports.")
 
         # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
         # exit
