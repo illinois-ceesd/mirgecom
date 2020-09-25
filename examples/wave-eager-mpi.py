@@ -34,10 +34,10 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
-from mpi4py import MPI
 
 
 def bump(actx, discr, t=0):
@@ -58,12 +58,14 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
+@mpi_entry_point
 def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    from mpi4py import MPI
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
 
