@@ -1,4 +1,4 @@
-""":mod:`mirgecom.mpi` contains MPI helper functionality.
+"""MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
 """
