@@ -5,6 +5,11 @@ Linear Acoustic Wave Equation
 
 .. automodule:: mirgecom.wave
 
+Heat Equation
+=============
+
+.. automodule:: mirgecom.heat
+
 Gas Dynamics
 ============
 
