@@ -49,11 +49,22 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
+from logpyle import (LogManager, add_general_quantities,
+        add_simulation_quantities, add_run_info, IntervalTimer,
+        set_dt, LogQuantity)
+
 
 logger = logging.getLogger(__name__)
 
 
 def main(ctx_factory=cl.create_some_context):
+    logmgr = LogManager("mylog.dat", "wo")  # , comm=...
+    add_run_info(logmgr)
+    add_general_quantities(logmgr)
+    add_simulation_quantities(logmgr)
+    logmgr.add_watches(["step", "t_sim", "t_step.max"])
+
+
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
@@ -132,11 +143,13 @@ def main(ctx_factory=cl.create_some_context):
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
+                          t=current_t, t_final=t_final, logmgr=logmgr, discr=discr, eos=eos)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state
+
+
 
     #    if current_t != checkpoint_t:
     if rank == 0:
@@ -147,6 +160,8 @@ def main(ctx_factory=cl.create_some_context):
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
+
+    logmgr.close()
 
 
 if __name__ == "__main__":

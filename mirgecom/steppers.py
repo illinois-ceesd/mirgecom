@@ -27,9 +27,47 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from logpyle import (LogManager, add_general_quantities,
+        add_simulation_quantities, add_run_info, IntervalTimer,
+        set_dt, LogQuantity)
+
+class Pressure(LogQuantity):
+  def __init__(self, discr, current_state, eos):
+        LogQuantity.__init__(self, "pressure", "p")
+
+        from mirgecom.euler import split_conserved
+        cv = split_conserved(discr.dim, current_state)
+        self.dv = eos.dependent_vars(cv)
+
+        self.discr = discr
+
+  def __call__(self):
+    from functools import partial
+    _min = partial(self.discr.nodal_min, "vol")
+    _max = partial(self.discr.nodal_max, "vol")
+
+    return _min(self.dv.pressure)
+
+class Temperature(LogQuantity):
+  def __init__(self, discr, current_state, eos):
+        LogQuantity.__init__(self, "temperature", "K")
+
+        from mirgecom.euler import split_conserved
+        cv = split_conserved(discr.dim, current_state)
+        self.dv = eos.dependent_vars(cv)
+
+        self.discr = discr
+
+  def __call__(self):
+    from functools import partial
+    _min = partial(self.discr.nodal_min, "vol")
+    _max = partial(self.discr.nodal_max, "vol")
+
+    return _min(self.dv.temperature)
+
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0):
+                  state, t_final, t=0.0, istep=0, logmgr=None, discr=None, eos=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -68,7 +106,13 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
     if t_final <= t:
         return istep, t, state
 
+    logmgr.add_quantity(Pressure(discr, state, eos))
+    logmgr.add_quantity(Temperature(discr, state, eos))
+    logmgr.add_watches(["pressure", "temperature"])
+
     while t < t_final:
+        if logmgr:
+            logmgr.tick_before()
 
         dt = get_timestep(state=state)
         if dt < 0:
@@ -80,5 +124,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         t += dt
         istep += 1
+
+        set_dt(logmgr, dt)
+        if logmgr:
+            logmgr.tick_after()
 
     return istep, t, state
