@@ -67,7 +67,7 @@ def wave_operator(discr, c, w):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     c: float
-        the (constant) wave speed)
+        the (constant) wave speed
     w: numpy.ndarray
         an object array of DOF arrays, representing the state vector
 
