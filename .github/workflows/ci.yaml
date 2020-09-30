@@ -18,6 +18,10 @@ jobs:
             python-version: '3.x'
         - name: Flake8 test
           run: |
+            sysctl vm.overcommit_memory
+            sysctl cm.overcommit_ratio
+            sysctl vm.overcommit_kbytes
+            cat /proc/meminfo 
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
