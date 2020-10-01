@@ -62,7 +62,7 @@ def main(ctx_factory=cl.create_some_context):
     add_run_info(logmgr)
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
-    logmgr.add_watches(["step", "t_sim", "t_step.max"])
+    logmgr.add_watches(["step", "t_sim", "t_step"])
 
 
     cl_ctx = ctx_factory()
