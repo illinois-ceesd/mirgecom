@@ -42,7 +42,8 @@ In order to avoid the slowdowns and warnings, users can direct the packages to c
 cache files in directories that are private to each rank by using the ``XDG_CACHE_HOME``
 environment variable, such as in the following example::
 
-   $ srun -n 512 bash -c 'XDG_CACHE_HOME=/p/lscratchh/diener3/xdg-scratch$SLURM_PROCID python examples/wave-eager-mpi.py'
+   $ export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
+   $ srun -n 512 python examples/wave-eager-mpi.py'
 
 
 Profiling kernel execution
@@ -86,7 +87,7 @@ On the Quartz machine, running mirgecom should be straightforward. An example ba
 
    nnodes=$SLURM_JOB_NUM_NODES
    nproc=$nnodes # 1 rank per node
-   export XDG_CACHE_HOME=/tmp/$USER/xdg-scratch # See above on why this is important
+   export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
    srun -n $nproc python examples/wave-eager-mpi.py
 
 Run this with ``sbatch <script.sh>``.
