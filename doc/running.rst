@@ -94,6 +94,10 @@ On the Quartz machine, running mirgecom should be straightforward. An example ba
 
 Run this with ``sbatch <script.sh>``.
 
+More information about Quartz can be found here:
+- `Machine overview <https://hpc.llnl.gov/hardware/platforms/Quartz>`__
+- `Detailed information <https://computing.llnl.gov/tutorials/lc_resources/>`__
+- `Programming environment <https://computing.llnl.gov/tutorials/linux_clusters/>`__
 
 Lassen
 ******
@@ -119,3 +123,7 @@ the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
 
 
 Run this with ``bsub <script.sh>``.
+
+More information about Lassen can be found here:
+- `Machine overview <https://hpc.llnl.gov/hardware/platforms/Lassen>`__
+- `Detailed information and programming environment <https://hpc.llnl.gov/training/tutorials/using-lcs-sierra-system>`__
