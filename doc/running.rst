@@ -59,3 +59,61 @@ In addition to using this array context, you also need to enable profiling in th
 Note that profiling has a performance impact (~20% at the time of this writing).
 
 .. automodule:: mirgecom.profiling
+
+
+Running on specific systems
+---------------------------
+
+General
+*******
+
+In general, we recommend running mirgecom with 1 MPI rank (= python process) per node.
+Kernel execution will be parallelized automatically through pocl
+(either on CPU or GPU, depending on the options you selected and what is available
+on the system).
+
+
+Quartz
+******
+
+On the Quartz machine, running mirgecom should be straightforward. An example batch script for the slurm batch system is given below:
+
+..code-block:: bash
+
+   #!/bin/bash
+   #SBATCH -t 00:02:00
+   #SBATCH -J <jobname>
+   #SBATCH -p pbatch
+
+   nnodes=$SLURM_JOB_NUM_NODES
+   nproc=$nnodes # 1 rank per node
+   export XDG_CACHE_HOME=/tmp/<username>/xdg-scratch # See above on why this is important
+   srun -n $nproc python examples/wave-eager-mpi.py
+
+Run this with ``sbatch <script.sh>``.
+
+
+Lassen
+******
+
+On Lassen, we recommend running 1 MPI rank per GPU on each node. Care must be
+taken to restrict each rank to a separate GPU to avoid competing for access to
+the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
+``lrun``. An example batch script for the LSF batch system is given below:
+
+..code-block:: bash
+
+   #BSUB -nnodes 4                   #number of nodes
+   #BSUB -W 30                       #walltime in minutes
+   #BSUB -J <jobname>                #name of job
+   #BSUB -q pbatch                   #queue to use
+
+   nnodes=$(echo $LSB_MCPU_HOSTS | wc -w)
+   nnodes=$((nnodes/2-1))
+   nproc=$((4*nnodes)) # 4 ranks per node, 1 per GPU
+
+   export XDG_CACHE_HOME="/tmp/<username>/xdg-scratch" # See above on why this is important
+   lrun -g 1 -n $nproc python examples/wave-eager-mpi.py
+
+
+Run this with ``bsub <script.sh>``.
