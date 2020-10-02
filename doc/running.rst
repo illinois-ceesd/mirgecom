@@ -81,13 +81,12 @@ On the Quartz machine, running mirgecom should be straightforward. An example ba
 .. code-block:: bash
 
    #!/bin/bash
-   #SBATCH -t 00:02:00
-   #SBATCH -J <jobname>
+   #SBATCH -t 00:30:00 # walltime
    #SBATCH -p pbatch
 
    nnodes=$SLURM_JOB_NUM_NODES
    nproc=$nnodes # 1 rank per node
-   export XDG_CACHE_HOME=/tmp/<username>/xdg-scratch # See above on why this is important
+   export XDG_CACHE_HOME=/tmp/$USER/xdg-scratch # See above on why this is important
    srun -n $nproc python examples/wave-eager-mpi.py
 
 Run this with ``sbatch <script.sh>``.
@@ -103,16 +102,15 @@ the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
 
 .. code-block:: bash
 
-   #BSUB -nnodes 4                   #number of nodes
-   #BSUB -W 30                       #walltime in minutes
-   #BSUB -J <jobname>                #name of job
-   #BSUB -q pbatch                   #queue to use
+   #BSUB -nnodes 4                   # number of nodes
+   #BSUB -W 30                       # walltime in minutes
+   #BSUB -q pbatch                   # queue to use
 
    nnodes=$(echo $LSB_MCPU_HOSTS | wc -w)
    nnodes=$((nnodes/2-1))
    nproc=$((4*nnodes)) # 4 ranks per node, 1 per GPU
 
-   export XDG_CACHE_HOME="/tmp/<username>/xdg-scratch" # See above on why this is important
+   export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
    lrun -g 1 -n $nproc python examples/wave-eager-mpi.py
 
 
