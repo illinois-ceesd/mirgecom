@@ -87,7 +87,9 @@ On the Quartz machine, running mirgecom should be straightforward. An example ba
 
    nnodes=$SLURM_JOB_NUM_NODES
    nproc=$nnodes # 1 rank per node
+
    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
+
    srun -n $nproc python examples/wave-eager-mpi.py
 
 Run this with ``sbatch <script.sh>``.
@@ -112,6 +114,7 @@ the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
    nproc=$((4*nnodes)) # 4 ranks per node, 1 per GPU
 
    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
+
    lrun -g 1 -n $nproc python examples/wave-eager-mpi.py
 
 
