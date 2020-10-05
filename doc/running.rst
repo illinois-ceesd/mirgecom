@@ -93,7 +93,7 @@ An example batch script for the slurm batch system is given below:
 
    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
 
-   srun -n $nproc python examples/wave-eager-mpi.py
+   srun -n $nproc python -m mpi4py examples/wave-eager-mpi.py
 
 Run this with ``sbatch <script.sh>``.
 
@@ -113,6 +113,7 @@ the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
 
 .. code-block:: bash
 
+   #!/bin/bash
    #BSUB -nnodes 4                   # number of nodes
    #BSUB -W 30                       # walltime in minutes
    #BSUB -q pbatch                   # queue to use
@@ -123,7 +124,7 @@ the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
 
    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
 
-   lrun -g 1 -n $nproc python examples/wave-eager-mpi.py
+   lrun -g 1 -n $nproc python -m mpi4py examples/wave-eager-mpi.py
 
 
 Run this with ``bsub <script.sh>``.
