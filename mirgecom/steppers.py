@@ -27,44 +27,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from logpyle import (LogManager, add_general_quantities,
-        add_simulation_quantities, add_run_info, IntervalTimer,
-        set_dt, LogQuantity)
+from logpyle import set_dt
 
-class Pressure(LogQuantity):
-  def __init__(self, discr, current_state, eos):
-        LogQuantity.__init__(self, "pressure", "p")
+my_state = None
 
-        from mirgecom.euler import split_conserved
-        cv = split_conserved(discr.dim, current_state)
-        self.dv = eos.dependent_vars(cv)
-
-        self.discr = discr
-
-  def __call__(self):
-    from functools import partial
-    _min = partial(self.discr.nodal_min, "vol")
-    _max = partial(self.discr.nodal_max, "vol")
-
-    return _min(self.dv.pressure)
-
-class Temperature(LogQuantity):
-  def __init__(self, discr, current_state, eos):
-        LogQuantity.__init__(self, "temperature", "K")
-
-        from mirgecom.euler import split_conserved
-        cv = split_conserved(discr.dim, current_state)
-        self.dv = eos.dependent_vars(cv)
-
-        self.discr = discr
-
-  def __call__(self):
-    from functools import partial
-    _min = partial(self.discr.nodal_min, "vol")
-    _max = partial(self.discr.nodal_max, "vol")
-
-    return _min(self.dv.temperature)
-
+def get_current_state():
+    return my_state
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0, logmgr=None, discr=None, eos=None):
@@ -106,10 +74,6 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
     if t_final <= t:
         return istep, t, state
 
-    logmgr.add_quantity(Pressure(discr, state, eos))
-    logmgr.add_quantity(Temperature(discr, state, eos))
-    logmgr.add_watches(["pressure", "temperature"])
-
     while t < t_final:
         if logmgr:
             logmgr.tick_before()
@@ -121,6 +85,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         checkpoint(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
+
+        global my_state
+        my_state = state
 
         t += dt
         istep += 1

@@ -53,6 +53,8 @@ from logpyle import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info, IntervalTimer,
         set_dt, LogQuantity)
 
+from mirgecom.logging_quantities import MinPressure, MinTemperature
+
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +109,13 @@ def main(ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
+
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
+
+    logmgr.add_quantity(MinPressure(discr, eos))
+    logmgr.add_quantity(MinTemperature(discr, eos))
+    logmgr.add_watches(["min_pressure", "min_temperature"])
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
