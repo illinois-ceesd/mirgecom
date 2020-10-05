@@ -68,7 +68,8 @@ Running on specific systems
 General
 *******
 
-In general, we recommend running mirgecom with 1 MPI rank (= python process) per node.
+In general, we recommend running mirgecom with 1 MPI rank (= python process) per cluster node.
+For GPU execution, we recommend running with 1 MPI rank per GPU.
 Kernel execution will be parallelized automatically through pocl
 (either on CPU or GPU, depending on the options you selected and what is available
 on the system).
@@ -77,7 +78,8 @@ on the system).
 Quartz
 ******
 
-On the Quartz machine, running mirgecom should be straightforward. An example batch script for the slurm batch system is given below:
+On the Quartz machine, running mirgecom should be straightforward.
+An example batch script for the slurm batch system is given below:
 
 .. code-block:: bash
 
