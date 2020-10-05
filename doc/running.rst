@@ -84,8 +84,9 @@ An example batch script for the slurm batch system is given below:
 .. code-block:: bash
 
    #!/bin/bash
-   #SBATCH -t 00:30:00 # walltime
-   #SBATCH -p pbatch
+   #SBATCH -N 4                        # number of nodes
+   #SBATCH -t 00:30:00                 # walltime
+   #SBATCH -p pbatch                   # queue to use
 
    nnodes=$SLURM_JOB_NUM_NODES
    nproc=$nnodes # 1 rank per node
