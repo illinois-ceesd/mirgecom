@@ -31,8 +31,10 @@ from logpyle import set_dt
 
 my_state = None
 
+
 def get_current_state():
     return my_state
+
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0, logmgr=None, discr=None, eos=None):

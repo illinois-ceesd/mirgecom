@@ -1,11 +1,8 @@
-from logpyle import (LogManager, add_general_quantities,
-        add_simulation_quantities, add_run_info, IntervalTimer,
-        set_dt, LogQuantity)
-
+from logpyle import LogQuantity
 
 
 class MinPressure(LogQuantity):
-  def __init__(self, discr, eos):
+    def __init__(self, discr, eos):
         LogQuantity.__init__(self, "min_pressure", "P")
 
         self.discr = discr
@@ -13,21 +10,22 @@ class MinPressure(LogQuantity):
         from functools import partial
         self._min = partial(self.discr.nodal_min, "vol")
 
-  def __call__(self):
-    from mirgecom.steppers import get_current_state
+    def __call__(self):
+        from mirgecom.steppers import get_current_state
 
-    if get_current_state() is None:
-        return 0
+        if get_current_state() is None:
+            return 0
 
-    from mirgecom.euler import split_conserved
+        from mirgecom.euler import split_conserved
 
-    cv = split_conserved(self.discr.dim, get_current_state())
-    dv = self.eos.dependent_vars(cv)
+        cv = split_conserved(self.discr.dim, get_current_state())
+        dv = self.eos.dependent_vars(cv)
 
-    return self._min(dv.pressure)
+        return self._min(dv.pressure)
+
 
 class MinTemperature(LogQuantity):
-  def __init__(self, discr, eos):
+    def __init__(self, discr, eos):
         LogQuantity.__init__(self, "min_temperature", "K")
 
         self.discr = discr
@@ -36,15 +34,15 @@ class MinTemperature(LogQuantity):
         from functools import partial
         self._min = partial(self.discr.nodal_min, "vol")
 
-  def __call__(self):
-    from mirgecom.steppers import get_current_state
+    def __call__(self):
+        from mirgecom.steppers import get_current_state
 
-    if get_current_state() is None:
-        return 0
+        if get_current_state() is None:
+            return 0
 
-    from mirgecom.euler import split_conserved
+        from mirgecom.euler import split_conserved
 
-    cv = split_conserved(self.discr.dim, get_current_state())
-    dv = self.eos.dependent_vars(cv)
+        cv = split_conserved(self.discr.dim, get_current_state())
+        dv = self.eos.dependent_vars(cv)
 
-    return self._min(dv.temperature)
+        return self._min(dv.temperature)

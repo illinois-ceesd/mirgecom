@@ -50,8 +50,7 @@ from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
 from logpyle import (LogManager, add_general_quantities,
-        add_simulation_quantities, add_run_info, IntervalTimer,
-        set_dt, LogQuantity)
+        add_simulation_quantities, add_run_info)
 
 from mirgecom.logging_quantities import MinPressure, MinTemperature
 
@@ -65,7 +64,6 @@ def main(ctx_factory=cl.create_some_context):
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
     logmgr.add_watches(["step", "t_sim", "t_step"])
-
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -150,13 +148,12 @@ def main(ctx_factory=cl.create_some_context):
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, discr=discr, eos=eos)
+                          t=current_t, t_final=t_final, logmgr=logmgr, discr=discr,
+                          eos=eos)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state
-
-
 
     #    if current_t != checkpoint_t:
     if rank == 0:
