@@ -1,4 +1,4 @@
-__copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
+__copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,7 +37,7 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from logpyle import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info, IntervalTimer,
-        set_dt, MultiLogQuantity)
+        set_dt)
 
 
 def bump(actx, discr, t=0):
