@@ -1,4 +1,4 @@
-from logpyle import LogQuantity
+from logpyle import LogQuantity, MultiLogQuantity
 
 
 class MinPressure(LogQuantity):
@@ -46,3 +46,13 @@ class MinTemperature(LogQuantity):
         dv = self.eos.dependent_vars(cv)
 
         return self._min(dv.temperature)
+
+
+class KernelProfile(LogQuantity):
+    def __init__(self, actx, kernel_name):
+        LogQuantity.__init__(self, kernel_name, "s")
+        self.kernel_name = kernel_name
+        self.actx = actx
+
+    def __call__(self):
+        return(self.actx.get_profiling_data_for_kernel(self.kernel_name))

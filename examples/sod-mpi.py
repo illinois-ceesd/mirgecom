@@ -33,6 +33,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
@@ -52,23 +53,28 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
-from mirgecom.logging_quantities import MinPressure, MinTemperature
+from mirgecom.logging_quantities import MinPressure, MinTemperature, KernelProfile
 
 
 logger = logging.getLogger(__name__)
 
 
-def main(ctx_factory=cl.create_some_context):
-    logmgr = LogManager("mylog.dat", "wo")  # , comm=...
+def main(ctx_factory=cl.create_some_context, use_profiling=False):
+    logmgr = LogManager("sod1d.dat", "wo")  # , comm=...
     add_run_info(logmgr)
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
-    logmgr.add_watches(["step", "t_sim", "t_step"])
 
     cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 1
     nel_1d = 24
@@ -113,7 +119,8 @@ def main(ctx_factory=cl.create_some_context):
 
     logmgr.add_quantity(MinPressure(discr, eos))
     logmgr.add_quantity(MinTemperature(discr, eos))
-    logmgr.add_watches(["min_pressure", "min_temperature"])
+    logmgr.add_quantity(KernelProfile(actx, "diff"))
+    logmgr.add_watches(["step","t_step", "min_pressure", "min_temperature", "diff"])
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -170,6 +177,12 @@ def main(ctx_factory=cl.create_some_context):
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Sod (MPI version)")
+    parser.add_argument("--profile", action="store_true",
+        help="enable kernel profiling")
+    args = parser.parse_args()
+
+    main(use_profiling=args.profile)
 
 # vim: foldmethod=marker

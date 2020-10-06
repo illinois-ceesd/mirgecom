@@ -94,9 +94,50 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events = []
 
-    def tabulate_profiling_data(self) -> pytools.Table:
+    def get_kernel_names(self, wait_for_events=True) -> list:
+        if wait_for_events:
+            self._finish_profile_events()
+
+        res = []
+
+        for key, value in self.profile_results.items():
+            res += key.name
+
+        return res
+
+    def get_profiling_data_for_kernel(self, kernel_name, wait_for_events=True) -> ProfileResult:
+        if wait_for_events:
+            self._finish_profile_events()
+
+        num_calls = 0
+        times = []
+        bytes_accessed = []
+        fprint_bytes = []
+
+        from statistics import mean
+
+        for key, value in self.profile_results.items():
+            if key.name != kernel_name:
+                continue
+
+            num_calls += len(value)
+
+            times += [v.time / 1e9 for v in value]
+            # flops += [v.flops / 1e9 for v in value]
+
+            bytes_accessed += [v.bytes_accessed / 1e9 for v in value]
+            # fprint_bytes += np.ma.masked_equal([v.footprint_bytes for v in value],
+                # None)
+
+        if times:
+            return mean(times)
+        else:
+            return 0
+
+    def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
-        self._finish_profile_events()
+        if wait_for_events:
+            self._finish_profile_events()
 
         tbl = pytools.Table()
 
