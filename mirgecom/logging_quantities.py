@@ -3,7 +3,7 @@ from logpyle import LogQuantity, MultiLogQuantity
 
 class MinPressure(LogQuantity):
     def __init__(self, discr, eos):
-        LogQuantity.__init__(self, "min_pressure", "P")
+        LogQuantity.__init__(self, "min_pressure", "P", "Minimum pressure")
 
         self.discr = discr
         self.eos = eos
@@ -26,7 +26,7 @@ class MinPressure(LogQuantity):
 
 class MinTemperature(LogQuantity):
     def __init__(self, discr, eos):
-        LogQuantity.__init__(self, "min_temperature", "K")
+        LogQuantity.__init__(self, "min_temperature", "K", "Minimum temperature")
 
         self.discr = discr
         self.eos = eos
@@ -50,7 +50,7 @@ class MinTemperature(LogQuantity):
 
 class KernelProfile(LogQuantity):
     def __init__(self, actx, kernel_name):
-        LogQuantity.__init__(self, kernel_name, "s")
+        LogQuantity.__init__(self, kernel_name, "s", f"Wall time of '{kernel_name}' kernel")
         self.kernel_name = kernel_name
         self.actx = actx
 
