@@ -772,16 +772,37 @@ def test_rhs_eoc_xg(actx_factory, nspecies, dim, order, morder):
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
 
+    from meshmode.mesh.generation import (
+        generate_regular_rect_mesh,
+        generate_box_mesh
+    )
+        #        dtmult = nel_1d / 8
+
+        #        mesh = generate_regular_rect_mesh(
+        #            a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+        #        )
+    mesh = generate_box_mesh(
+        (
+            np.linspace(1, 2, 5),
+            np.linspace(1, 2, 5),
+        ),
+        mesh_type="X"
+    )
     # for nel_1d in [4, 8, 12]:
-    for nel_1d in [5, 9, 17, 33, 65]:
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(1,) * dim, b=(2,) * dim, n=(nel_1d,) * dim
-        )
+    for refine_level in [1, 2, 4, 8, 16]:
+        # from meshmode.mesh.generation import generate_regular_rect_mesh
+        # mesh = generate_regular_rect_mesh(
+        #     a=(1,) * dim, b=(2,) * dim, n=(nel_1d,) * dim
+        # )
+        h = 1.0 / float(refine_level * 4)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
         )
+
+        if refine_level > 1:
+            from meshmode.mesh.refinement import refine_uniformly
+            mesh = refine_uniformly(mesh, 1)
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
@@ -854,7 +875,7 @@ def test_rhs_eoc_xg(actx_factory, nspecies, dim, order, morder):
         #            assert discr.norm(mom_resid[i], np.inf) < tolerance
 
         err_max = discr.norm(rhs_resid[0], np.inf)
-        eoc.add_data_point(1.0 / (nel_1d - 1), err_max)
+        eoc.add_data_point(h, err_max)
         # assert(err_max < tolerance)
         # if err_max > maxxerr:
         #     maxxerr = err_max
