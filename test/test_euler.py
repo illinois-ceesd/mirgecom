@@ -606,7 +606,7 @@ def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
         velocity[:] = 1.0
 
     v2 = np.dot(velocity, velocity)
-    soln_mass = sum([(i + 1.0) * np.power(ncoords[i], morder)
+    soln_mass = sum([(i + 1.0) / 100.0  * np.power(ncoords[i], morder)
                      for i in range(sdim)])
     soln_energy = 0.5 * v2 * soln_mass + 2.5
     soln_mom = velocity * make_obj_array([soln_mass])
@@ -620,7 +620,7 @@ def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
 
     soln = join_conserved(sdim, soln_mass, soln_energy, soln_mom, soln_massfrac)
 
-    massgrad = make_obj_array([(i + 1.0) * morder * np.power(ncoords[i], morder - 1)
+    massgrad = make_obj_array([(i + 1.0) / 100.0 * morder * np.power(ncoords[i], morder - 1)
                 for i in range(sdim)])
     #    print(f"massgrad = {massgrad}")
     rhsterm = np.dot(massgrad, soln_vel)
@@ -639,9 +639,9 @@ def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
 
 @pytest.mark.parametrize("nspecies", [1])
 @pytest.mark.parametrize("dim", [2])
-#@pytest.mark.parametrize("order", [1, 2, 3])
+# @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("order", [1])
-#@pytest.mark.parametrize("morder", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+# @pytest.mark.parametrize("morder", [0, 1, 2, 3, 4, 5, 6, 7, 8])
 @pytest.mark.parametrize("morder", [0, 1, 2, 3, 4])
 def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
     """Tests the inviscid rhs using a trivial
@@ -658,7 +658,122 @@ def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
     eoc = EOCRecorder()
 
     # for nel_1d in [4, 8, 12]:
-    for nel_1d in [8, 12, 16, 24]:
+    for nel_1d in [5, 9, 17, 33, 65]:
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(1,) * dim, b=(2,) * dim, n=(nel_1d,) * dim
+        )
+
+        logger.info(
+            f"Number of {dim}d elements: {mesh.nelements}"
+        )
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+
+        # create_morder_soln(nodes, dim, morder, velocity=None, nspecies=1):
+        xsoln, xrhs = _create_morder_soln(nodes, dim, morder)
+        soln_split = split_conserved(dim, xsoln)
+        rho_soln = soln_split.mass
+        rhoe_soln = soln_split.energy
+        rhov_soln = soln_split.momentum
+        spec_soln = soln_split.massfrac
+
+        message = (
+            f"rho_soln  = {rho_soln}\n"
+            f"rhoe_soln = {rhoe_soln}\n"
+            f"rhov_soln = {rhov_soln}\n"
+        )
+        #        print(message)
+
+        xrhs_split = split_conserved(dim, xrhs)
+        rho_xrhs = xrhs_split.mass
+        rhoe_xrhs = xrhs_split.energy
+        mom_xrhs = xrhs_split.momentum
+        spec_xrhs = xrhs_split.massfrac
+
+        message = (
+            f"rho_xrhs  = {rho_xrhs}\n"
+            f"rhoe_xrhs = {rhoe_xrhs}\n"
+            f"mom_xrhs = {mom_xrhs}\n"
+        )
+        #        print(message)
+
+        eos = IdealSingleGas()
+        from mirgecom.euler import inviscid_flux
+        inviscid_fluxes = inviscid_flux(discr, eos, xsoln)
+        message = (
+            f"massflux = {inviscid_fluxes[0]}\n"
+            f"eflux = {inviscid_fluxes[1]}\n"
+            f"momflux = {inviscid_fluxes[2]}"
+        )
+        #        print(message)
+
+        boundaries = {BTAG_ALL: DummyBoundary()}
+        inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
+                                         boundaries=boundaries, q=xsoln, t=0.0)
+
+        rhs_split = split_conserved(dim, inviscid_rhs)
+        rho_rhs = rhs_split.mass
+        rhoe_rhs = rhs_split.energy
+        rhov_rhs = rhs_split.momentum
+        spec_rhs = rhs_split.massfrac
+
+        message = (
+            f"rho_rhs  = {rho_rhs}\n"
+            f"rhoe_rhs = {rhoe_rhs}\n"
+            f"rhov_rhs = {rhov_rhs}\n"
+        )
+        #        print(message)
+
+        rhs_resid = inviscid_rhs + xrhs
+        resid_split = split_conserved(dim, rhs_resid)
+        rho_resid = resid_split.mass
+        rhoe_resid = resid_split.energy
+        mom_resid = resid_split.momentum
+        spec_resid = resid_split.massfrac
+
+        #        assert discr.norm(rho_resid, np.inf) < tolerance
+        #        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        #        for i in range(dim):
+        #            assert discr.norm(mom_resid[i], np.inf) < tolerance
+
+        err_max = discr.norm(rhs_resid[0], np.inf)
+        eoc.add_data_point(1.0 / (nel_1d - 1), err_max)
+        # assert(err_max < tolerance)
+        # if err_max > maxxerr:
+        #     maxxerr = err_max
+
+    print(f"EOC({order}, {morder}): {eoc}")
+    assert (
+        eoc.order_estimate() >= order - 0.5
+        or eoc.max_error() < tolerance
+    )
+    assert(False)
+
+
+@pytest.mark.parametrize("nspecies", [1])
+@pytest.mark.parametrize("dim", [2])
+# @pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [1])
+# @pytest.mark.parametrize("morder", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("morder", [0, 1, 2, 3, 4])
+def test_rhs_eoc_xg(actx_factory, nspecies, dim, order, morder):
+    """Tests the inviscid rhs using a trivial
+    constant/uniform state which should
+    yield rhs = 0 to FP.  The test is performed
+    for 1, 2, and 3 dimensions.
+    """
+    actx = actx_factory()
+
+    tolerance = 1e-9
+    maxxerr = 0.0
+
+    from pytools.convergence import EOCRecorder
+    eoc = EOCRecorder()
+
+    # for nel_1d in [4, 8, 12]:
+    for nel_1d in [5, 9, 17, 33, 65]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(1,) * dim, b=(2,) * dim, n=(nel_1d,) * dim
