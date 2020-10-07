@@ -600,7 +600,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
 
 def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
-    actx = ncoords[0].array_context
 
     if velocity is None:
         velocity = np.zeros(shape=(sdim,))
@@ -623,7 +622,7 @@ def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
 
     massgrad = make_obj_array([(i + 1.0) * morder * np.power(ncoords[i], morder - 1)
                 for i in range(sdim)])
-    print(f"massgrad = {massgrad}")
+    #    print(f"massgrad = {massgrad}")
     rhsterm = np.dot(massgrad, soln_vel)
     rhs_mass = rhsterm
     rhs_energy = .5 * soln_v2 * rhsterm
@@ -639,9 +638,11 @@ def _create_morder_soln(ncoords, sdim, morder, velocity=None, nspecies=1):
 
 
 @pytest.mark.parametrize("nspecies", [1])
-@pytest.mark.parametrize("dim", [1, 2])
-@pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("morder", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("dim", [2])
+#@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [1])
+#@pytest.mark.parametrize("morder", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("morder", [0, 1, 2, 3, 4])
 def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
     """Tests the inviscid rhs using a trivial
     constant/uniform state which should
@@ -683,7 +684,7 @@ def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
             f"rhoe_soln = {rhoe_soln}\n"
             f"rhov_soln = {rhov_soln}\n"
         )
-        print(message)
+        #        print(message)
 
         xrhs_split = split_conserved(dim, xrhs)
         rho_xrhs = xrhs_split.mass
@@ -696,7 +697,7 @@ def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
             f"rhoe_xrhs = {rhoe_xrhs}\n"
             f"mom_xrhs = {mom_xrhs}\n"
         )
-        print(message)
+        #        print(message)
 
         eos = IdealSingleGas()
         from mirgecom.euler import inviscid_flux
@@ -706,7 +707,7 @@ def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
             f"eflux = {inviscid_fluxes[1]}\n"
             f"momflux = {inviscid_fluxes[2]}"
         )
-        print(message)
+        #        print(message)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
@@ -723,7 +724,7 @@ def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
             f"rhoe_rhs = {rhoe_rhs}\n"
             f"rhov_rhs = {rhov_rhs}\n"
         )
-        print(message)
+        #        print(message)
 
         rhs_resid = inviscid_rhs + xrhs
         resid_split = split_conserved(dim, rhs_resid)
@@ -732,22 +733,23 @@ def test_rhs_eoc(actx_factory, nspecies, dim, order, morder):
         mom_resid = resid_split.momentum
         spec_resid = resid_split.massfrac
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
-        for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+        #        assert discr.norm(rho_resid, np.inf) < tolerance
+        #        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        #        for i in range(dim):
+        #            assert discr.norm(mom_resid[i], np.inf) < tolerance
 
-        err_max = discr.norm(rhs_resid[i], np.inf)
+        err_max = discr.norm(rhs_resid[0], np.inf)
         eoc.add_data_point(1.0 / (nel_1d - 1), err_max)
-        assert(err_max < tolerance)
-        if err_max > maxxerr:
-            maxxerr = err_max
+        # assert(err_max < tolerance)
+        # if err_max > maxxerr:
+        #     maxxerr = err_max
 
     print(f"EOC({order}, {morder}): {eoc}")
     assert (
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < tolerance
     )
+    assert(False)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])

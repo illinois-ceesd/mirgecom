@@ -152,7 +152,8 @@ def join_conserved(dim, mass, energy, momentum, massfrac=None):
     aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,))])
+        _aux_shape(momentum, (dim,))]
+    nspec = 0
     if massfrac is not None:
         nspec = len(massfrac)
         aux_shapes.append(_aux_shape(massfrac, (nspec,)))
@@ -222,7 +223,7 @@ def _facial_flux(discr, eos, q_tpair):
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
 
-    print(f"lam = {lam}")
+    #    print(f"lam = {lam}")
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
