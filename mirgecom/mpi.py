@@ -42,6 +42,10 @@ def mpi_entry_point(func):
     """
     @wraps(func)
     def wrapped_func(*args, **kwargs):
+        if "mpi4py.run" not in sys.modules:
+            raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
+                        "mpi4py <args>').")
+
         if "mpi4py.MPI" in sys.modules:
             raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
                         "point. Check for prior imports.")
