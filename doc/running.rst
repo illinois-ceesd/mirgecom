@@ -43,7 +43,7 @@ cache files in directories that are private to each node by using the ``XDG_CACH
 environment variable, such as in the following example::
 
    $ export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-   $ srun -n 512 python examples/wave-eager-mpi.py'
+   $ srun -n 512 python -m mpi4py examples/wave-eager-mpi.py'
 
 
 Profiling kernel execution
