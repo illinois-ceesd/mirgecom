@@ -37,7 +37,7 @@ def get_current_state():
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None, discr=None, eos=None):
+                  state, t_final, t=0.0, istep=0, logmgr=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -94,8 +94,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         t += dt
         istep += 1
 
-        set_dt(logmgr, dt)
         if logmgr:
+            set_dt(logmgr, dt)
             logmgr.tick_after()
 
     return istep, t, state

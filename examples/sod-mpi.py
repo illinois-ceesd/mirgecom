@@ -59,11 +59,15 @@ from mirgecom.logging_quantities import MinPressure, MinTemperature, KernelProfi
 logger = logging.getLogger(__name__)
 
 
-def main(ctx_factory=cl.create_some_context, use_profiling=False):
-    logmgr = LogManager("sod1d.dat", "wu")  # , comm=...
-    add_run_info(logmgr)
-    add_general_quantities(logmgr)
-    add_simulation_quantities(logmgr)
+def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
+
+    if use_logmgr:
+        logmgr = LogManager("sod1d.dat", "wu")  # , comm=...
+        add_run_info(logmgr)
+        add_general_quantities(logmgr)
+        add_simulation_quantities(logmgr)
+    else:
+        logmgr = None
 
     cl_ctx = ctx_factory()
     if use_profiling:
@@ -117,10 +121,15 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False):
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
-    logmgr.add_quantity(MinPressure(discr, eos))
-    logmgr.add_quantity(MinTemperature(discr, eos))
-    logmgr.add_quantity(KernelProfile(actx, "diff"))
-    logmgr.add_watches(["step","t_step", "min_pressure", "min_temperature", "diff"])
+    if use_logmgr:
+        logmgr.add_quantity(MinPressure(discr, eos))
+        logmgr.add_quantity(MinTemperature(discr, eos))
+        if rank == 0:
+            logmgr.add_watches(["step","t_step", "min_pressure", "min_temperature"])
+        if use_profiling:
+            logmgr.add_quantity(KernelProfile(actx, "diff"))
+            if rank == 0:
+                logmgr.add_watches(["diff"])
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -155,8 +164,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False):
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, discr=discr,
-                          eos=eos)
+                          t=current_t, t_final=t_final, logmgr=logmgr)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -172,7 +180,11 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False):
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
 
-    logmgr.close()
+    if use_logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
+
 
 
 if __name__ == "__main__":
@@ -181,8 +193,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sod (MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
+    parser.add_argument("--logging", action="store_true",
+        help="enable time series logging")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile)
+    main(use_profiling=args.profile, use_logmgr=args.logging)
 
 # vim: foldmethod=marker
