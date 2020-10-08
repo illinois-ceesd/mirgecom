@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(ctx_factory=cl.create_some_context, use_profiling=False):
-    logmgr = LogManager("sod1d.dat", "wo")  # , comm=...
+    logmgr = LogManager("sod1d.dat", "wu")  # , comm=...
     add_run_info(logmgr)
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
