@@ -28,12 +28,7 @@ THE SOFTWARE.
 """
 
 from logpyle import set_dt
-
-my_state = None
-
-
-def get_current_state():
-    return my_state
+from mirgecom.logging_quantities import set_state
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
@@ -96,6 +91,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             set_dt(logmgr, dt)
+            set_state(logmgr, state)
             logmgr.tick_after()
 
     return istep, t, state

@@ -1,13 +1,31 @@
 from logpyle import LogQuantity
 
 
-class PhysicalQuantity(LogQuantity):
+def set_state(mgr, state):
+    for gd_lst in [mgr.before_gather_descriptors,
+            mgr.after_gather_descriptors]:
+        for gd in gd_lst:
+            if isinstance(gd.quantity, StateConsumer):
+                gd.quantity.set_state(state)
+
+
+class StateConsumer:
+    def __init__(self, state):
+        self.state = state
+
+    def set_state(self, state) -> None:
+        self.state = state
+
+
+class PhysicalQuantity(LogQuantity, StateConsumer):
     def __init__(self, discr, eos, quantity, unit, op):
         LogQuantity.__init__(self, f"{op}_{quantity}", unit)
+        StateConsumer.__init__(self, None)
 
         self.discr = discr
         self.eos = eos
         self.quantity = quantity
+
         from functools import partial
 
         if op == "min":
@@ -18,14 +36,12 @@ class PhysicalQuantity(LogQuantity):
             raise RuntimeError("unknown operation {op}")
 
     def __call__(self):
-        from mirgecom.steppers import get_current_state
-
-        if get_current_state() is None:
+        if self.state is None:
             return 0
 
         from mirgecom.euler import split_conserved
 
-        cv = split_conserved(self.discr.dim, get_current_state())
+        cv = split_conserved(self.discr.dim, self.state)
         dv = self.eos.dependent_vars(cv)
 
         return self._myop(getattr(dv, self.quantity))
