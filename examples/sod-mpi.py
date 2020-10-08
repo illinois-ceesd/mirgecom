@@ -53,7 +53,7 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
-from mirgecom.logging_quantities import MinPressure, MinTemperature, KernelProfile
+from mirgecom.logging_quantities import PhysicalQuantity, KernelProfile
 
 
 logger = logging.getLogger(__name__)
@@ -122,14 +122,14 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     current_state = initializer(0, nodes)
 
     if use_logmgr:
-        logmgr.add_quantity(MinPressure(discr, eos))
-        logmgr.add_quantity(MinTemperature(discr, eos))
+        logmgr.add_quantity(PhysicalQuantity(discr, eos, "pressure", "P", "min"))
+        logmgr.add_quantity(PhysicalQuantity(discr, eos, "temperature", "K", "min"))
         if rank == 0:
-            logmgr.add_watches(["step","t_step", "min_pressure", "min_temperature"])
+            logmgr.add_watches(["step", "t_step", "min_pressure", "min_temperature"])
         if use_profiling:
-            logmgr.add_quantity(KernelProfile(actx, "diff"))
+            logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
             if rank == 0:
-                logmgr.add_watches(["diff"])
+                logmgr.add_watches(["diff_flops"])
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -184,7 +184,6 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr.close()
     elif use_profiling:
         print(actx.tabulate_profiling_data())
-
 
 
 if __name__ == "__main__":

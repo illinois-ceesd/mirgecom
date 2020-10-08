@@ -105,14 +105,16 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return res
 
-    def get_profiling_data_for_kernel(self, kernel_name, wait_for_events=True) -> ProfileResult:
+    def get_profiling_data_for_kernel(self, kernel_name, stat, wait_for_events=True)\
+      -> ProfileResult:
         if wait_for_events:
             self._finish_profile_events()
 
         num_calls = 0
+        flops = []
         times = []
         bytes_accessed = []
-        fprint_bytes = []
+        # fprint_bytes = []
 
         from statistics import mean
 
@@ -123,16 +125,23 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             num_calls += len(value)
 
             times += [v.time / 1e9 for v in value]
-            # flops += [v.flops / 1e9 for v in value]
+            flops += [v.flops / 1e9 for v in value]
 
             bytes_accessed += [v.bytes_accessed / 1e9 for v in value]
             # fprint_bytes += np.ma.masked_equal([v.footprint_bytes for v in value],
-                # None)
+            # None)
 
-        if times:
-            return mean(times)
-        else:
+        if num_calls == 0:
             return 0
+        else:
+            if stat == "num_calls":
+                return num_calls
+            if stat == "time":
+                return mean(times)
+            elif stat == "flops":
+                return mean(flops)
+            elif stat == "bytes_accessed":
+                return mean(bytes_accessed)
 
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
