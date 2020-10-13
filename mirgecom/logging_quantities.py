@@ -31,7 +31,7 @@ __doc__ = """
 .. autofunction:: set_state
 """
 
-from logpyle import LogQuantity, LogManager
+from logpyle import LogQuantity
 from numpy import ndarray
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
