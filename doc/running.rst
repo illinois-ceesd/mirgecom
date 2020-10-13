@@ -133,3 +133,16 @@ More information about Lassen can be found here:
 
 - `Machine overview <https://hpc.llnl.gov/hardware/platforms/Lassen>`__
 - `Detailed information and programming environment <https://hpc.llnl.gov/training/tutorials/using-lcs-sierra-system>`__
+
+
+Time series logging
+-------------------
+
+Mirgecom supports logging of simulation and profiling quantities with the help
+of the `logpyle package <https://github.com/illinois-ceesd/logpyle>`_. Logpyle requires
+classes to describe how quantities for logging are calculated. For mirgecom, these classes are described below.
+
+.. automodule:: mirgecom.logging_quantities
+
+
+An overview of how to use logpyle is given `here <https://logpyle.readthedocs.io/en/latest/log.html#how-do-i-use-this>`_.
