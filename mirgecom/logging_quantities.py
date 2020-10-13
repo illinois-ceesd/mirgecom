@@ -1,7 +1,12 @@
-from logpyle import LogQuantity
+"""Support for time series logging."""
+
+from logpyle import LogQuantity, LogManager
+from numpy import ndarray
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 
-def set_state(mgr, state):
+def set_state(mgr: LogManager, state: ndarray) -> None:
+    """Update the state of all :class:`StateConsumer` of the log manager `mgr`."""
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
@@ -10,15 +15,20 @@ def set_state(mgr, state):
 
 
 class StateConsumer:
-    def __init__(self, state):
+    """Base class for quantities that require a state for logging."""
+
+    def __init__(self, state: ndarray):
         self.state = state
 
-    def set_state(self, state) -> None:
+    def set_state(self, state: ndarray) -> None:
+        """Set the state of the object."""
         self.state = state
 
 
 class PhysicalQuantity(LogQuantity, StateConsumer):
-    def __init__(self, discr, eos, quantity, unit, op):
+    """Logging support for physical quantities."""
+
+    def __init__(self, discr, eos, quantity, unit, op: str):
         LogQuantity.__init__(self, f"{op}_{quantity}", unit)
         StateConsumer.__init__(self, None)
 
@@ -36,6 +46,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
             raise RuntimeError("unknown operation {op}")
 
     def __call__(self):
+        """Return the requested quantity."""
         if self.state is None:
             return 0
 
@@ -48,7 +59,10 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
 
 
 class KernelProfile(LogQuantity):
-    def __init__(self, actx, kernel_name, stat):
+    """Logging support for results of the OpenCL kernel profiling."""
+
+    def __init__(self, actx: PyOpenCLProfilingArrayContext,
+                 kernel_name: str, stat: str):
         if stat == "time":
             unit = "s"
         else:
@@ -60,4 +74,5 @@ class KernelProfile(LogQuantity):
         self.stat = stat
 
     def __call__(self):
+        """Return the requested quantity."""
         return(self.actx.get_profiling_data_for_kernel(self.kernel_name, self.stat))

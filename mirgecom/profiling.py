@@ -95,6 +95,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_events = []
 
     def get_kernel_names(self, wait_for_events=True) -> list:
+        """Return a list of all kernel names."""
         if wait_for_events:
             self._finish_profile_events()
 
@@ -105,8 +106,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return res
 
-    def get_profiling_data_for_kernel(self, kernel_name, stat, wait_for_events=True)\
-      -> ProfileResult:
+    def get_profiling_data_for_kernel(self, kernel_name: str, stat: str,
+                                      wait_for_events=True) -> float:
+        """Return value of profiling result for kernel `kernel_name`."""
         if wait_for_events:
             self._finish_profile_events()
 

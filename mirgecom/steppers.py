@@ -83,9 +83,6 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
-        global my_state
-        my_state = state
-
         t += dt
         istep += 1
 

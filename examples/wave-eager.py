@@ -59,7 +59,7 @@ def bump(actx, discr, t=0):
 
 
 def main(use_profiling=False):
-    logmgr = LogManager("mylog.dat", "wo")  # , comm=...
+    logmgr = LogManager("mylog.dat", "wu")  # , comm=...
     add_run_info(logmgr)
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
