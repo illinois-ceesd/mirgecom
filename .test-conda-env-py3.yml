@@ -15,3 +15,5 @@ dependencies:
 - pip
 - pytest
 - libhwloc=1
+- sphinx
+- graphviz
