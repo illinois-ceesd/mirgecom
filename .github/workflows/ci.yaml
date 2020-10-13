@@ -123,5 +123,6 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
+            conda install sphinx graphviz
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"

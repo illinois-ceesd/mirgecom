@@ -10,10 +10,8 @@ dependencies:
 - islpy
 - pyopencl
 - pymetis
-- python=3
+- python=3.8
 - gmsh
 - pip
 - pytest
 - libhwloc=1
-- sphinx
-- graphviz
