@@ -1,4 +1,4 @@
-__copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
+__copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,10 +35,6 @@ import pyopencl.tools as cl_tools
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from logpyle import (LogManager, add_general_quantities,
-        add_simulation_quantities, add_run_info, IntervalTimer,
-        set_dt)
-
 
 def bump(actx, discr, t=0):
     source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
@@ -59,15 +55,6 @@ def bump(actx, discr, t=0):
 
 
 def main(use_profiling=False):
-    logmgr = LogManager("mylog.dat", "wu")  # , comm=...
-    add_run_info(logmgr)
-    add_general_quantities(logmgr)
-    add_simulation_quantities(logmgr)
-
-    vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-    logmgr.add_quantity(vis_timer)
-    logmgr.add_watches(["step", "t_sim", "t_step.max"])
-
     cl_ctx = cl.create_some_context()
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
@@ -117,25 +104,20 @@ def main(use_profiling=False):
     t_final = 3
     istep = 0
     while t < t_final:
-        logmgr.tick_before()
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
             print(istep, t, discr.norm(fields[0], np.inf))
-            with vis_timer.start_sub_timer():
-                vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
-                        [
-                            ("u", fields[0]),
-                            ("v", fields[1:]),
-                            ])
-        set_dt(logmgr, dt)
+            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+                    [
+                        ("u", fields[0]),
+                        ("v", fields[1:]),
+                        ])
+
         t += dt
         istep += 1
-        logmgr.tick_after()
-
-    logmgr.close()
 
 
 if __name__ == "__main__":
