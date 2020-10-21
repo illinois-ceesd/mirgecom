@@ -28,7 +28,6 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
-from mpi4py import MPI
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -45,6 +44,7 @@ from mirgecom.simutil import (
     ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
+from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -56,6 +56,7 @@ from mirgecom.eos import IdealSingleGas
 logger = logging.getLogger(__name__)
 
 
+@mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -88,6 +89,7 @@ def main(ctx_factory=cl.create_some_context):
     box_ll = -5.0
     box_ur = 5.0
 
+    from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 

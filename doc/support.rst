@@ -11,6 +11,11 @@ Time Integration Loops
 
 .. automodule:: mirgecom.steppers
 
+MPI
+---
+
+.. automodule:: mirgecom.mpi
+
 Input/Output
 ------------
 
