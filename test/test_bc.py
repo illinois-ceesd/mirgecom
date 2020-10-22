@@ -31,29 +31,16 @@ import pytest
 
 from pytools.obj_array import make_obj_array
 
-# from meshmode.dof_array import thaw, unflatten
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-# from grudge.eager import interior_trace_pair
-# from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import split_conserved
 from mirgecom.initializers import Lump
-# from mirgecom.boundary import (
-#    DummyBoundary,
-#    PrescribedBoundary,
-#    AdiabaticSlipBoundary
-# )
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-
-
-# from grudge.shortcuts import make_visualizer
-# from mirgecom.euler import get_inviscid_timestep
-# from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +77,6 @@ def test_slipwall_identity(actx_factory, dim):
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
-    #    # for the boundaries in each dimension
-    #   for bdir in range(dim):
     # for velocity going along each direction
     for vdir in range(dim):
         vel = np.zeros(shape=(dim,))
@@ -102,8 +87,6 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(0, nodes)
-            #    acoustic_pulse = AcousticPulse(numdim=dim, amplitude=1.0, width=.1,
-            #                                   center=orig)
             from functools import partial
             bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
@@ -123,7 +106,6 @@ def test_slipwall_identity(actx_factory, dim):
             # check that exterior momentum term is mom_interior - 2 * mom_normal
             mom_norm_comp = np.dot(bnd_cv_int.momentum, nhat)
             mom_norm = nhat * make_obj_array([mom_norm_comp])
-            # mom_tan = bnd_cv_int.momentum - mom_norm
             expected_mom_ext = bnd_cv_int.momentum - 2.0 * mom_norm
             mom_resid = bnd_cv_ext.momentum - expected_mom_ext
             mom_err = bnd_norm(mom_resid)
@@ -156,30 +138,29 @@ def test_slipwall_flux(actx_factory, dim):
     normal_mag = actx.np.sqrt(np.dot(normal, normal))
     nhat_mult = 1.0 / normal_mag
     nhat = normal * make_obj_array([nhat_mult])
-    #    print(f"nhat = {nhat}")
+    wall = AdiabaticSlipBoundary()
+
+    from functools import partial
+    bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
-    # for velocity going along each direction
+    # for velocities in each direction
     for vdir in range(dim):
         vel = np.zeros(shape=(dim,))
+
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
-            wall = AdiabaticSlipBoundary()
-            print(f"vel = {vel}")
             uniform_state = initializer(0, nodes)
-
-            from functools import partial
-            bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
             bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
                                           btag=BTAG_ALL, eos=eos)
 
             # Check the total velocity component normal
             # to each surface.  It should be zero.  The
-            # numerical fluxes may or may not be zero.
+            # numerical fluxes cannot be zero.
             tol = 1e-16
             avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
             acv = split_conserved(dim, avg_state)
@@ -188,11 +169,10 @@ def test_slipwall_flux(actx_factory, dim):
             assert(bnd_mom < tol)
 
             from mirgecom.euler import _facial_flux
-            bnd_flux = _facial_flux(discr, eos, bnd_pair, local=True)
-            #            print(f"bnd_flux = {bnd_flux}")
-
-            mass_flux = bnd_flux[0]
-            energy_flux = bnd_flux[1]
+            bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
+                                                         bnd_pair, local=True))
+            mass_flux = bnd_flux.mass
+            energy_flux = bnd_flux.energy
 
             # mass and energy flux at the boundary should be zero
             massflux_max = bnd_norm(mass_flux)
