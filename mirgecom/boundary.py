@@ -105,7 +105,16 @@ class AdiabaticSlipBoundary:
     def boundary_pair(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
-        """Get the interior and exterior solution on the boundary."""
+        """Get the interior and exterior solution on the boundary.
+
+        The exterior solution is set such that there will be vanishing
+        flux through the boundary, preserving mass, momentum (magnitude) and
+        energy.
+        rho_plus = rho_minus
+        v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
+        mom_plus = rho_plus * v_plus
+        E_plus = E_minus
+        """
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)
