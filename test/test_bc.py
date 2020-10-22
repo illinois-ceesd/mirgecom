@@ -121,7 +121,7 @@ def test_slipwall_flux(actx_factory, dim):
     """
     actx = actx_factory()
 
-    nel_1d = 2
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -129,7 +129,7 @@ def test_slipwall_flux(actx_factory, dim):
         a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
 
-    order = 1
+    order = 3
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
