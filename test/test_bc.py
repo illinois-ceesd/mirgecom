@@ -139,7 +139,7 @@ def test_slipwall_flux(actx_factory, dim):
     """
     actx = actx_factory()
 
-    nel_1d = 4
+    nel_1d = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -147,11 +147,16 @@ def test_slipwall_flux(actx_factory, dim):
         a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
 
-    order = 3
+    order = 1
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
+    normal = thaw(actx, discr.normal(BTAG_ALL))
+    normal_mag = actx.np.sqrt(np.dot(normal, normal))
+    nhat_mult = 1.0 / normal_mag
+    nhat = normal * make_obj_array([nhat_mult])
+    #    print(f"nhat = {nhat}")
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -163,7 +168,7 @@ def test_slipwall_flux(actx_factory, dim):
             vel[vdir] = parity
             initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
             wall = AdiabaticSlipBoundary()
-
+            print(f"vel = {vel}")
             uniform_state = initializer(0, nodes)
 
             from functools import partial
@@ -171,8 +176,26 @@ def test_slipwall_flux(actx_factory, dim):
 
             bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
                                           btag=BTAG_ALL, eos=eos)
-            from mirgecom.euler import _facial_flux
-            bnd_flux = _facial_flux(discr, eos, bnd_pair)
+
+            # Check the total velocity component normal
+            # to each surface.  It should be zero.  The
+            # numerical fluxes may or may not be zero.
             tol = 1e-16
-            max_flux = bnd_norm(bnd_flux)
-            assert(max_flux < tol)
+            avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
+            acv = split_conserved(dim, avg_state)
+            bnd_norm_mom = np.dot(acv.momentum, nhat)
+            bnd_mom = bnd_norm(bnd_norm_mom)
+            assert(bnd_mom < tol)
+
+            from mirgecom.euler import _facial_flux
+            bnd_flux = _facial_flux(discr, eos, bnd_pair, local=True)
+            #            print(f"bnd_flux = {bnd_flux}")
+
+            mass_flux = bnd_flux[0]
+            energy_flux = bnd_flux[1]
+
+            # mass and energy flux at the boundary should be zero
+            massflux_max = bnd_norm(mass_flux)
+            energyflux_max = bnd_norm(energy_flux)
+            assert(massflux_max < tol)
+            assert(energyflux_max < tol)

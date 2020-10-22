@@ -171,8 +171,12 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
-def _facial_flux(discr, eos, q_tpair):
-    """Return the flux across a face given the solution on both sides *q_tpair*."""
+def _facial_flux(discr, eos, q_tpair, local=False):
+    """Return the flux across a face given the solution on both sides *q_tpair*.
+
+    If *local* is *True*, then the returned flux is NOT projected to "all_faces,"
+    but instead remains on *q_tpair.dd*.
+    """
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context
@@ -186,14 +190,17 @@ def _facial_flux(discr, eos, q_tpair):
 
     lam = actx.np.maximum(
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+    )
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
         - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
 
-    return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    if local is False:
+        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    return flux_weak
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
