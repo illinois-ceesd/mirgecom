@@ -171,7 +171,8 @@ def test_shock_init(ctx_factory, dim):
         x0 = 0.0
         initr = SodShock1D(dim=dim, xdir=xdir, x0=x0)
         initsoln = initr(t=0.0, x_vec=nodes)
-        p = eos.pressure(initsoln)
+        cv = split_conserved(dim, initsoln)
+        p = eos.pressure(cv)
         nodes_x = nodes[xdir]
         assert discr.norm(actx.np.where(nodes_x < x0, p-xpl, p-xpr), np.inf) < tol
 
