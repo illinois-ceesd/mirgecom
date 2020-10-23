@@ -9,7 +9,8 @@ dependencies:
 - clinfo
 - islpy
 - pyopencl
-- python=3
+- pymetis
+- python=3.8
 - gmsh
 - pip
 - pytest

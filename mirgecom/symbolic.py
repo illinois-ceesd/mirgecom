@@ -1,3 +1,12 @@
+"""Utilities and functions for symbolic code expressions.
+
+.. autofunction:: diff
+.. autofunction:: div
+.. autofunction:: grad
+
+.. autoclass:: EvaluationMapper
+"""
+
 __copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
@@ -28,15 +37,6 @@ import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
 
 
-__doc__ = """
-.. autofunction:: diff
-.. autofunction:: div
-.. autofunction:: grad
-
-.. autoclass:: EvaluationMapper
-"""
-
-
 def diff(var):
     """Return the symbolic derivative operator with respect to *var*."""
     from pymbolic.mapper.differentiator import DifferentiationMapper
@@ -55,7 +55,7 @@ def diff(var):
 def div(vector_func):
     """Return the symbolic divergence of *vector_func*."""
     dim = len(vector_func)
-    coords = prim.make_sym_vector('x', dim)
+    coords = prim.make_sym_vector("x", dim)
     div = 0
     for i in range(dim):
         div += diff(coords[i])(vector_func[i])
@@ -64,14 +64,18 @@ def div(vector_func):
 
 def grad(dim, func):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
-    coords = prim.make_sym_vector('x', dim)
+    coords = prim.make_sym_vector("x", dim)
     return [diff(coords[i])(func) for i in range(dim)]
 
 
 class EvaluationMapper(ev.EvaluationMapper):
-    """Evaluates symbolic expressions given a mapping from variables to values"""
+    """Evaluates symbolic expressions given a mapping from variables to values.
+
+    Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
+    """
 
     def map_call(self, expr):
+        """Map a symbolic code expression to actual function call."""
         assert isinstance(expr.function, prim.Variable)
         if expr.function.name == "sin":
             par, = expr.parameters

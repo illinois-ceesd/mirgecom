@@ -1,3 +1,41 @@
+r""":mod:`mirgecom.euler` helps solve Euler's equations of gas dynamics.
+
+Euler's equations of gas dynamics:
+
+.. math::
+
+    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
+    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
+
+where:
+
+-   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
+-   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
+-   domain boundary :math:`\partial_{\Omega}`,
+-   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+    {(\partial_t{\rho\vec{V}})}_s]`
+
+
+State Vector Handling
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ConservedVars
+.. autofunction:: split_conserved
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
+.. autofunction:: inviscid_flux
+.. autofunction:: inviscid_operator
+
+Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: get_inviscid_timestep
+.. autofunction:: get_inviscid_cfl
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -25,11 +63,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-import numpy.linalg as la  # noqa
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
@@ -37,47 +71,13 @@ from grudge.eager import (
     cross_rank_trace_pairs
 )
 
-from mirgecom.eos import IdealSingleGas
-
-
-__doc__ = r"""
-This module is designed provide functions and utilities
-useful for solving the Euler flow equations.
-
-The Euler flow equations are:
-
-.. :math::
-
-    \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_\partial_{\Omega} + \mathbf{S}
-
-where:
-    state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
-    flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-                (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
-    domain boundary :math:`\partial_{\Omega}`,
-    sources :math:`mathbf{S} =
-                   [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-                    {(\partial_t{\rho\vec{V}})}_s]`
-
-.. autofunction:: inviscid_operator
-.. autofunction:: number_of_scalars
-.. autofunction:: split_conserved
-.. autofunction:: split_species
-.. autofunction:: split_fields
-.. autofunction:: get_inviscid_timestep
-.. autofunction:: get_inviscid_cfl
-.. autoclass:: ConservedVars
-.. autoclass:: MassFractions
-"""
-
 
 @dataclass
-class ConservedVars:
-    r"""
-    Class to resolve the canonical conserved quantities,
-    (mass, energy, momentum) per unit volume =
-    :math:`(\rho,\rhoE,\rho\vec{V})` from an agglomerated
+class ConservedVars:  # FIXME: Name?
+    r"""Resolve the canonical conserved quantities.
+
+    Get the canonical conserved quantities (mass, energy, momentum)
+    per unit volume = :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
     object array.
 
     .. attribute:: mass
@@ -92,186 +92,119 @@ class ConservedVars:
 
         Momentum vector per unit volume
     """
+
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
 
 
-@dataclass
-class MassFractions:
-    r"""
-    Class to pick off the species mass fractions
-    (mass fractions) per unit volume =
-    :math:`(\rhoY_{\alpha}) | 1 \le \alpha \le N_{species}`,
-    from an agglomerated object array. :math:`N_{species}` is
-    the number of mixture species.
-
-    .. attribute:: mass
-
-        Mass fraction per unit volume for each mixture species
-    """
-    massfractions: np.ndarray
-
-
-def split_fields(ndim, q):
-    """
-    Method to spit out a list of named flow variables in
-    an agglomerated flow solution. Useful for specifying
-    named data arrays to helper functions (e.g. I/O).
-    """
-    qs = split_conserved(ndim, q)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-
-    retlist = [
-        ("mass", mass),
-        ("energy", energy),
-        ("momentum", mom),
-    ]
-    nscalar = number_of_scalars(ndim, q)
-    if nscalar > 0:
-        massfrac = split_species(ndim, q).massfraction
-        retlist.append(("massfraction", massfrac))
-
-    return retlist
-
-
-def number_of_scalars(ndim, q):
-    """
-    Return the number of scalars or mixture species in a flow solution.
-    """
-    return len(q) - (ndim + 2)
-
-
-def number_of_equations(ndim, q):
-    """
-    Return the number of equations (i.e. number of dofs) in the soln
-    """
-    return len(q) + number_of_scalars(ndim, q)
+def _aux_shape(ary, leading_shape):
+    """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
+    from meshmode.dof_array import DOFArray
+    if (isinstance(ary, np.ndarray) and ary.dtype == np.object
+            and not isinstance(ary, DOFArray)):
+        naxes = len(leading_shape)
+        if ary.shape[:naxes] != leading_shape:
+            raise ValueError("array shape does not start with expected leading "
+                    "dimensions")
+        return ary.shape[naxes:]
+    else:
+        if leading_shape != ():
+            raise ValueError("array shape does not start with expected leading "
+                    "dimensions")
+        return ()
 
 
 def split_conserved(dim, q):
+    """Get the canonical conserved quantities.
+
+    Return a :class:`ConservedVars` that is the canonical conserved quantities,
+    mass, energy, and momentum from the agglomerated object array extracted
+    from the state vector *q*.
     """
-    Return a :class:`ConservedVars` object that splits out conserved quantities
-    by name. Useful for expressive coding.
-    """
+    assert len(q) == 2+dim
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def split_species(dim, q):
-    """
-    Return a 'MassFractions' object that splits out mixture species
-    conserved quantities by name. Useful for expressive coding.
-    """
-    numscalar = number_of_scalars(dim, q)
-    sindex = dim + 2
-    return MassFractions(massfractions=q[sindex:sindex+numscalar])
+def join_conserved(dim, mass, energy, momentum):
+    """Create an agglomerated solution array from the conserved quantities."""
+    from pytools import single_valued
+    aux_shape = single_valued([
+        _aux_shape(mass, ()),
+        _aux_shape(energy, ()),
+        _aux_shape(momentum, (dim,))])
+
+    result = np.zeros((2+dim,) + aux_shape, dtype=object)
+    result[0] = mass
+    result[1] = energy
+    result[2:] = momentum
+    return result
 
 
-def _inviscid_flux(discr, q, eos=IdealSingleGas()):
-    r"""Computes the inviscid flux vectors from flow solution *q*
+def scalar(s):
+    """Create an object array for a scalar."""
+    return make_obj_array([s])
+
+
+def inviscid_flux(discr, eos, q):
+    r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})
+    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
     """
-    ndim = discr.dim
+    dim = discr.dim
+    cv = split_conserved(dim, q)
+    p = eos.pressure(cv)
 
-    # q = [ rho rhoE rhoV ]
-    qs = split_conserved(ndim, q)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-
-    p = eos.pressure(q)
-
-    # Fluxes:
-    # [ rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    momflux = make_obj_array(
-        [
-            (mom[i] * mom[j] / mass + (p if i == j else 0))
-            for i in range(ndim)
-            for j in range(ndim)
-        ]
-    )
-    massflux = mom * make_obj_array([1.0])
-    energyflux = mom * make_obj_array([(energy + p) / mass])
-    # scalarflux = mom * massfractions / mass
-
-    return flat_obj_array(massflux, energyflux, momflux,)
+    mom = cv.momentum
+    return join_conserved(dim,
+            mass=mom,
+            energy=mom * scalar((cv.energy + p) / cv.mass),
+            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p))
 
 
-def _get_wavespeed(dim, q, eos=IdealSingleGas()):
-    """Returns the maximum wavespeed in for flow solution *q*"""
-    qs = split_conserved(dim, q)
-    mass = qs.mass
-    mom = qs.momentum
-    actx = mass.array_context
+def _get_wavespeed(dim, eos, cv: ConservedVars):
+    """Return the maximum wavespeed in for flow solution *q*."""
+    actx = cv.mass.array_context
 
-    v = mom * make_obj_array([1.0 / mass])
-
-    sos = eos.sound_speed(q)
-    return actx.np.sqrt(np.dot(v, v)) + sos
+    v = cv.momentum / scalar(cv.mass)
+    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
-def _facial_flux(discr, q_tpair, eos=IdealSingleGas()):
-    """Returns the flux across a face given the solution on both sides *q_tpair*"""
+def _facial_flux(discr, eos, q_tpair):
+    """Return the flux across a face given the solution on both sides *q_tpair*."""
     dim = discr.dim
 
-    qs = split_conserved(dim, q_tpair)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-    actx = qs.mass.int.array_context
+    actx = q_tpair[0].int.array_context
+
+    flux_int = inviscid_flux(discr, eos, q_tpair.int)
+    flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
+
+    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, Section 6.6
+    # DOI: 10.1007/978-0-387-72067-8
+    flux_avg = 0.5*(flux_int + flux_ext)
+
+    lam = actx.np.maximum(
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
-
-    # Get inviscid fluxes [rhoV (rhoE + p)V (rhoV.x.V + p*I) ]
-    #    qint = q_tpair.int
-    #    qext = q_tpair.ext
-    qint = flat_obj_array(mass.int, energy.int, mom.int)
-    qext = flat_obj_array(mass.ext, energy.ext, mom.ext)
-
-    # Jump in soln
-    qjump = qext - qint
-
-    flux_int = _inviscid_flux(discr, qint, eos)
-    flux_ext = _inviscid_flux(discr, qext, eos)
-
-    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, p. 209
-    # DOI: 10.1007/978-0-387-72067-8
-    flux_aver = (flux_int + flux_ext) * 0.5
-
-    # wavespeeds = [ wavespeed_int, wavespeed_ext ]
-    wavespeeds = [_get_wavespeed(dim, qint), _get_wavespeed(dim, qext)]
-
-    lam = actx.np.maximum(*wavespeeds)
-    lfr = qjump * make_obj_array([0.5 * lam])
-
-    # Surface fluxes should be inviscid flux .dot. normal
-    # rhoV .dot. normal
-    # (rhoE + p)V  .dot. normal
-    # (rhoV.x.V)_1 .dot. normal
-    # (rhoV.x.V)_2 .dot. normal
-    numeqns = number_of_equations(dim, qint)
-    num_flux = flat_obj_array(
-        [
-            np.dot(flux_aver[(i * dim): ((i + 1) * dim)], normal)
-            for i in range(numeqns)
-        ]
-    )
-
-    # add Lax/Friedrichs jump penalty
-    flux_weak = num_flux + lfr
+    flux_weak = (
+        flux_avg @ normal
+        - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
 
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
 
-def inviscid_operator(
-        discr, q, boundaries, t=0.0, eos=IdealSingleGas(),
-):
-    """
-    RHS of the Euler flow equations
+def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+    r"""Compute RHS of the Euler flow equations.
+
+    Returns
+    -------
+    The right-hand-side of the Euler flow equations:
+
+    :math:`\dot\mathbf{q} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega}`
 
     Parameters
     ----------
@@ -285,31 +218,25 @@ def inviscid_operator(
     t
         Time
 
-    eos
-        class:EOS implementing the pressure and temperature functions for
+    eos : mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     """
-
-    ndim = discr.dim
-
-    vol_flux = _inviscid_flux(discr, q, eos)
-    dflux = flat_obj_array(
-        [
-            discr.weak_div(vol_flux[(i * ndim): (i + 1) * ndim])
-            for i in range(ndim + 2)
-        ]
-    )
+    vol_flux = inviscid_flux(discr, eos, q)
+    dflux = discr.weak_div(vol_flux)
 
     interior_face_flux = _facial_flux(
-        discr, q_tpair=interior_trace_pair(discr, q), eos=eos
-    )
+        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
 
     # Domain boundaries
     domain_boundary_flux = sum(
         _facial_flux(
             discr,
-            q_tpair=boundaries[btag].boundary_pair(discr, q, t=t,
-                                                   btag=btag, eos=eos),
+            q_tpair=boundaries[btag].boundary_pair(discr,
+                                                   eos=eos,
+                                                   btag=btag,
+                                                   t=t,
+                                                   q=q),
             eos=eos
         )
         for btag in boundaries
@@ -317,7 +244,7 @@ def inviscid_operator(
 
     # Flux across partition boundaries
     partition_boundary_flux = sum(
-        _facial_flux(discr, q_tpair=part_pair, eos=eos)
+        _facial_flux(discr, eos=eos, q_tpair=part_pair)
         for part_pair in cross_rank_trace_pairs(discr, q)
     )
 
@@ -327,17 +254,15 @@ def inviscid_operator(
     )
 
 
-def get_inviscid_cfl(discr, q, dt, eos=IdealSingleGas()):
-    """
-    Routine calculates and returns CFL based on current state and timestep
-    """
-    wanted_dt = get_inviscid_timestep(discr, q, eos=eos)
+def get_inviscid_cfl(discr, eos, dt, q):
+    """Calculate and return CFL based on current state and timestep."""
+    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
 
 
-def get_inviscid_timestep(discr, q, cfl=1.0, eos=IdealSingleGas()):
-    """
-    Routine (will) return the (local) maximum stable inviscid timestep.
+def get_inviscid_timestep(discr, eos, cfl, q):
+    """Routine (will) return the (local) maximum stable inviscid timestep.
+
     Currently, it's a hack waiting for the geometric_factor helpers port
     from grudge.
     """

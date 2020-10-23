@@ -1,3 +1,10 @@
+"""Functions for time integration.
+
+Time integrators
+^^^^^^^^^^^^^^^^
+.. autofunction:: rk4_step
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -28,15 +35,8 @@ THE SOFTWARE.
 """
 
 
-__doc__ = """
-.. autofunction:: rk4_step
-"""
-
-
 def rk4_step(state, t, dt, rhs):
-    """
-    Implements a generic RK4 time step state/rhs pair.
-    """
+    """Implement a generic RK4 time step state/rhs pair."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)
     k3 = rhs(t+dt/2, state + dt/2*k2)

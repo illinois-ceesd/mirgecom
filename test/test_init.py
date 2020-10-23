@@ -1,3 +1,5 @@
+"""Test the solution initialization routines."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -51,18 +53,21 @@ from pytools.obj_array import (
 )
 import pytest
 
+logger = logging.getLogger(__name__)
+
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_lump_init(ctx_factory, dim):
-    """
+    """Test mass lump intializer.
+
     Simple test to check that Lump initializer
     creates the expected solution field.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
-    logger = logging.getLogger(__name__)
 
+    dim = 2
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -77,38 +82,31 @@ def test_lump_init(ctx_factory, dim):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
-    for vdim in range(dim):
-        center = np.zeros(shape=(dim,))
-        velocity = np.zeros(shape=(dim,))
-        velocity[vdim] = 1.0
-        lump = Lump(center=center, velocity=velocity)
-        lump_soln = lump(0, nodes)
+    # Init soln with Vortex
+    center = np.zeros(shape=(dim,))
+    velocity = np.zeros(shape=(dim,))
+    center[0] = 5
+    velocity[0] = 1
+    lump = Lump(center=center, velocity=velocity)
+    lump_soln = lump(0, nodes)
 
-        qs = split_conserved(dim, lump_soln)
-        mass = qs.mass
-        energy = qs.energy
-        mom = qs.momentum
-        p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
-        exp_p = 1.0
-        errmax = discr.norm(p - exp_p, np.inf)
+    cv = split_conserved(dim, lump_soln)
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
+    exp_p = 1.0
+    errmax = discr.norm(p - exp_p, np.inf)
 
-        logger.info(f"lump_soln = {lump_soln}")
-        logger.info(f"pressure = {p}")
-
-        assert errmax < 1e-15
+    assert errmax < 1e-15
 
 
 def test_vortex_init(ctx_factory):
-    """
+    """Test the isentropic vortex initializer.
+
     Simple test to check that Vortex2D initializer
     creates the expected solution field.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
-
-    logger = logging.getLogger(__name__)
-
     dim = 2
     nel_1d = 4
 
@@ -128,12 +126,9 @@ def test_vortex_init(ctx_factory):
     vortex = Vortex2D()
     vortex_soln = vortex(0, nodes)
     gamma = 1.4
-    qs = split_conserved(dim, vortex_soln)
-    mass = qs.mass
-    energy = qs.energy
-    mom = qs.momentum
-    p = 0.4 * (energy - 0.5 * np.dot(mom, mom) / mass)
-    exp_p = mass ** gamma
+    cv = split_conserved(dim, vortex_soln)
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
+    exp_p = cv.mass ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 
     logger.info(f"vortex_soln = {vortex_soln}")
@@ -144,7 +139,8 @@ def test_vortex_init(ctx_factory):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_shock_init(ctx_factory, dim):
-    """
+    """Test Sod's 1D shock intialization.
+
     Simple test to check that Shock1D initializer
     creates the expected solution field.
     """
@@ -182,7 +178,7 @@ def test_shock_init(ctx_factory, dim):
 
 # Surrogate for the currently non-functioning Uniform class
 def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
-
+    """Create a uniform flow solution."""
     dim = len(x_vec)
     _rho = 1.0
     _p = 1.0
@@ -205,7 +201,8 @@ def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_uniform(ctx_factory, dim):
-    """
+    """Terst the uniform solution initializer.
+
     Simple test to check that Uniform initializer
     creates the expected solution field.
     """
@@ -239,7 +236,8 @@ def test_uniform(ctx_factory, dim):
 
     print(f"Uniform Soln:{initsoln}")
     eos = IdealSingleGas()
-    p = eos.pressure(initsoln)
+    cv = split_conserved(dim, initsoln)
+    p = eos.pressure(cv)
     print(f"Press:{p}")
 
     assert discr.norm(p - 1.0, np.inf) < tol
@@ -247,7 +245,8 @@ def test_uniform(ctx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_pulse(ctx_factory, dim):
-    """
+    """Test the Gaussian pulse generator intialization.
+
     Test of Gaussian pulse generator.
     If it looks, walks, and quacks like a duck, then ...
     """

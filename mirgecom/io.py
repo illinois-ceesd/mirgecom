@@ -1,3 +1,10 @@
+"""I/O - related functions and utilities.
+
+.. autofunction:: make_status_message
+.. autofunction:: make_rank_fname
+.. autofunction:: make_par_fname
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -21,42 +28,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import os
-import numpy.linalg as la  # noqa
-import pyopencl.array as cla  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from mirgecom.euler import split_fields
-from mirgecom.checkstate import get_field_stats
-
-
-def make_io_fields(dim, state, dv, eos):
-    r"""Makes fluid-flow-specific fields for restart or
-    visualization I/O.
-
-    Parameters
-    ----------
-    dim
-        Dimensionality of solution
-    state
-        Solution state
-    dv
-        EOS-specific dependent quantities
-        (e.g. pressure, temperature, for ideal monatomic gas)
-    eos
-        Equation of state utility for resolving the dependent
-        fields.
-    """
-    io_fields = split_fields(dim, state)
-    io_fields += eos.split_fields(dim, dv)
-    return io_fields
 
 
 def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
                       initname, eosname, casename,
                       nelements=0, global_nelements=0):
+    """Create a summary of some general simulation parameters and inputs."""
     return(
         f"Initialization for Case({casename})\n"
         f"===\n"
@@ -71,44 +51,26 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, t, step, dt, cfl, dv):
-    dvxt = get_field_stats(dv)
+def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
+    r"""Make simulation status and health message."""
+    dv = dependent_vars
+    from functools import partial
+    _min = partial(discr.nodal_min, "vol")
+    _max = partial(discr.nodal_max, "vol")
     statusmsg = (
-        f"Status: Step({step}) Time({t})\n"
-        f"------   P({dvxt[0]},{dvxt[2]})\n"
-        f"------   T({dvxt[1]},{dvxt[3]})\n"
-        f"------   dt,cfl = ({dt},{cfl})"
+        f"Status: {step=} {t=}\n"
+        f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"
+        f"------- T({_min(dv.temperature):.3g}, {_max(dv.temperature):.3g})\n"
+        f"------- {dt=} {cfl=}"
     )
     return statusmsg
 
 
-def make_serial_fname(basename, step=0, t=0):
-    return f"{basename}-{step:06d}.vtu"
-
-
 def make_rank_fname(basename, rank=0, step=0, t=0):
+    """Create a rank-specific filename."""
     return f"{basename}-{step:06d}-{{rank:04d}}.vtu"
 
 
 def make_par_fname(basename, step=0, t=0):
+    r"""Make parallel visualization filename."""
     return f"{basename}-{step:06d}.pvtu"
-
-
-def make_output_dump(visualizer, basename, io_fields,
-                     comm=None, step=0, t=0, overwrite=True):
-    rank = 0
-    nproc = 1
-    if comm is not None:
-        rank = comm.Get_rank()
-        nproc = comm.Get_size()
-    if nproc > 1:
-        rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
-        par_fn = make_par_fname(basename=basename, step=step, t=t)
-        visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields, overwrite=True)
-        if rank == 0:
-            os.rename(rank_fn.format(rank=rank).replace("vtu", "pvtu"), par_fn)
-    else:
-        fname = make_serial_fname(basename=basename, step=step, t=t)
-        #        print(f"vizfilename = {fname}")
-        #        print(f"io_fields = {io_fields}")
-        visualizer.write_vtk_file(fname, io_fields, overwrite=True)

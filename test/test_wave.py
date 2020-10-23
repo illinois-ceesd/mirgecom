@@ -21,7 +21,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import flat_obj_array, make_obj_array
@@ -29,11 +28,10 @@ import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
 import pytest
@@ -62,7 +60,7 @@ def get_standing_wave(dim):
             b=(0.5*np.pi,)*dim,
             n=(n,)*dim)
     c = 2.
-    sym_coords = prim.make_sym_vector('x', dim)
+    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
@@ -83,7 +81,7 @@ def get_manufactured_cubic(dim):
             a=(-1.,)*dim,
             b=(1.,)*dim,
             n=(n,)*dim)
-    sym_coords = prim.make_sym_vector('x', dim)
+    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_phi = sym_cos(sym_t - np.pi/4)
@@ -100,7 +98,7 @@ def sym_wave(dim, sym_phi):
     """
 
     sym_c = pmbl.var("c")
-    sym_coords = prim.make_sym_vector('x', dim)
+    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
 
     # f = phi_tt - c^2 * div(grad(phi))
@@ -130,13 +128,10 @@ def sym_wave(dim, sym_phi):
         get_manufactured_cubic(3)
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
+def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     """Checks accuracy of the wave operator for a given problem setup.
     """
-
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim, c, mesh_factory, sym_phi = problem
 
@@ -199,15 +194,13 @@ def test_wave_accuracy(ctx_factory, problem, order, visualize=False):
         (get_manufactured_cubic(3), 0.025)
     ])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_wave_stability(ctx_factory, problem, timestep_scale, order,
+def test_wave_stability(actx_factory, problem, timestep_scale, order,
             visualize=False):
     """Checks stability of the wave operator for a given problem setup.
     Adjust *timestep_scale* to get timestep close to stability limit.
     """
 
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim, c, mesh_factory, sym_phi = problem
 

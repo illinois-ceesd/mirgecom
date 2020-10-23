@@ -22,10 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
 import pyopencl as cl
-import numpy.linalg as la  # noqa
-import pyopencl.array as cla  # noqa
 import pyopencl.tools as cl_tools
 from functools import partial
 
@@ -39,40 +36,42 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    exact_sim_checkpoint
+    sim_checkpoint,
+    create_parallel_grid,
+    ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
+from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import Vortex2D
+from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
 
-def main(ctx_factory=cl.create_some_context):
+logger = logging.getLogger(__name__)
 
+
+@mpi_entry_point
+def main(ctx_factory=cl.create_some_context):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    logger = logging.getLogger(__name__)
-
-    dim = 2
-    nel_1d = 16
-    order = 3
-    exittol = .09
-    t_final = 0.1
+    dim = 1
+    nel_1d = 24
+    order = 1
+    # tolerate large errors; case is unstable
+    exittol = .2
+    t_final = 0.01
     current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
-    current_dt = .001
+    current_dt = .0001
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Vortex2D(center=orig, velocity=vel)
-    casename = 'vortex'
+    initializer = SodShock1D(dim)
+    casename = "sod1d"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
     nstatus = 10
@@ -81,14 +80,23 @@ def main(ctx_factory=cl.create_some_context):
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
+    box_ll = -5.0
+    box_ur = 5.0
+
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
 
-    mesh = generate_regular_rect_mesh(
-        a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+    local_nelements = local_mesh.nelements
+
+    discr = EagerDGDiscretization(
+        actx, local_mesh, order=order, mpi_communicator=comm
     )
-
-    discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
@@ -96,7 +104,9 @@ def main(ctx_factory=cl.create_some_context):
                                  if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order, nelements=mesh.nelements,
+    init_message = make_init_message(dim=dim, order=order,
+                                     nelements=local_nelements,
+                                     global_nelements=global_nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
@@ -113,15 +123,21 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return exact_sim_checkpoint(discr, initializer, visualizer, eos, logger,
-                            q=state, vizname=casename, step=step, t=t, dt=dt,
-                            nstatus=nstatus, nviz=nviz, exittol=exittol,
-                            constant_cfl=constant_cfl)
+        return sim_checkpoint(discr, visualizer, eos, q=state,
+                              exact_soln=initializer, vizname=casename, step=step,
+                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
 
-    (current_step, current_t, current_state) = \
-        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=get_timestep, state=current_state,
-                    t=current_t, t_final=t_final)
+    try:
+        (current_step, current_t, current_state) = \
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          checkpoint=my_checkpoint,
+                          get_timestep=get_timestep, state=current_state,
+                          t=current_t, t_final=t_final)
+    except ExactSolutionMismatch as ex:
+        current_step = ex.step
+        current_t = ex.t
+        current_state = ex.state
 
     #    if current_t != checkpoint_t:
     if rank == 0:
