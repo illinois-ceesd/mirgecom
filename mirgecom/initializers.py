@@ -7,6 +7,9 @@ Solution Initializers
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
 .. autoclass:: Uniform
+.. autoclass:: AcousticPulse
+.. automethod: _make_pulse
+.. automethod: _make_uniform_flow
 """
 
 __copyright__ = """
@@ -40,7 +43,97 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-# from mirgecom.euler import split_conserved
+from mirgecom.euler import split_conserved, join_conserved
+
+
+def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
+                       velocity=None, eos=IdealSingleGas()):
+    r"""Construct uniform, constant flow.
+
+    Construct a uniform, constant flow from mass, energy, pressure, and
+    an EOS object.
+
+    Parameters
+    ----------
+    x_vec: np.ndarray
+        Nodal positions
+    mass: float
+        Value to set `:math:\rho`
+    energy: float
+        Optional value to set `:math:\rho{E}`
+    pressure: float
+        Value to use for calculating `:math:\rho{E}`
+    velocity: np.ndarray
+        Optional constant velocity to set `:math:\rho\vec{V}`
+
+    Returns
+    -------
+    q: Object array of DOFArrays
+        Agglomerated object array with the uniform flow
+    """
+    dim = len(x_vec)
+    if velocity is None:
+        velocity = np.zeros(shape=(dim,))
+
+    _rho = mass
+    _p = pressure
+    _velocity = velocity
+    _gamma = eos.gamma()
+
+    mom0 = _rho * _velocity
+    e0 = _p / (_gamma - 1.0)
+    ke = 0.5 * np.dot(_velocity, _velocity) / _rho
+    x_rel = x_vec[0]
+    zeros = 0.0*x_rel
+    ones = zeros + 1.0
+
+    mass = zeros + _rho
+    mom = make_obj_array([mom0 * ones for i in range(dim)])
+    energy = e0 + ke + zeros
+
+    return flat_obj_array(mass, energy, mom)
+
+
+def _make_pulse(amp, r0, w, r):
+    r"""Create a Gaussian pulse.
+
+    The Gaussian pulse is defined by:
+
+    .. math::
+
+        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
+
+    Where :math:`\vec{r}` is the nodal position, and the parameters are
+    the pulse amplitude :math:`a_0`, the pulse location :math:`\vec{r_0}`, and the
+    RMS width of the pulse, :math:`w`.
+
+    Parameters
+    ----------
+    amp : float
+        specifies the value of :math:`\a_0`, the pulse amplitude
+    r0 : float array
+        specifies the value of :math:`\r_0`, the pulse location
+    w : float
+        specifies the value of :math:`w`, the rms pulse width
+    r : Object array of DOFArrays
+        specifies the nodal coordinates
+
+    Returns
+    -------
+    G : float array
+        The values of the exponential function
+    """
+    dim = len(r)
+    r_0 = np.zeros(dim)
+    r_0 = r_0 + r0
+    # coordinates relative to pulse center
+    rel_center = make_obj_array(
+        [r[i] - r_0[i] for i in range(dim)]
+    )
+    actx = r[0].array_context
+    rms2 = w * w
+    r2 = np.dot(rel_center, rel_center) / rms2
+    return amp * actx.np.exp(-.5 * r2)
 
 
 class Vortex2D:
@@ -217,7 +310,8 @@ class SodShock1D:
 
 
 class Lump:
-    r"""Implement an N-dimensional Gaussian lump of mass.
+    r"""
+    Create an N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
@@ -373,85 +467,74 @@ class Lump:
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
-def make_pulse(amp, r0, w, r):
-    r"""Create a Gaussian pulse.
+class AcousticPulse:
+    r"""
+    Create an N-dimensional Gaussian acoustic pulse.
 
     The Gaussian pulse is defined by:
+
     .. math::
 
-        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
+        {\rho}E(\vec{r}) = {\rho}E + amplitude * G(\vec{r})\\
+        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}
 
-    Where :math:`\vec{r}` is the nodal position, and the parameters are
-    the pulse amplitude :math:`a_0`, the pulse location :math:`\vec{r_0}`, and the
-    RMS width of the pulse, :math:`w`.
+    Where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
+    :math:`amplitude`, and :math:`w`, are the the user-specified pulse location,
+    amplitude, and width, respectively.
 
-    A call to this object after creation/init adds a pulse to the input solution
-
-    Parameters
-    ----------
-    amp : float
-        specifies the value of :math:`\a_0`, the pulse amplitude
-    r0 : float array
-        specifies the value of :math:`\r_0`, the pulse location
-    w : float
-        specifies the value of :math:`w`, the rms pulse width
-    r : Object array of DOFArrays
-        specifies the nodal coordinates
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
-    dim = len(r)
-    r_0 = np.zeros(dim)
-    r_0 = r_0 + r0
-    # coordinates relative to pulse center
-    rel_center = make_obj_array(
-        [r[i] - r_0[i] for i in range(dim)]
-    )
-    actx = r[0].array_context
-    rms2 = w * w
-    r2 = np.dot(rel_center, rel_center) / rms2
-    return amp * actx.np.exp(-.5 * r2)
+    def __init__(self, numdim=1, amplitude=1,
+                 center=None, width=1):
+        r"""
+        Initialize acoustic pulse parameters.
 
+        Parameters
+        ----------
+        numdim : int
+            specify the number of dimensions for the pulse
+        amplitude : float
+            specifies the value of :math:`amplitude`
+        width: float
+            specifies the rms width of the pulse
+        center : numpy.ndarray
+            pulse location, shape ``(numdim,)``
+        """
+        if len(center) == numdim:
+            self._center = center
+        elif len(center) > numdim:
+            numdim = len(center)
+            self._center = center
+        else:
+            self._center = np.zeros(shape=(numdim,))
 
-def set_uniform_solution(self, t, x_vec, mass=1.0, energy=2.5, pressure=1.0,
-                         velocity=None, eos=IdealSingleGas()):
-    """
-    Create a uniform flow solution at locations *x_vec*.
+        assert len(self._center) == numdim
 
-    Parameters
-    ----------
-    t: float
-        Current time at which the solution is desired (unused)
-    x_vec: numpy.ndarray
-        Nodal coordinates
-    eos: :class:`mirgecom.eos.GasEOS`
-        Equation of state class to be used in construction of soln (unused)
-    """
-    gamma = eos.gamma()
-    mass = x_vec[0].copy()
-    mom = self._velocity * make_obj_array([mass])
-    energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+        self._amp = amplitude
+        self._width = width
+        self._dim = numdim
 
-    return flat_obj_array(mass, energy, mom)
+    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+        """
+        Create the acoustic pulse at locations *x_vec*.
 
-    #        dim = len(x_vec)
-    #        if velocity is None:
-    #            velocity = np.zeros(shape=(dim,))
-    #
-    #        _rho = mass
-    #        _p = pressure
-    #        _velocity = velocity
-    #        _gamma = eos.gamma()
-    #
-    #        mom0 = _rho * _velocity
-    #        e0 = _p / (_gamma - 1.0)
-    #        ke = 0.5 * np.dot(_velocity, _velocity) / _rho
-    #        x_rel = x_vec[0]
-    #        zeros = 0.0*x_rel
-    #        ones = zeros + 1.0
-    #
-    #        mass = zeros + _rho
-    #        mom = make_obj_array([mom0 * ones for i in range(dim)])
-    #        energy = e0 + ke + zeros
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (unused)
+        """
+        assert len(x_vec) == self._dim
+        cv = split_conserved(self._dim, q)
+        cv.energy = cv.energy + _make_pulse(amp=self._amp, w=self._width,
+                                            r0=self._center, r=x_vec)
+        return join_conserved(dim=self._dim, mass=cv.mass, energy=cv.energy,
+                              momentum=cv.momentum)
 
 
 class Uniform:
@@ -493,26 +576,27 @@ class Uniform:
         self._e = e
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        """Create uniform solution."""
-        dim = len(x_vec)
-        _rho = self._rho
-        _p = self._p
-        _velocity = self._velocity
-        _gamma = eos.gamma()
+        """
+        Create a uniform flow solution at locations *x_vec*.
 
-        mom0 = _rho * _velocity
-        e0 = _p / (_gamma - 1.0)
-        ke = 0.5 * np.dot(_velocity, _velocity) / _rho
-
-        x_rel = x_vec[0]
-        zeros = 0.0*x_rel
-        ones = zeros + 1.0
-
-        mass = zeros + _rho
-        mom = make_obj_array([mom0 * ones for i in range(dim)])
-        energy = e0 + ke + zeros
-
-        return flat_obj_array(mass, energy, mom)
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (unused)
+        """
+        return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
+                                  pressure=self._p, energy=self._e,
+                                  eos=eos)
+        # gamma = eos.gamma()
+        # mass = x_vec[0].copy()
+        # mom = self._velocity * make_obj_array([mass])
+        # energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+        #
+        # return flat_obj_array(mass, energy, mom)97
 
     def exact_rhs(self, discr, q, t=0.0):
         """

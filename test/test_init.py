@@ -30,6 +30,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+import pytest
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -51,7 +52,6 @@ from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
-import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_uniform(ctx_factory, dim):
-    """Terst the uniform solution initializer.
+    """Test the Uniform solution initialization.
 
     Simple test to check that Uniform initializer
     creates the expected solution field.
@@ -227,11 +227,12 @@ def test_uniform(ctx_factory, dim):
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
-    #    initr = Uniform(numdim=dim)
-    #    initsoln = initr(t=0.0, x_vec=nodes)
+    from mirgecom.initializers import Uniform
+    initr = Uniform(numdim=dim)
+    initsoln = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
-    initsoln = set_uniform_solution(t=0.0, x_vec=nodes)
     ssoln = split_conserved(dim, initsoln)
+
     assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
     assert discr.norm(ssoln.energy - 2.5, np.inf) < tol
 
@@ -246,9 +247,8 @@ def test_uniform(ctx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_pulse(ctx_factory, dim):
-    """Test the Gaussian pulse generator intialization.
+    """Test Gaussian pulse generator.
 
-    Test of Gaussian pulse generator.
     If it looks, walks, and quacks like a duck, then ...
     """
     cl_ctx = ctx_factory()
@@ -272,13 +272,13 @@ def test_pulse(ctx_factory, dim):
     print(f"Nodes={nodes}")
 
     tol = 1e-15
-    from mirgecom.initializers import make_pulse
+    from mirgecom.initializers import _make_pulse
     amp = 1.0
     w = .1
     rms2 = w * w
     r0 = np.zeros(dim)
     r2 = np.dot(nodes, nodes) / rms2
-    pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
+    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     print(f"Pulse = {pulse}")
 
     # does it return the expected exponential?
@@ -291,17 +291,17 @@ def test_pulse(ctx_factory, dim):
     # proper scaling with amplitude?
     amp = 2.0
     pulse = 0
-    pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
+    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     pulse_resid = pulse - (pulse_check + pulse_check)
     assert(discr.norm(pulse_resid, np.inf) < tol)
 
     # proper scaling with r?
     amp = 1.0
     rcheck = np.sqrt(2.0) * nodes
-    pulse = make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
+    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
     assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
 
     # proper scaling with w?
     w = w / np.sqrt(2.0)
-    pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
+    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)

@@ -1,3 +1,5 @@
+"""Demonstrate Sod's 1D shock example."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -55,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
+    """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,

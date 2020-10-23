@@ -79,6 +79,7 @@ class GasEOS:
     .. automethod:: internal_energy
     .. automethod:: gas_const
     .. automethod:: dependent_vars
+    .. automethod:: total_energy
     """
 
     def pressure(self, cv: ConservedVars):
@@ -107,6 +108,10 @@ class GasEOS:
             pressure=self.pressure(cv),
             temperature=self.temperature(cv),
             )
+
+    def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
+        """Get the total (thermal + kinetic) energy for the gas."""
+        raise NotImplementedError()
 
 
 class IdealSingleGas(GasEOS):
@@ -193,8 +198,9 @@ class IdealSingleGas(GasEOS):
             * self.internal_energy(cv) / cv.mass)
         )
 
-    def energy(self, mass, pressure, momentum):
-        r"""Get gas total energy from mass, pressure, momentum.
+    def total_energy(self, cv, pressure):
+        r"""
+        Get gas total energy from mass, pressure, and momentum.
 
         The total energy density (rhoE) is calculated from
         the mass density (rho) , pressure (p) , and
@@ -206,13 +212,4 @@ class IdealSingleGas(GasEOS):
             \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
         """
         return (pressure / (self._gamma - 1.0)
-                + 0.5 * np.dot(momentum, momentum) / mass)
-    #
-    #    def __call__(self, q):
-    #        return dependent_vars(q)
-    #
-    #    def split_fields(self, ndim, dv):
-    #        return [
-    #            ("pressure", dv[0]),
-    #            ("temperature", dv[1]),
-    #        ]
+                + 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
