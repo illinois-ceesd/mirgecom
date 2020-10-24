@@ -1,3 +1,10 @@
+"""mirgecom driver for the Y0 demonstration.
+
+Note: this example requires a *scaled* version of the Y0
+grid. A working grid example is located here:
+github.com:/illinois-ceesd/data@y0scaled
+"""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -39,14 +46,11 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    #    check_step,
-    #    make_status_message,
-    sim_checkpoint
+    sim_checkpoint,
+    create_parallel_grid
 )
 from mirgecom.io import (
     make_init_message,
-    #    make_io_fields,
-    #    make_output_dump,
 )
 # from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
@@ -56,45 +60,31 @@ from mirgecom.boundary import (
     AdiabaticSlipBoundary,
     DummyBoundary
 )
-# from mirgecom.boundary import DummyBoundary
-# from mirgecom.initializers import Uniform
-from mirgecom.initializers import (
-    Lump,
-    make_pulse
-)
+from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
 
 
-# Surrogate for the currently non-functioning Uniform class
-def set_uniform_solution(t, x_vec, eos=IdealSingleGas()):
+def get_pseudo_y0_mesh():
+    """Generate or import a grid using `gmsh`.
 
-    dim = len(x_vec)
-    _rho = 1.0
-    _p = 1.0
-    _velocity = np.zeros(shape=(dim,))
-    _gamma = 1.4
+    Input required:
+        data/pseudoY0.brep  (for mesh gen)
+        -or-
+        data/pseudoY0.msh   (read existing mesh)
 
-    mom0 = _rho * _velocity
-    e0 = _p / (_gamma - 1.0)
-    ke = 0.5 * np.dot(_velocity, _velocity) / _rho
-    x_rel = x_vec[0]
-    zeros = 0.0*x_rel
-    ones = zeros + 1.0
-
-    mass = zeros + _rho
-    mom = make_obj_array([mom0 * ones for i in range(dim)])
-    energy = e0 + ke + zeros
-
-    return flat_obj_array(mass, energy, mom)
-
-
-def import_pseudo_y0_mesh():
-
-    from meshmode.mesh.io import read_gmsh, generate_gmsh, ScriptWithFilesSource
+    This routine will generate a new grid if it does
+    not find the grid file (data/pseudoY0.msh), but
+    note that if the grid is generated in millimeters,
+    then the solution initialization and BCs need to be
+    adjusted or the grid needs to be scaled up to meters
+    before being used with the current main driver in this
+    example.
+    """
+    from meshmode.mesh.io import (
+        read_gmsh,
+        generate_gmsh,
+        ScriptWithFilesSource
+    )
     import os
     if os.path.exists("data/pseudoY0.msh") is False:
         mesh = generate_gmsh(
@@ -134,7 +124,7 @@ def import_pseudo_y0_mesh():
             Field[5].FieldsList = {2,4};
 
             Background Field = 5;
-        """, ["data/pseudoY0.brep"]), 3, target_unit='MM')
+        """, ["data/pseudoY0.brep"]), 3, target_unit="MM")
     else:
         mesh = read_gmsh("data/pseudoY0.msh")
 
@@ -142,7 +132,7 @@ def import_pseudo_y0_mesh():
 
 
 def main(ctx_factory=cl.create_some_context):
-
+    """Drive the Y0 example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
@@ -160,106 +150,70 @@ def main(ctx_factory=cl.create_some_context):
     orig[0] = 0.83
     orig[2] = 0.001
     #    vel[0] = 340.0
-    vel_inflow[0] = 100.0
+    vel_inflow[0] = 100.0  # m/s
     current_dt = 1e-8
     current_t = 0
-    eos = IdealSingleGas()
-    bulk_init = Lump(numdim=dim, rho0=1.225, p0=100000.0,
-                     center=orig, velocity=vel_init, rhoamp=0.0)
-    inflow_init = Lump(numdim=dim, rho0=1.225, p0=200000.0,
-                       center=orig, velocity=vel_inflow, rhoamp=0.0)
-
-    #    initializer = Uniform(numdim=dim)
-    casename = 'pseudoY1'
-    wall = AdiabaticSlipBoundary()
-    from grudge import sym
-    #    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    boundaries = {sym.DTAG_BOUNDARY("Inflow"): PrescribedBoundary(inflow_init),
-                  sym.DTAG_BOUNDARY("Outflow"): DummyBoundary,
-                  sym.DTAG_BOUNDARY("Wall"): wall}
+    casename = "pseudoY0"
     constant_cfl = False
     nstatus = 10
     nviz = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
+
     timestepper = rk4_step
+    eos = IdealSingleGas()
+    bulk_init = Lump(numdim=dim, rho0=1.225, p0=100000.0,
+                     center=orig, velocity=vel_init, rhoamp=0.0)
+    inflow_init = Lump(numdim=dim, rho0=2.0, p0=200000.0,
+                       center=orig, velocity=vel_inflow, rhoamp=0.0)
+    wall = AdiabaticSlipBoundary()
+    dummy = DummyBoundary()
+
+    from grudge import sym
+#    boundaries = {BTAG_ALL: DummyBoundary}
+    boundaries = {sym.DTAG_BOUNDARY("Inflow"): PrescribedBoundary(inflow_init),
+                  sym.DTAG_BOUNDARY("Outflow"): dummy,
+                  sym.DTAG_BOUNDARY("Wall"): wall}
 
     comm = MPI.COMM_WORLD
-    nproc = comm.Get_size()
     rank = comm.Get_rank()
-    num_parts = nproc
 
-    from meshmode.distributed import (
-        MPIMeshDistributor,
-        get_partition_by_pymetis,
-    )
-
-    global_nelements = 0
-    local_nelements = 0
-
-    if nproc > 1:
-        mesh_dist = MPIMeshDistributor(comm)
-        if mesh_dist.is_mananger_rank():
-
-            mesh = import_pseudo_y0_mesh()
-            global_nelements = mesh.nelements
-            logging.info(f"Total {dim}d elements: {global_nelements}")
-            logging.info(f"Grid BTAGS: {mesh.boundary_tags}")
-            #            print(f"btags = {mesh.boundary_tags}")
-
-            logging.info("Partitioning grid.")
-            part_per_element = get_partition_by_pymetis(mesh, num_parts)
-            logging.info("Sending grid partitions")
-
-            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-            del mesh
-            logging.info("Grid partitions sent.")
-
-        else:
-            local_mesh = mesh_dist.receive_mesh_part()
-
-        comm.Barrier()
-
-        if rank == 0:
-            logging.info("Grid distributed.")
-    else:
-        logging.info("Reading grid.")
-        local_mesh = import_pseudo_y0_mesh()
-        global_nelements = local_mesh.nelements
-        logging.info("Done. Reading grid.")
+    local_mesh, global_nelements = create_parallel_grid(comm,
+                                                        get_pseudo_y0_mesh)
 
     local_nelements = local_mesh.nelements
 
-    comm.Barrier()
     if rank == 0:
         logging.info("Making discretization")
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    comm.Barrier()
+
     if rank == 0:
         logging.info("Initializing soln.")
     current_state = bulk_init(0, nodes)
     #    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
-    comm.Barrier()
+
     if rank == 0:
         logging.info("Adding pulse.")
-    current_state[1] = current_state[1] + make_pulse(amp=50000.0, w=.002,
-                                                     r0=orig, r=nodes)
+    #    current_state[1] = current_state[1] + _make_pulse(amp=50000.0, w=.002,
+    #                                                      r0=orig, r=nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
     #    initname = initializer.__class__.__name__
-    initname = "pseudoY1"
+    initname = "pseudoY0"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
-                                     dt=current_dt, t_final=t_final, nstatus=nstatus,
-                                     nviz=nviz, cfl=current_cfl,
-                                     constant_cfl=constant_cfl, initname=initname,
+                                     dt=current_dt, t_final=t_final,
+                                     nstatus=nstatus, nviz=nviz,
+                                     cfl=current_cfl,
+                                     constant_cfl=constant_cfl,
+                                     initname=initname,
                                      eosname=eosname, casename=casename)
     if rank == 0:
         logger.info(init_message)
@@ -269,25 +223,24 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos)
+        return inviscid_operator(discr, eos=eos, boundaries=boundaries,
+                                 q=state, t=t)
 
     def my_checkpoint(step, t, dt, state):
-        if rank == 0:
-            logger.info(f"Checkpoint: {step}.")
         return sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos,
-                              logger=logger, q=state, vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+                              q=state, vizname=casename,
+                              step=step, t=t, dt=dt, nstatus=nstatus,
+                              nviz=nviz, exittol=exittol,
+                              constant_cfl=constant_cfl, comm=comm)
 
-    comm.Barrier()
     if rank == 0:
         logging.info("Stepping.")
 
     (current_step, current_t, current_state) = \
-        advance_state(rhs=my_rhs, timestepper=timestepper, checkpoint=my_checkpoint,
-                    get_timestep=get_timestep, state=current_state,
-                    t=current_t, t_final=t_final)
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      checkpoint=my_checkpoint,
+                      get_timestep=get_timestep, state=current_state,
+                      t_final=t_final, t=current_t, istep=current_step)
 
     if rank == 0:
         logger.info("Checkpointing final state ...")

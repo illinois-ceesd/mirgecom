@@ -79,6 +79,10 @@ class DummyBoundary:
     .. automethod:: boundary_pair
     """
 
+    def __init__(self):
+        """Initialize dummy boundary."""
+        self.test = 1
+
     def boundary_pair(
         self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
@@ -102,6 +106,10 @@ class AdiabaticSlipBoundary:
 
     .. automethod:: boundary_pair
     """
+
+    def __init__(self):
+        """Create the adiabatic slip boundary."""
+        self.test = 1
 
     def boundary_pair(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
