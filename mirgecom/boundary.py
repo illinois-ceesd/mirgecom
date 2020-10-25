@@ -42,7 +42,7 @@ from mirgecom.euler import split_conserved, join_conserved
 
 
 class PrescribedBoundary:
-    """Assign the boundary solution with a user-specified function.
+    """Boundary condition prescribes boundary soln with user-specified function.
 
     .. automethod:: __init__
     .. automethod:: boundary_pair
@@ -73,7 +73,7 @@ class PrescribedBoundary:
 
 
 class DummyBoundary:
-    """Use the boundary-adjacent solution as the boundary solution.
+    """Boundary condition that assigns boundary-adjacent soln as the boundary solution.
 
     .. automethod:: boundary_pair
     """
@@ -87,7 +87,7 @@ class DummyBoundary:
 
 
 class AdiabaticSlipBoundary:
-    """Adiabatic slip boundary for inviscid flows.
+    """Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
 

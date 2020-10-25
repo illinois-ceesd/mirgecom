@@ -109,18 +109,18 @@ def _make_pulse(amp, r0, w, r):
 
     Parameters
     ----------
-    amp : float
+    amp: float
         specifies the value of :math:`\a_0`, the pulse amplitude
-    r0 : float array
+    r0: float array
         specifies the value of :math:`\r_0`, the pulse location
-    w : float
+    w: float
         specifies the value of :math:`w`, the rms pulse width
-    r : Object array of DOFArrays
+    r: Object array of DOFArrays
         specifies the nodal coordinates
 
     Returns
     -------
-    G : float array
+    G: float array
         The values of the exponential function
     """
     dim = len(r)
@@ -137,7 +137,7 @@ def _make_pulse(amp, r0, w, r):
 
 
 class Vortex2D:
-    r"""Create the isentropic vortex solution.
+    r"""Initializer for the isentropic vortex solution.
 
     Implements the isentropic vortex after
         - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
@@ -172,11 +172,11 @@ class Vortex2D:
 
         Parameters
         ----------
-        beta : float
+        beta: float
             vortex amplitude
-        center : numpy.ndarray
+        center: numpy.ndarray
             center of vortex, shape ``(2,)``
-        velocity : numpy.ndarray
+        velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0, shape ``(2,)``
         """
         self._beta = beta
@@ -217,7 +217,7 @@ class Vortex2D:
 
 
 class SodShock1D:
-    r"""Implement a 1D Sod Shock.
+    r"""Solution initializer for the 1D Sod Shock.
 
         - JSH/TW Nodal DG Methods, p. 209
 
@@ -308,8 +308,7 @@ class SodShock1D:
 
 
 class Lump:
-    r"""
-    Create an N-dimensional Gaussian lump of mass.
+    r"""Solution initializer for N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
@@ -349,17 +348,17 @@ class Lump:
 
         Parameters
         ----------
-        numdim : int
+        numdim: int
             specify the number of dimensions for the lump
-        rho0 : float
+        rho0: float
             specifies the value of :math:`\rho_0`
-        rhoamp : float
+        rhoamp: float
             specifies the value of :math:`\rho_a`
-        p0 : float
+        p0: float
             specifies the value of :math:`p_0`
-        center : numpy.ndarray
+        center: numpy.ndarray
             center of lump, shape ``(2,)``
-        velocity : numpy.ndarray
+        velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(2,)``
         """
@@ -466,14 +465,13 @@ class Lump:
 
 
 class AcousticPulse:
-    r"""
-    Create an N-dimensional Gaussian acoustic pulse.
+    r"""Solution initializer for N-dimensional Gaussian acoustic pulse.
 
     The Gaussian pulse is defined by:
 
     .. math::
 
-        {\rho}E(\vec{r}) = {\rho}E + amplitude * G(\vec{r})\\
+        {\rho}E(\vec{r}) = {\rho}E + a_0 * G(\vec{r})\\
         G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
 
     where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
@@ -491,13 +489,13 @@ class AcousticPulse:
 
         Parameters
         ----------
-        numdim : int
+        numdim: int
             specify the number of dimensions for the pulse
-        amplitude : float
+        amplitude: float
             specifies the value of :math:`amplitude`
         width: float
             specifies the rms width of the pulse
-        center : numpy.ndarray
+        center: numpy.ndarray
             pulse location, shape ``(numdim,)``
         """
         if len(center) == numdim:
@@ -536,7 +534,7 @@ class AcousticPulse:
 
 
 class Uniform:
-    r"""Implement initialization to a uniform flow.
+    r"""Solution initializer for a uniform flow.
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
@@ -553,15 +551,15 @@ class Uniform:
 
         Parameters
         ----------
-        numdim : int
+        numdim: int
             specify the number of dimensions for the lump
-        rho : float
+        rho: float
             specifies the density
-        p : float
+        p: float
             specifies the pressure
-        e : float
+        e: float
             specifies the internal energy
-        velocity : numpy.ndarray
+        velocity: numpy.ndarray
             specifies the flow velocity
         """
         if len(velocity) == numdim:

@@ -237,7 +237,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     t
         Time
 
-    eos : mirgecom.eos.GasEOS
+    eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     """

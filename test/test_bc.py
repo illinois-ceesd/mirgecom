@@ -98,10 +98,10 @@ def test_slipwall_identity(actx_factory, dim):
             # check that mass and energy are preserved
             mass_resid = bnd_cv_int.mass - bnd_cv_ext.mass
             mass_err = bnd_norm(mass_resid)
-            assert(mass_err == 0.0)
+            assert mass_err == 0.0
             energy_resid = bnd_cv_int.energy - bnd_cv_ext.energy
             energy_err = bnd_norm(energy_resid)
-            assert(energy_err == 0.0)
+            assert energy_err == 0.0
 
             # check that exterior momentum term is mom_interior - 2 * mom_normal
             mom_norm_comp = np.dot(bnd_cv_int.momentum, nhat)
@@ -110,7 +110,7 @@ def test_slipwall_identity(actx_factory, dim):
             mom_resid = bnd_cv_ext.momentum - expected_mom_ext
             mom_err = bnd_norm(mom_resid)
 
-            assert(mom_err == 0.0)
+            assert mom_err == 0.0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -166,7 +166,7 @@ def test_slipwall_flux(actx_factory, dim):
             acv = split_conserved(dim, avg_state)
             bnd_norm_mom = np.dot(acv.momentum, nhat)
             bnd_mom = bnd_norm(bnd_norm_mom)
-            assert(bnd_mom < tol)
+            assert bnd_mom < tol
 
             from mirgecom.euler import _facial_flux
             bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
@@ -177,5 +177,5 @@ def test_slipwall_flux(actx_factory, dim):
             # mass and energy flux at the boundary should be zero
             massflux_max = bnd_norm(mass_flux)
             energyflux_max = bnd_norm(energy_flux)
-            assert(massflux_max < tol)
-            assert(energyflux_max < tol)
+            assert massflux_max < tol
+            assert energyflux_max < tol
