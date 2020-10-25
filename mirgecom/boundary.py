@@ -103,7 +103,7 @@ class AdiabaticSlipBoundary:
     """
 
     def boundary_pair(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, t=0.0, btag, eos
     ):
         """Get the interior and exterior solution on the boundary.
 

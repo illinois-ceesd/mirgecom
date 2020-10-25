@@ -103,7 +103,7 @@ def _make_pulse(amp, r0, w, r):
 
         G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
 
-    Where :math:`\vec{r}` is the nodal position, and the parameters are
+    Where :math:`\vec{r}` is the position, and the parameters are
     the pulse amplitude :math:`a_0`, the pulse location :math:`\vec{r_0}`, and the
     RMS width of the pulse, :math:`w`.
 
@@ -474,9 +474,9 @@ class AcousticPulse:
     .. math::
 
         {\rho}E(\vec{r}) = {\rho}E + amplitude * G(\vec{r})\\
-        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}
+        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
 
-    Where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
+    where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
     :math:`amplitude`, and :math:`w`, are the the user-specified pulse location,
     amplitude, and width, respectively.
 
