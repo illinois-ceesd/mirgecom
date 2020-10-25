@@ -34,6 +34,12 @@ Time Step Computation
 
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
+
+References
+^^^^^^^^^^
+.. [DGBook] Hesthaven and Warburton (2008), Nodal DG Methods, Springer
+   (DOI: 10.1007/978-0-387-72067-8)
+
 """
 
 __copyright__ = """
@@ -196,8 +202,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     flux_int = inviscid_flux(discr, eos, q_tpair.int)
     flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
 
-    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, Section 6.6
-    # DOI: 10.1007/978-0-387-72067-8
+    # Lax-Friedrichs/Rusanov after [DGBook]_, Section 6.6
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(

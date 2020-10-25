@@ -10,6 +10,12 @@ Solution Initializers
 .. autoclass:: AcousticPulse
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
+
+References
+^^^^^^^^^^
+.. [ZWJCP] Y.C. Zhou, G.W. Wei (2003), Journal of Computational Physics 189 159 \
+          (https://doi.org/10.1016/S0021-9991(03)00206-7)
+
 """
 
 __copyright__ = """
@@ -140,10 +146,8 @@ class Vortex2D:
     r"""Initializer for the isentropic vortex solution.
 
     Implements the isentropic vortex after
-        - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
-          (https://doi.org/10.1016/S0021-9991(03)00206-7)
-        - JSH/TW Nodal DG Methods, Section 6.6
-          DOI: 10.1007/978-0-387-72067-8
+        - [ZWJCP]_
+        - [DGBook]_, Section 6.6
 
     The isentropic vortex is defined by:
 

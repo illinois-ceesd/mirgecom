@@ -6,6 +6,12 @@ Boundary Conditions
 .. autoclass:: PrescribedBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
+
+References
+^^^^^^^^^^
+.. [BCPL] Poinsot and Lele (1992), JCP \
+   (http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf)
+
 """
 
 __copyright__ = """
@@ -98,10 +104,8 @@ class AdiabaticSlipBoundary:
     wherein the normal component of velocity at the wall is 0, and
     tangential components are preserved. These perfectly reflecting
     conditions are used by the forward-facing step case in
-    JSH/TW Nodal DG Methods, Section 6.6 DOI: 10.1007/978-0-387-72067-8 and
-    correspond to the characteristic boundary conditions described in detail
-    by Poinsot and Lele's JCP paper
-    (http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf).
+    [DGBook]_, Section 6.6, and correspond to the characteristic
+    boundary conditions described in detail in [BCPL]_.
 
     .. automethod:: boundary_pair
     """
