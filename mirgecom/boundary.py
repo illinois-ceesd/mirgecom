@@ -36,7 +36,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.eos import IdealSingleGas
+# from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import split_conserved, join_conserved
 
@@ -60,7 +60,7 @@ class PrescribedBoundary:
         self._userfunc = userfunc
 
     def boundary_pair(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
@@ -79,7 +79,7 @@ class DummyBoundary:
     """
 
     def boundary_pair(
-        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
@@ -103,7 +103,7 @@ class AdiabaticSlipBoundary:
     """
 
     def boundary_pair(
-            self, discr, q, t=0.0, btag, eos
+            self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary.
 
