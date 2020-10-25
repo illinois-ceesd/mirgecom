@@ -8,8 +8,7 @@ Boundary Conditions
 .. autoclass:: AdiabaticSlipBoundary
 
 References
-^^^^^^^^^^
-
+----------
 .. [BCPL] Poinsot and Lele (1992), JCP \
    (http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf)
 

@@ -37,7 +37,6 @@ Time Step Computation
 
 References
 ----------
-
 .. [DGBook] Hesthaven and Warburton (2008), Nodal DG Methods, Springer
    (DOI: 10.1007/978-0-387-72067-8)
 
