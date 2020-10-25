@@ -87,17 +87,21 @@ class DummyBoundary:
 
 
 class AdiabaticSlipBoundary:
-    """Boundary condition implementing inviscid slip boundary.
+    r"""Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
 
-    This class implements an adiabatic reflective slip boundary
+    This class implements an adiabatic reflective slip boundary given
+    by
+    :math:`\mathbf{q^+} = [\rho^-, \rho{E}^-,
+    \rho\vec{V}^- - 2(\rho\vec{V}\cdot\hat\vec{n})\hat\vec{n}]`
     wherein the normal component of velocity at the wall is 0, and
     tangential components are preserved. These perfectly reflecting
     conditions are used by the forward-facing step case in
     JSH/TW Nodal DG Methods, Section 6.6 DOI: 10.1007/978-0-387-72067-8 and
-    described in detail by Poinsot and Lele's JCP paper
-    http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf
+    correspond to the characteristic boundary conditions described in detail
+    by Poinsot and Lele's JCP paper
+    (http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf).
 
     .. automethod:: boundary_pair
     """
