@@ -174,9 +174,21 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
 def _facial_flux(discr, eos, q_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
-    If *local* is *True*, then the returned flux is NOT projected to "all_faces,"
-    but instead remains on *q_tpair.dd*.
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    q_tpair
+        Trace pair for the face upon which flux calculation is to be performed
+
+    local: boolean
+        Indicates whether to skip projection of fluxes to "all_faces" or not.
     """
+#    dd
+#        Discretization restriction indicating the target discretization to which
+#        the fluxes should be projected.
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context

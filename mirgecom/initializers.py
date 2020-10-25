@@ -595,12 +595,6 @@ class Uniform:
         return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
                                   pressure=self._p, energy=self._e,
                                   eos=eos)
-        # gamma = eos.gamma()
-        # mass = x_vec[0].copy()
-        # mom = self._velocity * make_obj_array([mass])
-        # energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        #
-        # return flat_obj_array(mass, energy, mom)97
 
     def exact_rhs(self, discr, q, t=0.0):
         """

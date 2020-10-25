@@ -70,10 +70,10 @@ def test_slipwall_identity(actx_factory, dim):
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    normal = thaw(actx, discr.normal(BTAG_ALL))
-    normal_mag = actx.np.sqrt(np.dot(normal, normal))
-    nhat_mult = 1.0 / normal_mag
-    nhat = normal * make_obj_array([nhat_mult])
+    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    #    normal_mag = actx.np.sqrt(np.dot(normal, normal))
+    #    nhat_mult = 1.0 / normal_mag
+    #    nhat = normal * make_obj_array([nhat_mult])
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -134,10 +134,10 @@ def test_slipwall_flux(actx_factory, dim):
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    normal = thaw(actx, discr.normal(BTAG_ALL))
-    normal_mag = actx.np.sqrt(np.dot(normal, normal))
-    nhat_mult = 1.0 / normal_mag
-    nhat = normal * make_obj_array([nhat_mult])
+    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    #    normal_mag = actx.np.sqrt(np.dot(normal, normal))
+    #    nhat_mult = 1.0 / normal_mag
+    #    nhat = normal * make_obj_array([nhat_mult])
     wall = AdiabaticSlipBoundary()
 
     from functools import partial
@@ -161,7 +161,7 @@ def test_slipwall_flux(actx_factory, dim):
             # Check the total velocity component normal
             # to each surface.  It should be zero.  The
             # numerical fluxes cannot be zero.
-            tol = 1e-16
+            tol = 5e-15
             avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
             acv = split_conserved(dim, avg_state)
             bnd_norm_mom = np.dot(acv.momentum, nhat)

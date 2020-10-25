@@ -121,31 +121,23 @@ class AdiabaticSlipBoundary:
         actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
-        normal = thaw(actx, discr.normal(btag))
-        normal_mag = actx.np.sqrt(np.dot(normal, normal))
-        nhat_mult = 1.0 / normal_mag
-        nhat = normal * make_obj_array([nhat_mult])
+        nhat = thaw(actx, discr.normal(btag))
 
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
-        bndry_cv = split_conserved(dim, int_soln)
-        # bpressure = eos.pressure(bndry_cv)
+        int_cv = split_conserved(dim, int_soln)
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to
         # induce an equal but opposite wall-normal (reflected) wave
         # preserving the tangential component
-        wall_velocity = bndry_cv.momentum / make_obj_array([bndry_cv.mass])
-        nvel_comp = np.dot(wall_velocity, nhat)  # part of velocity normal to wall
-        wnorm_vel = nhat * make_obj_array([nvel_comp])  # wall-normal velocity vec
-        wall_velocity = wall_velocity - 2.0 * wnorm_vel  # prescribed ext velocity
+        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
+        wnorm_mom = nhat * make_obj_array([mom_normcomp])  # wall-normal mom vec
+        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
-        # Re-calculate the boundary solution with the new
-        # momentum
-        bndry_cv.momentum = wall_velocity * make_obj_array([bndry_cv.mass])
-        # bndry_cv.energy = eos.total_energy(bndry_cv, bpressure)
-        bndry_soln = join_conserved(dim=dim, mass=bndry_cv.mass,
-                                    energy=bndry_cv.energy,
-                                    momentum=bndry_cv.momentum)
+        # Form the external boundary solution with the new momentum
+        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
+                                    energy=int_cv.energy,
+                                    momentum=ext_mom)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
