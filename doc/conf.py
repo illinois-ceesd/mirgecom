@@ -45,6 +45,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.graphviz",
     "sphinx.ext.todo",
+    "sphinx.ext.viewcode",
     ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -76,8 +77,8 @@ html_theme_options = {
 # html_static_path = ['_static']
 
 intersphinx_mapping = {
-    "https://docs.python.org/": None,
-    "https://docs.scipy.org/doc/numpy/": None,
+    "https://docs.python.org/3/": None,
+    "https://numpy.org/doc/stable/": None,
     "https://documen.tician.de/pyopencl/": None,
     "https://documen.tician.de/modepy/": None,
     "https://documen.tician.de/meshmode/": None,
