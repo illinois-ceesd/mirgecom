@@ -224,8 +224,7 @@ class Vortex2D:
 class SodShock1D:
     r"""Solution initializer for the 1D Sod Shock.
 
-        - JSH/TW Nodal DG Methods, p. 209
-
+    This is Sod's 1D shock solution as explained in [DGBook]_, Section 5.9
     The Sod Shock setup is defined by:
 
     .. math::
