@@ -86,18 +86,19 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     _velocity = velocity
     _gamma = eos.gamma()
 
-    mom0 = _rho * _velocity
+    mom0 = _velocity * make_obj_array([_rho])
     e0 = _p / (_gamma - 1.0)
-    ke = 0.5 * np.dot(_velocity, _velocity) / _rho
+    ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
+
     x_rel = x_vec[0]
     zeros = 0.0*x_rel
     ones = zeros + 1.0
 
     mass = zeros + _rho
-    mom = make_obj_array([mom0 * ones for i in range(dim)])
-    energy = e0 + ke + zeros
+    mom = mom0 * make_obj_array([ones])
+    energy = e0 + ke0 + zeros
 
-    return flat_obj_array(mass, energy, mom)
+    return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
 
 
 def _make_pulse(amp, r0, w, r):
@@ -596,7 +597,7 @@ class Uniform:
         """
         return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
                                   pressure=self._p, energy=self._e,
-                                  eos=eos)
+                                  velocity=self._velocity, eos=eos)
 
     def exact_rhs(self, discr, q, t=0.0):
         """

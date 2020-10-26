@@ -133,11 +133,7 @@ def test_slipwall_flux(actx_factory, dim):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
-    orig = np.zeros(shape=(dim,))
     nhat = thaw(actx, discr.normal(BTAG_ALL))
-    #    normal_mag = actx.np.sqrt(np.dot(normal, normal))
-    #    nhat_mult = 1.0 / normal_mag
-    #    nhat = normal * make_obj_array([nhat_mult])
     wall = AdiabaticSlipBoundary()
 
     from functools import partial
@@ -152,9 +148,9 @@ def test_slipwall_flux(actx_factory, dim):
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
-            initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
+            from mirgecom.initializers import Uniform
+            initializer = Uniform(numdim=dim, velocity=vel)
             uniform_state = initializer(0, nodes)
-
             bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
                                           btag=BTAG_ALL, eos=eos)
 
