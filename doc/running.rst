@@ -88,6 +88,14 @@ An example batch script for the slurm batch system is given below:
    #SBATCH -t 00:30:00                 # walltime
    #SBATCH -p pbatch                   # queue to use
 
+   # Run this script with 'sbatch <script.sh>'
+
+   # Put any environment activation here, e.g.:
+   # source ../../config/activate_env.sh
+
+   # Put any device selection here, e.g.:
+   # export PYOPENCL_CTX=":"
+
    nnodes=$SLURM_JOB_NUM_NODES
    nproc=$nnodes # 1 rank per node
 
@@ -117,6 +125,14 @@ the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
    #BSUB -nnodes 4                   # number of nodes
    #BSUB -W 30                       # walltime in minutes
    #BSUB -q pbatch                   # queue to use
+
+   # Run this script with 'bsub <script.sh>'
+
+   # Put any environment activation here, e.g.:
+   # source ../../config/activate_env.sh
+
+   # Put any device selection here, e.g.:
+   # export PYOPENCL_CTX=":"
 
    nnodes=$(echo $LSB_MCPU_HOSTS | wc -w)
    nnodes=$((nnodes/2-1))
