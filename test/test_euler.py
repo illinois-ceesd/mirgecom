@@ -683,67 +683,7 @@ def test_lump_rhs(actx_factory, dim, order):
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
-        lump = Lump(center=center, velocity=velocity)
-        lump_soln = lump(0, nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
-        inviscid_rhs = inviscid_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
-
-        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
-        if err_max > maxxerr:
-            maxxerr = err_max
-
-        eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-    logger.info(f"Max error: {maxxerr}")
-
-    message = (
-        f"Error for (dim,order) = ({dim},{order}):\n"
-        f"{eoc_rec}"
-    )
-    logger.info(message)
-    assert (
-        eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < tolerance
-    )
-
-
-@pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 2, 3])
-def test_multilump_rhs(actx_factory, dim, order):
-    """Test the inviscid rhs using multiple scalar components.
-
-    Test 1, 2, and 3D mass lumps in each component against the
-    analytic expressions of the RHS. Checks several different
-    orders and refinement levels to check error behavior.
-    """
-    actx = actx_factory()
-
-    tolerance = 1e-10
-    maxxerr = 0.0
-
-    from pytools.convergence import EOCRecorder
-
-    eoc_rec = EOCRecorder()
-
-    for nel_1d in [4, 8, 12]:
-        from meshmode.mesh.generation import (
-            generate_regular_rect_mesh,
-        )
-
-        mesh = generate_regular_rect_mesh(
-            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
-        )
-
-        logger.info(f"Number of elements: {mesh.nelements}")
-
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
-
-        # Init soln with Lump and expected RHS = 0
-        center = np.zeros(shape=(dim,))
-        velocity = np.zeros(shape=(dim,))
-        lump = Lump(center=center, velocity=velocity)
+        lump = Lump(numdim=dim, center=center, velocity=velocity)
         lump_soln = lump(0, nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = inviscid_operator(

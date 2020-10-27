@@ -247,8 +247,11 @@ class Lump:
     """
 
     def __init__(
-            self, numdim=1, rho0=1.0, rhoamp=1.0,
-            p0=1.0, center=[0], velocity=[0]
+            self, numdim, nspecies=0,
+            rho0=1.0, rhoamp=1.0, p0=1.0,
+            center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None,
+            spec_centers=None
     ):
         r"""Initialize Lump parameters.
 
@@ -268,33 +271,37 @@ class Lump:
             fixed flow velocity used for exact solution at t != 0,
             shape ``(2,)``
         """
-        if len(center) == numdim:
-            self._center = center
-        elif len(center) > numdim:
-            numdim = len(center)
-            self._center = center
-        else:
-            self._center = np.zeros(shape=(numdim,))
+        if center is None:
+            center = np.zeros(shape=(numdim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(numdim,))
+        assert len(center) == numdim
+        assert len(velocity) == numdim
 
-        if len(velocity) == numdim:
-            self._velocity = velocity
-        elif len(velocity) > numdim:
-            numdim = len(velocity)
-            self._velocity = velocity
-            new_center = np.zeros(shape=(numdim,))
-            for i in range(len(self._center)):
-                new_center[i] = self._center[i]
-            self._center = new_center
-        else:
-            self._velocity = np.zeros(shape=(numdim,))
+        if nspecies > 0:
+            if spec_y0s is None:
+                spec_y0s = np.ones(shape=(nspecies,))
+            if spec_centers is None:
+                spec_centers = make_obj_array([np.zeros(shape=numdim,)
+                                               for i in range(nspecies)])
+            if spec_amplitudes is None:
+                spec_amplitudes = np.ones(shape=(nspecies,))
+            assert len(spec_y0s) == nspecies
+            assert len(spec_amplitudes) == nspecies
+            assert len(spec_centers) == nspecies
+            for i in range(nspecies):
+                assert len(spec_centers[i]) == numdim
 
-        assert len(self._velocity) == numdim
-        assert len(self._center) == numdim
-
+        self._nspecies = nspecies
+        self._dim = numdim
+        self._velocity = velocity
+        self._center = center
         self._p0 = p0
         self._rho0 = rho0
         self._rhoamp = rhoamp
-        self._dim = numdim
+        self._spec_y0s = spec_y0s
+        self._spec_centers = spec_centers
+        self._spec_amplitudes = spec_amplitudes
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         """
@@ -312,19 +319,39 @@ class Lump:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        lump_loc = self._center + t * self._velocity
         assert len(x_vec) == self._dim
+        amplitude = self._rhoamp
+        # mass0 = self._rho0
+
+        # if ispec >= 0 and self._nspecies > 0:
+        #     if spec_center is not None:
+        #         assert len(spec_center) == self._dim
+        #         self._spec_center[ispec] = spec_center
+        #     else:
+        #         self._spec_center[ispec] = self._center
+        #     lump_loc = self._spec_center[ispec] + t * self._velocity
+        #     if spec_amp > 0:
+        #         amplitude = spec_amp
+        #     if y0 > 0:
+        #         mass0 = y0
+        # else:
+        lump_loc = self._center + t * self._velocity
+
         # coordinates relative to lump center
         rel_center = make_obj_array(
             [x_vec[i] - lump_loc[i] for i in range(self._dim)]
         )
         actx = x_vec[0].array_context
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
+        expterm = amplitude * actx.np.exp(1 - r ** 2)
+
+        mass = expterm + self._rho0
+        #        mass = 0.0 * rel_center[0] + self._rho0
+        #        if ispec > 0:
+        #            massfrac =
+        mom = self._velocity * make_obj_array([mass])
 
         gamma = eos.gamma()
-        expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
-        mass = expterm + self._rho0
-        mom = self._velocity * make_obj_array([mass])
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         return flat_obj_array(mass, energy, mom)
@@ -382,7 +409,8 @@ class Uniform:
     """
 
     def __init__(
-            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
+            self, numdim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
+            velocity=None, massfracs=None
     ):
         r"""Initialize uniform flow parameters.
 
@@ -390,6 +418,8 @@ class Uniform:
         ----------
         numdim : int
             specify the number of dimensions for the lump
+        nspecies: int
+            specify the number of species in the flow
         rho : float
             specifies the density
         p : float
@@ -399,13 +429,28 @@ class Uniform:
         velocity : numpy.ndarray
             specifies the flow velocity
         """
-        if len(velocity) == numdim:
-            self._velocity = velocity
-        elif len(velocity) > numdim:
-            numdim = len(velocity)
-            self._velocity = velocity
+        if velocity is not None:
+            numvel = len(velocity)
+            myvel = velocity
+            if numvel > numdim:
+                numdim = numvel
+            elif numvel < numdim:
+                myvel = np.zeros(shape=(numdim,))
+                for i in range(numvel):
+                    myvel[i] = velocity[i]
+            self._velocity = myvel
         else:
             self._velocity = np.zeros(shape=(numdim,))
+
+        if massfracs is not None:
+            self._nspecies = len(massfracs)
+            self._massfrac = massfracs
+        elif nspecies > 0:
+            self._nspecies = nspecies
+            self._massfrac = np.zeros(shape=(nspecies,))
+        else:
+            self._massfrac = None
+            self._nspecies = 0
 
         assert len(self._velocity) == numdim
 
@@ -428,11 +473,14 @@ class Uniform:
             Equation of state class to be used in construction of soln (unused)
         """
         gamma = eos.gamma()
-        mass = x_vec[0].copy()
+        mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * make_obj_array([mass])
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+        massfrac = None
+        if self._massfrac is not None:
+            massfrac = self._massfrac * make_obj_array([mass])
 
-        return flat_obj_array(mass, energy, mom)
+        return flat_obj_array(mass, energy, mom, massfrac)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -452,6 +500,8 @@ class Uniform:
         mass[:] = 1.0
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
-        momrhs = make_obj_array([0 * mass])
+        momrhs = make_obj_array([0 * mass for i in range(self._dim)])
+        if self._massfrac is not None:
+            yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)

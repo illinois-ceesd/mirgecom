@@ -28,6 +28,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+import pytest
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -45,6 +46,63 @@ from pyopencl.tools import (  # noqa
 )
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("nspecies", [0, 1, 2, 10])
+def test_uniform_init(ctx_factory, dim, nspecies):
+    """Test the uniform flow initializer.
+
+    Simple test to check that uniform initializer
+    creates the expected solution field.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+    )
+
+    order = 3
+    logger.info(f"Number of elements: {mesh.nelements}")
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
+    velocity = np.ones(shape=(dim,))
+    from mirgecom.initializers import Uniform
+    massfracs = None
+    if nspecies > 0:
+        massfracs = np.ones(shape=(nspecies,))
+        for ispec in range(nspecies):
+            massfracs[ispec] = massfracs[ispec]*(ispec+1)
+
+    initializer = Uniform(numdim=dim, massfracs=massfracs, velocity=velocity)
+    init_soln = initializer(0, nodes)
+    cv = split_conserved(dim, init_soln)
+
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
+    exp_p = 1.0
+    perrmax = discr.norm(p - exp_p, np.inf)
+
+    exp_mass = 1.0
+    merrmax = discr.norm(cv.mass - exp_mass, np.inf)
+
+    exp_energy = 2.5 + .5 * dim
+    eerrmax = discr.norm(cv.energy - exp_energy, np.inf)
+
+    if nspecies > 1:
+        exp_massfracs = massfracs
+        mferrmax = discr.norm(cv.massfrac - exp_massfracs, np.inf)
+        assert mferrmax < 1e-15
+
+    assert perrmax < 1e-15
+    assert merrmax < 1e-15
+    assert eerrmax < 1e-15
 
 
 def test_lump_init(ctx_factory):
@@ -75,7 +133,7 @@ def test_lump_init(ctx_factory):
     velocity = np.zeros(shape=(dim,))
     center[0] = 5
     velocity[0] = 1
-    lump = Lump(center=center, velocity=velocity)
+    lump = Lump(numdim=dim, center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
     cv = split_conserved(dim, lump_soln)
