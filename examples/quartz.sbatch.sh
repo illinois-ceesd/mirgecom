@@ -6,7 +6,7 @@
 # Run this script with 'sbatch quartz.sbatch.sh'
 
 # Put any environment activation here, e.g.:
-source ../../config/activate_env.sh
+# source ../../config/activate_env.sh
 
 # Put any device selection here, e.g.:
 # export PYOPENCL_CTX=":"
