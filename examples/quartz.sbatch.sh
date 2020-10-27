@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -N 2                        # number of nodes
-#SBATCH -t 00:30:00                 # walltime
+#SBATCH -t 00:30:00                 # walltime (hh:mm:ss)
 #SBATCH -p pbatch                   # queue to use
 
 # Run this script with 'sbatch quartz.sbatch.sh'
