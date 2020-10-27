@@ -480,7 +480,9 @@ class Uniform:
         if self._massfrac is not None:
             massfrac = self._massfrac * make_obj_array([mass])
 
-        return flat_obj_array(mass, energy, mom, massfrac)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, massfrac=massfrac)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
