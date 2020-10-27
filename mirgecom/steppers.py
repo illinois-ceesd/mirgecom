@@ -29,10 +29,11 @@ THE SOFTWARE.
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_state
+from pyinstrument import Profiler
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None):
+                  state, t_final, t=0.0, istep=0, logmgr=None, instrumenter=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -72,6 +73,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         return istep, t, state
 
     while t < t_final:
+
+        if instrumenter:
+            instrumenter.start()
         if logmgr:
             logmgr.tick_before()
 
@@ -90,5 +94,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
             set_dt(logmgr, dt)
             set_state(logmgr, state)
             logmgr.tick_after()
+
+        if instrumenter:
+            instrumenter.stop()
+            print(instrumenter.output_text())
 
     return istep, t, state

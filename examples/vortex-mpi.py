@@ -55,13 +55,14 @@ from logpyle import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
 from mirgecom.logging_quantities import PhysicalQuantity, KernelProfile
+import pyinstrument
 
 
 logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
+def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False, use_pyinstrument=False):
 
     if use_logmgr:
         logmgr = LogManager("vortex.dat", "wu")  # , comm=...
@@ -123,6 +124,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
+    if use_pyinstrument:
+        instrumenter = pyinstrument.Profiler()
+    else:
+        instrumenter = None
+
+
     if use_logmgr:
         logmgr.add_quantity(PhysicalQuantity(discr, eos, "pressure", "P", "min"))
         logmgr.add_quantity(PhysicalQuantity(discr, eos, "temperature", "K", "min"))
@@ -133,8 +140,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
             if rank == 0:
                 logmgr.add_watches(["diff_flops"])
 
-    visualizer = make_visualizer(discr, discr.order + 3
-                                 if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order + 3
+                                 if discr.dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -166,7 +173,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr)
+                          t=current_t, t_final=t_final, logmgr=logmgr, instrumenter=instrumenter)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -196,8 +203,10 @@ if __name__ == "__main__":
         help="enable kernel profiling")
     parser.add_argument("--logging", action="store_true",
         help="enable time series logging")
+    parser.add_argument("--instrument", action="store_true",
+        help="enable pyinstrument instrumentation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile, use_logmgr=args.logging)
+    main(use_profiling=args.profile, use_logmgr=args.logging, use_pyinstrument=args.instrument)
 
 # vim: foldmethod=marker
