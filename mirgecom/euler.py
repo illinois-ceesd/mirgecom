@@ -35,6 +35,12 @@ Time Step Computation
 
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
+
+References
+----------
+.. [DGBook] Hesthaven and Warburton (2008), Nodal DG Methods, Springer
+   (DOI: 10.1007/978-0-387-72067-8)
+
 """
 
 __copyright__ = """
@@ -212,8 +218,24 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
-def _facial_flux(discr, eos, q_tpair):
-    """Return the flux across a face given the solution on both sides *q_tpair*."""
+def _facial_flux(discr, eos, q_tpair, local=False):
+    """Return the flux across a face given the solution on both sides *q_tpair*.
+
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    q_tpair
+        Trace pair for the face upon which flux calculation is to be performed
+
+    local: boolean
+        Indicates whether to skip projection of fluxes to "all_faces" or not.
+    """
+#    dd
+#        Discretization restriction indicating the target discretization to which
+#        the fluxes should be projected.
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context
@@ -221,20 +243,22 @@ def _facial_flux(discr, eos, q_tpair):
     flux_int = inviscid_flux(discr, eos, q_tpair.int)
     flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
 
-    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, Section 6.6
-    # DOI: 10.1007/978-0-387-72067-8
+    # Lax-Friedrichs/Rusanov after [DGBook]_, Section 6.6
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+    )
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
         - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
 
-    return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    if local is False:
+        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    return flux_weak
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
@@ -257,7 +281,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     t
         Time
 
-    eos : mirgecom.eos.GasEOS
+    eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
