@@ -65,6 +65,9 @@ Note that profiling has a performance impact (~20% at the time of this writing).
 Running on specific systems
 ---------------------------
 
+This section discusses how to run mirgecom on various clusters.
+There are also several example run scripts in mirgecom's ``examples/`` folder.
+
 General
 *******
 
