@@ -221,7 +221,7 @@ class IdealSingleGas(GasEOS):
             \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
 
         .. note::
-        
+
             The total_energy function computes cv.energy from pressure,
             mass, and momentum in this case. In general in the EOS we need
             DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
