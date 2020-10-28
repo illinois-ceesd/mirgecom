@@ -84,7 +84,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
             if [[ ${{ matrix.os }} == "macos-latest" ]]; then
-              export PYOPENCL_TEST=0:0
+              export PYOPENCL_TEST=port:pthread
             fi
             python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
 
