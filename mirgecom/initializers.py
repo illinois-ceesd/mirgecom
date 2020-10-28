@@ -10,12 +10,6 @@ Solution Initializers
 .. autoclass:: AcousticPulse
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
-
-References
-----------
-.. [ZWJCP] Y.C. Zhou, G.W. Wei (2003), Journal of Computational Physics 189 159 \
-          `DOI <https://doi.org/10.1016/S0021-9991(03)00206-7>`__
-
 """
 
 __copyright__ = """
@@ -147,8 +141,8 @@ class Vortex2D:
     r"""Initializer for the isentropic vortex solution.
 
     Implements the isentropic vortex after
-        - [ZWJCP]_
-        - [DGBook]_, Section 6.6
+        - [Zhou_2003]
+        - [Hesthaven_2008]_, Section 6.6
 
     The isentropic vortex is defined by:
 
@@ -224,7 +218,7 @@ class Vortex2D:
 class SodShock1D:
     r"""Solution initializer for the 1D Sod Shock.
 
-    This is Sod's 1D shock solution as explained in [DGBook]_, Section 5.9
+    This is Sod's 1D shock solution as explained in [Hesthaven_2008]_, Section 5.9
     The Sod Shock setup is defined by:
 
     .. math::
