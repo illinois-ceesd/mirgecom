@@ -72,3 +72,16 @@ In some cases, it can be helpful to install certain packages from source, for de
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
 `installation script <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__.
 
+How can I build pyopencl from source?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pyopencl needs to be built against an OpenCL runtime and you therefore need to make sure
+that the build process picks up the right runtime. This can be challenging especially on MacOS, since Apple provides its own CL runtime which does not easily compile against pyopencl.
+
+You can build pyopencl against conda's OpenCL driver in the following way::
+
+   $ conda install ocl-icd
+   $ cd emirge/pyopencl
+   $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
+   $ pip install -e .
+
