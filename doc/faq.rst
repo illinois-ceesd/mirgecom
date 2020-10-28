@@ -80,8 +80,8 @@ that the build process picks up the right runtime. This can be challenging espec
 
 You can build pyopencl against conda's OpenCL driver in the following way::
 
-   $ conda install ocl-icd # Linux
-   $ conda install khronos-opencl-icd-loader # MacOS
+   $ conda install ocl-icd                    # Linux
+   $ conda install khronos-opencl-icd-loader  # MacOS
    $ cd emirge/pyopencl
    $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
    $ pip install -e .
