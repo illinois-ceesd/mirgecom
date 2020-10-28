@@ -114,64 +114,79 @@ def test_slipwall_identity(actx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_slipwall_flux(actx_factory, dim):
+@pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
+def test_slipwall_flux(actx_factory, dim, order):
     """Check for zero boundary flux.
 
     Check for vanishing flux across the slipwall.
     """
     actx = actx_factory()
 
-    nel_1d = 4
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
-    )
-
-    order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    eos = IdealSingleGas()
-    nhat = thaw(actx, discr.normal(BTAG_ALL))
     wall = AdiabaticSlipBoundary()
+    eos = IdealSingleGas()
 
-    from functools import partial
-    bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+    from pytools.convergence import EOCRecorder
+    eoc = EOCRecorder()
 
-    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+    for np1 in [4, 8, 12]:
+        from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    # for velocities in each direction
-    for vdir in range(dim):
-        vel = np.zeros(shape=(dim,))
+        mesh = generate_regular_rect_mesh(
+            a=(-0.5,) * dim, b=(0.5,) * dim, n=(np1,) * dim
+        )
 
-        # for velocity directions +1, and -1
-        for parity in [1.0, -1.0]:
-            vel[vdir] = parity
-            from mirgecom.initializers import Uniform
-            initializer = Uniform(numdim=dim, velocity=vel)
-            uniform_state = initializer(0, nodes)
-            bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                          btag=BTAG_ALL, eos=eos)
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+        nhat = thaw(actx, discr.normal(BTAG_ALL))
+        h = 1.0 / np1
 
-            # Check the total velocity component normal
-            # to each surface.  It should be zero.  The
-            # numerical fluxes cannot be zero.
-            tol = 5e-15
-            avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
-            acv = split_conserved(dim, avg_state)
-            bnd_norm_mom = np.dot(acv.momentum, nhat)
-            bnd_mom = bnd_norm(bnd_norm_mom)
-            assert bnd_mom < tol
+        from functools import partial
+        bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
-            from mirgecom.euler import _facial_flux
-            bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
-                                                         bnd_pair, local=True))
-            mass_flux = bnd_flux.mass
-            energy_flux = bnd_flux.energy
+        logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+        # for velocities in each direction
+        err_max = 0.0
+        for vdir in range(dim):
+            vel = np.zeros(shape=(dim,))
 
-            # mass and energy flux at the boundary should be zero
-            massflux_max = bnd_norm(mass_flux)
-            energyflux_max = bnd_norm(energy_flux)
-            assert massflux_max < tol
-            assert energyflux_max < tol
+            # for velocity directions +1, and -1
+            for parity in [1.0, -1.0]:
+                vel[vdir] = parity
+                from mirgecom.initializers import Uniform
+                initializer = Uniform(numdim=dim, velocity=vel)
+                uniform_state = initializer(0, nodes)
+                bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
+                                              btag=BTAG_ALL, eos=eos)
+
+                # Check the total velocity component normal
+                # to each surface.  It should be zero.  The
+                # numerical fluxes cannot be zero.
+                avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
+                acv = split_conserved(dim, avg_state)
+                bnd_norm_mom = np.dot(acv.momentum, nhat)
+                bnd_err = bnd_norm(bnd_norm_mom)
+                if bnd_err > err_max:
+                    err_max = bnd_err
+
+                from mirgecom.euler import _facial_flux
+                bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
+                                                             bnd_pair, local=True))
+                mass_flux = bnd_flux.mass
+                energy_flux = bnd_flux.energy
+
+                # mass and energy flux at the boundary should be zero
+                massflux_max = bnd_norm(mass_flux)
+                energyflux_max = bnd_norm(energy_flux)
+                if massflux_max > err_max:
+                    err_max = massflux_max
+                if energyflux_max > err_max:
+                    err_max = energyflux_max
+
+        eoc.add_data_point(h, err_max)
+
+    message = (f"EOC:\n{eoc}")
+    logger.info(message)
+    assert (
+        eoc.order_estimate() >= order - 0.5
+        or eoc.max_error() < 1e-12
+    )
