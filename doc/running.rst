@@ -67,7 +67,7 @@ Running on specific systems
 
 This section discusses how to run mirgecom on various clusters.
 There are also several example run scripts in mirgecom's ``examples/``
-`folder <https://github.com/illinois-ceesd/mirgecom/tree/master/examples>`_.
+`folder <https://github.com/illinois-ceesd/mirgecom/tree/master/examples>`__.
 
 General
 *******
