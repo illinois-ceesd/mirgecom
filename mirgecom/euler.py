@@ -189,12 +189,9 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     q_tpair
         Trace pair for the face upon which flux calculation is to be performed
 
-    local: boolean
+    local: bool
         Indicates whether to skip projection of fluxes to "all_faces" or not.
     """
-#    dd
-#        Discretization restriction indicating the target discretization to which
-#        the fluxes should be projected.
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context

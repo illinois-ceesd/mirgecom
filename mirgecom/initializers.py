@@ -14,7 +14,7 @@ Solution Initializers
 References
 ----------
 .. [ZWJCP] Y.C. Zhou, G.W. Wei (2003), Journal of Computational Physics 189 159 \
-          (https://doi.org/10.1016/S0021-9991(03)00206-7)
+          `DOI <https://doi.org/10.1016/S0021-9991(03)00206-7>`__
 
 """
 

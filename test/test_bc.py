@@ -171,16 +171,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.euler import _facial_flux
                 bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
                                                              bnd_pair, local=True))
-                mass_flux = bnd_flux.mass
-                energy_flux = bnd_flux.energy
-
-                # mass and energy flux at the boundary should be zero
-                massflux_max = bnd_norm(mass_flux)
-                energyflux_max = bnd_norm(energy_flux)
-                if massflux_max > err_max:
-                    err_max = massflux_max
-                if energyflux_max > err_max:
-                    err_max = energyflux_max
+                err_max = max(err_max, bnd_norm(bnd_flux.mass), bnd_norm(bnd_flux.energy))
 
         eoc.add_data_point(h, err_max)
 
