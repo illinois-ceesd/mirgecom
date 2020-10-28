@@ -163,7 +163,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 # numerical fluxes cannot be zero.
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 acv = split_conserved(dim, avg_state)
-                err_max = max(err_max, bnd_norm(np.dot(acv.momentum, nhat))
+                err_max = max(err_max, bnd_norm(np.dot(acv.momentum, nhat)))
 
                 from mirgecom.euler import _facial_flux
                 bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
