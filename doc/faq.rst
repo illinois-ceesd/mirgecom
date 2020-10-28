@@ -83,6 +83,7 @@ You can build pyopencl against conda's OpenCL driver in the following way::
    $ conda install ocl-icd                    # Linux
    $ conda install khronos-opencl-icd-loader  # MacOS
    $ cd emirge/pyopencl
+   # Apply this patch on MacOS: https://raw.githubusercontent.com/conda-forge/pyopencl-feedstock/master/recipe/osx_flags.diff
    $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
    $ pip install -e .
 
