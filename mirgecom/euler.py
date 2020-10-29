@@ -91,6 +91,8 @@ class ConservedVars:  # FIXME: Name?
     per unit volume = :math:`(\rho,\rho{E},\rho\vec{V})` from an agglomerated
     object array.
 
+    .. attribute:: dim
+
     .. attribute:: mass
 
         Mass per unit volume
@@ -102,6 +104,9 @@ class ConservedVars:  # FIXME: Name?
     .. attribute:: momentum
 
         Momentum vector per unit volume
+
+    .. automethod:: join
+    .. automethod:: replace
     """
 
     mass: np.ndarray
@@ -122,7 +127,9 @@ class ConservedVars:  # FIXME: Name?
             momentum=self.momentum)
 
     def replace(self, **kwargs):
-        """Replace one or more conserved quantities."""
+        """Return a copy of *self* with the attributes in *kwargs* replaced by
+        the given values.
+        """
         from dataclasses import replace
         return replace(self, **kwargs)
 
