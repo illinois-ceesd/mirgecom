@@ -29,7 +29,6 @@ THE SOFTWARE.
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_state
-from pyinstrument import Profiler
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,

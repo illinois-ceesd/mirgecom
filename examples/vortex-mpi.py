@@ -62,7 +62,8 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False, use_pyinstrument=False):
+def main(ctx_factory=cl.create_some_context,
+         use_profiling=False, use_logmgr=False, use_pyinstrument=False):
 
     if use_logmgr:
         logmgr = LogManager("vortex.dat", "wu")  # , comm=...
@@ -129,7 +130,6 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     else:
         instrumenter = None
 
-
     if use_logmgr:
         logmgr.add_quantity(PhysicalQuantity(discr, eos, "pressure", "P", "min"))
         logmgr.add_quantity(PhysicalQuantity(discr, eos, "temperature", "K", "min"))
@@ -173,7 +173,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, instrumenter=instrumenter)
+                          t=current_t, t_final=t_final, logmgr=logmgr,
+                          instrumenter=instrumenter)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -207,6 +208,7 @@ if __name__ == "__main__":
         help="enable pyinstrument instrumentation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile, use_logmgr=args.logging, use_pyinstrument=args.instrument)
+    main(use_profiling=args.profile,
+         use_logmgr=args.logging, use_pyinstrument=args.instrument)
 
 # vim: foldmethod=marker

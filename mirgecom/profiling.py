@@ -36,6 +36,24 @@ __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
 """
 
+nonloopy_profile_results = {}
+
+
+@dataclass(eq=True, frozen=True)
+class NonLoopyProfilekernel:
+    """Class to hold the name for a non-loopy profile result."""
+
+    name: str
+
+
+def add_nonloopy_profiling_result(name, time, flops=0,
+                              bytes_accessed=0, footprint_bytes=0) -> None:
+    """Add a non-loopy profile result to the profiling framework."""
+    knl = NonLoopyProfilekernel(name)
+    new = ProfileResult(time, flops, bytes_accessed, footprint_bytes)
+    global nonloopy_profile_results
+    nonloopy_profile_results.setdefault(knl, []).append(new)
+
 
 @dataclass
 class ProfileResult:
@@ -164,7 +182,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         from statistics import mean
 
-        for key, value in self.profile_results.items():
+        all_res = {**self.profile_results, **nonloopy_profile_results}
+
+        for key, value in all_res.items():
             num_values = len(value)
 
             times = [v.time / 1e9 for v in value]
@@ -187,7 +207,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min = "--"
                 fprint_max = "--"
 
-            bytes_per_flop = [f / b for f, b in zip(flops, bytes_accessed)]
+            bytes_per_flop = [f / b if b > 0 else 0
+                              for f, b in zip(flops, bytes_accessed)]
 
             tbl.add_row([key.name, num_values,
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
