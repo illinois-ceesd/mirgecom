@@ -1,3 +1,5 @@
+"""Test the EOS interfaces."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -46,7 +48,8 @@ logger = logging.getLogger(__name__)
 
 
 def test_idealsingle_lump(ctx_factory):
-    """
+    """Test EOS with mass lump.
+
     Tests that the IdealSingleGas EOS returns
     the correct (uniform) pressure for the Lump
     solution field.
@@ -84,14 +87,24 @@ def test_idealsingle_lump(ctx_factory):
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
 
+    exp_ke = 0.5 * cv.mass
+    ke = eos.kinetic_energy(cv)
+    kerr = discr.norm(ke - exp_ke, np.inf)
+
+    te = eos.total_energy(cv, p)
+    terr = discr.norm(te - cv.energy, np.inf)
+
     logger.info(f"lump_soln = {lump_soln}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
+    assert kerr < 1e-15
+    assert terr < 1e-15
 
 
 def test_idealsingle_vortex(ctx_factory):
-    r"""
+    r"""Test EOS with isentropic vortex.
+
     Tests that the IdealSingleGas EOS returns
     the correct pressure (p) for the Vortex2D solution
     field (i.e. :math:'p = \rho^{\gamma}').
@@ -124,7 +137,16 @@ def test_idealsingle_vortex(ctx_factory):
     exp_p = cv.mass ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 
+    exp_ke = 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass
+    ke = eos.kinetic_energy(cv)
+    kerr = discr.norm(ke - exp_ke, np.inf)
+
+    te = eos.total_energy(cv, p)
+    terr = discr.norm(te - cv.energy, np.inf)
+
     logger.info(f"vortex_soln = {vortex_soln}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
+    assert kerr < 1e-15
+    assert terr < 1e-15
