@@ -61,7 +61,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
 
     def __init__(self, discr, eos, quantity, unit, op: str):
         LogQuantity.__init__(self, f"{op}_{quantity}", unit)
-        StateConsumer.__init__(self, None)
+        StateConsumer.__init__(self)
 
         self.discr = discr
         self.eos = eos
@@ -85,6 +85,8 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
 
         cv = split_conserved(self.discr.dim, self.state)
         dv = self.eos.dependent_vars(cv)
+
+        self.state = None
 
         return self._myop(getattr(dv, self.quantity))
 
