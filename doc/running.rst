@@ -65,6 +65,10 @@ Note that profiling has a performance impact (~20% at the time of this writing).
 Running on specific systems
 ---------------------------
 
+This section discusses how to run mirgecom on various clusters.
+There are also several example run scripts in mirgecom's ``examples/``
+`folder <https://github.com/illinois-ceesd/mirgecom/tree/master/examples>`__.
+
 General
 *******
 
@@ -81,19 +85,8 @@ Quartz
 On the Quartz machine, running mirgecom should be straightforward.
 An example batch script for the slurm batch system is given below:
 
-.. code-block:: bash
-
-   #!/bin/bash
-   #SBATCH -N 4                        # number of nodes
-   #SBATCH -t 00:30:00                 # walltime
-   #SBATCH -p pbatch                   # queue to use
-
-   nnodes=$SLURM_JOB_NUM_NODES
-   nproc=$nnodes # 1 rank per node
-
-   export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
-
-   srun -n $nproc python -m mpi4py examples/wave-eager-mpi.py
+.. literalinclude:: ../examples/quartz.sbatch.sh
+    :language: bash
 
 Run this with ``sbatch <script.sh>``.
 
@@ -111,20 +104,8 @@ taken to restrict each rank to a separate GPU to avoid competing for access to
 the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
 ``lrun``. An example batch script for the LSF batch system is given below:
 
-.. code-block:: bash
-
-   #!/bin/bash
-   #BSUB -nnodes 4                   # number of nodes
-   #BSUB -W 30                       # walltime in minutes
-   #BSUB -q pbatch                   # queue to use
-
-   nnodes=$(echo $LSB_MCPU_HOSTS | wc -w)
-   nnodes=$((nnodes/2-1))
-   nproc=$((4*nnodes)) # 4 ranks per node, 1 per GPU
-
-   export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch" # See above on why this is important
-
-   lrun -g 1 -n $nproc python -m mpi4py examples/wave-eager-mpi.py
+.. literalinclude:: ../examples/lassen.bsub.sh
+    :language: bash
 
 
 Run this with ``bsub <script.sh>``.
