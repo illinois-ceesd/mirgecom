@@ -108,6 +108,21 @@ class ConservedVars:  # FIXME: Name?
     energy: np.ndarray
     momentum: np.ndarray
 
+    @property
+    def dim(self):
+        return len(self.momentum)
+
+    def join(self):
+        return join_conserved(
+            dim=self.dim,
+            mass=self.mass,
+            energy=self.energy,
+            momentum=self.momentum)
+
+    def replace(self, **kwargs):
+        from dataclasses import replace
+        return replace(self, **kwargs)
+
 
 def _aux_shape(ary, leading_shape):
     """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
