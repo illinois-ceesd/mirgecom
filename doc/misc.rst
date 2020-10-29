@@ -58,4 +58,4 @@ References
 .. [Zhou_2003] Y.C. Zhou, G.W. Wei (2003), Journal of Computational Physics 189 159 \
     `DOI <https://doi.org/10.1016/S0021-9991(03)00206-7>`__
 .. [Poinsot_1992] Poinsot and Lele (1992), Journal of Computational Physics 101 \
-   `PDF <http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf>`__
+   `PDF <https://doi.org/10.1016/0021-9991(92)90046-2>`__
