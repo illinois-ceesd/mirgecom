@@ -22,6 +22,7 @@ State Vector Handling
 
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
+.. autofunction:: join_conserved
 
 RHS Evaluation
 ^^^^^^^^^^^^^^
