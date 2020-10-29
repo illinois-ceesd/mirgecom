@@ -88,7 +88,7 @@ class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum)
-    per unit volume = :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
+    per unit volume = :math:`(\rho,\rho{E},\rho\vec{V})` from an agglomerated
     object array.
 
     .. attribute:: mass
@@ -161,7 +161,7 @@ def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
+    :math:`(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
