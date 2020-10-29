@@ -8,7 +8,7 @@ dependencies:
 - islpy
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
-  - "git+https://github.com/inducer/loopy.git#egg=loo.py"
+  - "git+https://github.com/inducer/loopy.git#egg=loopy"
   - "git+https://github.com/inducer/dagrt.git#egg=dagrt"
   - "git+https://github.com/inducer/leap.git#egg=leap"
   - "git+https://github.com/inducer/modepy.git#egg=modepy"
