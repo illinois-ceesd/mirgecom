@@ -52,6 +52,7 @@ def main():
               "meshmode>=2013.3",
               "pyopencl>=2013.1",
               "pymbolic>=2013.2",
+              "pyinstrument",
               "loo.py>=2013.1beta",
               "cgen>=2013.1.2",
               "leap>=2019.1",
