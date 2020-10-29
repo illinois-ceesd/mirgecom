@@ -93,8 +93,9 @@ class AdiabaticSlipBoundary:
 
     This class implements an adiabatic reflective slip boundary given
     by
-    :math:`\mathbf{q^{+}} = [\rho^{-}, \rho{E}^{-},
-    \rho\vec{V}^{-} - 2(\rho\vec{V}\cdot\hat\vec{n})\hat\vec{n}]`
+    :math:`\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-},
+    (\rho\vec{V})^{-} - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}})
+    \hat{\mathbf{n}}]`
     wherein the normal component of velocity at the wall is 0, and
     tangential components are preserved. These perfectly reflecting
     conditions are used by the forward-facing step case in

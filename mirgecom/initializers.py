@@ -225,8 +225,8 @@ class SodShock1D:
 
          {\rho}(x < x_0, 0) = \rho_l\\
          {\rho}(x > x_0, 0) = \rho_r\\
-         {\rho}{V_x}(x, 0) = 0
-         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
+         {\rho}{V_x}(x, 0) = 0\\
+         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}\\
          {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
 
     A call to this object after creation/init creates Sod's shock solution at a
