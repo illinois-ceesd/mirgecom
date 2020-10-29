@@ -45,3 +45,17 @@ To-Do List for the Docs
 =======================
 
 .. todolist::
+
+References
+==========
+
+..
+    When adding references here, please use the demonstrated format:
+    [FirstAuthor_pubyear]
+
+.. [Hesthaven_2008] Hesthaven and Warburton (2008), Nodal DG Methods, Springer \
+    `DOI: <https://doi.org/10.1007/978-0-387-72067-8>`__
+.. [Zhou_2003] Y.C. Zhou, G.W. Wei (2003), Journal of Computational Physics 189 159 \
+    `DOI <https://doi.org/10.1016/S0021-9991(03)00206-7>`__
+.. [Poinsot_1992] Poinsot and Lele (1992), Journal of Computational Physics 101 \
+   `PDF <http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf>`__
