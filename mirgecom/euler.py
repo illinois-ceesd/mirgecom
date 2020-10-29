@@ -116,9 +116,7 @@ class ConservedVars:  # FIXME: Name?
             momentum=self.momentum)
 
     def replace(self, **kwargs):
-        """Return a copy of *self* with the attributes in *kwargs* replaced by
-        the given values.
-        """
+        """Return a copy of *self* with the attributes in *kwargs* replaced."""
         from dataclasses import replace
         return replace(self, **kwargs)
 
