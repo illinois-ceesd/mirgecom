@@ -79,7 +79,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
     def __call__(self):
         """Return the requested quantity."""
         if self.state is None:
-            return 0
+            return None
 
         from mirgecom.euler import split_conserved
 
