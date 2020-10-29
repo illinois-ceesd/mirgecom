@@ -1,8 +1,11 @@
+"""Demonstrate simple MPI use."""
+
 from mirgecom.mpi import mpi_entry_point
 
 
 @mpi_entry_point
 def main():
+    """Run the demo."""
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD

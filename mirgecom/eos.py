@@ -73,6 +73,8 @@ class GasEOS:
     .. automethod:: internal_energy
     .. automethod:: gas_const
     .. automethod:: dependent_vars
+    .. automethod:: total_energy
+    .. automethod:: kinetic_energy
     """
 
     def pressure(self, cv: ConservedVars):
@@ -93,6 +95,14 @@ class GasEOS:
 
     def internal_energy(self, cv: ConservedVars):
         """Get the thermal energy of the gas."""
+        raise NotImplementedError()
+
+    def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
+        """Get the total (thermal + kinetic) energy for the gas."""
+        raise NotImplementedError()
+
+    def kinetic_energy(self, cv: ConservedVars):
+        """Get the kinetic energy for the gas."""
         raise NotImplementedError()
 
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
@@ -134,6 +144,17 @@ class IdealSingleGas(GasEOS):
         """Get specific gas constant R."""
         return self._gas_const
 
+    def kinetic_energy(self, cv: ConservedVars):
+        r"""Get kinetic (i.e. not internal) energy of gas.
+
+        The kinetic energy is calculated as:
+        .. :math::
+
+            k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        mom = cv.momentum
+        return (0.5 * np.dot(mom, mom) / cv.mass)
+
     def internal_energy(self, cv: ConservedVars):
         r"""Get internal thermal energy of gas.
 
@@ -142,8 +163,7 @@ class IdealSingleGas(GasEOS):
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
         """
-        mom = cv.momentum
-        return (cv.energy - 0.5 * np.dot(mom, mom) / cv.mass)
+        return (cv.energy - self.kinetic_energy(cv))
 
     def pressure(self, cv: ConservedVars):
         r"""Get thermodynamic pressure of the gas.
@@ -186,3 +206,26 @@ class IdealSingleGas(GasEOS):
             (((self._gamma - 1.0) / self._gas_const)
             * self.internal_energy(cv) / cv.mass)
         )
+
+    def total_energy(self, cv, pressure):
+        r"""
+        Get gas total energy from mass, pressure, and momentum.
+
+        The total energy density (rhoE) is calculated from
+        the mass density (rho) , pressure (p) , and
+        momentum (rhoV) as:
+
+        .. :math::
+
+            \rhoE = \frac{p}{(\gamma - 1)} +
+            \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
+
+        .. note::
+
+            The total_energy function computes cv.energy from pressure,
+            mass, and momentum in this case. In general in the EOS we need
+            DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
+            inversion interfaces.
+        """
+        return (pressure / (self._gamma - 1.0)
+                + self.kinetic_energy(cv))
