@@ -108,9 +108,9 @@ class ConservedVars:  # FIXME: Name?
         return len(self.momentum)
 
     def join(self):
-        """Form a conglomerated DOFArray from the conserved quantities."""
+        """Call :func:`join_conserved` on *self*."""
         return join_conserved(
-            dim=self.dim(),
+            dim=self.dim,
             mass=self.mass,
             energy=self.energy,
             momentum=self.momentum)
