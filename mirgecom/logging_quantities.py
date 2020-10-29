@@ -48,8 +48,8 @@ def set_state(mgr, state: ndarray) -> None:
 class StateConsumer:
     """Base class for quantities that require a state for logging."""
 
-    def __init__(self, state: ndarray):
-        self.state = state
+    def __init__(self):
+        self.state = None
 
     def set_state(self, state: ndarray) -> None:
         """Set the state of the object."""
