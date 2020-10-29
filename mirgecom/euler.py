@@ -110,16 +110,19 @@ class ConservedVars:  # FIXME: Name?
 
     @property
     def dim(self):
+        """Return the number of physical dimensions."""
         return len(self.momentum)
 
     def join(self):
+        """Form a conglomerated DOFArray from the conserved quantities."""
         return join_conserved(
-            dim=self.dim,
+            dim=self.dim(),
             mass=self.mass,
             energy=self.energy,
             momentum=self.momentum)
 
     def replace(self, **kwargs):
+        """Replace one or more conserved quantities."""
         from dataclasses import replace
         return replace(self, **kwargs)
 
