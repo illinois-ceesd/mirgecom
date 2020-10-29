@@ -191,7 +191,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
-    q_tpair
+    q_tpair: :class:`grudge.symbolic.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
 
     local: bool
