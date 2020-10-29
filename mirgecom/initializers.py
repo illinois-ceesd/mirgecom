@@ -525,9 +525,10 @@ class AcousticPulse:
         """
         assert len(x_vec) == self._dim
         cv = split_conserved(self._dim, q)
-        newcv = cv.replace(energy=(cv.energy + _make_pulse(amp=self._amp,
-                                                           w=self._width)))
-        return newcv.join()
+        return cv.replace(
+                energy=cv.energy + _make_pulse(
+                    amp=self._amp, w=self._width, r0=self._center, r=x_vec)
+                ).join()
 
 
 class Uniform:
