@@ -144,5 +144,4 @@ classes to describe how quantities for logging are calculated. For mirgecom, the
 
 .. automodule:: mirgecom.logging_quantities
 
-
 An overview of how to use logpyle is given `here <https://logpyle.readthedocs.io/en/latest/log.html#how-do-i-use-this>`_.
