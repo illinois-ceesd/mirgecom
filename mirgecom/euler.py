@@ -195,7 +195,10 @@ def _facial_flux(discr, eos, q_tpair, local=False):
         Trace pair for the face upon which flux calculation is to be performed
 
     local: bool
-        Indicates whether to skip projection of fluxes to "all_faces" or not.
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
     """
     dim = discr.dim
 
