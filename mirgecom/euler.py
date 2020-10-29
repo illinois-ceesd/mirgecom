@@ -72,7 +72,7 @@ from grudge.eager import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
