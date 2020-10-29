@@ -141,7 +141,7 @@ class Vortex2D:
     r"""Initializer for the isentropic vortex solution.
 
     Implements the isentropic vortex after
-        - [Zhou_2003]
+        - [Zhou_2003]_
         - [Hesthaven_2008]_, Section 6.6
 
     The isentropic vortex is defined by:
