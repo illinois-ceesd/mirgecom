@@ -85,7 +85,7 @@ def main(ctx_factory=cl.create_some_context,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
-    nel_1d = 16
+    nel_1d = 48 
     order = 3
     exittol = .09
     t_final = 0.1
