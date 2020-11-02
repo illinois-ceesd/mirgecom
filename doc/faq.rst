@@ -72,6 +72,8 @@ In some cases, it can be helpful to install certain packages from source, for de
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
 `installation script <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__.
 
+.. _Pyopencl source:
+
 How can I build pyopencl from source?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -97,10 +99,17 @@ the time when `version.sh` was executed. You can use this file to install the
 exact versions of the packages at a later time::
 
    $ cd emirge/
-   $ ./version.sh
+   $ ./version.sh --output-requirements=myreq.txt
    [...]
    *** Creating requirements file with current emirge module versions
    [...]
-   *** Created file 'requirements.txt.XXXXXX'. Install it with 'pip install --src . -r requirements.txt.XXXXXX'.
+   *** Created file 'myreq.txt'. Install it with 'pip install --src . -r myreq.txt'.
 
-   $ pip install --src . -r requirements.txt.XXXXXX
+   $ pip install --src . -r myreq.txt
+
+
+.. note::
+
+   This will build pyopencl by source, which can be challenging on some systems. Please
+   see :ref:`Pyopencl source`
+
