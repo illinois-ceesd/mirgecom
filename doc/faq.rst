@@ -87,3 +87,20 @@ You can build pyopencl against conda's OpenCL driver in the following way::
    # Apply this patch on MacOS: https://raw.githubusercontent.com/conda-forge/pyopencl-feedstock/master/recipe/osx_flags.diff
    $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
    $ pip install -e .
+
+How can I record the exact versions of Python packages that are currently installed?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Running emirge's `version.sh` script creates a requirements.txt file that
+stores the exact git commits of each emirge sub-repository that were used at
+the time when `version.sh` was executed. You can use this file to install the
+exact versions of the packages at a later time::
+
+   $ cd emirge/
+   $ ./version.sh
+   [...]
+   *** Creating requirements file with current emirge module versions
+   [...]
+   *** Created file 'requirements.txt.XXXXXX'. Install it with 'pip install --src . -r requirements.txt.XXXXXX'.
+
+   $ pip install --src . -r requirements.txt.XXXXXX
