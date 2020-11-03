@@ -34,6 +34,8 @@ __doc__ = """
 from logpyle import LogQuantity
 from numpy import ndarray
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
+from meshmode.discretization import Discretization
+from mirgecom.eos import GasEOS
 
 
 def set_state(mgr, state: ndarray) -> None:
@@ -59,12 +61,16 @@ class StateConsumer:
 class PhysicalQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities."""
 
-    def __init__(self, discr, eos, quantity, unit, op: str):
-        LogQuantity.__init__(self, f"{op}_{quantity}", unit)
+    def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
+                 name=None):
+        if name:
+            LogQuantity.__init__(self, name, unit)
+        else:
+            LogQuantity.__init__(self, f"{op}_{quantity}", unit)
         StateConsumer.__init__(self)
 
         self.discr = discr
-        self.eos = eos
+
         self.quantity = quantity
 
         from functools import partial
@@ -73,11 +79,64 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
             self._myop = partial(self.discr.nodal_min, "vol")
         elif op == "max":
             self._myop = partial(self.discr.nodal_max, "vol")
+        elif op == "sum":
+            self._myop = partial(self.discr.nodal_sum, "vol")
         else:
             raise RuntimeError("unknown operation {op}")
 
     def __call__(self):
         """Return the requested quantity."""
+        raise NotImplementedError
+
+
+class ConservedQuantity(PhysicalQuantity):
+    """Logging support for conserved quantities."""
+
+    def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
+                 dim: int = None, name: str = None):
+        if name:
+            PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
+        elif dim:
+            PhysicalQuantity.__init__(self, discr, quantity, unit, op,
+                                      name=f"{op}_{quantity}{dim}")
+        else:
+            PhysicalQuantity.__init__(self, discr, quantity, unit, op)
+        self.dim = dim
+
+    def __call__(self):
+        """Return the requested conserved quantity."""
+        if self.state is None:
+            return None
+
+        from mirgecom.euler import split_conserved
+
+        cv = split_conserved(self.discr.dim, self.state)
+
+        self.state = None
+
+        cq = getattr(cv, self.quantity)
+
+        if isinstance(cq, ndarray):
+            if self.dim is None:
+                raise RuntimeError("Missing 'dim' parameter for dimensional "
+                                   f"ConservedQuantity '{self.quantity}'.")
+            return self._myop(cq[0])
+        else:
+            return self._myop(cq)
+
+
+class DependentQuantity(PhysicalQuantity):
+
+    def __init__(self, discr: Discretization, eos: GasEOS,
+                 quantity: str, unit: str, op: str, name: str = None):
+        if name:
+            PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
+        else:
+            PhysicalQuantity.__init__(self, discr, quantity, unit, op)
+        self.eos = eos
+
+    def __call__(self):
+        """Return the requested dependent quantity."""
         if self.state is None:
             return None
 
@@ -95,13 +154,18 @@ class KernelProfile(LogQuantity):
     """Logging support for results of the OpenCL kernel profiling."""
 
     def __init__(self, actx: PyOpenCLProfilingArrayContext,
-                 kernel_name: str, stat: str):
+                 kernel_name: str, stat: str, name: str = None):
         if stat == "time":
             unit = "s"
         else:
             unit = ""
-        LogQuantity.__init__(self, f"{kernel_name}_{stat}",
-                             unit, f"{stat} of '{kernel_name}'")
+
+        if name:
+            LogQuantity.__init__(self, name,
+                                 unit, f"{stat} of '{kernel_name}'")
+        else:
+            LogQuantity.__init__(self, f"{kernel_name}_{stat}",
+                                 unit, f"{stat} of '{kernel_name}'")
         self.kernel_name = kernel_name
         self.actx = actx
         self.stat = stat

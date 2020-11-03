@@ -54,7 +54,8 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import (LogManager, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
-from mirgecom.logging_quantities import PhysicalQuantity, KernelProfile
+from mirgecom.logging_quantities import (DependentQuantity, ConservedQuantity,
+                                         KernelProfile)
 import pyinstrument
 
 
@@ -85,7 +86,7 @@ def main(ctx_factory=cl.create_some_context,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
-    nel_1d = 48 
+    nel_1d = 48
     order = 3
     exittol = .09
     t_final = 0.1
@@ -131,10 +132,12 @@ def main(ctx_factory=cl.create_some_context,
         instrumenter = None
 
     if use_logmgr:
-        logmgr.add_quantity(PhysicalQuantity(discr, eos, "pressure", "P", "min"))
-        logmgr.add_quantity(PhysicalQuantity(discr, eos, "temperature", "K", "min"))
+        logmgr.add_quantity(DependentQuantity(discr, eos, "pressure", "P", "min"))
+        logmgr.add_quantity(DependentQuantity(discr, eos, "temperature", "K", "min"))
+        logmgr.add_quantity(ConservedQuantity(discr, "momentum", "K", "sum", dim=1))
         if rank == 0:
-            logmgr.add_watches(["step", "t_step", "min_pressure", "min_temperature"])
+            logmgr.add_watches(["step", "t_step", "min_pressure", "min_temperature",
+                                "sum_momentum1"])
         if use_profiling:
             logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
             if rank == 0:
