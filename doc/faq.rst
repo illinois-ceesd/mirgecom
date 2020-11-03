@@ -111,5 +111,5 @@ exact versions of the packages at a later time::
 .. note::
 
    This will build pyopencl by source, which can be challenging on some systems. Please
-   see :ref:`Pyopencl source`
+   see :ref:`Pyopencl source` for details.
 
