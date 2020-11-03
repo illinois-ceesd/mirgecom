@@ -1,3 +1,5 @@
+"""Demonstrate Sod's 1D shock example."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -61,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
-
+    """Drive the example."""
     if use_logmgr:
         logmgr = LogManager("sod1d.dat", "wu")  # , comm=...
         add_run_info(logmgr)
