@@ -58,15 +58,13 @@ from logpyle import (LogManager, add_general_quantities,
 
 from mirgecom.logging_quantities import (DependentQuantity, ConservedQuantity,
                                          KernelProfile)
-import pyinstrument
 
 
 logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context,
-         use_profiling=False, use_logmgr=False, use_pyinstrument=False):
+def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
     """Drive the example."""
     if use_logmgr:
         logmgr = LogManager("vortex.dat", "wu")  # , comm=...
@@ -128,11 +126,6 @@ def main(ctx_factory=cl.create_some_context,
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
-    if use_pyinstrument:
-        instrumenter = pyinstrument.Profiler()
-    else:
-        instrumenter = None
-
     if use_logmgr:
         logmgr.add_quantity(DependentQuantity(discr, eos, "pressure", "P", "min"))
         logmgr.add_quantity(DependentQuantity(discr, eos, "temperature", "K", "min"))
@@ -178,8 +171,7 @@ def main(ctx_factory=cl.create_some_context,
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr,
-                          instrumenter=instrumenter)
+                          t=current_t, t_final=t_final, logmgr=logmgr)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -204,16 +196,13 @@ def main(ctx_factory=cl.create_some_context,
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     import argparse
-    parser = argparse.ArgumentParser(description="Sod (MPI version)")
+    parser = argparse.ArgumentParser(description="Vortex (MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
     parser.add_argument("--logging", action="store_true",
         help="enable time series logging")
-    parser.add_argument("--instrument", action="store_true",
-        help="enable pyinstrument instrumentation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile,
-         use_logmgr=args.logging, use_pyinstrument=args.instrument)
+    main(use_profiling=args.profile, use_logmgr=args.logging)
 
 # vim: foldmethod=marker
