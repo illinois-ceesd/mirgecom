@@ -37,6 +37,7 @@ from grudge import sym
 from meshmode.dof_array import DOFArray
 from modepy import vandermonde
 from pytools import memoize_in
+from pytools.obj_array import make_obj_array
 
 
 def linear_operator_kernel():
@@ -52,7 +53,6 @@ def linear_operator_kernel():
     knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
     return knl
 
-#This is hardcoded for order=3 elements currently, working on generalizing
 def compute_smoothness_indicator():
     """Compute the smoothness indicator for all elements."""
     from meshmode.array_context import make_loopy_program
@@ -61,8 +61,8 @@ def compute_smoothness_indicator():
         0<=iel<nelements and
         0<=idof<ndiscr_nodes_out and
         0<=j<ndiscr_nodes_in and
-        6<=k<ndiscr_nodes_in}""",
-        "result[iel,idof] = sum(k,vec[iel,k]*vec[iel,k])/sum(j, vec[iel,j]*vec[iel,j])",
+        0<=k<ndiscr_nodes_in}""",
+        "result[iel,idof] = sum(k,vec[iel,k]*vec[iel,k]*modes[k])/sum(j, vec[iel,j]*vec[iel,j])",
         name="smooth_comp")
     #knl = lp.tag_array_axes(knl, "vec", "stride:auto,stride:auto")
     return knl
@@ -91,13 +91,24 @@ def smoothness_indicator(u,discr):
             result=uhat[group.index],
             vec=u[group.index])
 
+    
     #Compute smoothness indicator value
     indicator = discr.empty(actx, dtype=u.entry_dtype)
     for group in discr.discr_from_dd("vol").groups:
+        mode_ids = group.mode_ids()
+        modes = len(mode_ids) 
+        order = group.order
+        highest_mode = np.ones(modes)
+        for mode_index,mode_id in enumerate(mode_ids):
+            highest_mode[mode_index] = highest_mode[mode_index] * (sum(mode_id)==order)
+            print(highest_mode[mode_index])
+        
         actx.call_loopy(
             get_indicator(),
             result=indicator[group.index],
-            vec=uhat[group.index])
+            vec=uhat[group.index],
+            modes=actx.from_numpy(highest_mode))
+
 
     return indicator
      
