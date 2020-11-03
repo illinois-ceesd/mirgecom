@@ -126,6 +126,7 @@ class ConservedQuantity(PhysicalQuantity):
 
 
 class DependentQuantity(PhysicalQuantity):
+    """Logging support for dependent quantities."""
 
     def __init__(self, discr: Discretization, eos: GasEOS,
                  quantity: str, unit: str, op: str, name: str = None):
