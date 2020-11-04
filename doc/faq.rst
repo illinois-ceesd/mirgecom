@@ -72,7 +72,7 @@ In some cases, it can be helpful to install certain packages from source, for de
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
 `installation script <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__.
 
-.. _Pyopencl source:
+.. _Pyopencl source installation:
 
 How can I build pyopencl from source?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -111,7 +111,8 @@ exact versions of the packages at a later time::
 .. note::
 
    This will build pyopencl by source, which can be challenging on some systems. Please
-   see :ref:`Pyopencl source` for details.
+   see :ref:`Pyopencl source installation` for information on the prerequisites of Pyopencl,
+   or remove/comment the pyopencl line from the generated requirements file.
 
 .. note::
 
