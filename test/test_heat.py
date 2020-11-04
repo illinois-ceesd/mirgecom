@@ -27,27 +27,48 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
-from mirgecom.heat import heat_operator
-from meshmode.dof_array import thaw, flat_norm
+from mirgecom.heat import diffusion_operator
+from meshmode.dof_array import thaw, flat_norm, DOFArray
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
 import pytest
-import os
+
+import dataclasses
+from dataclasses import dataclass
+from typing import Callable
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-# Tests below take a problem description as input, which is a tuple
-#   (dim, alpha, mesh_factory, sym_u)
-# where:
-#   dim is the problem dimension
-#   alpha is the diffusivity
-#   mesh_factory is a factory that creates a mesh given a characteristic size
-#   sym_u is a symbolic expression for the solution
+@dataclass
+class HeatProblem:
+    """Description of a heat equation problem.
+
+    .. attribute:: dim
+
+        The problem dimension.
+
+    .. attribute:: alpha
+
+        The diffusivity.
+
+    .. attribute:: mesh_factory
+
+        A factory that creates a mesh when given some characteristic size as input.
+
+    .. attribute:: sym_u
+
+        A symbolic expresssion for the solution.
+    """
+
+    dim: int
+    alpha: float
+    mesh_factory: Callable
+    sym_u: prim.Expression
 
 
 def get_decaying_cosine(dim, alpha):
@@ -68,26 +89,14 @@ def get_decaying_cosine(dim, alpha):
     sym_u = sym_exp(-dim*alpha*sym_t)
     for i in range(dim):
         sym_u *= sym_cos(sym_coords[i])
-    return (dim, alpha, mesh_factory, sym_u)
+    return HeatProblem(dim, alpha, mesh_factory, sym_u)
 
 
-def sym_heat(dim, sym_u):
-    """Return symbolic expressions for the heat equation system given a desired
-    solution. (Note: In order to support manufactured solutions, we modify the heat
-    equation to add a source term (f). If the solution is exact, this term should
-    be 0.)
+def sym_diffusion(dim, sym_u):
+    """Return a symbolic expression for the diffusion operator applied to a function.
     """
-
     sym_alpha = pmbl.var("alpha")
-    sym_t = pmbl.var("t")
-
-    # rhs = alpha * div(grad(u))
-    sym_rhs = sym_alpha * sym.div(sym.grad(dim, sym_u))
-
-    # f = u_t - rhs
-    sym_f = sym.diff(sym_t)(sym_u) - sym_rhs
-
-    return sym_f, sym_rhs
+    return sym_alpha * sym.div(sym.grad(dim, sym_u))
 
 
 # Note: Must integrate in time for a while in order to achieve expected spatial
@@ -102,15 +111,22 @@ def sym_heat(dim, sym_u):
         (get_decaying_cosine(2, 2.), 50, 5.e-5),
         (get_decaying_cosine(3, 2.), 50, 5.e-5),
     ])
-def test_heat_accuracy_and_stability(actx_factory, problem, nsteps, dt, order,
+def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
             visualize=False):
-    """Checks accuracy/stability of the heat operator for a given problem setup.
+    """
+    Checks the accuracy of the diffusion operator by solving the heat equation for a
+    given problem setup.
     """
     actx = actx_factory()
 
-    dim, alpha, mesh_factory, sym_u = problem
+    dim, alpha, mesh_factory, sym_u = dataclasses.astuple(problem)
 
-    sym_f, _ = sym_heat(dim, sym_u)
+    sym_diffusion_u = sym_diffusion(dim, sym_u)
+
+    # In order to support manufactured solutions, we modify the heat equation
+    # to add a source term f. If the solution is exact, this term should be 0.
+    sym_t = pmbl.var("t")
+    sym_f = sym.diff(sym_t)(sym_u) - sym_diffusion_u
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
@@ -127,7 +143,7 @@ def test_heat_accuracy_and_stability(actx_factory, problem, nsteps, dt, order,
             return sym.EvaluationMapper({"alpha": alpha, "x": nodes, "t": t})(expr)
 
         def get_rhs(t, w):
-            result = heat_operator(discr, alpha=alpha, w=w)
+            result = diffusion_operator(discr, alpha=alpha, w=w)
             result[0] += sym_eval(sym_f, t)
             return result
 
@@ -151,11 +167,11 @@ def test_heat_accuracy_and_stability(actx_factory, problem, nsteps, dt, order,
         if visualize:
             from grudge.shortcuts import make_visualizer
             vis = make_visualizer(discr, discr.order+3)
-            vis.write_vtk_file("heat_accuracy_{order}_{n}.vtu".format(order=order,
-                        n=n), [
-                            ("u", fields[0]),
-                            ("expected_u", expected_fields[0]),
-                            ])
+            vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
+                order=order, n=n), [
+                    ("u", fields[0]),
+                    ("expected_u", expected_fields[0]),
+                    ])
 
     print("Approximation error:")
     print(eoc_rec)
@@ -170,69 +186,130 @@ def test_heat_accuracy_and_stability(actx_factory, problem, nsteps, dt, order,
     [
         get_decaying_cosine(1, 1.)
     ])
-def test_heat_compare_to_nodaldg(actx_factory, problem, order, print_err=False):
-    """Compares heat operator to Hesthaven/Warburton Nodal-DG code."""
-    if "NODALDG" in os.environ:
-        nodaldg_path = os.environ["NODALDG"]
-    else:
-        pytest.skip("Nodal-DG code not detected. Set NODALDG environment variable "
-                    "to Nodal-DG code's install path to enable.")
+def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
+            print_err=False):
+    """Compares diffusion operator to Hesthaven/Warburton Nodal-DG code."""
+    pytest.importorskip("oct2py")
 
     actx = actx_factory()
 
-    dim, alpha, mesh_factory, sym_u = problem
+    dim, alpha, mesh_factory, sym_u = dataclasses.astuple(problem)
 
     assert dim == 1
     assert alpha == 1.
 
-    sym_f, sym_rhs = sym_heat(dim, sym_u)
+    from meshmode.interop.nodal_dg import download_nodal_dg_if_not_present
+    download_nodal_dg_if_not_present()
+
+    sym_diffusion_u = sym_diffusion(dim, sym_u)
 
     for n in [4, 8, 16, 32, 64]:
         mesh = mesh_factory(n)
 
         from meshmode.interop.nodal_dg import NodalDGContext
-        with NodalDGContext(os.path.join(nodaldg_path, "Codes1.1")) as ndgctx:
+        with NodalDGContext("./nodal-dg/Codes1.1") as ndgctx:
             ndgctx.set_mesh(mesh, order=order)
 
-            t_check = 1.23456789
+            t = 1.23456789
 
             from grudge.eager import EagerDGDiscretization
             discr_mirgecom = EagerDGDiscretization(actx, mesh, order=order)
             nodes_mirgecom = thaw(actx, discr_mirgecom.nodes())
 
-            def sym_eval_mirgecom(expr, t):
+            def sym_eval_mirgecom(expr):
                 return sym.EvaluationMapper({"alpha": alpha, "x": nodes_mirgecom,
                             "t": t})(expr)
 
-            fields_mirgecom = make_obj_array([sym_eval_mirgecom(sym_u, t_check)])
+            fields_mirgecom = make_obj_array([sym_eval_mirgecom(sym_u)])
 
-            rhs_mirgecom = heat_operator(discr_mirgecom, alpha=alpha,
+            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom, alpha=alpha,
                         w=fields_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
 
-            def sym_eval_ndg(expr, t):
+            def sym_eval_ndg(expr):
                 return sym.EvaluationMapper({"alpha": alpha, "x": nodes_ndg,
                             "t": t})(expr)
 
-            fields_ndg = make_obj_array([sym_eval_ndg(sym_u, t_check)])
+            fields_ndg = make_obj_array([sym_eval_ndg(sym_u)])
 
             ndgctx.push_dof_array("u", fields_ndg[0])
-            ndgctx.octave.push("t", t_check)
+            ndgctx.octave.push("t", t)
             ndgctx.octave.eval("[rhs] = HeatCRHS1D(u,t)", verbose=False)
-            rhs_ndg = make_obj_array([ndgctx.pull_dof_array(actx, "rhs")])
+            diffusion_u_ndg = make_obj_array([ndgctx.pull_dof_array(actx, "rhs")])
 
-            err = flat_norm(rhs_mirgecom[0]-rhs_ndg[0], np.inf)/flat_norm(
-                rhs_ndg[0], np.inf)
+            err = (flat_norm(diffusion_u_mirgecom[0]-diffusion_u_ndg[0], np.inf)
+                        / flat_norm(diffusion_u_ndg[0], np.inf))
 
             if print_err:
-                rhs_exact = make_obj_array([sym_eval_mirgecom(sym_rhs, t_check)])
-                err_exact = (flat_norm(rhs_mirgecom[0]-rhs_exact[0], np.inf)
-                    / flat_norm(rhs_exact[0], np.inf))
+                diffusion_u_exact = make_obj_array([sym_eval_mirgecom(
+                    sym_diffusion_u)])
+                err_exact = (flat_norm(diffusion_u_mirgecom[0]-diffusion_u_exact[0],
+                            np.inf) / flat_norm(diffusion_u_exact[0], np.inf))
                 print(err, err_exact)
 
             assert err < 1.e-9
+
+
+def test_diffusion_obj_array_vectorize(actx_factory):
+    """
+    Checks that the diffusion operator can be called with either scalars or object
+    arrays for `u`.
+    """
+    actx = actx_factory()
+
+    problem = get_decaying_cosine(1, 2.)
+    dim, alpha, mesh_factory, sym_u = dataclasses.astuple(problem)
+
+    sym_u1 = sym_u
+    sym_u2 = 2*sym_u
+
+    sym_diffusion_u1 = sym_diffusion(dim, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(dim, sym_u2)
+
+    n = 128
+
+    mesh = mesh_factory(n)
+
+    from grudge.eager import EagerDGDiscretization
+    discr = EagerDGDiscretization(actx, mesh, order=4)
+
+    nodes = thaw(actx, discr.nodes())
+
+    t = 1.23456789
+
+    def sym_eval(expr):
+        return sym.EvaluationMapper({"alpha": alpha, "x": nodes, "t": t})(expr)
+
+    u1 = sym_eval(sym_u1)
+    u2 = sym_eval(sym_u2)
+
+    diffusion_u1 = diffusion_operator(discr, alpha=alpha, w=u1)
+
+    assert type(diffusion_u1) == DOFArray
+
+    expected_diffusion_u1 = sym_eval(sym_diffusion_u1)
+    rel_linf_err = (
+        discr.norm(diffusion_u1 - expected_diffusion_u1, np.inf)
+        / discr.norm(expected_diffusion_u1, np.inf))
+    assert rel_linf_err < 1.e-5
+
+    us = make_obj_array([u1, u2])
+
+    diffusion_us = diffusion_operator(discr, alpha=alpha, w=us)
+
+    assert type(diffusion_us) == np.ndarray
+    assert diffusion_us.shape == (2,)
+
+    expected_diffusion_us = make_obj_array([
+        sym_eval(sym_diffusion_u1),
+        sym_eval(sym_diffusion_u2)
+    ])
+    rel_linf_err = (
+        discr.norm(diffusion_us - expected_diffusion_us, np.inf)
+        / discr.norm(expected_diffusion_us, np.inf))
+    assert rel_linf_err < 1.e-5
 
 
 if __name__ == "__main__":

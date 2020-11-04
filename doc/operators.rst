@@ -5,8 +5,8 @@ Linear Acoustic Wave Equation
 
 .. automodule:: mirgecom.wave
 
-Heat Equation
-=============
+Diffusion
+=========
 
 .. automodule:: mirgecom.heat
 

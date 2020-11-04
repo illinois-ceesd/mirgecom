@@ -20,3 +20,6 @@ MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 pip install -r requirements.txt
 python setup.py install
+
+sudo apt update
+sudo apt install octave

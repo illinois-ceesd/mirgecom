@@ -35,7 +35,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.integrators import rk4_step
-from mirgecom.heat import heat_operator
+from mirgecom.heat import diffusion_operator
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
@@ -95,7 +95,7 @@ def main():
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
     def rhs(t, w):
-        return heat_operator(discr, alpha=1, w=w) + make_obj_array([actx.np.exp(
+        return diffusion_operator(discr, alpha=1, w=w) + make_obj_array([actx.np.exp(
             -np.dot(nodes, nodes)/source_width**2)])
 
     rank = comm.Get_rank()
