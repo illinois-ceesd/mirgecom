@@ -116,8 +116,6 @@ exact versions of the packages at a later time::
 
 .. note::
 
-   You can also install the packages from the created requirements.txt into a new conda environment::
+   You can also install the packages from the created requirements.txt with a new emirge installation::
    
-      $ conda create -n new_env
-      $ conda activate new_env
-      $ pip install --src . -r myreq.txt
+      $ ./install.sh --pip-pkgs=myreq.txt
