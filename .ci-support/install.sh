@@ -1,9 +1,11 @@
 if [ "$(uname)" = "Darwin" ]; then
 PLATFORM=MacOSX
 brew install open-mpi
+brew install octave
 else
 PLATFORM=Linux
 sudo apt-get -y install openmpi-bin libopenmpi-dev
+sudo apt-get -y install octave
 fi
 MINIFORGE_INSTALL_DIR=.miniforge3
 MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
@@ -20,6 +22,3 @@ MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 pip install -r requirements.txt
 python setup.py install
-
-sudo apt update
-sudo apt install octave
