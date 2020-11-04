@@ -120,6 +120,7 @@ def sym_wave(dim, sym_phi):
     return sym_u, sym_v, sym_f, sym_rhs
 
 
+@pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("problem",
     [
         get_standing_wave(2),
@@ -127,7 +128,6 @@ def sym_wave(dim, sym_phi):
         get_manufactured_cubic(2),
         get_manufactured_cubic(3)
     ])
-@pytest.mark.parametrize("order", [2, 3, 4])
 def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     """Checks accuracy of the wave operator for a given problem setup.
     """
@@ -186,6 +186,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
 
 
+@pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize(("problem", "timestep_scale"),
     [
         (get_standing_wave(2), 0.05),
@@ -193,7 +194,6 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
         (get_manufactured_cubic(2), 0.025),
         (get_manufactured_cubic(3), 0.025)
     ])
-@pytest.mark.parametrize("order", [2, 3, 4])
 def test_wave_stability(actx_factory, problem, timestep_scale, order,
             visualize=False):
     """Checks stability of the wave operator for a given problem setup.
