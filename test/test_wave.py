@@ -36,17 +36,39 @@ from meshmode.array_context import (  # noqa
 
 import pytest
 
+import dataclasses
+from dataclasses import dataclass
+from typing import Callable
+
 import logging
 logger = logging.getLogger(__name__)
 
 
-# Tests below take a problem description as input, which is a tuple
-#   (dim, c, mesh_factory, sym_phi)
-# where:
-#   dim is the problem dimension
-#   c is the sound speed
-#   mesh_factory is a factory that creates a mesh given a characteristic size
-#   sym_phi is a symbolic expression for the solution
+@dataclass
+class WaveProblem:
+    """Description of a wave equation problem.
+
+    .. attribute:: dim
+
+        The problem dimension.
+
+    .. attribute:: c
+
+        The sound speed.
+
+    .. attribute:: mesh_factory
+
+        A factory that creates a mesh when given some characteristic size as input.
+
+    .. attribute:: sym_phi
+
+        A symbolic expresssion for the solution.
+    """
+
+    dim: int
+    c: float
+    mesh_factory: Callable
+    sym_phi: prim.Expression
 
 
 def get_standing_wave(dim):
@@ -66,7 +88,7 @@ def get_standing_wave(dim):
     sym_phi = sym_cos(np.sqrt(dim)*c*sym_t - np.pi/4)
     for i in range(dim):
         sym_phi *= sym_cos(sym_coords[i])
-    return (dim, c, mesh_factory, sym_phi)
+    return WaveProblem(dim, c, mesh_factory, sym_phi)
 
 
 def get_manufactured_cubic(dim):
@@ -87,7 +109,7 @@ def get_manufactured_cubic(dim):
     sym_phi = sym_cos(sym_t - np.pi/4)
     for i in range(dim):
         sym_phi *= (sym_coords[i]-1)**3 * (sym_coords[i]+1)**3
-    return (dim, 2., mesh_factory, sym_phi)
+    return WaveProblem(dim, 2., mesh_factory, sym_phi)
 
 
 def sym_wave(dim, sym_phi):
@@ -133,7 +155,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     """
     actx = actx_factory()
 
-    dim, c, mesh_factory, sym_phi = problem
+    dim, c, mesh_factory, sym_phi = dataclasses.astuple(problem)
 
     sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
@@ -202,7 +224,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     actx = actx_factory()
 
-    dim, c, mesh_factory, sym_phi = problem
+    dim, c, mesh_factory, sym_phi = dataclasses.astuple(problem)
 
     sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
 
