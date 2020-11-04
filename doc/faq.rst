@@ -118,6 +118,6 @@ exact versions of the packages at a later time::
 
    You can also install the packages from the created requirements.txt into a new conda environment::
    
-   $ conda create -n new_env
-   $ conda activate new_env
-   $ pip install --src . -r myreq.txt
+      $ conda create -n new_env
+      $ conda activate new_env
+      $ pip install --src . -r myreq.txt
