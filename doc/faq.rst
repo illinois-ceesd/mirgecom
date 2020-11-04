@@ -90,8 +90,8 @@ You can build pyopencl against conda's OpenCL driver in the following way::
    $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
    $ pip install -e .
 
-How can I record the exact versions of Python packages that are currently installed?
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+How can I record the exact versions of Python packages that are currently installed and reinstall them at a later time?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Running emirge's `version.sh` script creates a requirements.txt file that
 stores the exact git commits of each emirge sub-repository that were used at
