@@ -113,3 +113,10 @@ exact versions of the packages at a later time::
    This will build pyopencl by source, which can be challenging on some systems. Please
    see :ref:`Pyopencl source` for details.
 
+.. note::
+
+   You can also install the packages from the created requirements.txt into a new conda environment::
+   
+   $ conda create -n new_env
+   $ conda activate new_env
+   $ pip install --src . -r myreq.txt
