@@ -35,7 +35,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.integrators import rk4_step
-from mirgecom.heat import diffusion_operator
+from mirgecom.diffusion import diffusion_operator
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 

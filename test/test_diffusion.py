@@ -27,7 +27,7 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
-from mirgecom.heat import diffusion_operator
+from mirgecom.diffusion import diffusion_operator
 from meshmode.dof_array import thaw, flat_norm, DOFArray
 
 from meshmode.array_context import (  # noqa

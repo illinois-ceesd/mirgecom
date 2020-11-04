@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.heat` computes the diffusion operator.
+r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
 .. autofunction:: diffusion_operator
 """

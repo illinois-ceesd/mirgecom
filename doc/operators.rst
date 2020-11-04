@@ -8,7 +8,7 @@ Linear Acoustic Wave Equation
 Diffusion
 =========
 
-.. automodule:: mirgecom.heat
+.. automodule:: mirgecom.diffusion
 
 Gas Dynamics
 ============
