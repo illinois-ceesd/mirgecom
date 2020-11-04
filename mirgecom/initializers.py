@@ -7,6 +7,9 @@ Solution Initializers
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
 .. autoclass:: Uniform
+.. autoclass:: AcousticPulse
+.. automethod: _make_pulse
+.. automethod: _make_uniform_flow
 """
 
 __copyright__ = """
@@ -40,16 +43,106 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
+from mirgecom.euler import split_conserved, join_conserved
+
+
+def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
+                       velocity=None, eos=IdealSingleGas()):
+    r"""Construct uniform, constant flow.
+
+    Construct a uniform, constant flow from mass, energy, pressure, and
+    an EOS object.
+
+    Parameters
+    ----------
+    x_vec: np.ndarray
+        Nodal positions
+    mass: float
+        Value to set `:math:\rho`
+    energy: float
+        Optional value to set `:math:\rho{E}`
+    pressure: float
+        Value to use for calculating `:math:\rho{E}`
+    velocity: np.ndarray
+        Optional constant velocity to set `:math:\rho\vec{V}`
+
+    Returns
+    -------
+    q: Object array of DOFArrays
+        Agglomerated object array with the uniform flow
+    """
+    dim = len(x_vec)
+    if velocity is None:
+        velocity = np.zeros(shape=(dim,))
+
+    _rho = mass
+    _p = pressure
+    _velocity = velocity
+    _gamma = eos.gamma()
+
+    mom0 = _velocity * make_obj_array([_rho])
+    e0 = _p / (_gamma - 1.0)
+    ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
+
+    x_rel = x_vec[0]
+    zeros = 0.0*x_rel
+    ones = zeros + 1.0
+
+    mass = zeros + _rho
+    mom = mom0 * make_obj_array([ones])
+    energy = e0 + ke0 + zeros
+
+    return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
+
+
+def _make_pulse(amp, r0, w, r):
+    r"""Create a Gaussian pulse.
+
+    The Gaussian pulse is defined by:
+
+    .. math::
+
+        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
+
+    Where :math:`\vec{r}` is the position, and the parameters are
+    the pulse amplitude :math:`a_0`, the pulse location :math:`\vec{r_0}`, and the
+    RMS width of the pulse, :math:`w`.
+
+    Parameters
+    ----------
+    amp: float
+        specifies the value of :math:`\a_0`, the pulse amplitude
+    r0: float array
+        specifies the value of :math:`\r_0`, the pulse location
+    w: float
+        specifies the value of :math:`w`, the rms pulse width
+    r: Object array of DOFArrays
+        specifies the nodal coordinates
+
+    Returns
+    -------
+    G: float array
+        The values of the exponential function
+    """
+    dim = len(r)
+    r_0 = np.zeros(dim)
+    r_0 = r_0 + r0
+    # coordinates relative to pulse center
+    rel_center = make_obj_array(
+        [r[i] - r_0[i] for i in range(dim)]
+    )
+    actx = r[0].array_context
+    rms2 = w * w
+    r2 = np.dot(rel_center, rel_center) / rms2
+    return amp * actx.np.exp(-.5 * r2)
 
 
 class Vortex2D:
-    r"""Create the isentropic vortex solution.
+    r"""Initializer for the isentropic vortex solution.
 
     Implements the isentropic vortex after
-        - Y.C. Zhou, G.W. Wei / Journal of Computational Physics 189 (2003) 159
-          (https://doi.org/10.1016/S0021-9991(03)00206-7)
-        - JSH/TW Nodal DG Methods, Section 6.6
-          DOI: 10.1007/978-0-387-72067-8
+        - [Zhou_2003]_
+        - [Hesthaven_2008]_, Section 6.6
 
     The isentropic vortex is defined by:
 
@@ -78,11 +171,11 @@ class Vortex2D:
 
         Parameters
         ----------
-        beta : float
+        beta: float
             vortex amplitude
-        center : numpy.ndarray
+        center: numpy.ndarray
             center of vortex, shape ``(2,)``
-        velocity : numpy.ndarray
+        velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0, shape ``(2,)``
         """
         self._beta = beta
@@ -123,18 +216,17 @@ class Vortex2D:
 
 
 class SodShock1D:
-    r"""Implement a 1D Sod Shock.
+    r"""Solution initializer for the 1D Sod Shock.
 
-        - JSH/TW Nodal DG Methods, p. 209
-
+    This is Sod's 1D shock solution as explained in [Hesthaven_2008]_, Section 5.9
     The Sod Shock setup is defined by:
 
     .. math::
 
          {\rho}(x < x_0, 0) = \rho_l\\
          {\rho}(x > x_0, 0) = \rho_r\\
-         {\rho}{V_x}(x, 0) = 0
-         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}
+         {\rho}{V_x}(x, 0) = 0\\
+         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}\\
          {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
 
     A call to this object after creation/init creates Sod's shock solution at a
@@ -214,7 +306,7 @@ class SodShock1D:
 
 
 class Lump:
-    r"""Implement an N-dimensional Gaussian lump of mass.
+    r"""Solution initializer for N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
@@ -257,17 +349,17 @@ class Lump:
 
         Parameters
         ----------
-        numdim : int
+        numdim: int
             specify the number of dimensions for the lump
-        rho0 : float
+        rho0: float
             specifies the value of :math:`\rho_0`
-        rhoamp : float
+        rhoamp: float
             specifies the value of :math:`\rho_a`
-        p0 : float
+        p0: float
             specifies the value of :math:`p_0`
-        center : numpy.ndarray
+        center: numpy.ndarray
             center of lump, shape ``(2,)``
-        velocity : numpy.ndarray
+        velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(2,)``
         """
@@ -397,8 +489,77 @@ class Lump:
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
+class AcousticPulse:
+    r"""Solution initializer for N-dimensional Gaussian acoustic pulse.
+
+    The Gaussian pulse is defined by:
+
+    .. math::
+
+        {\rho}E(\vec{r}) = {\rho}E + a_0 * G(\vec{r})\\
+        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
+
+    where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
+    :math:`amplitude`, and :math:`w`, are the the user-specified pulse location,
+    amplitude, and width, respectively.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(self, numdim=1, amplitude=1,
+                 center=None, width=1):
+        r"""
+        Initialize acoustic pulse parameters.
+
+        Parameters
+        ----------
+        numdim: int
+            specify the number of dimensions for the pulse
+        amplitude: float
+            specifies the value of :math:`amplitude`
+        width: float
+            specifies the rms width of the pulse
+        center: numpy.ndarray
+            pulse location, shape ``(numdim,)``
+        """
+        if len(center) == numdim:
+            self._center = center
+        elif len(center) > numdim:
+            numdim = len(center)
+            self._center = center
+        else:
+            self._center = np.zeros(shape=(numdim,))
+
+        assert len(self._center) == numdim
+
+        self._amp = amplitude
+        self._width = width
+        self._dim = numdim
+
+    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+        """
+        Create the acoustic pulse at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (unused)
+        """
+        assert len(x_vec) == self._dim
+        cv = split_conserved(self._dim, q)
+        return cv.replace(
+            energy=cv.energy + _make_pulse(
+                amp=self._amp, w=self._width, r0=self._center, r=x_vec)
+            ).join()
+
+
 class Uniform:
-    r"""Implement initialization to a uniform flow.
+    r"""Solution initializer for a uniform flow.
 
     A uniform flow is the same everywhere and should have
     a zero RHS.
@@ -416,17 +577,17 @@ class Uniform:
 
         Parameters
         ----------
-        numdim : int
+        numdim: int
             specify the number of dimensions for the lump
         nspecies: int
             specify the number of species in the flow
-        rho : float
+        rho: float
             specifies the density
-        p : float
+        p: float
             specifies the pressure
-        e : float
+        e: float
             specifies the internal energy
-        velocity : numpy.ndarray
+        velocity: numpy.ndarray
             specifies the flow velocity
         """
         if velocity is not None:
@@ -483,6 +644,13 @@ class Uniform:
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, massfrac=massfrac)
+    # Save this - some things in Uniform flow generator are broken
+    # and one or the other of the above or below fixes the issue.
+    # =======
+    #         return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
+    #                                  pressure=self._p, energy=self._e,
+    #                                  velocity=self._velocity, eos=eos)
+    # >>>>>>> master
 
     def exact_rhs(self, discr, q, t=0.0):
         """

@@ -3,7 +3,7 @@
 [![CI](https://github.com/illinois-ceesd/mirgecom/workflows/CI/badge.svg)](https://github.com/illinois-ceesd/mirgecom/actions?query=workflow%3ACI+branch%3Amaster)
 [![Documentation Status](https://readthedocs.org/projects/mirgecom/badge/?version=latest)](https://mirgecom.readthedocs.io/en/latest/?badge=latest)
 
-mirgecom aims to be the workhorse simulation library for the
+mirgecom is a simulation library for the
 Center for Exascale-Enabled Scramjet Design at the University
 of Illinois.
 
