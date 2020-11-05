@@ -36,7 +36,6 @@ from meshmode.array_context import (  # noqa
 
 import pytest
 
-import dataclasses
 from dataclasses import dataclass
 from typing import Callable
 
@@ -155,15 +154,15 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     """
     actx = actx_factory()
 
-    dim, c, mesh_factory, sym_phi = dataclasses.astuple(problem)
+    p = problem
 
-    sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
+    sym_u, sym_v, sym_f, sym_rhs = sym_wave(p.dim, p.sym_phi)
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for n in [8, 10, 12] if dim == 3 else [4, 8, 16]:
-        mesh = mesh_factory(n)
+    for n in [8, 10, 12] if p.dim == 3 else [4, 8, 16]:
+        mesh = p.mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -171,7 +170,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
         nodes = thaw(actx, discr.nodes())
 
         def sym_eval(expr, t):
-            return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
+            return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
 
         t_check = 1.23456789
 
@@ -180,7 +179,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
         fields = flat_obj_array(u, v)
 
-        rhs = wave_operator(discr, c=c, w=fields)
+        rhs = wave_operator(discr, c=p.c, w=fields)
         rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
         expected_rhs = sym_eval(sym_rhs, t_check)
@@ -221,14 +220,13 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
     """Checks stability of the wave operator for a given problem setup.
     Adjust *timestep_scale* to get timestep close to stability limit.
     """
-
     actx = actx_factory()
 
-    dim, c, mesh_factory, sym_phi = dataclasses.astuple(problem)
+    p = problem
 
-    sym_u, sym_v, sym_f, sym_rhs = sym_wave(dim, sym_phi)
+    sym_u, sym_v, sym_f, sym_rhs = sym_wave(p.dim, p.sym_phi)
 
-    mesh = mesh_factory(8)
+    mesh = p.mesh_factory(8)
 
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -236,10 +234,10 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
     nodes = thaw(actx, discr.nodes())
 
     def sym_eval(expr, t):
-        return sym.EvaluationMapper({"c": c, "x": nodes, "t": t})(expr)
+        return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
 
     def get_rhs(t, w):
-        result = wave_operator(discr, c=c, w=w)
+        result = wave_operator(discr, c=p.c, w=w)
         result[0] += sym_eval(sym_f, t)
         return result
 
