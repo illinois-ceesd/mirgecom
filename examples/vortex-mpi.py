@@ -53,7 +53,7 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
-from logpyle import (LogManager, add_general_quantities,
+from logpyle import (LogManager, IntervalTimer, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
 from mirgecom.logging_quantities import (DependentQuantity, ConservedQuantity,
@@ -126,6 +126,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
+    vis_timer = None
+
     if use_logmgr:
         for quantity in ["pressure", "temperature"]:
             for op in ["min", "max", "sum"]:
@@ -139,9 +141,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                 logmgr.add_quantity(
                     ConservedQuantity(discr, "momentum", op, dim=dim))
 
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
         if rank == 0:
             logmgr.add_watches(["step", "t_step", "min_pressure", "min_temperature",
-                                "min_momentum1"])
+                                "min_momentum1", "t_vis"])
         if use_profiling:
             logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
             if rank == 0:
@@ -173,7 +178,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+                              exittol=exittol, constant_cfl=constant_cfl, comm=comm,
+                              vis_timer=vis_timer)
 
     try:
         (current_step, current_t, current_state) = \
