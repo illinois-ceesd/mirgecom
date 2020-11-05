@@ -83,7 +83,7 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .01
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
+    initializer = Lump(numdim=dim, center=orig, velocity=vel, rhoamp=0.0)
     casename = "pulse"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
