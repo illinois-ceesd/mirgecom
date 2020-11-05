@@ -170,7 +170,7 @@ class DependentQuantity(PhysicalQuantity):
 
 
 class KernelProfile(LogQuantity):
-    """Logging support for results of the OpenCL kernel profiling (time,
+    """Logging support for results of the OpenCL kernel profiling (time, \
     num_calls, flops, bytes_accessed)."""
 
     def __init__(self, actx: PyOpenCLProfilingArrayContext,
