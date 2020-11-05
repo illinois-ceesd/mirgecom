@@ -127,12 +127,21 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     current_state = initializer(0, nodes)
 
     if use_logmgr:
-        logmgr.add_quantity(DependentQuantity(discr, eos, "pressure", "P", "min"))
-        logmgr.add_quantity(DependentQuantity(discr, eos, "temperature", "K", "min"))
-        logmgr.add_quantity(ConservedQuantity(discr, "momentum", "K", "sum", dim=1))
+        for quantity in ["pressure", "temperature"]:
+            for op in ["min", "max", "sum"]:
+                logmgr.add_quantity(DependentQuantity(discr, eos, quantity, op))
+        for quantity in ["mass", "energy"]:
+            for op in ["min", "max", "sum"]:
+                logmgr.add_quantity(ConservedQuantity(discr, quantity, op))
+
+        for dim in range(dim):
+            for op in ["min", "max", "sum"]:
+                logmgr.add_quantity(
+                    ConservedQuantity(discr, "momentum", op, dim=dim))
+
         if rank == 0:
             logmgr.add_watches(["step", "t_step", "min_pressure", "min_temperature",
-                                "sum_momentum1"])
+                                "min_momentum1"])
         if use_profiling:
             logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
             if rank == 0:

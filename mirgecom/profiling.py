@@ -79,6 +79,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
+    .. automethod:: get_kernel_names
+    .. automethod:: get_profiling_data_for_kernel
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
     """
@@ -136,8 +138,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         bytes_accessed = []
         # fprint_bytes = []
 
-        from statistics import mean
-
         for key, value in self.profile_results.items():
             if key.name != kernel_name:
                 continue
@@ -154,6 +154,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         if num_calls == 0:
             return 0
         else:
+            from statistics import mean
             if stat == "num_calls":
                 return num_calls
             if stat == "time":

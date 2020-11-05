@@ -27,18 +27,21 @@ THE SOFTWARE.
 __doc__ = """
 .. autoclass:: StateConsumer
 .. autoclass:: PhysicalQuantity
+.. autoclass:: ConservedQuantity
+.. autoclass:: DependentQuantity
 .. autoclass:: KernelProfile
 .. autofunction:: set_state
 """
 
-from logpyle import LogQuantity
+from logpyle import LogQuantity, LogManager
 from numpy import ndarray
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
+from meshmode.dof_array import DOFArray
 
 
-def set_state(mgr, state: ndarray) -> None:
+def set_state(mgr: LogManager, state: ndarray) -> None:
     """Update the state of all :class:`StateConsumer` of the log manager `mgr`."""
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
@@ -62,11 +65,9 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities."""
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
-                 name=None):
-        if name:
-            LogQuantity.__init__(self, name, unit)
-        else:
-            LogQuantity.__init__(self, f"{op}_{quantity}", unit)
+                 name: str):
+
+        LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self)
 
         self.discr = discr
@@ -82,7 +83,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
         elif op == "sum":
             self._myop = partial(self.discr.nodal_sum, "vol")
         else:
-            raise RuntimeError("unknown operation {op}")
+            raise RuntimeError(f"unknown operation {op}")
 
     def __call__(self):
         """Return the requested quantity."""
@@ -90,17 +91,28 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
 
 
 class ConservedQuantity(PhysicalQuantity):
-    """Logging support for conserved quantities."""
+    """Logging support for conserved quantities (mass, energy, momentum)."""
 
-    def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
-                 dim: int = None, name: str = None):
-        if name:
-            PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
-        elif dim:
-            PhysicalQuantity.__init__(self, discr, quantity, unit, op,
-                                      name=f"{op}_{quantity}{dim}")
-        else:
-            PhysicalQuantity.__init__(self, discr, quantity, unit, op)
+    def __init__(self, discr: Discretization, quantity: str, op: str,
+                 unit: str = None, dim: int = None, name: str = None):
+        if unit is None:
+            if quantity == "mass":
+                unit = "g"
+            elif quantity == "energy":
+                unit = "J"
+            elif quantity == "momentum":
+                if dim is None:
+                    raise RuntimeError("Missing 'dim' parameter for dimensional "
+                                       f"ConservedQuantity '{quantity}'.")
+                unit = "kg*m/s"
+            else:
+                unit = ""
+
+        if name is None:
+            name = f"{op}_{quantity}{dim}"
+
+        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
+
         self.dim = dim
 
     def __call__(self):
@@ -116,24 +128,30 @@ class ConservedQuantity(PhysicalQuantity):
 
         cq = getattr(cv, self.quantity)
 
-        if isinstance(cq, ndarray):
-            if self.dim is None:
-                raise RuntimeError("Missing 'dim' parameter for dimensional "
-                                   f"ConservedQuantity '{self.quantity}'.")
-            return self._myop(cq[0])
+        if not isinstance(cq, DOFArray):
+            return self._myop(cq[self.dim])
         else:
             return self._myop(cq)
 
 
 class DependentQuantity(PhysicalQuantity):
-    """Logging support for dependent quantities."""
+    """Logging support for dependent quantities (temperature, pressure)."""
 
     def __init__(self, discr: Discretization, eos: GasEOS,
-                 quantity: str, unit: str, op: str, name: str = None):
-        if name:
-            PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
-        else:
-            PhysicalQuantity.__init__(self, discr, quantity, unit, op)
+                 quantity: str, op: str, unit: str = None, name: str = None):
+        if unit is None:
+            if quantity == "temperature":
+                unit = "K"
+            elif quantity == "pressure":
+                unit = "P"
+            else:
+                unit = ""
+
+        if name is None:
+            name = f"{op}_{quantity}"
+
+        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
+
         self.eos = eos
 
     def __call__(self):
@@ -152,7 +170,8 @@ class DependentQuantity(PhysicalQuantity):
 
 
 class KernelProfile(LogQuantity):
-    """Logging support for results of the OpenCL kernel profiling."""
+    """Logging support for results of the OpenCL kernel profiling (time,
+    num_calls, flops, bytes_accessed)."""
 
     def __init__(self, actx: PyOpenCLProfilingArrayContext,
                  kernel_name: str, stat: str, name: str = None):
