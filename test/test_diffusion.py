@@ -36,7 +36,6 @@ from meshmode.array_context import (  # noqa
 
 import pytest
 
-import dataclasses
 from dataclasses import dataclass
 from typing import Callable
 
@@ -119,20 +118,20 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
     """
     actx = actx_factory()
 
-    dim, alpha, mesh_factory, sym_u = dataclasses.astuple(problem)
+    p = problem
 
-    sym_diffusion_u = sym_diffusion(dim, sym_u)
+    sym_diffusion_u = sym_diffusion(p.dim, p.sym_u)
 
     # In order to support manufactured solutions, we modify the heat equation
     # to add a source term f. If the solution is exact, this term should be 0.
     sym_t = pmbl.var("t")
-    sym_f = sym.diff(sym_t)(sym_u) - sym_diffusion_u
+    sym_f = sym.diff(sym_t)(p.sym_u) - sym_diffusion_u
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for n in [8, 10, 12] if dim == 3 else [8, 16, 24]:
-        mesh = mesh_factory(n)
+    for n in [8, 10, 12] if p.dim == 3 else [8, 16, 24]:
+        mesh = p.mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -140,16 +139,16 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
         nodes = thaw(actx, discr.nodes())
 
         def sym_eval(expr, t):
-            return sym.EvaluationMapper({"alpha": alpha, "x": nodes, "t": t})(expr)
+            return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes, "t": t})(expr)
 
         def get_rhs(t, w):
-            result = diffusion_operator(discr, alpha=alpha, w=w)
+            result = diffusion_operator(discr, alpha=p.alpha, w=w)
             result[0] += sym_eval(sym_f, t)
             return result
 
         t = 0.
 
-        fields = make_obj_array([sym_eval(sym_u, t)])
+        fields = make_obj_array([sym_eval(p.sym_u, t)])
 
         from mirgecom.integrators import rk4_step
 
@@ -157,7 +156,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
             fields = rk4_step(fields, t, dt, get_rhs)
             t += dt
 
-        expected_fields = make_obj_array([sym_eval(sym_u, t)])
+        expected_fields = make_obj_array([sym_eval(p.sym_u, t)])
 
         rel_linf_err = (
             discr.norm(fields - expected_fields, np.inf)
@@ -193,18 +192,18 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
     actx = actx_factory()
 
-    dim, alpha, mesh_factory, sym_u = dataclasses.astuple(problem)
+    p = problem
 
-    assert dim == 1
-    assert alpha == 1.
+    assert p.dim == 1
+    assert p.alpha == 1.
 
     from meshmode.interop.nodal_dg import download_nodal_dg_if_not_present
     download_nodal_dg_if_not_present()
 
-    sym_diffusion_u = sym_diffusion(dim, sym_u)
+    sym_diffusion_u = sym_diffusion(p.dim, p.sym_u)
 
     for n in [4, 8, 16, 32, 64]:
-        mesh = mesh_factory(n)
+        mesh = p.mesh_factory(n)
 
         from meshmode.interop.nodal_dg import NodalDGContext
         with NodalDGContext("./nodal-dg/Codes1.1") as ndgctx:
@@ -217,22 +216,22 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             nodes_mirgecom = thaw(actx, discr_mirgecom.nodes())
 
             def sym_eval_mirgecom(expr):
-                return sym.EvaluationMapper({"alpha": alpha, "x": nodes_mirgecom,
+                return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes_mirgecom,
                             "t": t})(expr)
 
-            fields_mirgecom = make_obj_array([sym_eval_mirgecom(sym_u)])
+            fields_mirgecom = make_obj_array([sym_eval_mirgecom(p.sym_u)])
 
-            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom, alpha=alpha,
+            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom, alpha=p.alpha,
                         w=fields_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
 
             def sym_eval_ndg(expr):
-                return sym.EvaluationMapper({"alpha": alpha, "x": nodes_ndg,
+                return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes_ndg,
                             "t": t})(expr)
 
-            fields_ndg = make_obj_array([sym_eval_ndg(sym_u)])
+            fields_ndg = make_obj_array([sym_eval_ndg(p.sym_u)])
 
             ndgctx.push_dof_array("u", fields_ndg[0])
             ndgctx.octave.push("t", t)
@@ -259,18 +258,17 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     """
     actx = actx_factory()
 
-    problem = get_decaying_cosine(1, 2.)
-    dim, alpha, mesh_factory, sym_u = dataclasses.astuple(problem)
+    p = get_decaying_cosine(1, 2.)
 
-    sym_u1 = sym_u
-    sym_u2 = 2*sym_u
+    sym_u1 = p.sym_u
+    sym_u2 = 2*p.sym_u
 
-    sym_diffusion_u1 = sym_diffusion(dim, sym_u1)
-    sym_diffusion_u2 = sym_diffusion(dim, sym_u2)
+    sym_diffusion_u1 = sym_diffusion(p.dim, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(p.dim, sym_u2)
 
     n = 128
 
-    mesh = mesh_factory(n)
+    mesh = p.mesh_factory(n)
 
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(actx, mesh, order=4)
@@ -280,12 +278,12 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     t = 1.23456789
 
     def sym_eval(expr):
-        return sym.EvaluationMapper({"alpha": alpha, "x": nodes, "t": t})(expr)
+        return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes, "t": t})(expr)
 
     u1 = sym_eval(sym_u1)
     u2 = sym_eval(sym_u2)
 
-    diffusion_u1 = diffusion_operator(discr, alpha=alpha, w=u1)
+    diffusion_u1 = diffusion_operator(discr, alpha=p.alpha, w=u1)
 
     assert type(diffusion_u1) == DOFArray
 
@@ -297,7 +295,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     us = make_obj_array([u1, u2])
 
-    diffusion_us = diffusion_operator(discr, alpha=alpha, w=us)
+    diffusion_us = diffusion_operator(discr, alpha=p.alpha, w=us)
 
     assert type(diffusion_us) == np.ndarray
     assert diffusion_us.shape == (2,)
