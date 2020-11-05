@@ -37,7 +37,8 @@ from meshmode.array_context import (  # noqa
 import pytest
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Union
+from numbers import Number
 
 import logging
 logger = logging.getLogger(__name__)
@@ -51,22 +52,22 @@ class HeatProblem:
 
         The problem dimension.
 
-    .. attribute:: alpha
-
-        The diffusivity.
-
     .. attribute:: mesh_factory
 
         A factory that creates a mesh when given some characteristic size as input.
 
+    .. attribute:: sym_alpha
+
+        A symbolic expression for the diffusivity.
+
     .. attribute:: sym_u
 
-        A symbolic expresssion for the solution.
+        A symbolic expression for the solution.
     """
 
     dim: int
-    alpha: float
     mesh_factory: Callable
+    sym_alpha: Union[prim.Expression, Number]
     sym_u: prim.Expression
 
 
@@ -88,13 +89,78 @@ def get_decaying_cosine(dim, alpha):
     sym_u = sym_exp(-dim*alpha*sym_t)
     for i in range(dim):
         sym_u *= sym_cos(sym_coords[i])
-    return HeatProblem(dim, alpha, mesh_factory, sym_u)
+    return HeatProblem(dim, mesh_factory, alpha, sym_u)
 
 
-def sym_diffusion(dim, sym_u):
+def get_static_cosine(dim, alpha):
+    # 1D: u(x,t) = cos(x)
+    # 2D: u(x,y,t) = cos(x)*cos(y)
+    # 3D: u(x,y,z,t) = cos(x)*cos(y)*cos(z)
+    # on [-pi/2, pi/2]^{#dims}
+    def mesh_factory(n):
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        return generate_regular_rect_mesh(
+            a=(-0.5*np.pi,)*dim,
+            b=(0.5*np.pi,)*dim,
+            n=(n,)*dim)
+    sym_coords = prim.make_sym_vector("x", dim)
+    sym_cos = pmbl.var("cos")
+    sym_u = 1
+    for i in range(dim):
+        sym_u *= sym_cos(sym_coords[i])
+    return HeatProblem(dim, mesh_factory, alpha, sym_u)
+
+
+def get_decaying_cosine_var_diff(dim):
+    # 1D: u(x,t) = exp(-alpha*t)*cos(x)
+    # 2D: u(x,y,t) = exp(-2*alpha*t)*cos(x)*cos(y)
+    # 3D: u(x,y,z,t) = exp(-3*alpha*t)*cos(x)*cos(y)*cos(z)
+    # on [-pi/2, pi/2]^{#dims}
+    def mesh_factory(n):
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        return generate_regular_rect_mesh(
+            a=(-0.5*np.pi,)*dim,
+            b=(0.5*np.pi,)*dim,
+            n=(n,)*dim)
+    sym_coords = prim.make_sym_vector("x", dim)
+    sym_t = pmbl.var("t")
+    sym_alpha = (2.+sym_coords[0])-sym_coords[0]
+    sym_cos = pmbl.var("cos")
+    sym_exp = pmbl.var("exp")
+    sym_u = sym_exp(-dim*sym_alpha*sym_t)
+    for i in range(dim):
+        sym_u *= sym_cos(sym_coords[i])
+    return HeatProblem(dim, mesh_factory, sym_alpha, sym_u)
+
+
+def get_static_cosine_var_diff(dim):
+    # 1D: u(x,t) = cos(x)
+    # 2D: u(x,y,t) = cos(x)*cos(y)
+    # 3D: u(x,y,z,t) = cos(x)*cos(y)*cos(z)
+    # on [-pi/2, pi/2]^{#dims}
+    def mesh_factory(n):
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        return generate_regular_rect_mesh(
+            a=(-0.5*np.pi,)*dim,
+            b=(0.5*np.pi,)*dim,
+            n=(n,)*dim)
+    sym_coords = prim.make_sym_vector("x", dim)
+    sym_cos = pmbl.var("cos")
+#     sym_sin = pmbl.var("sin")
+    sym_alpha = 1
+    for i in range(dim):
+#         sym_alpha *= sym_sin(3*sym_coords[i])
+        sym_alpha *= (sym_coords[i])**2
+    sym_alpha = 1 + 0.05*sym_alpha
+    sym_u = 1
+    for i in range(dim):
+        sym_u *= sym_cos(sym_coords[i])
+    return HeatProblem(dim, mesh_factory, sym_alpha, sym_u)
+
+
+def sym_diffusion(dim, sym_alpha, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
-    sym_alpha = pmbl.var("alpha")
     return sym_alpha * sym.div(sym.grad(dim, sym_u))
 
 
@@ -106,12 +172,14 @@ def sym_diffusion(dim, sym_u):
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt"),
     [
-        (get_decaying_cosine(1, 2.), 50, 5.e-5),
-        (get_decaying_cosine(2, 2.), 50, 5.e-5),
-        (get_decaying_cosine(3, 2.), 50, 5.e-5),
+#         (get_decaying_cosine(1, 2.), 50, 5.e-5),
+#         (get_decaying_cosine(2, 2.), 50, 5.e-5),
+#         (get_decaying_cosine(3, 2.), 50, 5.e-5),
+        (get_static_cosine_var_diff(1), 50, 5.e-5),
+#         (get_decaying_cosine_var_diff(1), 50, 5.e-5),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
-            visualize=False):
+            visualize=True):
     """
     Checks the accuracy of the diffusion operator by solving the heat equation for a
     given problem setup.
@@ -120,7 +188,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
 
     p = problem
 
-    sym_diffusion_u = sym_diffusion(p.dim, p.sym_u)
+    sym_diffusion_u = sym_diffusion(p.dim, p.sym_alpha, p.sym_u)
 
     # In order to support manufactured solutions, we modify the heat equation
     # to add a source term f. If the solution is exact, this term should be 0.
@@ -134,19 +202,35 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
         mesh = p.mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.symbolic.primitives import QTAG_NONE
+        from meshmode.discretization.poly_element import \
+                QuadratureSimplexGroupFactory, \
+                PolynomialWarpAndBlendGroupFactory
+        discr = EagerDGDiscretization(actx, mesh,
+                quad_tag_to_group_factory={
+                    QTAG_NONE: PolynomialWarpAndBlendGroupFactory(order),
+                    "var_diff": QuadratureSimplexGroupFactory(3*order),
+                    })
 
         nodes = thaw(actx, discr.nodes())
 
         def sym_eval(expr, t):
-            return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes, "t": t})(expr)
-
-        def get_rhs(t, w):
-            result = diffusion_operator(discr, alpha=p.alpha, w=w)
-            result[0] += sym_eval(sym_f, t)
-            return result
+            return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
         t = 0.
+
+        alpha = sym_eval(p.sym_alpha, t)
+
+        if isinstance(alpha, DOFArray):
+            var_diff_quad_tag = "var_diff"
+        else:
+            var_diff_quad_tag = None
+
+        def get_rhs(t, w):
+            result = diffusion_operator(discr, alpha=alpha, w=w,
+                        var_diff_quad_tag=var_diff_quad_tag)
+            result[0] += sym_eval(sym_f, t)
+            return result
 
         fields = make_obj_array([sym_eval(p.sym_u, t)])
 
@@ -155,6 +239,16 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
         for istep in range(nsteps):
             fields = rk4_step(fields, t, dt, get_rhs)
             t += dt
+            expected_fields = make_obj_array([sym_eval(p.sym_u, t)])
+            if istep % 10 == 0 and visualize:
+                from grudge.shortcuts import make_visualizer
+                vis = make_visualizer(discr, discr.order+3)
+                vis.write_vtk_file("diffusion_accuracy_{order}_{n}_{istep}.vtu".format(
+                    order=order, n=n, istep=istep), [
+                        ("alpha", alpha),
+                        ("u", fields[0]),
+                        ("expected_u", expected_fields[0]),
+                        ])
 
         expected_fields = make_obj_array([sym_eval(p.sym_u, t)])
 
@@ -163,14 +257,14 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
             / discr.norm(expected_fields, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
-        if visualize:
-            from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order+3)
-            vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
-                order=order, n=n), [
-                    ("u", fields[0]),
-                    ("expected_u", expected_fields[0]),
-                    ])
+#         if visualize:
+#             from grudge.shortcuts import make_visualizer
+#             vis = make_visualizer(discr, discr.order+3)
+#             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
+#                 order=order, n=n), [
+#                     ("u", fields[0]),
+#                     ("expected_u", expected_fields[0]),
+#                     ])
 
     print("Approximation error:")
     print(eoc_rec)
@@ -195,12 +289,12 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
     p = problem
 
     assert p.dim == 1
-    assert p.alpha == 1.
+    assert p.sym_alpha == 1.
 
     from meshmode.interop.nodal_dg import download_nodal_dg_if_not_present
     download_nodal_dg_if_not_present()
 
-    sym_diffusion_u = sym_diffusion(p.dim, p.sym_u)
+    sym_diffusion_u = sym_diffusion(p.dim, p.sym_alpha, p.sym_u)
 
     for n in [4, 8, 16, 32, 64]:
         mesh = p.mesh_factory(n)
@@ -216,20 +310,18 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             nodes_mirgecom = thaw(actx, discr_mirgecom.nodes())
 
             def sym_eval_mirgecom(expr):
-                return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes_mirgecom,
-                            "t": t})(expr)
+                return sym.EvaluationMapper({"x": nodes_mirgecom, "t": t})(expr)
 
             fields_mirgecom = make_obj_array([sym_eval_mirgecom(p.sym_u)])
 
-            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom, alpha=p.alpha,
-                        w=fields_mirgecom)
+            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
+                        alpha=p.sym_alpha, w=fields_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
 
             def sym_eval_ndg(expr):
-                return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes_ndg,
-                            "t": t})(expr)
+                return sym.EvaluationMapper({"x": nodes_ndg, "t": t})(expr)
 
             fields_ndg = make_obj_array([sym_eval_ndg(p.sym_u)])
 
@@ -263,8 +355,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     sym_u1 = p.sym_u
     sym_u2 = 2*p.sym_u
 
-    sym_diffusion_u1 = sym_diffusion(p.dim, sym_u1)
-    sym_diffusion_u2 = sym_diffusion(p.dim, sym_u2)
+    sym_diffusion_u1 = sym_diffusion(p.dim, p.sym_alpha, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(p.dim, p.sym_alpha, sym_u2)
 
     n = 128
 
@@ -278,12 +370,12 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     t = 1.23456789
 
     def sym_eval(expr):
-        return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes, "t": t})(expr)
+        return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
     u1 = sym_eval(sym_u1)
     u2 = sym_eval(sym_u2)
 
-    diffusion_u1 = diffusion_operator(discr, alpha=p.alpha, w=u1)
+    diffusion_u1 = diffusion_operator(discr, alpha=p.sym_alpha, w=u1)
 
     assert type(diffusion_u1) == DOFArray
 
@@ -295,7 +387,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     us = make_obj_array([u1, u2])
 
-    diffusion_us = diffusion_operator(discr, alpha=p.alpha, w=us)
+    diffusion_us = diffusion_operator(discr, alpha=p.sym_alpha, w=us)
 
     assert type(diffusion_us) == np.ndarray
     assert diffusion_us.shape == (2,)
