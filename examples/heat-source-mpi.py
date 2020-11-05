@@ -97,17 +97,19 @@ def main():
 
     nodes = thaw(actx, discr.nodes())
 
-    u = discr.zeros(actx)
-
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+    alpha = discr.zeros(actx) + 1.
 
     boundaries = {
         grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
         grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
     }
 
+    u = discr.zeros(actx)
+
+    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+
     def rhs(t, u):
-        return (diffusion_operator(discr, alpha=1, boundaries=boundaries, u=u)
+        return (diffusion_operator(discr, alpha=alpha, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()
