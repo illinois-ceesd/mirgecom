@@ -10,9 +10,11 @@ Euler's equations of gas dynamics:
 where:
 
 -   state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]$
--   flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V}, (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]$,
+-   flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]$,
 -   domain boundary $\partial\Omega$,
--   sources $\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s]$
+-   sources $\mathbf{S} = [{(\partial_t{\rho})}_s,
+    {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s]$
 
 
 State Vector Handling
