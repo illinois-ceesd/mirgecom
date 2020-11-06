@@ -133,7 +133,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
             def my_facialflux_r_boundary(sol_ext,sol_int):
                 q_tpair = TracePair(btag,interior=make_obj_array([sol_int]),exterior=make_obj_array([sol_ext]))
                 return _facial_flux_r(discr,q_tpair=q_tpair)
-            r_ext=boundaries[btag].interior_sol(discr,eos=eos,btag=btag,t=t,q=r)
+            r_ext=boundaries[btag].exterior_sol(discr,eos=eos,btag=btag,t=t,q=r)
             r_int=discr.project("vol",btag,r)
             dbf_r = dbf_r + obj_array_vectorize_n_args(my_facialflux_r_boundary,r_ext,r_int)
             
