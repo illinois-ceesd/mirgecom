@@ -63,7 +63,7 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=100):
+def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
