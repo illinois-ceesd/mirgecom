@@ -13,8 +13,9 @@ where:
 -   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
     (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y_s}\vec{V}]`,
 -   unit normal :math:`\hat{n}` to the domain boundary :math:`\partial\Omega`,
--   sources :math:`\mathbf{\phi}_{source} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-    {(\partial_t{\rho\vec{V}})}_s, {(\partial_t{\rho{Y_s}})}_s]`
+-   sources :math:`\mathbf{\phi}_{source} = [{(\partial_t{\rho})}_s,
+    {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s,
+    {(\partial_t{\rho{Y_s}})}_s]`
 
 
 State Vector Handling
