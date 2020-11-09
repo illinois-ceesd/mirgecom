@@ -46,6 +46,7 @@ extensions = [
     "sphinx.ext.graphviz",
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
+    "sphinx_math_dollar",
     ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -94,3 +95,10 @@ autoclass_content = "class"
 todo_include_todos = True
 
 nitpicky = True
+
+mathjax_config = {
+    "tex2jax": {
+        "inlineMath": [["\\(", "\\)"]],
+        "displayMath": [["\\[", "\\]"]],
+    },
+}
