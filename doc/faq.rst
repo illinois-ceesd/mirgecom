@@ -72,6 +72,8 @@ In some cases, it can be helpful to install certain packages from source, for de
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
 `installation script <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__.
 
+.. _Pyopencl source installation:
+
 How can I build pyopencl from source?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -87,3 +89,33 @@ You can build pyopencl against conda's OpenCL driver in the following way::
    # Apply this patch on MacOS: https://raw.githubusercontent.com/conda-forge/pyopencl-feedstock/master/recipe/osx_flags.diff
    $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
    $ pip install -e .
+
+How can I record the exact versions of Python packages that are currently installed and reinstall them at a later time?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Running emirge's `version.sh` script creates a requirements.txt file that
+stores the exact git commits of each emirge sub-repository that were used at
+the time when `version.sh` was executed. You can use this file to install the
+exact versions of the packages at a later time::
+
+   $ cd emirge/
+   $ ./version.sh --output-requirements=myreq.txt
+   [...]
+   *** Creating requirements file with current emirge module versions
+   [...]
+   *** Created file 'myreq.txt'. Install it with 'pip install --src . -r myreq.txt'.
+
+   $ pip install --src . -r myreq.txt
+
+
+.. note::
+
+   This will build pyopencl by source, which can be challenging on some systems. Please
+   see :ref:`Pyopencl source installation` for information on the prerequisites of Pyopencl,
+   or remove/comment the pyopencl line from the generated requirements file.
+
+.. note::
+
+   You can also install the packages from the created requirements.txt with a new emirge installation::
+   
+      $ ./install.sh --pip-pkgs=myreq.txt

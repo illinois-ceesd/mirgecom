@@ -5,14 +5,14 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
+    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{S}
 
 where:
 
 -   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
 -   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
     (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
--   domain boundary :math:`\partial_{\Omega}`,
+-   domain boundary :math:`\partial\Omega`,
 -   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
     {(\partial_t{\rho\vec{V}})}_s]`
 
@@ -243,10 +243,13 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
 
     Returns
     -------
-    The right-hand-side of the Euler flow equations:
+    numpy.ndarray
+        The right-hand-side of the Euler flow equations:
 
-    :math:`\dot\mathbf{q} = \mathbf{S} - \nabla\cdot\mathbf{F} +
-          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega}`
+        .. math::
+
+            \dot{\mathbf{q}} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+                (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
     Parameters
     ----------
