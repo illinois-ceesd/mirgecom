@@ -46,6 +46,8 @@ def diff(var):
             return pmbl.var("cos")(*arg)
         elif func == pmbl.var("cos"):
             return -pmbl.var("sin")(*arg)
+        elif func == pmbl.var("exp"):
+            return pmbl.var("exp")(*arg)
         else:
             raise ValueError("Unrecognized function")
 
@@ -83,6 +85,9 @@ class EvaluationMapper(ev.EvaluationMapper):
         elif expr.function.name == "cos":
             par, = expr.parameters
             return self._cos(self.rec(par))
+        elif expr.function.name == "exp":
+            par, = expr.parameters
+            return self._exp(self.rec(par))
         else:
             raise ValueError("Unrecognized function '%s'" % expr.function)
 
@@ -99,3 +104,10 @@ class EvaluationMapper(ev.EvaluationMapper):
             return np.cos(val)
         else:
             return val.array_context.np.cos(val)
+
+    def _exp(self, val):
+        from numbers import Number
+        if isinstance(val, Number):
+            return np.exp(val)
+        else:
+            return val.array_context.np.exp(val)

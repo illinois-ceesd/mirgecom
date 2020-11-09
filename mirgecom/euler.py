@@ -5,16 +5,16 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{\phi}_{source}
+    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{\phi}_{source}
 
 where:
 
 -   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y_s}]`
 -   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
     (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y_s}\vec{V}]`,
--   unit normal :math:`\hat{n}` to the domain boundary :math:`\partial_{\Omega}`,
--   sources :math:`\mathbf{\phi}_{source} = [{\Delta}_t{\rho}, {\Delta}_t(\rho{E}),
-    {\Delta}_t(\rho\vec{V}), {\Delta}_t(\rho{Y_s})]`
+-   unit normal :math:`\hat{n}` to the domain boundary :math:`\partial\Omega`,
+-   sources :math:`\mathbf{\phi}_{source} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
+    {(\partial_t{\rho\vec{V}})}_s, {(\partial_t{\rho{Y_s}})}_s]`
 
 
 State Vector Handling
@@ -281,10 +281,15 @@ def _facial_flux(discr, eos, q_tpair, local=False):
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     r"""Compute RHS of the Euler flow equations.
 
-    The RHS (:math:`\dot{\mathbf{Q}}`) is computed as:
+    Returns
+    -------
+    numpy.ndarray
+        The right-hand-side of the Euler flow equations:
 
-    :math:`\dot{\mathbf{Q}} = \mathbf{\phi}_{source} - \nabla\cdot\mathbf{F} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}}`
+        .. math::
+
+            \dot{\mathbf{q}} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+                (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
     Parameters
     ----------
