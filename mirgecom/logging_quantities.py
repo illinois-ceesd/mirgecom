@@ -65,7 +65,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities."""
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
-                 name: str):
+                 name: str, rank_aggr: str = None):
 
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self)
@@ -73,6 +73,11 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
         self.discr = discr
 
         self.quantity = quantity
+
+        if rank_aggr is None:
+            self.rank_aggr = "norm_2"
+        else:
+            self.rank_aggr = rank_aggr
 
         from functools import partial
 
@@ -85,6 +90,23 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
         else:
             raise RuntimeError(f"unknown operation {op}")
 
+    @property
+    def default_aggregator(self):
+        if self.rank_aggr == "norm_2":
+            from pytools import norm_2
+            return norm_2
+        elif self.rank_aggr == "norm_inf":
+            from pytools import norm_inf
+            return norm_inf
+        elif self.rank_aggr == "sum":
+            return sum
+        elif self.rank_aggr == "min":
+            return min
+        elif self.rank_aggr == "max":
+            return max
+        else:
+            return None
+
     def __call__(self):
         """Return the requested quantity."""
         raise NotImplementedError
@@ -94,10 +116,11 @@ class ConservedQuantity(PhysicalQuantity):
     """Logging support for conserved quantities (mass, energy, momentum)."""
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
-                 unit: str = None, dim: int = None, name: str = None):
+                 unit: str = None, dim: int = None, name: str = None,
+                 rank_aggr: str = None):
         if unit is None:
             if quantity == "mass":
-                unit = "g"
+                unit = "kg"
             elif quantity == "energy":
                 unit = "J"
             elif quantity == "momentum":
@@ -111,7 +134,7 @@ class ConservedQuantity(PhysicalQuantity):
         if name is None:
             name = f"{op}_{quantity}{dim}"
 
-        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
+        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name, rank_aggr)
 
         self.dim = dim
 
@@ -138,7 +161,8 @@ class DependentQuantity(PhysicalQuantity):
     """Logging support for dependent quantities (temperature, pressure)."""
 
     def __init__(self, discr: Discretization, eos: GasEOS,
-                 quantity: str, op: str, unit: str = None, name: str = None):
+                 quantity: str, op: str, unit: str = None, name: str = None,
+                 rank_aggr: str = None):
         if unit is None:
             if quantity == "temperature":
                 unit = "K"
@@ -150,7 +174,7 @@ class DependentQuantity(PhysicalQuantity):
         if name is None:
             name = f"{op}_{quantity}"
 
-        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name)
+        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name, rank_aggr)
 
         self.eos = eos
 
