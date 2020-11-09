@@ -92,6 +92,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
 
     @property
     def default_aggregator(self):
+        """Rank aggregator to use."""
         if self.rank_aggr == "norm_2":
             from pytools import norm_2
             return norm_2
