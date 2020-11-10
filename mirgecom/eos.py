@@ -229,3 +229,128 @@ class IdealSingleGas(GasEOS):
         """
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
+
+
+class PrometheusMixture(GasEOS):
+    r"""Ideal gas mixture (:math:`p = \bar{\rho}{R}_\mathtt{mix}{T}`).
+
+    The mixture gas constant, :math:`R_\mathtt{mix}`, is calculated
+    as :math:`R_\mathtt{mix} = \sum{Y_\alpha R_\alpha}` by the _Prometheus_ 
+    mechanism provided by the user.
+
+    Each interface call expects that the agglomerated
+    object array representing the state vector (:math:`q`),
+    contains at least the canonical conserved quantities
+    mass (:math:`\rho`), energy (:math:`\rho{E}`), and
+    momentum (:math:`\rho\vec{V}`) and the vector of 
+    mass fractions for each species (:math:`Y_\alpha`).
+
+    .. automethod:: __init__
+    .. automethod:: gamma
+
+    Inherits from (and implements) :class:`GasEOS`.
+    """
+
+    def __init__(self, prometheus_mech):
+        """Initialize Prometheus EOS with mechanism class."""
+        self._prometheus_mech = prometheus_mech
+
+    def gamma(self):
+        """Get specific heat ratio Cp/Cv."""
+        return self._gamma
+
+    def gas_const(self):
+        """Get specific gas constant R."""
+        return self._prometheus_mech.gas_constant
+
+    def kinetic_energy(self, cv: ConservedVars):
+        r"""Get kinetic (i.e. not internal) energy of gas.
+
+        The kinetic energy is calculated as:
+        .. :math::
+
+            k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        mom = cv.momentum
+        return (0.5 * np.dot(mom, mom) / cv.mass)
+
+    def internal_energy(self, cv: ConservedVars):
+        r"""Get internal thermal energy of gas.
+
+        The internal energy (e) is calculated as:
+        .. :math::
+
+            e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        return (cv.energy - self.kinetic_energy(cv))
+
+    def mass_fractions(self, cv: ConservedVars):
+        r"""Get mass fractions :math:`\Y_\alpha` from species densities."""
+        return cv.massfractions / cv.mass
+
+    def pressure(self, cv: ConservedVars):
+        r"""Get thermodynamic pressure of the gas.
+
+        Gas pressure (p) is calculated from the internal energy (e) as:
+
+        .. :math::
+
+            p = (\gamma - 1)e
+        """
+        temperature = self.temperature(cv)
+        y = self.mass_fractions(cv)
+        return self._prometheus_mech.get_pressure(cv.mass, temperature, y)
+
+    def sound_speed(self, cv: ConservedVars):
+        r"""Get the speed of sound in the gas.
+
+        The speed of sound (c) is calculated as:
+
+        .. :math::
+
+            c = \sqrt{\frac{\gamma{p}}{\rho}}
+        """
+        actx = cv.mass.array_context
+
+        p = self.pressure(cv)
+        c2 = self._gamma / cv.mass * p
+        return actx.np.sqrt(c2)
+
+    def temperature(self, cv: ConservedVars):
+        r"""Get the thermodynamic temperature of the gas.
+
+        The thermodynamic temperature (T) is calculated from
+        the internal energy (e) and specific gas constant (R)
+        as:
+
+        .. :math::
+
+            T = \frac{(\gamma - 1)e}{R\rho}
+        """
+        y = self.mass_fractions(cv)
+        e = self.internal_energy(cv) / cv.mass
+        tguess = 300.0
+        return self._prometheus_mech.get_temperature(e, tguess, y, True)
+
+    def total_energy(self, cv, pressure):
+        r"""
+        Get gas total energy from mass, pressure, and momentum.
+
+        The total energy density (rhoE) is calculated from
+        the mass density (rho) , pressure (p) , and
+        momentum (rhoV) as:
+
+        .. :math::
+
+            \rhoE = \frac{p}{(\gamma - 1)} +
+            \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
+
+        .. note::
+
+            The total_energy function computes cv.energy from pressure,
+            mass, and momentum in this case. In general in the EOS we need
+            DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
+            inversion interfaces.
+        """
+        return (pressure / (self._gamma - 1.0)
+                + self.kinetic_energy(cv))
