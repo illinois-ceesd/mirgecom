@@ -161,7 +161,7 @@ def get_static_cosine_var_diff(dim):
 def sym_diffusion(dim, sym_alpha, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
-    return sym_alpha * sym.div(sym.grad(dim, sym_u))
+    return sym.div([sym_alpha * grad_i for grad_i in sym.grad(dim, sym_u)])
 
 
 # Note: Must integrate in time for a while in order to achieve expected spatial
