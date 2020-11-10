@@ -29,6 +29,8 @@ import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.diffusion import diffusion_operator
 from meshmode.dof_array import thaw, flat_norm, DOFArray
+from grudge.symbolic.primitives import TracePair
+from grudge import sym as grudge_sym
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -70,24 +72,35 @@ class HeatProblem:
     sym_u: prim.Expression
 
 
-def get_decaying_cosine(dim, alpha):
+def get_decaying_trig(dim, alpha):
     # 1D: u(x,t) = exp(-alpha*t)*cos(x)
-    # 2D: u(x,y,t) = exp(-2*alpha*t)*cos(x)*cos(y)
-    # 3D: u(x,y,z,t) = exp(-3*alpha*t)*cos(x)*cos(y)*cos(z)
+    # 2D: u(x,y,t) = exp(-2*alpha*t)*sin(x)*cos(y)
+    # 3D: u(x,y,z,t) = exp(-3*alpha*t)*sin(x)*sin(y)*cos(z)
     # on [-pi/2, pi/2]^{#dims}
     def get_mesh(n):
+        dim_names = ["x", "y", "z"]
+        neumann_boundaries = []
+        for i in range(dim-1):
+            neumann_boundaries += ["+"+dim_names[i], "-"+dim_names[i]]
+        dirichlet_boundaries = ["+"+dim_names[dim-1], "-"+dim_names[dim-1]]
         from meshmode.mesh.generation import generate_regular_rect_mesh
         return generate_regular_rect_mesh(
             a=(-0.5*np.pi,)*dim,
             b=(0.5*np.pi,)*dim,
-            n=(n,)*dim)
+            n=(n,)*dim,
+            boundary_tag_to_face={
+                "dirichlet": dirichlet_boundaries,
+                "neumann": neumann_boundaries
+                })
     sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
+    sym_sin = pmbl.var("sin")
     sym_exp = pmbl.var("exp")
     sym_u = sym_exp(-dim*alpha*sym_t)
-    for i in range(dim):
-        sym_u *= sym_cos(sym_coords[i])
+    for i in range(dim-1):
+        sym_u *= sym_sin(sym_coords[i])
+    sym_u *= sym_cos(sym_coords[dim-1])
     return HeatProblem(dim, alpha, get_mesh, sym_u)
 
 
@@ -98,6 +111,39 @@ def sym_diffusion(dim, sym_u):
     return sym_alpha * sym.div(sym.grad(dim, sym_u))
 
 
+def get_boundaries():
+    dirichlet_btag = grudge_sym.DTAG_BOUNDARY("dirichlet")
+    neumann_btag = grudge_sym.DTAG_BOUNDARY("neumann")
+
+    def u_dirichlet(discr, u):
+        dir_u = discr.project("vol", dirichlet_btag, u)
+        return TracePair(dirichlet_btag, interior=dir_u, exterior=-dir_u)
+
+    def q_dirichlet(discr, q):
+        dir_q = discr.project("vol", dirichlet_btag, q)
+        return TracePair(dirichlet_btag, interior=dir_q, exterior=dir_q)
+
+    def u_neumann(discr, u):
+        dir_u = discr.project("vol", neumann_btag, u)
+        return TracePair(neumann_btag, interior=dir_u, exterior=dir_u)
+
+    def q_neumann(discr, q):
+        dir_q = discr.project("vol", neumann_btag, q)
+        return TracePair(neumann_btag, interior=dir_q, exterior=-dir_q)
+
+    u_boundaries = {
+        dirichlet_btag: u_dirichlet,
+        neumann_btag: u_neumann
+    }
+
+    q_boundaries = {
+        dirichlet_btag: q_dirichlet,
+        neumann_btag: q_neumann
+    }
+
+    return u_boundaries, q_boundaries
+
+
 # Note: Must integrate in time for a while in order to achieve expected spatial
 # accuracy. Checking the RHS alone will give lower numbers.
 #
@@ -106,9 +152,9 @@ def sym_diffusion(dim, sym_u):
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt"),
     [
-        (get_decaying_cosine(1, 2.), 50, 5.e-5),
-        (get_decaying_cosine(2, 2.), 50, 5.e-5),
-        (get_decaying_cosine(3, 2.), 50, 5.e-5),
+        (get_decaying_trig(1, 2.), 50, 5.e-5),
+        (get_decaying_trig(2, 2.), 50, 5.e-5),
+        (get_decaying_trig(3, 2.), 50, 5.e-5),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
             visualize=False):
@@ -130,6 +176,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
+    u_boundaries, q_boundaries = get_boundaries()
+
     for n in [8, 10, 12] if p.dim == 3 else [8, 16, 24]:
         mesh = p.get_mesh(n)
 
@@ -142,7 +190,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
             return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes, "t": t})(expr)
 
         def get_rhs(t, u):
-            result = (diffusion_operator(discr, alpha=p.alpha, u=u)
+            result = (diffusion_operator(discr, alpha=p.alpha,
+                    u_boundaries=u_boundaries, q_boundaries=q_boundaries, u=u)
                 + sym_eval(sym_f, t))
             return result
 
@@ -183,7 +232,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("problem",
     [
-        get_decaying_cosine(1, 1.)
+        get_decaying_trig(1, 1.)
     ])
 def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             print_err=False):
@@ -201,6 +250,8 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
     download_nodal_dg_if_not_present()
 
     sym_diffusion_u = sym_diffusion(p.dim, p.sym_u)
+
+    u_boundaries, q_boundaries = get_boundaries()
 
     for n in [4, 8, 16, 32, 64]:
         mesh = p.get_mesh(n)
@@ -222,7 +273,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             u_mirgecom = sym_eval_mirgecom(p.sym_u)
 
             diffusion_u_mirgecom = diffusion_operator(discr_mirgecom, alpha=p.alpha,
-                        u=u_mirgecom)
+                u_boundaries=u_boundaries, q_boundaries=q_boundaries, u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
@@ -257,13 +308,15 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     """
     actx = actx_factory()
 
-    p = get_decaying_cosine(1, 2.)
+    p = get_decaying_trig(1, 2.)
 
     sym_u1 = p.sym_u
     sym_u2 = 2*p.sym_u
 
     sym_diffusion_u1 = sym_diffusion(p.dim, sym_u1)
     sym_diffusion_u2 = sym_diffusion(p.dim, sym_u2)
+
+    u_boundaries, q_boundaries = get_boundaries()
 
     n = 128
 
@@ -282,7 +335,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u1 = sym_eval(sym_u1)
     u2 = sym_eval(sym_u2)
 
-    diffusion_u1 = diffusion_operator(discr, alpha=p.alpha, u=u1)
+    diffusion_u1 = diffusion_operator(discr, alpha=p.alpha,
+        u_boundaries=u_boundaries, q_boundaries=q_boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
@@ -292,20 +346,24 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         / discr.norm(expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
 
-    us = make_obj_array([u1, u2])
+    u_boundaries_vector = make_obj_array([u_boundaries, u_boundaries])
+    q_boundaries_vector = make_obj_array([q_boundaries, q_boundaries])
+    u_vector = make_obj_array([u1, u2])
 
-    diffusion_us = diffusion_operator(discr, alpha=p.alpha, u=us)
+    diffusion_u_vector = diffusion_operator(discr, alpha=p.alpha,
+        u_boundaries=u_boundaries_vector, q_boundaries=q_boundaries_vector,
+        u=u_vector)
 
-    assert isinstance(diffusion_us, np.ndarray)
-    assert diffusion_us.shape == (2,)
+    assert isinstance(diffusion_u_vector, np.ndarray)
+    assert diffusion_u_vector.shape == (2,)
 
-    expected_diffusion_us = make_obj_array([
+    expected_diffusion_u_vector = make_obj_array([
         sym_eval(sym_diffusion_u1),
         sym_eval(sym_diffusion_u2)
     ])
     rel_linf_err = (
-        discr.norm(diffusion_us - expected_diffusion_us, np.inf)
-        / discr.norm(expected_diffusion_us, np.inf))
+        discr.norm(diffusion_u_vector - expected_diffusion_u_vector, np.inf)
+        / discr.norm(expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
 
 

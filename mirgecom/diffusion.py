@@ -30,10 +30,9 @@ THE SOFTWARE.
 import math
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import obj_array_vectorize
+from pytools.obj_array import obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
-from grudge.symbolic.primitives import TracePair
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 
 
@@ -49,7 +48,7 @@ def _u_flux(discr, alpha, q_tpair):
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
 
-def diffusion_operator(discr, alpha, u):
+def diffusion_operator(discr, alpha, u_boundaries, q_boundaries, u):
     r"""
     Compute the diffusion operator.
 
@@ -57,14 +56,18 @@ def diffusion_operator(discr, alpha, u):
     $\nabla\cdot(\alpha\nabla u)$, where $\alpha$ is the diffusivity and
     $u$ is a scalar field.
 
-    Currently sets $u = 0$ on the boundaries.
-
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     alpha: float
         the (constant) diffusivity
+    u_boundaries:
+        dictionary (or object array of dictionaries) of boundary functions for *u*,
+        one for each valid btag
+    q_boundaries:
+        dictionary (or object array of dictionaries) of boundary functions for
+        :math:`q = \sqrt{\alpha}\nabla u`, one for each valid btag
     u: meshmode.dof_array.DOFArray or numpy.ndarray
         the DOF array or object array of DOF arrays to which the operator should be
         applied
@@ -75,25 +78,28 @@ def diffusion_operator(discr, alpha, u):
         the diffusion operator applied to *u*
     """
     if isinstance(u, np.ndarray):
-        return obj_array_vectorize(lambda u_i: diffusion_operator(discr, alpha, u_i),
-                    u)
-
-    dir_u = discr.project("vol", BTAG_ALL, u)
+        if not isinstance(u_boundaries, np.ndarray) or len(u_boundaries) != len(u):
+            raise RuntimeError("u_boundaries must be the same length as u")
+        if not isinstance(q_boundaries, np.ndarray) or len(q_boundaries) != len(u):
+            raise RuntimeError("q_boundaries must be the same length as u")
+        return obj_array_vectorize_n_args(lambda u_boundaries_i, q_boundaries_i, u_i:
+            diffusion_operator(discr, alpha, u_boundaries_i, q_boundaries_i, u_i),
+            u_boundaries, q_boundaries, u)
 
     q = discr.inverse_mass(
         -math.sqrt(alpha)*discr.weak_grad(u)
         +  # noqa: W504
         discr.face_mass(
             _q_flux(discr, alpha=alpha, u_tpair=interior_trace_pair(discr, u))
-            + _q_flux(discr, alpha=alpha,
-                u_tpair=TracePair(BTAG_ALL, interior=dir_u, exterior=-dir_u))
+            + sum(
+                _q_flux(discr, alpha=alpha, u_tpair=u_boundaries[btag](discr, u))
+                for btag in u_boundaries
+            )
             + sum(
                 _q_flux(discr, alpha=alpha, u_tpair=tpair)
                 for tpair in cross_rank_trace_pairs(discr, u)
             )
         ))
-
-    dir_q = discr.project("vol", BTAG_ALL, q)
 
     return (
         discr.inverse_mass(
@@ -101,8 +107,10 @@ def diffusion_operator(discr, alpha, u):
             +  # noqa: W504
             discr.face_mass(
                 _u_flux(discr, alpha=alpha, q_tpair=interior_trace_pair(discr, q))
-                + _u_flux(discr, alpha=alpha,
-                    q_tpair=TracePair(BTAG_ALL, interior=dir_q, exterior=dir_q))
+                + sum(
+                    _u_flux(discr, alpha=alpha, q_tpair=q_boundaries[btag](discr, q))
+                    for btag in q_boundaries
+                )
                 + sum(
                     _u_flux(discr, alpha=alpha, q_tpair=tpair)
                     for tpair in cross_rank_trace_pairs(discr, q))
