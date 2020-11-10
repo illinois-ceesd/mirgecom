@@ -8,6 +8,7 @@ Solution Initializers
 .. autoclass:: Lump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
+.. autoclass:: MultiLump
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
 """
@@ -489,6 +490,231 @@ class Lump:
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
+class MultiLump:
+    r"""Solution initializer for multi-species N-dimensional Gaussian lump of mass.
+
+    The Gaussian lump is defined by:
+
+    .. math::
+
+         {\rho}(r) = {\rho}_{0} + {\rho}_{a}{e}^{(1-r^{2})}\\
+         {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
+         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+
+    Where :math:`V_0` is the fixed velocity specified
+    by the user at init time, and :math:`\gamma` is taken
+    from the equation-of-state object (eos).
+
+    For multi-species or mixutres, :math:`\rho=1`, and each mixture component
+    is assigned by:
+
+    .. math::
+
+         {\rho}Y_\alpha = \bar{Y_\alpha} + a_\alpha{e}^{-(r - c_\alpha)^2}
+
+    :math:`\bar{Y_\alpha}` is the user-specified vector of initial values
+    for the mass fraction of each species, *spec_y0s*, and :math:`a_\alpha` is the
+    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
+    :math:`c_\alpha` is the user-specified origin for each species, *spec_centers*.
+
+    A call to this object after creation/init creates
+    the lump solution at a given time (t)
+    relative to the configured origin (center) and
+    background flow velocity (velocity).
+
+    This object also functions as a boundary condition
+    by providing the "get_boundary_flux" method to
+    prescribe exact field values on the given boundary.
+
+    This object also supplies the exact expected RHS
+    terms from the analytic expression in the
+    "expected_rhs" method.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: exact_rhs
+    """
+
+    def __init__(
+            self, numdim, nspecies=0,
+            rho0=1.0, rhoamp=0.0, p0=1.0,
+            center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None,
+            spec_centers=None
+    ):
+        r"""Initialize Lump parameters.
+
+        Parameters
+        ----------
+        numdim: int
+            specify the number of dimensions for the lump
+        rho0: float
+            specifies the value of :math:`\rho_0`
+        rhoamp: float
+            specifies the value of :math:`\rho_a`
+        p0: float
+            specifies the value of :math:`p_0`
+        center: numpy.ndarray
+            center of lump, shape ``(2,)``
+        velocity: numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(2,)``
+        """
+        if center is None:
+            center = np.zeros(shape=(numdim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(numdim,))
+        assert len(center) == numdim
+        assert len(velocity) == numdim
+
+        if nspecies > 0:
+            if spec_y0s is None:
+                spec_y0s = np.ones(shape=(nspecies,))
+            if spec_centers is None:
+                spec_centers = make_obj_array([np.zeros(shape=numdim,)
+                                               for i in range(nspecies)])
+            if spec_amplitudes is None:
+                spec_amplitudes = np.ones(shape=(nspecies,))
+            assert len(spec_y0s) == nspecies
+            assert len(spec_amplitudes) == nspecies
+            assert len(spec_centers) == nspecies
+            for i in range(nspecies):
+                assert len(spec_centers[i]) == numdim
+
+        self._nspecies = nspecies
+        self._dim = numdim
+        self._velocity = velocity
+        self._center = center
+        self._p0 = p0
+        self._rho0 = rho0
+        self._rhoamp = rhoamp
+        self._spec_y0s = spec_y0s
+        self._spec_centers = spec_centers
+        self._spec_amplitudes = spec_amplitudes
+
+    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+        """
+        Create the lump-of-mass solution at time *t* and locations *x_vec*.
+
+        Note that *t* is used to advect the mass lump under the assumption of
+        constant, and uniform velocity.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
+        print(f"len(x_vec) = {len(x_vec)}")
+        print(f"self._dim = {self._dim}")
+
+        assert len(x_vec) == self._dim
+        amplitude = self._rhoamp
+        actx = x_vec[0].array_context
+
+        # mass0 = self._rho0
+        loc_update = t * self._velocity
+        lump_loc = self._center + loc_update
+        # coordinates relative to lump center
+        rel_center = make_obj_array(
+            [x_vec[i] - lump_loc[i] for i in range(self._dim)]
+        )
+        r = actx.np.sqrt(np.dot(rel_center, rel_center))
+        expterm = amplitude * actx.np.exp(- r ** 2)
+        mass = expterm + self._rho0
+        mom = self._velocity * make_obj_array([mass])
+        gamma = eos.gamma()
+        energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+
+        # process the species components independently
+        massfracs = None
+        if self._nspecies > 0:
+            lump_locs = make_obj_array([self._spec_centers[i] + loc_update
+                                       for i in range(self._nspecies)])
+            rel_poss = make_obj_array([x_vec - lump_locs[i]
+                                       for i in range(self._nspecies)])
+            r2s = make_obj_array([np.dot(rel_poss[i], rel_poss[i])
+                                  for i in range(self._nspecies)])
+            expterms = make_obj_array(
+                [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
+                 for i in range(self._nspecies)]
+            )
+            massfracs = make_obj_array([self._spec_y0s + expterms[i]
+                                        for i in range(self._nspecies)])
+
+        return flat_obj_array(mass, energy, mom, massfracs)
+
+    def exact_rhs(self, discr, q, t=0.0):
+        """
+        Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
+
+        Note that this routine is only useful for testing under the condition of
+        uniform, and constant velocity field.
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point.
+        t: float
+            Time at which RHS is desired
+        """
+        actx = q[0].array_context
+        nodes = thaw(actx, discr.nodes())
+        loc_update = t * self._velocity
+        lump_loc = self._center + loc_update
+        # coordinates relative to lump center
+        rel_center = make_obj_array(
+            [nodes[i] - lump_loc[i] for i in range(self._dim)]
+        )
+        r = actx.np.sqrt(np.dot(rel_center, rel_center))
+
+        # The expected rhs is:
+        # rhorhs  = -2*rho*(r.dot.v)
+        # rhoerhs = -rho*v^2*(r.dot.v)
+        # rhovrhs = -2*rho*(r.dot.v)*v
+        # rhoYrhs = -2*rho*Y*(r.dot.v)
+        expterm = self._rhoamp * actx.np.exp(- r ** 2)
+        mass = expterm + self._rho0
+
+        mom = self._velocity * make_obj_array([mass])
+
+        v = mom * make_obj_array([1 / mass])
+
+        v2 = np.dot(v, v)
+        rdotv = np.dot(rel_center, v)
+
+        massrhs = -2 * rdotv * mass
+        energyrhs = -v2 * rdotv * mass
+        momrhs = v * make_obj_array([-2 * mass * rdotv])
+
+        # process the species components independently
+        specrhs = None
+        if self._nspecies > 0:
+            lump_locs = make_obj_array([self._spec_centers[i] + loc_update
+                                       for i in range(self._nspecies)])
+            rel_poss = make_obj_array([nodes - lump_locs[i]
+                                       for i in range(self._nspecies)])
+            rdotvs = make_obj_array([np.dot(rel_poss[i], v)
+                                     for i in range(self._nspecies)])
+            r2s = make_obj_array([np.dot(rel_poss[i], rel_poss[i])
+                                  for i in range(self._nspecies)])
+            expterms = make_obj_array(
+                [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
+                 for i in range(self._nspecies)]
+            )
+            massfracs = make_obj_array([self._spec_y0s[i] + expterms[i]
+                                        for i in range(self._nspecies)])
+            massfracs = massfracs * make_obj_array([mass])
+            specrhs = make_obj_array([-2 * massfracs[i] * rdotvs[i]
+                                      for i in range(self._nspecies)])
+
+        return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
+
+
 class AcousticPulse:
     r"""Solution initializer for N-dimensional Gaussian acoustic pulse.
 
@@ -643,7 +869,7 @@ class Uniform:
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, massfrac=massfrac)
+                              momentum=mom, massfractions=massfrac)
     # Save this - some things in Uniform flow generator are broken
     # and one or the other of the above or below fixes the issue.
     # =======

@@ -28,6 +28,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+from pytools.obj_array import make_obj_array
 import pytest
 
 from meshmode.array_context import PyOpenCLArrayContext
@@ -36,7 +37,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
+from mirgecom.initializers import MultiLump
+
 from mirgecom.euler import split_conserved
+from mirgecom.euler import get_num_species
+
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
@@ -97,7 +102,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     if nspecies > 1:
         exp_massfracs = massfracs
-        mferrmax = discr.norm(cv.massfrac - exp_massfracs, np.inf)
+        mferrmax = discr.norm(cv.massfractions - exp_massfracs, np.inf)
         assert mferrmax < 1e-15
 
     assert perrmax < 1e-15
@@ -327,3 +332,79 @@ def test_pulse(ctx_factory, dim):
     w = w / np.sqrt(2.0)
     pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
+
+
+@pytest.mark.parametrize("nspecies", [1, 2, 10])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_multilump(ctx_factory, dim, nspecies):
+    """Test the multispecies lump initializer."""
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(-1.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 3
+    logger.info(f"Number of elements: {mesh.nelements}")
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
+    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+    spec_y0s = np.ones(shape=(nspecies,))
+    spec_amplitudes = np.ones(shape=(nspecies,))
+
+    for i in range(nspecies):
+        centers[i][0] = (.1 * i)
+        spec_y0s[i] += (.1 * i)
+        spec_amplitudes[i] += (.1 * i)
+
+    velocity = np.zeros(shape=(dim,))
+    velocity[0] = 1
+
+    lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
+                     velocity=velocity, spec_y0s=spec_y0s,
+                     spec_amplitudes=spec_amplitudes)
+
+    lump_soln = lump(t=0, x_vec=nodes)
+    numcvspec = get_num_species(dim, lump_soln)
+    print(f"get_num_species = {numcvspec}")
+    exp_mass = 1.0  # we expect \rho = 1.0 for multispecies lump init
+
+    assert get_num_species(dim, lump_soln) == nspecies
+
+    cv = split_conserved(dim, lump_soln)
+    assert discr.norm(cv.mass - exp_mass) == 0.0
+
+    p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
+    exp_p = 1.0
+    errmax = discr.norm(p - exp_p, np.inf)
+    assert cv.massfractions is not None
+    massfractions = cv.massfractions
+
+    for i in range(nspecies):
+        spec_r = nodes - centers[i]
+        r2 = np.dot(spec_r, spec_r)
+        expfactor = spec_amplitudes[i] * actx.np.exp(- r2)
+        exp_mass = spec_y0s[i] + expfactor
+        mfrac = massfractions[i:i+1]
+        print(f"Species number {i}")
+        print(f"spec_r = {spec_r}")
+        print(f"r2 = {r2}")
+        print(f"expfactor = {expfactor}")
+        print(f"expected_mass = {exp_mass}")
+        print(f"massfracs = {mfrac}")
+        mass_resid = mfrac - exp_mass
+        print(f"mass_resid = {mass_resid}")
+        assert discr.norm(mass_resid, np.inf) == 0.0
+
+    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"pressure = {p}")
+
+    assert errmax < 1e-15

@@ -41,7 +41,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import inviscid_operator, split_conserved, join_conserved
-from mirgecom.initializers import Vortex2D, Lump
+from mirgecom.initializers import Vortex2D, Lump, MultiLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
@@ -110,7 +110,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
         )
 
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       massfrac=massfracs)
+                       massfractions=massfracs)
     cv = split_conserved(dim, q)
 
     # {{{ create the expected result
@@ -393,7 +393,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            massfrac=massfrac_input)
+            massfractions=massfrac_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -407,7 +407,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert fnorm(iff_split.mass) < tolerance
         assert fnorm(iff_split.energy) < tolerance
         if nspecies > 1:
-            assert fnorm(iff_split.massfrac) < tolerance
+            assert fnorm(iff_split.massfractions) < tolerance
 
         # The expected pressure 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
@@ -434,9 +434,9 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dir_mf = discr.interp("vol", BTAG_ALL, massfrac_input)
 
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                  massfrac=dir_mf)
+                                  massfractions=dir_mf)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                massfrac=dir_mf)
+                                massfractions=dir_mf)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
@@ -447,7 +447,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert fnorm(bf_split.mass) < tolerance
         assert fnorm(bf_split.energy) < tolerance
         if nspecies > 1:
-            assert fnorm(bf_split.massfrac) < tolerance
+            assert fnorm(bf_split.massfractions) < tolerance
 
         momerr = fnorm(bf_split.momentum) - p0
         assert momerr < tolerance
@@ -515,7 +515,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            massfrac=massfrac_input)
+            massfractions=massfrac_input)
 
         expected_rhs = make_obj_array(
             [discr.zeros(actx) for i in range(len(fields))]
@@ -686,6 +686,75 @@ def test_lump_rhs(actx_factory, dim, order):
         lump = Lump(numdim=dim, center=center, velocity=velocity)
         lump_soln = lump(0, nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+        inviscid_rhs = inviscid_operator(
+            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
+        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+
+        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
+        if err_max > maxxerr:
+            maxxerr = err_max
+
+        eoc_rec.add_data_point(1.0 / nel_1d, err_max)
+    logger.info(f"Max error: {maxxerr}")
+
+    message = (
+        f"Error for (dim,order) = ({dim},{order}):\n"
+        f"{eoc_rec}"
+    )
+    logger.info(message)
+    assert (
+        eoc_rec.order_estimate() >= order - 0.5
+        or eoc_rec.max_error() < tolerance
+    )
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("nspecies", [1, 2, 10])
+@pytest.mark.parametrize("v0", [0.0, 1.0])
+def test_multilump_rhs(actx_factory, dim, order, nspecies, v0):
+    """Tests the inviscid rhs using the non-trivial
+    1, 2, and 3D mass lump case against the analytic
+    expressions of the RHS. Checks several different
+    orders and refinement levels to check error behavior.
+    """
+    actx = actx_factory()
+
+    tolerance = 1e-10
+    maxxerr = 0.0
+
+    from pytools.convergence import EOCRecorder
+
+    eoc_rec = EOCRecorder()
+
+    for nel_1d in [4, 8, 16]:
+        from meshmode.mesh.generation import (
+            generate_regular_rect_mesh,
+        )
+
+        mesh = generate_regular_rect_mesh(
+            a=(-1,) * dim, b=(1,) * dim, n=(nel_1d,) * dim,
+        )
+
+        logger.info(f"Number of elements: {mesh.nelements}")
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+
+        centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+        spec_y0s = np.ones(shape=(nspecies,))
+        spec_amplitudes = np.ones(shape=(nspecies,))
+
+        velocity = np.zeros(shape=(dim,))
+        velocity[0] = v0
+
+        lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
+                         velocity=velocity, spec_y0s=spec_y0s,
+                         spec_amplitudes=spec_amplitudes)
+
+        lump_soln = lump(t=0, x_vec=nodes)
+        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
