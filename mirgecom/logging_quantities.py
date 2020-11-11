@@ -41,6 +41,15 @@ from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
 
 
+def add_versions(mgr: LogManager) -> None:
+    """Add the output of the emirge version.sh script to the log."""
+    import os
+
+    if os.path.isfile("../version.sh"):
+        stream = os.popen('../version.sh')
+        mgr.set_constant("versions", stream.read())
+
+
 def set_state(mgr: LogManager, state: ndarray) -> None:
     """Update the state of all :class:`StateConsumer` of the log manager `mgr`."""
     for gd_lst in [mgr.before_gather_descriptors,
