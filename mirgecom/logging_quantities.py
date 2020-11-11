@@ -42,7 +42,7 @@ from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
 
 
-def add_versions(mgr: LogManager) -> None:
+def add_package_versions(mgr: LogManager) -> None:
     """Add the output of the emirge version.sh script to the log."""
     import os
 
