@@ -172,7 +172,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
                     ("expected_u", expected_fields[0]),
                     ])
 
-    print("Approximation error:")
+    print("L^inf error:")
     print(eoc_rec)
     # Expected convergence rates from Hesthaven/Warburton book
     expected_order = order+1 if order % 2 == 0 else order
@@ -248,7 +248,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
                             np.inf) / flat_norm(diffusion_u_exact[0], np.inf))
                 print(err, err_exact)
 
-            assert err < 1.e-9
+            assert err < 1e-9
 
 
 def test_diffusion_obj_array_vectorize(actx_factory):
