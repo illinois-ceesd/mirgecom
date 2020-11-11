@@ -6,12 +6,12 @@ pyvisfile
 pymetis
 
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
-git+https://github.com/inducer/pyopencl.git#egg=pyopencl
+git+https://github.com/inducer/pyopencl.git@array-distinctive-repr#egg=pyopencl
 git+https://github.com/inducer/loopy.git#egg=loopy
 git+https://github.com/inducer/dagrt.git#egg=dagrt
 git+https://github.com/inducer/leap.git#egg=leap
 git+https://github.com/inducer/modepy.git#egg=modepy
-git+https://github.com/inducer/meshmode.git#egg=meshmode
+git+https://github.com/inducer/meshmode.git@dofarray-not-ndarray-subclass#egg=meshmode
 git+https://github.com/inducer/grudge.git#egg=grudge
 
 # Toy Fortran parser for Loopy
