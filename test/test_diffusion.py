@@ -55,9 +55,9 @@ class HeatProblem:
 
         The diffusivity.
 
-    .. attribute:: mesh_factory
+    .. attribute:: get_mesh
 
-        A factory that creates a mesh when given some characteristic size as input.
+        A function that creates a mesh when given some characteristic size as input.
 
     .. attribute:: sym_u
 
@@ -66,7 +66,7 @@ class HeatProblem:
 
     dim: int
     alpha: float
-    mesh_factory: Callable
+    get_mesh: Callable
     sym_u: prim.Expression
 
 
@@ -75,7 +75,7 @@ def get_decaying_cosine(dim, alpha):
     # 2D: u(x,y,t) = exp(-2*alpha*t)*cos(x)*cos(y)
     # 3D: u(x,y,z,t) = exp(-3*alpha*t)*cos(x)*cos(y)*cos(z)
     # on [-pi/2, pi/2]^{#dims}
-    def mesh_factory(n):
+    def get_mesh(n):
         from meshmode.mesh.generation import generate_regular_rect_mesh
         return generate_regular_rect_mesh(
             a=(-0.5*np.pi,)*dim,
@@ -88,7 +88,7 @@ def get_decaying_cosine(dim, alpha):
     sym_u = sym_exp(-dim*alpha*sym_t)
     for i in range(dim):
         sym_u *= sym_cos(sym_coords[i])
-    return HeatProblem(dim, alpha, mesh_factory, sym_u)
+    return HeatProblem(dim, alpha, get_mesh, sym_u)
 
 
 def sym_diffusion(dim, sym_u):
@@ -131,7 +131,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
     eoc_rec = EOCRecorder()
 
     for n in [8, 10, 12] if p.dim == 3 else [8, 16, 24]:
-        mesh = p.mesh_factory(n)
+        mesh = p.get_mesh(n)
 
         from grudge.eager import EagerDGDiscretization
         discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -203,7 +203,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
     sym_diffusion_u = sym_diffusion(p.dim, p.sym_u)
 
     for n in [4, 8, 16, 32, 64]:
-        mesh = p.mesh_factory(n)
+        mesh = p.get_mesh(n)
 
         from meshmode.interop.nodal_dg import NodalDGContext
         with NodalDGContext("./nodal-dg/Codes1.1") as ndgctx:
@@ -268,7 +268,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     n = 128
 
-    mesh = p.mesh_factory(n)
+    mesh = p.get_mesh(n)
 
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(actx, mesh, order=4)
