@@ -139,7 +139,7 @@ exact versions of the packages at a later time::
    [...]
    *** Created file 'myenv.yml'. Install it with 'conda env create -f myenv.yml'
 
-   $ conda env create -f myenv.yml [--name my_new_env] [--force]
+   $ conda env create -f=myenv.yml [--name my_new_env] [--force]
 
 .. note::
 
