@@ -115,9 +115,9 @@ def main():
         if t >= t_final:
             break
 
-        istep += 1
         fields = rk4_step(fields, t, dt, rhs)
         t += dt
+        istep += 1
 
 
 if __name__ == "__main__":
