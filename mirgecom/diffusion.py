@@ -93,6 +93,8 @@ def diffusion_operator(discr, alpha, w):
     :math:`\nabla\cdot(\alpha\nabla w)`, where :math:`\alpha` is the diffusivity and
     :math:`w` is a scalar field.
 
+    Currently sets :math:`w = 0` on the boundaries.
+
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
