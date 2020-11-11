@@ -90,6 +90,8 @@ You can build pyopencl against conda's OpenCL driver in the following way::
    $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
    $ pip install -e .
 
+.. _record pip packages:
+
 How can I record the exact versions of Python packages that are currently installed and reinstall them at a later time?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -117,5 +119,38 @@ exact versions of the packages at a later time::
 .. note::
 
    You can also install the packages from the created requirements.txt with a new emirge installation::
-   
+
       $ ./install.sh --pip-pkgs=myreq.txt
+
+.. _record conda packages:
+
+How can I record the exact versions of Conda packages that are currently installed and reinstall them at a later time?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Running emirge's `version.sh` script creates a conda environment file that
+stores the exact versions of the conda packages that were installed at
+the time when `version.sh` was executed. You can use this file to install the
+exact versions of the packages at a later time::
+
+   $ cd emirge/
+   $ ./version.sh --output-conda-env=myenv.yml
+   [...]
+   *** Conda env file with current conda package versions
+   [...]
+   *** Created file 'myenv.yml'. Install it with 'conda env create -f myenv.yml'
+
+   $ conda env create -f myenv.yml [--name my_new_env] [--force]
+
+.. note::
+
+   The filename must end in '.yml', otherwise conda refuses to install the file.
+
+.. note::
+
+   You can also install the conda packages from the created environment file with a new emirge installation::
+
+      $ ./install.sh --conda-env=myenv.yml
+
+   You can also combine this with :ref:`record pip packages`::
+
+      $ ./install.sh --conda-env=myenv.yml --pip-pkgs=myreq.txt
