@@ -30,6 +30,7 @@ __doc__ = """
 .. autoclass:: ConservedQuantity
 .. autoclass:: DependentQuantity
 .. autoclass:: KernelProfile
+.. autofunction:: add_versions
 .. autofunction:: set_state
 """
 
@@ -46,8 +47,8 @@ def add_versions(mgr: LogManager) -> None:
     import os
 
     if os.path.isfile("../version.sh"):
-        stream = os.popen('../version.sh')
-        mgr.set_constant("versions", stream.read())
+        stream = os.popen("../version.sh")
+        mgr.set_constant("package_versions", stream.read())
 
 
 def set_state(mgr: LogManager, state: ndarray) -> None:

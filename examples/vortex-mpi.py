@@ -57,7 +57,7 @@ from logpyle import (LogManager, IntervalTimer, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
 from mirgecom.logging_quantities import (DependentQuantity, ConservedQuantity,
-                                         KernelProfile)
+                                         KernelProfile, add_versions)
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if use_logmgr:
         logmgr = LogManager("vortex.dat", "wu")  # , comm=...
         add_run_info(logmgr)
+        add_versions(logmgr)
         add_general_quantities(logmgr)
         add_simulation_quantities(logmgr)
     else:
