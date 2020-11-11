@@ -22,25 +22,25 @@ Model
 
 In fluid domains, the code solves the compressible Navier-Stokes equations
 in curvilinear coordinates.  The basic equations, in a Cartesian coordinate space, for the conserved mass
-density :math:`\rho`, momentum density :math:`\rho u_i`, and total energy
-density :math:`\rho E` are, in index form with summation convention are given as
+density $\rho$, momentum density $\rho u_i$, and total energy
+density $\rho E$ are, in index form with summation convention are given as
 
 .. math::
     \frac{\partial \rho}{\partial t} + \frac{\partial }{\partial x_j} \rho u_j &= S_\rho \\
     \frac{\partial \rho u_i}{\partial t} + \frac{\partial}{\partial x_j}\left(\rho u_i u_j + p\delta_{ij} - \tau_{ij}\right) &= S_{\rho u_i} \\
     \frac{\partial \rho E}{\partial t} + \frac{\partial}{\partial x_j}\left(\left\{\rho E + p\right\}u_j + q_j - u_i \tau_{ij}\right) &= S_{\rho E},
 
-where :math:`p` is the thermodynamic pressure, :math:`\tau_{ij}` is the
-viscous stress tensor, and :math:`q_i` is the heat flux in the :math:`i`th
-direction. :math:`S_\rho`, :math:`S_{\rho u_i}`, and :math:`S_{\rho E}` are are mass, momentum, and energy density source terms.  These equations can be written in the compact form
+where $p$ is the thermodynamic pressure, $\tau_{ij}$ is the
+viscous stress tensor, and $q_i$ is the heat flux in the $i$th
+direction. $S_\rho$, $S_{\rho u_i}$, and $S_{\rho E}$ are are mass, momentum, and energy density source terms.  These equations can be written in the compact form
 
 .. math::
 
     \frac{\partial Q}{\partial t} + \frac{\partial \vec{F}_j}{\partial x_j} = S,
 
-where :math:`Q = [\rho\,\rho \vec{u}\,\rho E]^T` is the vector of conserved
-variables, :math:`\vec{F} = \vec{F}^I - \vec{F}^V` is the flux vector account
-for both visicd and inviscid terms, and :math:`S` is the source term vector.
+where $Q = [\rho\,\rho \vec{u}\,\rho E]^T$ is the vector of conserved
+variables, $\vec{F} = \vec{F}^I - \vec{F}^V$ is the flux vector account
+for both visicd and inviscid terms, and $S$ is the source term vector.
 
 Viscous stress constitutive relation
 ------------------------------------
@@ -50,11 +50,11 @@ The viscous stress tensor is defined as
 .. math::
     \tau_{ij} = \mu \left(\frac{\partial u_i}{\partial x_j} + \frac{\partial u_j}{\partial x_i}\right) + \lambda \frac{\partial u_k}{\partial x_k}\delta_{ij}
 
-where :math:`\mu` and :math:`\lambda` are the first and second coefficients
+where $\mu$ and $\lambda$ are the first and second coefficients
 of viscosity, respectively; both may be a function of temperature.  Note
-that Stokes' hypothesis :math:`(\lambda = -\frac{2}{3}\mu)` is not
-automatically enforced and that :math:`\lambda` is related to bulk
-viscosity :math:`\mu_B` as :math:`\lambda = \mu_B - (2/3)\mu`.
+that Stokes' hypothesis $(\lambda = -\frac{2}{3}\mu)$ is not
+automatically enforced and that $\lambda$ is related to bulk
+viscosity $\mu_B$ as $\lambda = \mu_B - (2/3)\mu$.
 
 .. _heat-flux-constitutive:
 
@@ -66,32 +66,32 @@ The heat flux vector is defined as
 .. math::
     q_i = - \kappa \frac{\partial T}{\partial x_i}
 
-where :math:`\kappa` is the thermal conductivity.
+where $\kappa$ is the thermal conductivity.
 
 Transport Coefficient Models
 ----------------------------
 
-The first viscosity coefficient :math:`\mu`, bulk viscosity coefficient,
-:math:`\mu_B`, and the thermal conductivity :math:`k` depend on the thermodynamic
+The first viscosity coefficient $\mu$, bulk viscosity coefficient,
+$\mu_B$, and the thermal conductivity $k$ depend on the thermodynamic
 state of the fluid.
 
 Power Law
 ---------
 
-The power law model gives the dynamic viscosity, :math:`\mu` as
+The power law model gives the dynamic viscosity, $\mu$ as
 
 .. math::
     \mu = \beta T^n
 
-where :math:`\beta` and :math:`n` are user specified parameters,
-typically :math:`n = 0.666` and :math:`\beta = 4.093 x 10^{-7}` for air.
+where $\beta$ and $n$ are user specified parameters,
+typically $n = 0.666$ and $\beta = 4.093 x 10^{-7}$ for air.
 
 The bulk viscosity is defined as
 
 .. math::
     \mu_B = \alpha \mu
 
-where :math:`\alpha` is a user specified parameter, typically :math:`\alpha = 0.6` for air.
+where $\alpha$ is a user specified parameter, typically $\alpha = 0.6$ for air.
 
 Thus the second coefficient of viscosity can be calculated as
 
@@ -115,8 +115,8 @@ assuming constant specific heats.  The equations of state are
 .. math::
     P = \rho R T
 
-where :math:`R` is the specific gas constant, defined as :math:`R = R_u / W` with
-:math:`R_u` the universal gas constant, and :math:`W` the molecular weight.
+where $R$ is the specific gas constant, defined as $R = R_u / W$ with
+$R_u$ the universal gas constant, and $W$ the molecular weight.
 
 The specific heat capacity at constant volume and pressure are defined as
 
@@ -129,7 +129,7 @@ Then, by substitution into the equation of state we get the following relation
 .. math::
     R = C_p - C_v
 
-By defining the specific heat ratio, :math:`\gamma = \frac{C_p}{C_v}`, the
+By defining the specific heat ratio, $\gamma = \frac{C_p}{C_v}$, the
 following expressions give the relationship between specific energy, pressure,
 and temperature.
 
@@ -143,23 +143,23 @@ Non-dimensionalization
 \PC2 can run in either a dimensional or non-dimensional mode.
 The code uses the following variables to define the non-dimensional scaling:
 
-:math:`\rho^*_\infty`, :math:`P^*_\infty`,
-:math:`T^*_\infty`, and :math:`L^*`,
-a length scale.  Where :math:`*` denotes a dimensional value and :math:`\infty` denotes
+$\rho^*_\infty$, $P^*_\infty$,
+$T^*_\infty$, and $L^*$,
+a length scale.  Where $*$ denotes a dimensional value and $\infty$ denotes
 the reference state. There are two optional non-dimensional spaces available to the user, as shown in the table below.
 
 ====================================================================== =============================================================================
 Standard (``nonDimensional=1``)                                        Legacy PlasComCM (``nonDimensional=2``)
 ====================================================================== =============================================================================
-:math:`u^*_\infty = \sqrt \frac{P^*_\infty}{\rho^*_\infty}`            :math:`u^*_\infty = \sqrt \frac{\gamma P^*_\infty}{\rho^*_\infty}`
-:math:`e^*_\infty = (u^*_\infty)^2 = \frac{P^*_\infty}{\rho^*_\infty}` :math:`e^*_\infty = (u^*_\infty)^2 = \frac{\gamma P^*_\infty}{\rho^*_\infty}`
-:math:`\rho = \rho^* /\rho^*_\infty`                                   :math:`\rho = \rho^* /\rho^*_\infty`
-:math:`P = P^* /P^*_\infty`                                            :math:`P = P^* /(\rho^*_\infty (u^*_\infty)^2)`
-:math:`T = T^* /T^*_\infty`                                            :math:`T = T^* /((\gamma-1)T^*_\infty)`
-:math:`u_i = u^*_i /u^*_\infty`                                        :math:`u_i = u^*_i /u^*_\infty`
-:math:`e = e^* /e^*_\infty`                                            :math:`e = e^* /e^*_\infty`
-:math:`t = t^* /(L^* / u^*_\infty)`                                    :math:`t = t^* /(L^* / u^*_\infty)`
-:math:`x_i = x_i^* /L^*`                                               :math:`x_i = x_i^* /L^*`
+$u^*_\infty = \sqrt \frac{P^*_\infty}{\rho^*_\infty}$                  $u^*_\infty = \sqrt \frac{\gamma P^*_\infty}{\rho^*_\infty}$
+$e^*_\infty = (u^*_\infty)^2 = \frac{P^*_\infty}{\rho^*_\infty}$       $e^*_\infty = (u^*_\infty)^2 = \frac{\gamma P^*_\infty}{\rho^*_\infty}$
+$\rho = \rho^* /\rho^*_\infty$                                         $\rho = \rho^* /\rho^*_\infty$
+$P = P^* /P^*_\infty$                                                  $P = P^* /(\rho^*_\infty (u^*_\infty)^2)$
+$T = T^* /T^*_\infty$                                                  $T = T^* /((\gamma-1)T^*_\infty)$
+$u_i = u^*_i /u^*_\infty$                                              $u_i = u^*_i /u^*_\infty$
+$e = e^* /e^*_\infty$                                                  $e = e^* /e^*_\infty$
+$t = t^* /(L^* / u^*_\infty)$                                          $t = t^* /(L^* / u^*_\infty)$
+$x_i = x_i^* /L^*$                                                     $x_i = x_i^* /L^*$
 ====================================================================== =============================================================================
 
 Substitution into the dimensional form of the Navier-Stokes equations yields
@@ -196,11 +196,11 @@ the non-dimensional viscous stress tensor and heat flux vector can be written as
       \frac{\lambda}{\RE} \frac{\partial u_k}{\partial x_k}\delta_{ij} \\
     q_i &= - \frac{\mu}{\RE \Pr} \frac{\partial T}{\partial x_i}
 
-where :math:`\RE` is defined as the code Reynolds number,
-:math:`\RE = \frac{\rho^*_\infty U^*_\infty L^*}{\mu^*_\infty}`
+where $\RE$ is defined as the code Reynolds number,
+$\RE = \frac{\rho^*_\infty U^*_\infty L^*}{\mu^*_\infty}$
 and \PR is defined as the Prandtl number,
-:math:`\PR = \frac{(C^*_p)_\infty\mu^*_\infty}{k^*_\infty} = \frac{C_p\mu}{k}`
-which define the dimensional reference values :math:`\mu^*_\infty` and :math:`\kappa^*_\infty` respectively.
+$\PR = \frac{(C^*_p)_\infty\mu^*_\infty}{k^*_\infty} = \frac{C_p\mu}{k}$
+which define the dimensional reference values $\mu^*_\infty$ and $\kappa^*_\infty$ respectively.
 
 Non-dimensional equation of state
 ---------------------------------
@@ -213,5 +213,5 @@ constant is calculated and non-dimensionalized as follows
     R^*_\infty     &= \frac{P^*_\infty}{\rho^*_\infty T^*_\infty} \\
     R       &= R^* /R^*_\infty \\
 
-For the standard non-dimensionalization, :math:`R` is exactly 1.0. For the legacy
-non-dimensionalization, :math:`R = \frac{\gamma-1}{\gamma}`.
+For the standard non-dimensionalization, $R$ is exactly 1.0. For the legacy
+non-dimensionalization, $R = \frac{\gamma-1}{\gamma}$.
