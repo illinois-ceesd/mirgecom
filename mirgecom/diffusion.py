@@ -90,10 +90,10 @@ def diffusion_operator(discr, alpha, w):
     Compute the diffusion operator.
 
     The diffusion operator is defined as
-    :math:`\nabla\cdot(\alpha\nabla w)`, where :math:`\alpha` is the diffusivity and
-    :math:`w` is a scalar field.
+    $\nabla\cdot(\alpha\nabla w)$, where $\alpha$ is the diffusivity and
+    $w$ is a scalar field.
 
-    Currently sets :math:`w = 0` on the boundaries.
+    Currently sets $w = 0$ on the boundaries.
 
     Parameters
     ----------
