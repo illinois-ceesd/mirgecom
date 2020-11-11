@@ -100,28 +100,24 @@ def main():
 
     rank = comm.Get_rank()
 
-    vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, 0),
-            [
-                ("u", fields[0])
-                ])
-
     t = 0
     t_final = 0.01
-    istep = 1
+    istep = 0
 
-    while t < t_final:
-        fields = rk4_step(fields, t, dt, rhs)
-
+    while True:
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))
+            vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
+                    [
+                        ("u", fields[0])
+                        ])
 
-        vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
-                [
-                    ("u", fields[0])
-                    ])
+        if t >= t_final:
+            break
 
-        t += dt
         istep += 1
+        fields = rk4_step(fields, t, dt, rhs)
+        t += dt
 
 
 if __name__ == "__main__":
