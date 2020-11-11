@@ -642,14 +642,14 @@ class MultiLump:
                 [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
                  for i in range(self._nspecies)]
             )
-            massfracs = make_obj_array([self._spec_y0s + expterms[i]
+            massfracs = make_obj_array([self._spec_y0s[i] + expterms[i]
                                         for i in range(self._nspecies)])
 
         return flat_obj_array(mass, energy, mom, massfracs)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
-        Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
+        Create the RHS for multlump-of-mass solution at time *t*, locations *x_vec*.
 
         Note that this routine is only useful for testing under the condition of
         uniform, and constant velocity field.
@@ -672,11 +672,12 @@ class MultiLump:
         )
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
-        # The expected rhs is:
-        # rhorhs  = -2*rho*(r.dot.v)
-        # rhoerhs = -rho*v^2*(r.dot.v)
-        # rhovrhs = -2*rho*(r.dot.v)*v
-        # rhoYrhs = -2*rho*Y*(r.dot.v)
+        # The expected rhs for multilump is:
+        # recall for multilump, rho = 1.
+        # rhorhs  = 0
+        # rhoerhs = 0
+        # rhovrhs = 0
+        # rhoYrhs = -2*rho*Yamp*e^(-r*r)*(r.dot.v)
         expterm = self._rhoamp * actx.np.exp(- r ** 2)
         mass = expterm + self._rho0
 
@@ -684,12 +685,11 @@ class MultiLump:
 
         v = mom * make_obj_array([1 / mass])
 
-        v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
 
-        massrhs = -2 * rdotv * mass
-        energyrhs = -v2 * rdotv * mass
-        momrhs = v * make_obj_array([-2 * mass * rdotv])
+        massrhs = 0 * mass
+        energyrhs = 0 * mass
+        momrhs = v * make_obj_array([0 * mass * rdotv])
 
         # process the species components independently
         specrhs = None
@@ -706,10 +706,7 @@ class MultiLump:
                 [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
                  for i in range(self._nspecies)]
             )
-            massfracs = make_obj_array([self._spec_y0s[i] + expterms[i]
-                                        for i in range(self._nspecies)])
-            massfracs = massfracs * make_obj_array([mass])
-            specrhs = make_obj_array([-2 * massfracs[i] * rdotvs[i]
+            specrhs = make_obj_array([2 * expterms[i] * rdotvs[i]
                                       for i in range(self._nspecies)])
 
         return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)

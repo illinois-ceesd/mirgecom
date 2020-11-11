@@ -388,21 +388,17 @@ def test_multilump(ctx_factory, dim, nspecies):
     assert cv.massfractions is not None
     massfractions = cv.massfractions
 
-    for i in range(nspecies):
-        spec_r = nodes - centers[i]
-        r2 = np.dot(spec_r, spec_r)
-        expfactor = spec_amplitudes[i] * actx.np.exp(- r2)
-        exp_mass = spec_y0s[i] + expfactor
-        mfrac = massfractions[i:i+1]
-        print(f"Species number {i}")
-        print(f"spec_r = {spec_r}")
-        print(f"r2 = {r2}")
-        print(f"expfactor = {expfactor}")
-        print(f"expected_mass = {exp_mass}")
-        print(f"massfracs = {mfrac}")
-        mass_resid = mfrac - exp_mass
-        print(f"mass_resid = {mass_resid}")
-        assert discr.norm(mass_resid, np.inf) == 0.0
+    spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
+    r2 = make_obj_array([np.dot(spec_r[i], spec_r[i]) for i in range(nspecies)])
+    expfactor = make_obj_array([spec_amplitudes[i] * actx.np.exp(- r2[i])
+                                for i in range(nspecies)])
+    exp_mass = make_obj_array([spec_y0s[i] + expfactor[i] for i in range(nspecies)])
+    mass_resid = massfractions - exp_mass
+
+    print(f"exp_mass = {exp_mass}")
+    print(f"mass_resid = {mass_resid}")
+
+    assert discr.norm(mass_resid, np.inf) == 0.0
 
     logger.info(f"lump_soln = {lump_soln}")
     logger.info(f"pressure = {p}")
