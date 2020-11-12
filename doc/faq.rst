@@ -151,6 +151,6 @@ exact versions of the packages at a later time::
 
       $ ./install.sh --conda-env=myenv.yml
 
-   You can also combine this with :ref:`record pip packages`::
+   To restore package versions in your entire environment, you should combine this with :ref:`record pip packages`::
 
       $ ./install.sh --conda-env=myenv.yml --pip-pkgs=myreq.txt
