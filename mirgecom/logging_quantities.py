@@ -30,7 +30,7 @@ __doc__ = """
 .. autoclass:: ConservedQuantity
 .. autoclass:: DependentQuantity
 .. autoclass:: KernelProfile
-.. autofunction:: add_versions
+.. autofunction:: add_package_versions
 .. autofunction:: set_state
 """
 
