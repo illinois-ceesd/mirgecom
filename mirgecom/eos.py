@@ -64,7 +64,7 @@ class GasEOS:
     computing relations between fluid or gas state variables.
 
     Each interface call expects that the agglomerated
-    object array representing the state vector (:math:`q`),
+    object array representing the state vector ($q$),
     contains the relevant simulation state quantities. Each
     EOS class should document its own state data requirements.
 
@@ -91,7 +91,7 @@ class GasEOS:
         raise NotImplementedError()
 
     def gas_const(self, cv: ConservedVars):
-        r"""Get the specific gas constant (:math:`R`)."""
+        r"""Get the specific gas constant ($R$)."""
         raise NotImplementedError()
 
     def internal_energy(self, cv: ConservedVars):
@@ -115,16 +115,16 @@ class GasEOS:
 
 
 class IdealSingleGas(GasEOS):
-    r"""Ideal gas law single-component gas (:math:`p = \rho{R}{T}`).
+    r"""Ideal gas law single-component gas ($p = \rho{R}{T}$).
 
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
 
     Each interface call expects that the agglomerated
-    object array representing the state vector (:math:`q`),
+    object array representing the state vector ($q$),
     contains at least the canonical conserved quantities
-    mass (:math:`\rho`), energy (:math:`\rho{E}`), and
-    momentum (:math:`\rho\vec{V}`).
+    mass ($\rho$), energy ($\rho{E}$), and
+    momentum ($\rho\vec{V}$).
 
     .. automethod:: __init__
     .. automethod:: gamma

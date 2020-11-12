@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
   push:
+    branches: master
   schedule:
   - cron:  '5 0 * * *'
 
@@ -128,5 +129,6 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
             conda install sphinx graphviz
+            pip install sphinx-math-dollar
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"

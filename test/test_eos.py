@@ -161,7 +161,7 @@ def test_idealsingle_vortex(ctx_factory):
 
     Tests that the IdealSingleGas EOS returns
     the correct pressure (p) for the Vortex2D solution
-    field (i.e. :math:'p = \rho^{\gamma}').
+    field (i.e. $p = \rho^{\gamma}$).
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)

@@ -5,18 +5,18 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{\phi}_{source}
+    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{S}
 
 where:
 
--   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y_s}]`
--   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y_s}\vec{V}]`,
--   unit normal :math:`\hat{n}` to the domain boundary :math:`\partial\Omega`,
--   sources :math:`\mathbf{\phi}_{source} = [{(\partial_t{\rho})}_s,
+-  state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y}_\alpha]$
+-  flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+   (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
+-  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
+-  sources $\mathbf{S} = [{(\partial_t{\rho})}_s,
     {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s,
-    {(\partial_t{\rho{Y_s}})}_s]`
-
+    {(\partial_t{\rho{Y}_\alpha})}_s]$
+-  vector of species mass fractions ${Y}_\alpha$.
 
 State Vector Handling
 ^^^^^^^^^^^^^^^^^^^^^
@@ -79,8 +79,8 @@ class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
-    mass_fraction) per unit volume = :math:`(\rho,\rho{E},\rho\vec{V},
-    \rho{Y_s})` from an agglomerated object array.
+    mass_fraction) per unit volume = $(\rho,\rho{E},\rho\vec{V},
+    \rho{Y_s})$ from an agglomerated object array.
 
     .. attribute:: dim
 
@@ -207,8 +207,8 @@ def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
-    +p\mathbf{I}, \rho{Y_s}\vec{V})`
+    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
+    +p\mathbf{I}, \rho{Y_s}\vec{V})$
     """
     dim = discr.dim
     cv = split_conserved(dim, q)

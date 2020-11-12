@@ -709,7 +709,7 @@ def test_lump_rhs(actx_factory, dim, order):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("nspecies", [1, 2, 10])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
 def test_multilump_rhs(actx_factory, dim, order, nspecies, v0):
@@ -720,7 +720,7 @@ def test_multilump_rhs(actx_factory, dim, order, nspecies, v0):
     """
     actx = actx_factory()
 
-    tolerance = 1e-10
+    tolerance = 1e-8
     maxxerr = 0.0
 
     from pytools.convergence import EOCRecorder
@@ -758,7 +758,8 @@ def test_multilump_rhs(actx_factory, dim, order, nspecies, v0):
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
-
+        print(f"inviscid_rhs = {inviscid_rhs}")
+        print(f"expected_rhs = {expected_rhs}")
         err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
