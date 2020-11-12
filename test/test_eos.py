@@ -35,7 +35,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
-from mirgecom.eos import IdealSingleGas
+from mirgecom.eos import IdealSingleGas, PrometheusMixture
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.euler import split_conserved
@@ -47,8 +47,62 @@ from pyopencl.tools import (  # noqa
 logger = logging.getLogger(__name__)
 
 
+def test_prometheus_mixture(ctx_factory):
+    """Test PrometheusMixture with mass lump.
+
+    Tests that PrometheusMixture EOS returns
+    the correct (uniform) pressure for the Lump
+    solution field.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = 2
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+    )
+
+    order = 3
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
+    # Init soln with Vortex
+    center = np.zeros(shape=(dim,))
+    velocity = np.zeros(shape=(dim,))
+    center[0] = 5
+    velocity[0] = 1
+    lump = Lump(numdim=dim, center=center, velocity=velocity)
+    eos = IdealSingleGas()
+    lump_soln = lump(0, nodes)
+
+    cv = split_conserved(dim, lump_soln)
+    p = eos.pressure(cv)
+    exp_p = 1.0
+    errmax = discr.norm(p - exp_p, np.inf)
+
+    exp_ke = 0.5 * cv.mass
+    ke = eos.kinetic_energy(cv)
+    kerr = discr.norm(ke - exp_ke, np.inf)
+
+    te = eos.total_energy(cv, p)
+    terr = discr.norm(te - cv.energy, np.inf)
+
+    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"pressure = {p}")
+
+    assert errmax < 1e-15
+    assert kerr < 1e-15
+    assert terr < 1e-15
+
 def test_idealsingle_lump(ctx_factory):
-    """Test EOS with mass lump.
+    """Test IdealSingle EOS with mass lump.
 
     Tests that the IdealSingleGas EOS returns
     the correct (uniform) pressure for the Lump

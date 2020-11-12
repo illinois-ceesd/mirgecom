@@ -9,6 +9,7 @@ manage the relationships between and among state and thermodynamic variables.
 .. autoclass:: EOSDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: IdealSingleGas
+.. autoclass:: PrometheusMixture
 """
 
 __copyright__ = """
@@ -235,14 +236,14 @@ class PrometheusMixture(GasEOS):
     r"""Ideal gas mixture (:math:`p = \bar{\rho}{R}_\mathtt{mix}{T}`).
 
     The mixture gas constant, :math:`R_\mathtt{mix}`, is calculated
-    as :math:`R_\mathtt{mix} = \sum{Y_\alpha R_\alpha}` by the _Prometheus_ 
+    as :math:`R_\mathtt{mix} = \sum{Y_\alpha R_\alpha}` by the _Prometheus_
     mechanism provided by the user.
 
     Each interface call expects that the agglomerated
     object array representing the state vector (:math:`q`),
     contains at least the canonical conserved quantities
     mass (:math:`\rho`), energy (:math:`\rho{E}`), and
-    momentum (:math:`\rho\vec{V}`) and the vector of 
+    momentum (:math:`\rho\vec{V}`) and the vector of
     mass fractions for each species (:math:`Y_\alpha`).
 
     .. automethod:: __init__
