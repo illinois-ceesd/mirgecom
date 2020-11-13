@@ -42,13 +42,30 @@ from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
 
 
-def add_package_versions(mgr: LogManager) -> None:
+def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> None:
     """Add the output of the emirge version.sh script to the log."""
     import os
 
-    if os.path.isfile("../version.sh"):
-        stream = os.popen("../version.sh")
-        mgr.set_constant("package_versions", stream.read())
+    if path_to_version_sh is None:
+        import pathlib
+        p = pathlib.Path(".").resolve()
+        for d in p.parents:
+            candidate = pathlib.Path(d).joinpath("version.sh")
+            if candidate.is_file() and "emirge" in candidate.open().read():
+                path_to_version_sh = str(candidate)
+                break
+
+    if path_to_version_sh is None:
+        from warnings import warn
+        warn("Could not find emirge's version.sh. No package versions recorded.")
+        mgr.set_constant("emirge_package_versions",
+            "Could not find emirge's version.sh. No package versions recorded.")
+
+    output = os.popen(path_to_version_sh).read()
+    if output == "":
+        output = "Could not record emirge's package versions."
+
+    mgr.set_constant("emirge_package_versions", output)
 
 
 def set_state(mgr: LogManager, state: ndarray) -> None:
