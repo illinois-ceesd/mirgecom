@@ -284,7 +284,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     diffusion_u1 = diffusion_operator(discr, alpha=p.alpha, u=u1)
 
-    assert type(diffusion_u1) == DOFArray
+    assert isinstance(diffusion_u1, DOFArray)
 
     expected_diffusion_u1 = sym_eval(sym_diffusion_u1)
     rel_linf_err = (
@@ -296,7 +296,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     diffusion_us = diffusion_operator(discr, alpha=p.alpha, u=us)
 
-    assert type(diffusion_us) == np.ndarray
+    assert isinstance(diffusion_us, np.ndarray)
     assert diffusion_us.shape == (2,)
 
     expected_diffusion_us = make_obj_array([
