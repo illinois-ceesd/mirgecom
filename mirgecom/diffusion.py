@@ -38,24 +38,50 @@ from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 
 
 def _q_flux(discr, alpha, u_tpair):
-    normal = thaw(u_tpair.int[0].array_context, discr.normal(u_tpair.dd))
-    flux_weak = math.sqrt(alpha)*u_tpair.avg*normal
+    normal = thaw(u_tpair.int.array_context, discr.normal(u_tpair.dd))
+    flux_weak = make_obj_array([math.sqrt(alpha)*u_tpair.avg])*normal
     return discr.project(u_tpair.dd, "all_faces", flux_weak)
 
 
 def _u_flux(discr, alpha, q_tpair):
     normal = thaw(q_tpair.int[0].array_context, discr.normal(q_tpair.dd))
-    flux_weak = math.sqrt(alpha)*make_obj_array([np.dot(q_tpair.avg, normal)])
+    flux_weak = math.sqrt(alpha)*np.dot(q_tpair.avg, normal)
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
 
-def _operator(discr, alpha, w):
-    u = make_obj_array([w])
+def diffusion_operator(discr, alpha, u):
+    r"""
+    Compute the diffusion operator.
+
+    The diffusion operator is defined as
+    $\nabla\cdot(\alpha\nabla u)$, where $\alpha$ is the diffusivity and
+    $u$ is a scalar field.
+
+    Currently sets $u = 0$ on the boundaries.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    alpha: float
+        the (constant) diffusivity
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array or object array of DOF arrays to which the operator should be
+        applied
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the diffusion operator applied to *u*
+    """
+    if isinstance(u, np.ndarray):
+        return obj_array_vectorize(lambda u_i: diffusion_operator(discr, alpha, u_i),
+                    u)
 
     dir_u = discr.project("vol", BTAG_ALL, u)
 
     q = discr.inverse_mass(
-        -math.sqrt(alpha)*discr.weak_grad(u[0])
+        -math.sqrt(alpha)*discr.weak_grad(u)
         +  # noqa: W504
         discr.face_mass(
             _q_flux(discr, alpha=alpha, u_tpair=interior_trace_pair(discr, u))
@@ -71,7 +97,7 @@ def _operator(discr, alpha, w):
 
     return (
         discr.inverse_mass(
-            make_obj_array([-math.sqrt(alpha)*discr.weak_div(q)])
+            -math.sqrt(alpha)*discr.weak_div(q)
             +  # noqa: W504
             discr.face_mass(
                 _u_flux(discr, alpha=alpha, q_tpair=interior_trace_pair(discr, q))
@@ -81,38 +107,5 @@ def _operator(discr, alpha, w):
                     _u_flux(discr, alpha=alpha, q_tpair=tpair)
                     for tpair in cross_rank_trace_pairs(discr, q))
                 )
-            )[0]
+            )
         )
-
-
-def diffusion_operator(discr, alpha, w):
-    r"""
-    Compute the diffusion operator.
-
-    The diffusion operator is defined as
-    $\nabla\cdot(\alpha\nabla w)$, where $\alpha$ is the diffusivity and
-    $w$ is a scalar field.
-
-    Currently sets $w = 0$ on the boundaries.
-
-    Parameters
-    ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
-    alpha: float
-        the (constant) diffusivity
-    w: meshmode.dof_array.DOFArray or numpy.ndarray
-        the DOF array or object array of DOF arrays to which the operator should be
-        applied
-
-    Returns
-    -------
-    meshmode.dof_array.DOFArray or numpy.ndarray
-        the diffusion operator applied to *w*
-    """
-    if (isinstance(w, np.ndarray)
-            and w.dtype.char == "O"
-            and not isinstance(w, DOFArray)):
-        return obj_array_vectorize(lambda u: _operator(discr, alpha, u), w)
-    else:
-        return _operator(discr, alpha, w)

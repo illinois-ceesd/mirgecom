@@ -141,26 +141,26 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes, "t": t})(expr)
 
-        def get_rhs(t, w):
-            result = diffusion_operator(discr, alpha=p.alpha, w=w)
-            result[0] += sym_eval(sym_f, t)
+        def get_rhs(t, u):
+            result = (diffusion_operator(discr, alpha=p.alpha, u=u)
+                + sym_eval(sym_f, t))
             return result
 
         t = 0.
 
-        fields = make_obj_array([sym_eval(p.sym_u, t)])
+        u = sym_eval(p.sym_u, t)
 
         from mirgecom.integrators import rk4_step
 
         for istep in range(nsteps):
-            fields = rk4_step(fields, t, dt, get_rhs)
+            u = rk4_step(u, t, dt, get_rhs)
             t += dt
 
-        expected_fields = make_obj_array([sym_eval(p.sym_u, t)])
+        expected_u = sym_eval(p.sym_u, t)
 
         rel_linf_err = (
-            discr.norm(fields - expected_fields, np.inf)
-            / discr.norm(expected_fields, np.inf))
+            discr.norm(u - expected_u, np.inf)
+            / discr.norm(expected_u, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
@@ -168,8 +168,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, order,
             vis = make_visualizer(discr, discr.order+3)
             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
                 order=order, n=n), [
-                    ("u", fields[0]),
-                    ("expected_u", expected_fields[0]),
+                    ("u", u),
+                    ("expected_u", expected_u),
                     ])
 
     print("L^inf error:")
@@ -219,10 +219,10 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
                 return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes_mirgecom,
                             "t": t})(expr)
 
-            fields_mirgecom = make_obj_array([sym_eval_mirgecom(p.sym_u)])
+            u_mirgecom = sym_eval_mirgecom(p.sym_u)
 
             diffusion_u_mirgecom = diffusion_operator(discr_mirgecom, alpha=p.alpha,
-                        w=fields_mirgecom)
+                        u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
@@ -231,21 +231,20 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
                 return sym.EvaluationMapper({"alpha": p.alpha, "x": nodes_ndg,
                             "t": t})(expr)
 
-            fields_ndg = make_obj_array([sym_eval_ndg(p.sym_u)])
+            u_ndg = sym_eval_ndg(p.sym_u)
 
-            ndgctx.push_dof_array("u", fields_ndg[0])
+            ndgctx.push_dof_array("u", u_ndg)
             ndgctx.octave.push("t", t)
             ndgctx.octave.eval("[rhs] = HeatCRHS1D(u,t)", verbose=False)
-            diffusion_u_ndg = make_obj_array([ndgctx.pull_dof_array(actx, "rhs")])
+            diffusion_u_ndg = ndgctx.pull_dof_array(actx, "rhs")
 
-            err = (flat_norm(diffusion_u_mirgecom[0]-diffusion_u_ndg[0], np.inf)
-                        / flat_norm(diffusion_u_ndg[0], np.inf))
+            err = (flat_norm(diffusion_u_mirgecom-diffusion_u_ndg, np.inf)
+                        / flat_norm(diffusion_u_ndg, np.inf))
 
             if print_err:
-                diffusion_u_exact = make_obj_array([sym_eval_mirgecom(
-                    sym_diffusion_u)])
-                err_exact = (flat_norm(diffusion_u_mirgecom[0]-diffusion_u_exact[0],
-                            np.inf) / flat_norm(diffusion_u_exact[0], np.inf))
+                diffusion_u_exact = sym_eval_mirgecom(sym_diffusion_u)
+                err_exact = (flat_norm(diffusion_u_mirgecom-diffusion_u_exact,
+                            np.inf) / flat_norm(diffusion_u_exact, np.inf))
                 print(err, err_exact)
 
             assert err < 1e-9
@@ -283,7 +282,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u1 = sym_eval(sym_u1)
     u2 = sym_eval(sym_u2)
 
-    diffusion_u1 = diffusion_operator(discr, alpha=p.alpha, w=u1)
+    diffusion_u1 = diffusion_operator(discr, alpha=p.alpha, u=u1)
 
     assert type(diffusion_u1) == DOFArray
 
@@ -295,7 +294,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     us = make_obj_array([u1, u2])
 
-    diffusion_us = diffusion_operator(discr, alpha=p.alpha, w=us)
+    diffusion_us = diffusion_operator(discr, alpha=p.alpha, u=us)
 
     assert type(diffusion_us) == np.ndarray
     assert diffusion_us.shape == (2,)
