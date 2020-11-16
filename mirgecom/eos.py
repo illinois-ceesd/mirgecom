@@ -37,6 +37,8 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
+from pytools.obj_array import make_obj_array
+
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import ConservedVars
@@ -287,7 +289,7 @@ class PrometheusMixture(GasEOS):
 
     def mass_fractions(self, cv: ConservedVars):
         r"""Get mass fractions :math:`\Y_\alpha` from species densities."""
-        return cv.massfractions / cv.mass
+        return cv.massfractions * make_obj_array([1.0/cv.mass])
 
     def pressure(self, cv: ConservedVars):
         r"""Get thermodynamic pressure of the gas.

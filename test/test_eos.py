@@ -31,18 +31,22 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+from pytools.obj_array import make_obj_array
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
+from prometheus.prometheus_uiuc import UIUCMechanism
 from mirgecom.eos import IdealSingleGas, PrometheusMixture
 from mirgecom.initializers import Vortex2D
-from mirgecom.initializers import Lump
+from mirgecom.initializers import Lump, MultiLump
 from mirgecom.euler import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,12 +78,20 @@ def test_prometheus_mixture(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
-    center = np.zeros(shape=(dim,))
-    velocity = np.zeros(shape=(dim,))
-    center[0] = 5
-    velocity[0] = 1
-    lump = Lump(numdim=dim, center=center, velocity=velocity)
-    eos = IdealSingleGas()
+    prometheus_mechanism = UIUCMechanism()
+    nspecies = prometheus_mechanism.num_species
+    print(f"PrometheusMixture::NumSpecies = {nspecies}")
+    eos = PrometheusMixture(prometheus_mechanism)
+    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+    spec_y0s = np.ones(shape=(nspecies,))
+    spec_amplitudes = np.ones(shape=(nspecies,))
+
+    velocity = np.ones(shape=(dim,))
+
+    lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
+                     velocity=velocity, spec_y0s=spec_y0s,
+                     spec_amplitudes=spec_amplitudes)
+
     lump_soln = lump(0, nodes)
 
     cv = split_conserved(dim, lump_soln)
@@ -100,6 +112,7 @@ def test_prometheus_mixture(ctx_factory):
     assert errmax < 1e-15
     assert kerr < 1e-15
     assert terr < 1e-15
+
 
 def test_idealsingle_lump(ctx_factory):
     """Test IdealSingle EOS with mass lump.
