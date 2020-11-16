@@ -56,8 +56,8 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import (LogManager, IntervalTimer, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
-from mirgecom.logging_quantities import (DependentQuantity, ConservedQuantity,
-                                         KernelProfile, add_package_versions)
+from mirgecom.logging_quantities import (DependentDiscretizationBasedQuantity,
+    ConservedDiscretizationBasedQuantity, KernelProfile, add_package_versions)
 
 
 logger = logging.getLogger(__name__)
@@ -132,15 +132,15 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if use_logmgr:
         for quantity in ["pressure", "temperature"]:
             for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(DependentQuantity(discr, eos, quantity, op))
+                logmgr.add_quantity(DependentDiscretizationBasedQuantity(discr, eos, quantity, op))
         for quantity in ["mass", "energy"]:
             for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(ConservedQuantity(discr, quantity, op))
+                logmgr.add_quantity(ConservedDiscretizationBasedQuantity(discr, quantity, op))
 
         for dim in range(dim):
             for op in ["min", "max", "sum"]:
                 logmgr.add_quantity(
-                    ConservedQuantity(discr, "momentum", op, dim=dim))
+                    ConservedDiscretizationBasedQuantity(discr, "momentum", op, dim=dim))
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)

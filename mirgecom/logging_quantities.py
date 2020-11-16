@@ -113,9 +113,9 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         if op == "min":
             self._discr_reduction = partial(self.discr.nodal_min, "vol")
         elif op == "max":
-            self._myop = partial(self.discr.nodal_max, "vol")
+            self._discr_reduction = partial(self.discr.nodal_max, "vol")
         elif op == "sum":
-            self._myop = partial(self.discr.nodal_sum, "vol")
+            self._discr_reduction = partial(self.discr.nodal_sum, "vol")
         else:
             raise RuntimeError(f"unknown operation {op}")
 
@@ -164,7 +164,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         if name is None:
             name = f"{op}_{quantity}{dim}"
 
-        super().__init__(self, discr, quantity, unit, op, name, rank_aggr)
+        super().__init__(discr, quantity, unit, op, name, rank_aggr)
 
         self.dim = dim
 
@@ -180,9 +180,9 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         cq = getattr(cv, self.quantity)
 
         if not isinstance(cq, DOFArray):
-            return self._myop(cq[self.dim])
+            return self._discr_reduction(cq[self.dim])
         else:
-            return self._myop(cq)
+            return self._discr_reduction(cq)
 
 
 class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
@@ -202,7 +202,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         if name is None:
             name = f"{op}_{quantity}"
 
-        super().__init__(self, discr, quantity, unit, op, name, rank_aggr)
+        super().__init__(discr, quantity, unit, op, name, rank_aggr)
 
         self.eos = eos
 
@@ -218,7 +218,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 
         self.state = None
 
-        return self._myop(getattr(dv, self.quantity))
+        return self._discr_reduction(getattr(dv, self.quantity))
 
 
 class KernelProfile(LogQuantity):
