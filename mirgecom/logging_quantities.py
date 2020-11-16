@@ -164,7 +164,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         if name is None:
             name = f"{op}_{quantity}{dim}"
 
-        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name, rank_aggr)
+        super().__init__(self, discr, quantity, unit, op, name, rank_aggr)
 
         self.dim = dim
 
@@ -176,9 +176,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         from mirgecom.euler import split_conserved
 
         cv = split_conserved(self.discr.dim, self.state)
-
         self.state = None
-
         cq = getattr(cv, self.quantity)
 
         if not isinstance(cq, DOFArray):
@@ -187,7 +185,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
             return self._myop(cq)
 
 
-class DependentQuantity(PhysicalQuantity):
+class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     """Logging support for dependent quantities (temperature, pressure)."""
 
     def __init__(self, discr: Discretization, eos: GasEOS,
@@ -204,7 +202,7 @@ class DependentQuantity(PhysicalQuantity):
         if name is None:
             name = f"{op}_{quantity}"
 
-        PhysicalQuantity.__init__(self, discr, quantity, unit, op, name, rank_aggr)
+        super().__init__(self, discr, quantity, unit, op, name, rank_aggr)
 
         self.eos = eos
 
