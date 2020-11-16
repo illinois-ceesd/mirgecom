@@ -45,7 +45,9 @@ from meshmode.dof_array import DOFArray
 def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> None:
     """Add the output of the emirge version.sh script to the log."""
     import os
+    from warnings import warn
 
+    # Find emirge's version.sh in any parent directory
     if path_to_version_sh is None:
         import pathlib
         p = pathlib.Path(".").resolve()
@@ -56,14 +58,14 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
                 break
 
     if path_to_version_sh is None:
-        from warnings import warn
-        warn("Could not find emirge's version.sh. No package versions recorded.")
-        mgr.set_constant("emirge_package_versions",
-            "Could not find emirge's version.sh. No package versions recorded.")
+        output = "Could not find emirge's version.sh. No package versions recorded."
+        warn(output)
 
-    output = os.popen(path_to_version_sh).read()
-    if output == "":
-        output = "Could not record emirge's package versions."
+    else:
+        output = os.popen(path_to_version_sh).read()
+        if output == "":
+            output = "Could not record emirge's package versions."
+            warn(output)
 
     mgr.set_constant("emirge_package_versions", output)
 
