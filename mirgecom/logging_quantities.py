@@ -36,7 +36,8 @@ __doc__ = """
 
 from logpyle import LogQuantity, LogManager
 from numpy import ndarray
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
+# Does not work due to circular dependency
+# from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
@@ -225,19 +226,18 @@ class KernelProfile(LogQuantity):
     """Logging support for results of the OpenCL kernel profiling (time, \
     num_calls, flops, bytes_accessed)."""
 
-    def __init__(self, actx: PyOpenCLProfilingArrayContext,
+    def __init__(self, actx,
                  kernel_name: str, stat: str, name: str = None):
         if stat == "time":
             unit = "s"
         else:
             unit = ""
 
-        if name:
-            LogQuantity.__init__(self, name,
-                                 unit, f"{stat} of '{kernel_name}'")
-        else:
-            LogQuantity.__init__(self, f"{kernel_name}_{stat}",
-                                 unit, f"{stat} of '{kernel_name}'")
+        if name is None:
+            name = f"{kernel_name}_{stat}"
+
+        super().__init__(name, unit, f"{stat} of '{kernel_name}'")
+
         self.kernel_name = kernel_name
         self.actx = actx
         self.stat = stat

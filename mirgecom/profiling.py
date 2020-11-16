@@ -31,6 +31,8 @@ import loopy as lp
 import numpy as np
 from dataclasses import dataclass
 import pytools
+from logpyle import LogManager
+from mirgecom.logging_quantities import KernelProfile
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -85,7 +87,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
     """
 
-    def __init__(self, queue, allocator=None) -> None:
+    def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:
         super().__init__(queue, allocator)
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
@@ -96,6 +98,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_events = []
         self.profile_results = {}
         self.kernel_stats = {}
+        self.logmgr = logmgr
 
     def _finish_profile_events(self) -> None:
         # First, wait for completion of all events
@@ -290,6 +293,20 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 footprint_bytes=footprint_bytes)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
+
+            if self.logmgr:
+                for stat in ["num_calls", "time", "flops", "bytes_accessed"]:
+                    # Since kernel names are not unique, find the next free ID
+                    # to append to the logging name
+                    i = 0
+                    while True:
+                        if (f"{program.name}_{i}_{stat}" not in
+                                self.logmgr.quantity_data):
+                            name = f"{program.name}_{i}_{stat}"
+                            break
+                        i += 1
+                    self.logmgr.add_quantity(
+                        KernelProfile(self, program.name, stat, name))
             return res
 
     def call_loopy(self, program, **kwargs) -> dict:
