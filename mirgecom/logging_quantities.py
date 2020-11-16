@@ -26,9 +26,9 @@ THE SOFTWARE.
 
 __doc__ = """
 .. autoclass:: StateConsumer
-.. autoclass:: PhysicalQuantity
-.. autoclass:: ConservedQuantity
-.. autoclass:: DependentQuantity
+.. autoclass:: DiscretizationBasedQuantity
+.. autoclass:: ConservedDiscretizationBasedQuantity
+.. autoclass:: DependentDiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autofunction:: add_package_versions
 .. autofunction:: set_state
