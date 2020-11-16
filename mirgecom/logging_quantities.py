@@ -90,7 +90,7 @@ class StateConsumer:
         self.state = state
 
 
-class PhysicalQuantity(LogQuantity, StateConsumer):
+class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities."""
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
@@ -111,7 +111,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._myop = partial(self.discr.nodal_min, "vol")
+            self._discr_reduction = partial(self.discr.nodal_min, "vol")
         elif op == "max":
             self._myop = partial(self.discr.nodal_max, "vol")
         elif op == "sum":
@@ -142,7 +142,7 @@ class PhysicalQuantity(LogQuantity, StateConsumer):
         raise NotImplementedError
 
 
-class ConservedQuantity(PhysicalQuantity):
+class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     """Logging support for conserved quantities (mass, energy, momentum)."""
 
     def __init__(self, discr: Discretization, quantity: str, op: str,

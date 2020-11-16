@@ -3,7 +3,6 @@ mpi4py
 numpy
 pytest
 pyvisfile
-pyinstrument
 pymetis
 logpyle
 

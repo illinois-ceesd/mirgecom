@@ -120,7 +120,7 @@ Time series logging
 -------------------
 
 Mirgecom supports logging of simulation and profiling quantities with the help
-of the `logpyle package <https://github.com/illinois-ceesd/logpyle>`_. Logpyle requires
+of :mod:`logpyle`. Logpyle requires
 classes to describe how quantities for logging are calculated. For mirgecom, these classes are described below.
 
 .. automodule:: mirgecom.logging_quantities

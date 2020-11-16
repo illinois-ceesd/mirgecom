@@ -208,7 +208,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min = "--"
                 fprint_max = "--"
 
-            bytes_per_flop = [f / b if b > 0 else 0
+            bytes_per_flop = [f / b if b > 0 else None
                               for f, b in zip(flops, bytes_accessed)]
 
             tbl.add_row([key.name, num_values,
