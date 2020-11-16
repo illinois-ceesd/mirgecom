@@ -25,8 +25,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from pytools.obj_array import make_obj_array
-
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
@@ -90,13 +88,13 @@ def main():
 
     nodes = thaw(actx, discr.nodes())
 
-    fields = make_obj_array([discr.zeros(actx)])
+    u = discr.zeros(actx)
 
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
-    def rhs(t, w):
-        return diffusion_operator(discr, alpha=1, w=w) + make_obj_array([actx.np.exp(
-            -np.dot(nodes, nodes)/source_width**2)])
+    def rhs(t, u):
+        return (diffusion_operator(discr, alpha=1, u=u)
+            + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()
 
@@ -106,16 +104,16 @@ def main():
 
     while True:
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
+            print(istep, t, discr.norm(u))
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
-                        ("u", fields[0])
+                        ("u", u)
                         ])
 
         if t >= t_final:
             break
 
-        fields = rk4_step(fields, t, dt, rhs)
+        u = rk4_step(u, t, dt, rhs)
         t += dt
         istep += 1
 
