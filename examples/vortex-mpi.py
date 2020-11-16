@@ -132,15 +132,17 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if use_logmgr:
         for quantity in ["pressure", "temperature"]:
             for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(DependentDiscretizationBasedQuantity(discr, eos, quantity, op))
+                logmgr.add_quantity(DependentDiscretizationBasedQuantity(
+                    discr, eos, quantity, op))
         for quantity in ["mass", "energy"]:
             for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(ConservedDiscretizationBasedQuantity(discr, quantity, op))
+                logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
+                    discr, quantity, op))
 
         for dim in range(dim):
             for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(
-                    ConservedDiscretizationBasedQuantity(discr, "momentum", op, dim=dim))
+                logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
+                    discr, "momentum", op, dim=dim))
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
