@@ -149,7 +149,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     """Logging support for conserved quantities.
 
-    See :meth:`split_conserved` for details.
+    See :meth:`~mirgecom.euler.split_conserved` for details.
     """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
