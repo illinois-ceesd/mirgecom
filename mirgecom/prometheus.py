@@ -57,62 +57,28 @@ class UIUCMechanism:
     def get_mixture_specific_heat_cp_mass(self, T, Y):  # noqa
 
         cp0_R = self.get_species_specific_heats_R(T)  # noqa
-        cp = 0.0
-        cp += Y[0] * cp0_R[0] * self.iwts[0]
-        cp += Y[1] * cp0_R[1] * self.iwts[1]
-        cp += Y[2] * cp0_R[2] * self.iwts[2]
-        cp += Y[3] * cp0_R[3] * self.iwts[3]
-        cp += Y[4] * cp0_R[4] * self.iwts[4]
-        cp += Y[5] * cp0_R[5] * self.iwts[5]
-        cp += Y[6] * cp0_R[6] * self.iwts[6]
-        cp *= self.gas_constant
-
-        return cp
+        cpsum = sum([Y[i] * cp0_R[i] * self.iwts[i]
+                     for i in range(self.num_species)])
+        return self.gas_constant * cpsum
 
     def get_mixture_specific_heat_cv_mass(self, T, Y):  # noqa
 
         cp0_R = self.get_species_specific_heats_R(T) - 1.0  # noqa
-        cp = 0.0
-        cp += Y[0] * cp0_R[0] * self.iwts[0]
-        cp += Y[1] * cp0_R[1] * self.iwts[1]
-        cp += Y[2] * cp0_R[2] * self.iwts[2]
-        cp += Y[3] * cp0_R[3] * self.iwts[3]
-        cp += Y[4] * cp0_R[4] * self.iwts[4]
-        cp += Y[5] * cp0_R[5] * self.iwts[5]
-        cp += Y[6] * cp0_R[6] * self.iwts[6]
-        cp *= self.gas_constant
-
-        return cp
+        cpsum = sum([Y[i] * cp0_R[i] * self.iwts[i]
+                     for i in range(self.num_species)])
+        return self.gas_constant * cpsum
 
     def get_mixture_enthalpy_mass(self, T, Y):  # noqa
 
         h0_RT = self.get_species_enthalpies_RT(T)  # noqa
-        h = 0.0
-        h += Y[0] * h0_RT[0] * self.iwts[0]
-        h += Y[1] * h0_RT[1] * self.iwts[1]
-        h += Y[2] * h0_RT[2] * self.iwts[2]
-        h += Y[3] * h0_RT[3] * self.iwts[3]
-        h += Y[4] * h0_RT[4] * self.iwts[4]
-        h += Y[5] * h0_RT[5] * self.iwts[5]
-        h += Y[6] * h0_RT[6] * self.iwts[6]
-        h *= self.gas_constant * T
-
-        return h
+        hsum = sum([Y[i] * h0_RT[i] * self.iwts[i] for i in range(self.num_species)])
+        return self.gas_constant * T * hsum
 
     def get_mixture_internal_energy_mass(self, T, Y):  # noqa
 
         e0_RT = self.get_species_enthalpies_RT(T) - 1.0  # noqa
-        e = 0.0
-        e += Y[0] * e0_RT[0] * self.iwts[0]
-        e += Y[1] * e0_RT[1] * self.iwts[1]
-        e += Y[2] * e0_RT[2] * self.iwts[2]
-        e += Y[3] * e0_RT[3] * self.iwts[3]
-        e += Y[4] * e0_RT[4] * self.iwts[4]
-        e += Y[5] * e0_RT[5] * self.iwts[5]
-        e += Y[6] * e0_RT[6] * self.iwts[6]
-        e *= self.gas_constant * T
-
-        return e
+        esum = sum([Y[i] * e0_RT[i] * self.iwts[i] for i in range(self.num_species)])
+        return self.gas_constant * T * esum
 
     def get_species_specific_heats_R(self, T):  # noqa
 
@@ -535,17 +501,16 @@ class UIUCMechanism:
 
     def get_equilibrium_constants(self, T):
 
+        actx = T.array_context
         RT = self.gas_constant * T
-        C0 = np.log(self.one_atm / RT)
-
-        k_eq = np.zeros(self.num_reactions)
+        C0 = actx.np.log(self.one_atm / RT)
 
         g0_RT = self.get_species_gibbs_RT(T)
 
-        k_eq[1] = C0 + (g0_RT[2]) - (g0_RT[3] + g0_RT[1])
-        k_eq[2] = C0 + (g0_RT[4]) - (g0_RT[5] + g0_RT[1])
+        k_eq1 = C0 + (g0_RT[2]) - (g0_RT[3] + g0_RT[1])
+        k_eq1 = C0 + (g0_RT[4]) - (g0_RT[5] + g0_RT[1])
 
-        return k_eq
+        return make_obj_array([k_eq1, k_eq2])
 
     def get_temperature(self, H_or_E, T_guess, Y, do_energy=False):
 
@@ -576,54 +541,60 @@ class UIUCMechanism:
 
     def get_rate_coefficients(self, T, C):
 
-        log_T = np.log(T)
+        actx = T.array_context
+        log_T = actx.np.log(T)
         inv_T = 1.0 / T
         k_eq = self.get_equilibrium_constants(T)
         k_fwd = np.zeros(self.num_reactions)
         k_rev = np.zeros(self.num_reactions)
 
-        k_fwd[0] = np.exp(2.659486e01 - 1.786429e04 * inv_T)
-        k_fwd[1] = np.exp(1.269378e01 + 7.000000e-01 * log_T - 6.038634e03 * inv_T)
-        k_fwd[2] = np.exp(1.830257e01 - 1.761268e04 * inv_T)
+        k_fwd0 = actx.np.exp(2.659486e01 - 1.786429e04 * inv_T)
+        k_fwd1 = actx.np.exp(1.269378e01 + 7.000000e-01 * log_T - 6.038634e03 * inv_T)
+        k_fwd2 = actx.np.exp(1.830257e01 - 1.761268e04 * inv_T)
 
-        for i in range(0, self.num_reactions):
-            if k_eq[i] > self.big_number:
-                k_eq[i] = self.big_number
-            k_rev[i] = k_fwd[i] * np.exp(k_eq[i])
+        k_fwd = make_obj_array([k_fwd0, k_fwd1, k_fwd2])
+        k_rev = k_fwd * actx.np.exp(k_eq)
+        #        for i in range(0, self.num_reactions):
+        #            if k_eq[i] > self.big_number:
+        #                k_eq[i] = self.big_number
+        #            k_rev[i] = k_fwd[i] * np.exp(k_eq[i])
 
         return k_fwd, k_rev
 
     def get_net_rates_of_progress(self, T, C):
 
-        R_fwd = np.zeros(self.num_reactions)
-        R_rev = np.zeros(self.num_reactions)
-        R_net = np.zeros(self.num_reactions)
+        actx = T.array_context
+        #        R_fwd = np.zeros(self.num_reactions)
+        #        R_rev = np.zeros(self.num_reactions)
+        #        R_net = np.zeros(self.num_reactions)
         k_fwd, k_rev = self.get_rate_coefficients(T, C)
 
-        R_fwd[0] = k_fwd[0] * C[0] * C[1]
+        R_fwd0 = k_fwd[0] * C[0] * C[1]
+        R_rev0 = 0.0 * R_fwd0
 
-        R_fwd[1] = k_fwd[1] * C[3] * C[1]
-        R_rev[1] = k_rev[1] * C[2]
+        R_fwd1 = k_fwd[1] * C[3] * C[1]
+        R_rev1 = k_rev[1] * C[2]
 
-        R_fwd[2] = k_fwd[2] * C[5] * C[1]
-        R_rev[2] = k_rev[2] * C[4]
+        R_fwd2 = k_fwd[2] * C[5] * C[1]
+        R_rev2 = k_rev[2] * C[4]
 
-        for i in range(0, self.num_reactions):
-            R_net[i] = R_fwd[i] - R_rev[i]
+        R_fwd = make_obj_array([R_fwd0, R_fwd1, R_fwd2])
+        R_rev = make_obj_array([R_rev0, R_rev1, R_rev2])
 
-        return R_net
+        return R_fwd - R_rev
 
     def get_net_production_rates(self, rho, T, Y):
 
         C = self.get_concentrations(rho, Y)
         R_net = self.get_net_rates_of_progress(T, C)
-        omega = np.zeros(self.num_species)
+        #        omega = np.zeros(self.num_species)
 
-        omega[0] = -R_net[0]
-        omega[1] = -R_net[0] - R_net[1] - R_net[2]
-        omega[2] = +R_net[1]
-        omega[3] = +R_net[0] + R_net[0] - R_net[1]
-        omega[4] = +R_net[2]
-        omega[5] = +R_net[0] + R_net[0] - R_net[2]
+        omega0 = -R_net[0]
+        omega1 = sum([-R_net[i] for i in range(3)])
+        omega2 = R_net[1]
+        omega3 = 2 * R_net[0] - R_net[1]
+        omega4 = R_net[2]
+        omega5 = 2 * R_net[0] - R_net[2]
 
-        return omega
+        return make_obj_array([omega0, omega1, omega2,
+                               omega3, omega4, omega5])

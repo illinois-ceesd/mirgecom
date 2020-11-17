@@ -505,7 +505,7 @@ class MultiLump:
     by the user at init time, and :math:`\gamma` is taken
     from the equation-of-state object (eos).
 
-    For multi-species or mixutres, :math:`\rho=1`, and each mixture component
+    For multi-species or mixtures, :math:`\rho=1`, and each mixture component
     is assigned by:
 
     .. math::

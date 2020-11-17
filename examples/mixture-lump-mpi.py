@@ -28,6 +28,7 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
+from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -52,7 +53,7 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import MultiLump
 from mirgecom.eos import PrometheusMixture
 
-from prometheus import UIUCMechanism
+from mirgecom.prometheus import UIUCMechanism
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,6 @@ def main(ctx_factory=cl.create_some_context):
     t_final = 0.01
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
     vel[:dim] = 1.0
     current_dt = .001
     current_t = 0
@@ -85,14 +85,6 @@ def main(ctx_factory=cl.create_some_context):
     timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
-
-    casename = "uiuc_mixture"
-    prometheus_mechanism = UIUCMechanism()
-    nspecies = prometheus_mechanism.num_species()
-    eos = PrometheusMixture(prometheus_mechanism)
-    initializer = MultiLump(numdim=dim, nspecies=nspecies,
-                            center=orig, velocity=vel)
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -107,6 +99,22 @@ def main(ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
+
+    casename = "uiuc_mixture"
+    prometheus_mechanism = UIUCMechanism(discr)
+    nspecies = prometheus_mechanism.num_species()
+    eos = PrometheusMixture(prometheus_mechanism)
+    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+    y0s = np.ones(shape=(nspecies,))
+    for i in range(1, nspecies):
+        y0s[i] = 1.0 / (10.0 ** i)
+    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
+    y0s[0] = 1.0 - spec_sum
+    amplitudes = np.zeros(shape=(nspecies,))
+    initializer = MultiLump(numdim=dim, nspecies=nspecies, p0=101500.0,
+                            spec_centers=centers, velocity=vel,
+                            spec_y0s=y0s, spec_amplitudes=amplitudes)
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
