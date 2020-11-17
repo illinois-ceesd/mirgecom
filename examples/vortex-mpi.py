@@ -66,8 +66,11 @@ logger = logging.getLogger(__name__)
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
     """Drive the example."""
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+
     if use_logmgr:
-        logmgr = LogManager("vortex.dat", "wu")  # , comm=...
+        logmgr = LogManager("vortex.dat", "wu", mpi_comm=comm)
         add_run_info(logmgr)
         add_package_versions(logmgr)
         add_general_quantities(logmgr)
@@ -112,8 +115,6 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     box_ll = -5.0
     box_ur = 5.0
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -149,8 +150,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr.add_quantity(vis_timer)
         logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
 
-        logmgr.add_watches(["step", "t_step", "min_pressure", "min_temperature",
-                                "min_momentum1", "t_vis"])
+        logmgr.add_watches(["step.max", "t_step.max", "min_pressure", "min_temperature",
+                                "min_momentum1", "t_vis.max"])
 
     visualizer = make_visualizer(discr, order + 3 if discr.dim == 2 else order)
     initname = initializer.__class__.__name__

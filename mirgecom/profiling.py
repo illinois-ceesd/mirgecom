@@ -43,7 +43,11 @@ nonloopy_profile_results = {}
 
 @dataclass(eq=True, frozen=True)
 class NonLoopyProfilekernel:
-    """Class to hold the name for a non-loopy profile result."""
+    """Class to hold the name for a non-loopy profile result.
+
+    This is necessary so that :meth:`tabulate_profiling_data` etc. can
+    access the 'name' field of the non-Loopy kernel.
+    """
 
     name: str
 
