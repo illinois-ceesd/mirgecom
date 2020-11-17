@@ -88,10 +88,6 @@ class UIUCMechanism:
         tt1 = T * tt0
         tt2 = T * tt1
         tt3 = T * tt2
-        #        tt4 = np.power(T, -1.0)
-        #        tt5 = tt4 * tt4
-
-        #        cp0_R = np.zeros(self.num_species)
 
         cp_high = (
             2.036111e00
@@ -215,11 +211,7 @@ class UIUCMechanism:
         tt1 = T * tt0
         tt2 = T * tt1
         tt3 = T * tt2
-        tt4 = np.power(T, -1.0)
-        #        tt5 = tt4 * tt4
-        #        tt6 = np.log(tt0) * tt4
-
-        # h0_RT = np.zeros(self.num_species)
+        tt4 = 1.0 / T
 
         h_high = (
             2.036111e00
@@ -357,11 +349,9 @@ class UIUCMechanism:
         tt1 = T * tt0
         tt2 = T * tt1
         tt3 = T * tt2
-        tt4 = np.power(T, -1.0)
+        tt4 = 1.0 / T
         tt5 = tt4 * tt4
-        tt6 = np.log(tt0)
-
-        #        s0_R = np.zeros(self.num_species)
+        tt6 = actx.np.log(tt0)
 
         s_high = (
             2.036111e00 * tt6
@@ -544,9 +534,7 @@ class UIUCMechanism:
         actx = T.array_context
         log_T = actx.np.log(T)
         inv_T = 1.0 / T
-        k_eq = self.get_equilibrium_constants(T)
-        k_fwd = np.zeros(self.num_reactions)
-        k_rev = np.zeros(self.num_reactions)
+        k_eq = actx.np.min(self.big_number, self.get_equilibrium_constants(T))
 
         k_fwd0 = actx.np.exp(2.659486e01 - 1.786429e04 * inv_T)
         k_fwd1 = actx.np.exp(1.269378e01 + 7.000000e-01 * log_T - 6.038634e03 * inv_T)
@@ -554,19 +542,11 @@ class UIUCMechanism:
 
         k_fwd = make_obj_array([k_fwd0, k_fwd1, k_fwd2])
         k_rev = k_fwd * actx.np.exp(k_eq)
-        #        for i in range(0, self.num_reactions):
-        #            if k_eq[i] > self.big_number:
-        #                k_eq[i] = self.big_number
-        #            k_rev[i] = k_fwd[i] * np.exp(k_eq[i])
 
         return k_fwd, k_rev
 
     def get_net_rates_of_progress(self, T, C):
 
-        actx = T.array_context
-        #        R_fwd = np.zeros(self.num_reactions)
-        #        R_rev = np.zeros(self.num_reactions)
-        #        R_net = np.zeros(self.num_reactions)
         k_fwd, k_rev = self.get_rate_coefficients(T, C)
 
         R_fwd0 = k_fwd[0] * C[0] * C[1]
@@ -587,7 +567,6 @@ class UIUCMechanism:
 
         C = self.get_concentrations(rho, Y)
         R_net = self.get_net_rates_of_progress(T, C)
-        #        omega = np.zeros(self.num_species)
 
         omega0 = -R_net[0]
         omega1 = sum([-R_net[i] for i in range(3)])
