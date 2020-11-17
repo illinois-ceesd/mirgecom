@@ -167,7 +167,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
                 unit = ""
 
         if name is None:
-            name = f"{op}_{quantity}{dim}"
+            name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
 
         super().__init__(discr, quantity, unit, op, name, rank_aggr)
 
