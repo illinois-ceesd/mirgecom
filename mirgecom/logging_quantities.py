@@ -55,7 +55,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
         script automatically if this argument is not specified.
 
     """
-    import os
+    import subprocess
     from warnings import warn
 
     # Find emirge's version.sh in any parent directory
@@ -75,7 +75,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
         warn(output)
 
     else:
-        output = os.popen(path_to_version_sh).read()
+        output = subprocess.check_output(path_to_version_sh)
         if output == "":
             output = "Could not record emirge's package versions."
             warn(output)
