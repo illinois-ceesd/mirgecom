@@ -91,6 +91,8 @@ class StateConsumer:
         """Set the state of the object."""
         self.state = state
 
+# {{{ Discretization-based quantities
+
 
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities."""
@@ -225,10 +227,32 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 
         return self._discr_reduction(getattr(dv, self.quantity))
 
+# }}}
+
+# {{{ Kernel profile quantities
+
 
 class KernelProfile(LogQuantity):
-    """Logging support for results of the OpenCL kernel profiling (time, \
-    num_calls, flops, bytes_accessed)."""
+    """Logging support for statistics of the OpenCL kernel profiling (time, \
+    num_calls, flops, bytes_accessed).
+
+    Parameters
+    ----------
+    actx
+        The array context from which to collect statistics. Must have profiling
+        enabled.
+
+    kernel_name
+        Name of the kernel to profile.
+
+    stat
+        Statistic to collect (can be one of "time", "num_calls", "flops",
+        "bytes_accessed").
+
+    name
+        Name under which the statistic will be stored (optional).
+
+    """
 
     def __init__(self, actx: PyOpenCLArrayContext,
                  kernel_name: str, stat: str, name: str = None):
@@ -249,3 +273,5 @@ class KernelProfile(LogQuantity):
     def __call__(self):
         """Return the requested quantity."""
         return(self.actx.get_profiling_data_for_kernel(self.kernel_name, self.stat))
+
+# }}}
