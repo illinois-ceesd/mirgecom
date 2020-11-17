@@ -43,7 +43,18 @@ from meshmode.dof_array import DOFArray
 
 
 def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> None:
-    """Add the output of the emirge version.sh script to the log."""
+    """Add the output of the emirge version.sh script to the log.
+
+    Parameters
+    ----------
+    mgr
+        The :class:LogManager to add the versions to.
+
+    path_to_version_sh
+        Path to emirge's version.sh script. The function will attempt to find this
+        script automatically if this argument is not specified.
+
+    """
     import os
     from warnings import warn
 
@@ -73,7 +84,16 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 
 def set_state(mgr: LogManager, state: ndarray) -> None:
-    """Update the state of all :class:`StateConsumer` of the log manager `mgr`."""
+    """Update the state of all :class:`StateConsumer` of the log manager `mgr`.
+
+    Parameters
+    ----------
+    mgr
+        The :class:LogManager to set the state of.
+
+    state
+        The state vector to the set the state to.
+    """
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
