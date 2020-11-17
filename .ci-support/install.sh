@@ -4,6 +4,7 @@ brew install open-mpi
 brew install octave
 else
 PLATFORM=Linux
+sudo apt-get update
 sudo apt-get -y install openmpi-bin libopenmpi-dev
 sudo apt-get -y install octave
 fi
