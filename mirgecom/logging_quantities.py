@@ -75,8 +75,9 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
         warn(output)
 
     else:
-        output = subprocess.check_output(path_to_version_sh)
-        if output == "":
+        try:
+            output = subprocess.check_output(path_to_version_sh)
+        except OSError:
             output = "Could not record emirge's package versions."
             warn(output)
 
