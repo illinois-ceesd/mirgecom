@@ -119,7 +119,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities."""
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
-                 name: str, rank_aggr: str = None):
+                 name: str):
 
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self)
@@ -128,39 +128,24 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         self.quantity = quantity
 
-        if rank_aggr is None:
-            self.rank_aggr = "norm_2"
-        else:
-            self.rank_aggr = rank_aggr
-
         from functools import partial
 
         if op == "min":
             self._discr_reduction = partial(self.discr.nodal_min, "vol")
+            self.rank_aggr = min
         elif op == "max":
             self._discr_reduction = partial(self.discr.nodal_max, "vol")
+            self.rank_aggr = max
         elif op == "sum":
             self._discr_reduction = partial(self.discr.nodal_sum, "vol")
+            self.rank_aggr = sum
         else:
             raise RuntimeError(f"unknown operation {op}")
 
     @property
     def default_aggregator(self):
         """Rank aggregator to use."""
-        if self.rank_aggr == "norm_2":
-            from pytools import norm_2
-            return norm_2
-        elif self.rank_aggr == "norm_inf":
-            from pytools import norm_inf
-            return norm_inf
-        elif self.rank_aggr == "sum":
-            return sum
-        elif self.rank_aggr == "min":
-            return min
-        elif self.rank_aggr == "max":
-            return max
-        else:
-            return None
+        return self.rank_aggr
 
     def __call__(self):
         """Return the requested quantity."""
@@ -174,8 +159,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
-                 unit: str = None, dim: int = None, name: str = None,
-                 rank_aggr: str = None):
+                 unit: str = None, dim: int = None, name: str = None):
         if unit is None:
             if quantity == "mass":
                 unit = "kg/m^3"
@@ -192,7 +176,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         if name is None:
             name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
 
-        super().__init__(discr, quantity, unit, op, name, rank_aggr)
+        super().__init__(discr, quantity, unit, op, name)
 
         self.dim = dim
 
@@ -217,8 +201,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     """Logging support for dependent quantities (temperature, pressure)."""
 
     def __init__(self, discr: Discretization, eos: GasEOS,
-                 quantity: str, op: str, unit: str = None, name: str = None,
-                 rank_aggr: str = None):
+                 quantity: str, op: str, unit: str = None, name: str = None):
         if unit is None:
             if quantity == "temperature":
                 unit = "K"
@@ -230,7 +213,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         if name is None:
             name = f"{op}_{quantity}"
 
-        super().__init__(discr, quantity, unit, op, name, rank_aggr)
+        super().__init__(discr, quantity, unit, op, name)
 
         self.eos = eos
 
