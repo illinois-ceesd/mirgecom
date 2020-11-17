@@ -54,9 +54,11 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
         p = pathlib.Path(".").resolve()
         for d in p.parents:
             candidate = pathlib.Path(d).joinpath("version.sh")
-            if candidate.is_file() and "emirge" in candidate.open().read():
-                path_to_version_sh = str(candidate)
-                break
+            if candidate.is_file():
+                with open(candidate) as f:
+                    if "emirge" in f.read():
+                        path_to_version_sh = str(candidate)
+                        break
 
     if path_to_version_sh is None:
         output = "Could not find emirge's version.sh. No package versions recorded."
