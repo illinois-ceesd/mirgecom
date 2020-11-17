@@ -155,14 +155,14 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
                  rank_aggr: str = None):
         if unit is None:
             if quantity == "mass":
-                unit = "kg"
+                unit = "kg/m^3"
             elif quantity == "energy":
-                unit = "J"
+                unit = "J/m^3"
             elif quantity == "momentum":
                 if dim is None:
                     raise RuntimeError("Missing 'dim' parameter for dimensional "
                                        f"ConservedQuantity '{quantity}'.")
-                unit = "kg*m/s"
+                unit = "kg*m/s/m^3"
             else:
                 unit = ""
 
