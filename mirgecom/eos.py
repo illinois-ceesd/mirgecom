@@ -257,6 +257,7 @@ class PrometheusMixture(GasEOS):
     def __init__(self, prometheus_mech):
         """Initialize Prometheus EOS with mechanism class."""
         self._prometheus_mech = prometheus_mech
+        self._gamma = 1.4
 
     def gamma(self):
         """Get specific heat ratio Cp/Cv."""
