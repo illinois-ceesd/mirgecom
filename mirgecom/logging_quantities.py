@@ -36,8 +36,7 @@ __doc__ = """
 
 from logpyle import LogQuantity, LogManager
 from numpy import ndarray
-# Does not work due to circular dependency
-# from mirgecom.profiling import PyOpenCLProfilingArrayContext
+from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
@@ -146,7 +145,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
 
 class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
-    """Logging support for conserved quantities (mass, energy, momentum)."""
+    """Logging support for conserved quantities.
+
+    See :meth:`split_conserved` for details.
+    """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
                  unit: str = None, dim: int = None, name: str = None,
@@ -228,7 +230,7 @@ class KernelProfile(LogQuantity):
     """Logging support for results of the OpenCL kernel profiling (time, \
     num_calls, flops, bytes_accessed)."""
 
-    def __init__(self, actx,
+    def __init__(self, actx: PyOpenCLArrayContext,
                  kernel_name: str, stat: str, name: str = None):
         if stat == "time":
             unit = "s"

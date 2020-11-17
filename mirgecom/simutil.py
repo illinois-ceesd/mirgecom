@@ -140,9 +140,9 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
             ctm = nullcontext()
 
         with ctm:
-            visualizer.write_parallel_vtk_file(
-                comm, rank_fn, io_fields, overwrite=overwrite,
-                par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
+            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
+                overwrite=overwrite, par_manifest_filename=make_par_fname(
+                    basename=vizname, step=step, t=t))
 
     if do_status is True:
         #        if constant_cfl is False:
