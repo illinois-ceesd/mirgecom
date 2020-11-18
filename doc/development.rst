@@ -71,6 +71,7 @@ Creating a new pull request
 
    .. code:: bash
 
+      # Install these with 'pip install wheel flake8 pep8-naming flake8-quotes pytest pylint'
       $ flake8
       $ pydocstyle
       $ pytest
