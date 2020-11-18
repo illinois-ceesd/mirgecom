@@ -42,7 +42,7 @@ Working with Pull Requests
 --------------------------
 
 We are using GitHub's pull requests (PRs) feature to integrate changes into
-mirgecom. Pull requests are based on git branches that are merged into another
+mirgecom and its supporting packages. Pull requests are based on git branches that are merged into another
 branch (usually the master branch). Note that pull requests are a GitHub
 feature and live outside the main git functionality; the `git` program itself
 has no knowledge of them.
