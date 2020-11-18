@@ -168,7 +168,7 @@ merging multiple commits into ``master``) are not directly supported by
 GitHub’s Web UI, but can be done manually on the command line (these
 might need to be force pushed to a branch).
 
-Creating merge commit
+Create a merge commit
 ~~~~~~~~~~~~~~~~~~~~~
 
 This options just merges all commits into the master branch. This is the simplest
