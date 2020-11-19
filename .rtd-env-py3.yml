@@ -10,6 +10,7 @@ dependencies:
 - pip:
   - "pybind11"
   - "mako"
+  - "pyopencl"
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"
   - "git+https://github.com/inducer/dagrt.git#egg=dagrt"
