@@ -42,10 +42,20 @@ Working with Pull Requests
 --------------------------
 
 We are using GitHub's pull requests (PRs) feature to integrate changes into
-mirgecom and its supporting packages. Pull requests are based on git branches that are merged into another
-branch (usually the master branch). Note that pull requests are a GitHub
-feature and live outside the main git functionality; the `git` program itself
-has no knowledge of them.
+mirgecom and its supporting packages. Pull requests are based on git branches
+that are merged into another branch (usually the master branch). Note that
+pull requests are a GitHub feature and live outside the main git
+functionality; the ``git`` program itself has no knowledge of them.
+
+.. note::
+
+   A good overview of basic git functionality and the ``git`` program can be found
+   on this `GitHub page <https://try.github.io/>`__.
+
+.. note::
+
+   On most systems, the ``git`` program will already be installed. You can
+   install it yourself by running ``conda install git``.
 
 Forking the repository
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -132,6 +142,11 @@ When changing the history of a branch (e.g., by rebasing the branch, or
 by amending a commit that is already pushed), you might need to
 force-push it back to the repository (i.e, ``git push --force``). Please
 use this sparingly.
+
+Dependent pull requests
+^^^^^^^^^^^^^^^^^^^^^^^
+
+
 
 Reviewing/CI
 ^^^^^^^^^^^^
