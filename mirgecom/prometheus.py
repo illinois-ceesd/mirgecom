@@ -511,9 +511,7 @@ class UIUCMechanism:
             j = -pv_fun(t_i, y)
             dt = -f / j
             t_i += dt
-            tresid = np.abs(dt)
-            maxerr = self.npctx.linalg.norm(tresid, np.inf)
-            if maxerr < tol:
+            if self.npctx.linalg.norm(dt, np.inf) < tol:
                 break
 
         return t_i

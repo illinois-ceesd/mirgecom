@@ -97,7 +97,6 @@ def test_prometheus_mixture(ctx_factory):
     p = eos.pressure(cv)
     pmax = discr.norm(p, np.inf)
     assert(pmax > 0)
-
     #    exp_ke = 0.5 * cv.mass
     #    ke = eos.kinetic_energy(cv)
     #    kerr = discr.norm(ke - exp_ke, np.inf)
