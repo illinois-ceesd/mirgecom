@@ -8,6 +8,8 @@ dependencies:
 - islpy
 - pip
 - pip:
+  - "pybind11"
+  - "mako"
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"
   - "git+https://github.com/inducer/dagrt.git#egg=dagrt"
@@ -16,5 +18,3 @@ dependencies:
   - "git+https://github.com/inducer/meshmode.git#egg=meshmode"
   - "git+https://github.com/inducer/grudge.git#egg=grudge"
   - "sphinx-math-dollar"
-  - "mako"
-  - "pybind11"
