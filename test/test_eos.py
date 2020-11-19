@@ -62,8 +62,8 @@ def test_prometheus_mixture(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    dim = 2
-    nel_1d = 4
+    dim = 1
+    nel_1d = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -71,7 +71,7 @@ def test_prometheus_mixture(ctx_factory):
         a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
     )
 
-    order = 3
+    order = 1
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -93,17 +93,15 @@ def test_prometheus_mixture(ctx_factory):
                      spec_amplitudes=spec_amplitudes)
 
     lump_soln = lump(0, nodes)
-
     cv = split_conserved(dim, lump_soln)
     p = eos.pressure(cv)
-    #    exp_p = 1.0
     pmax = discr.norm(p, np.inf)
     assert(pmax > 0)
-    
+
     #    exp_ke = 0.5 * cv.mass
     #    ke = eos.kinetic_energy(cv)
     #    kerr = discr.norm(ke - exp_ke, np.inf)
-    
+
     #    te = eos.total_energy(cv, p)
     #    terr = discr.norm(te - cv.energy, np.inf)
 

@@ -608,8 +608,6 @@ class MultiLump:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        print(f"len(x_vec) = {len(x_vec)}")
-        print(f"self._dim = {self._dim}")
 
         assert len(x_vec) == self._dim
         amplitude = self._rhoamp
@@ -645,7 +643,9 @@ class MultiLump:
             massfracs = make_obj_array([self._spec_y0s[i] + expterms[i]
                                         for i in range(self._nspecies)])
 
-        return flat_obj_array(mass, energy, mom, massfracs)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, massfractions=massfracs)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
