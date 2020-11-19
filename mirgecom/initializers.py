@@ -80,7 +80,7 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     _velocity = velocity
     _gamma = eos.gamma()
 
-    mom0 = _velocity * make_obj_array([_rho])
+    mom0 = _velocity * _rho
     e0 = _p / (_gamma - 1.0)
     ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
 
@@ -89,7 +89,7 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     ones = zeros + 1.0
 
     mass = zeros + _rho
-    mom = mom0 * make_obj_array([ones])
+    mom = mom0 * ones
     energy = e0 + ke0 + zeros
 
     return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
@@ -416,7 +416,7 @@ class Lump:
         gamma = eos.gamma()
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
-        mom = self._velocity * make_obj_array([mass])
+        mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         return flat_obj_array(mass, energy, mom)
@@ -452,12 +452,12 @@ class Lump:
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
 
-        v = self._velocity * make_obj_array([1.0 / mass])
+        v = self._velocity / mass
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
         massrhs = -2 * rdotv * mass
         energyrhs = -v2 * rdotv * mass
-        momrhs = v * make_obj_array([-2 * mass * rdotv])
+        momrhs = v * (-2 * mass * rdotv)
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
@@ -543,7 +543,7 @@ class Uniform:
     """
 
     def __init__(
-            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
+            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=np.zeros((1,)),
     ):
         r"""Initialize uniform flow parameters.
 
