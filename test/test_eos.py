@@ -78,7 +78,7 @@ def test_prometheus_mixture(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
-    prometheus_mechanism = UIUCMechanism(discr)
+    prometheus_mechanism = UIUCMechanism(actx.np)
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
     eos = PrometheusMixture(prometheus_mechanism)

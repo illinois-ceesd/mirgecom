@@ -1,9 +1,9 @@
-import numpy as np
+import numpy as realnp
 from pytools.obj_array import make_obj_array
 
 
 class UIUCMechanism:
-    def __init__(self, discr):
+    def __init__(self, np):
 
         self.model_name = "uiuc"
         self.num_elements = 4
@@ -14,9 +14,9 @@ class UIUCMechanism:
         self.one_third = 1.0 / 3.0
         self.gas_constant = 8314.4621
         self.big_number = 1.0e300
-        self.discr = discr
+        self.np = np
 
-        self.wts = np.array(
+        self.wts = realnp.array(
             [
                 2.805400e01,
                 3.199800e01,
@@ -46,7 +46,7 @@ class UIUCMechanism:
 
     def get_mix_molecular_weight(self, massfractions):
 
-        return 1.0 / np.dot(self.iwts, massfractions)
+        return 1.0 / self.np.dot(self.iwts, massfractions)
 
     def get_concentrations(self, rho, massfractions):
 
@@ -82,8 +82,6 @@ class UIUCMechanism:
 
     def get_species_specific_heats(self, temperature):
 
-        actx = temperature.array_context
-
         tt0 = temperature
         tt1 = temperature * tt0
         tt2 = temperature * tt1
@@ -103,7 +101,7 @@ class UIUCMechanism:
             - 6.915888e-08 * tt2
             + 2.698844e-11 * tt3
         )
-        cpr0 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr0 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         cp_high = (
             3.282538e00
@@ -119,7 +117,7 @@ class UIUCMechanism:
             - 9.681295e-09 * tt2
             + 3.243728e-12 * tt3
         )
-        cpr1 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr1 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         cp_high = (
             3.857460e00
@@ -135,7 +133,7 @@ class UIUCMechanism:
             + 2.459190e-09 * tt2
             - 1.436995e-13 * tt3
         )
-        cpr2 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr2 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         cp_high = (
             2.715186e00
@@ -151,7 +149,7 @@ class UIUCMechanism:
             + 9.070059e-10 * tt2
             - 9.044245e-13 * tt3
         )
-        cpr3 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr3 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         cp_high = (
             3.033992e00
@@ -167,7 +165,7 @@ class UIUCMechanism:
             - 5.487971e-09 * tt2
             + 1.771978e-12 * tt3
         )
-        cpr4 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr4 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         cp_high = (
             3.337279e00
@@ -183,7 +181,7 @@ class UIUCMechanism:
             + 2.015721e-08 * tt2
             - 7.376118e-12 * tt3
         )
-        cpr5 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr5 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         cp_high = (
             2.926640e00
@@ -199,13 +197,11 @@ class UIUCMechanism:
             + 5.641515e-09 * tt2
             - 2.444854e-12 * tt3
         )
-        cpr6 = actx.np.where(tt0 < 1.000000e03, cp_low, cp_high)
+        cpr6 = self.np.where(tt0 < 1.000000e03, cp_low, cp_high)
 
         return make_obj_array([cpr0, cpr1, cpr2, cpr3, cpr4, cpr5, cpr6])
 
     def get_species_enthalpies(self, temperature):
-
-        actx = temperature.array_context
 
         tt0 = temperature
         tt1 = temperature * tt0
@@ -229,7 +225,7 @@ class UIUCMechanism:
             + 2.698844e-11 * 0.20 * tt3
             + 5.089776e03 * tt4
         )
-        hrt0 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt0 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         h_high = (
             3.282538e00
@@ -247,7 +243,7 @@ class UIUCMechanism:
             + 3.243728e-12 * 0.20 * tt3
             - 1.063944e03 * tt4
         )
-        hrt1 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt1 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         h_high = (
             3.857460e00
@@ -265,7 +261,7 @@ class UIUCMechanism:
             - 1.436995e-13 * 0.20 * tt3
             - 4.837197e04 * tt4
         )
-        hrt2 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt2 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         h_high = (
             2.715186e00
@@ -283,7 +279,7 @@ class UIUCMechanism:
             - 9.044245e-13 * 0.20 * tt3
             - 1.434409e04 * tt4
         )
-        hrt3 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt3 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         h_high = (
             3.033992e00
@@ -301,7 +297,7 @@ class UIUCMechanism:
             + 1.771978e-12 * 0.20 * tt3
             - 3.029373e04 * tt4
         )
-        hrt4 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt4 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         h_high = (
             3.337279e00
@@ -319,7 +315,7 @@ class UIUCMechanism:
             - 7.376118e-12 * 0.20 * tt3
             - 9.179352e02 * tt4
         )
-        hrt5 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt5 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         h_high = (
             2.926640e00
@@ -337,13 +333,11 @@ class UIUCMechanism:
             - 2.444854e-12 * 0.20 * tt3
             - 1.020900e03 * tt4
         )
-        hrt6 = actx.np.where(tt0 < 1.000000e03, h_low, h_high)
+        hrt6 = self.np.where(tt0 < 1.000000e03, h_low, h_high)
 
         return make_obj_array([hrt0, hrt1, hrt2, hrt3, hrt4, hrt5, hrt6])
 
     def get_species_entropies(self, temperature):
-
-        actx = temperature.array_context
 
         tt0 = temperature
         tt1 = temperature * tt0
@@ -351,7 +345,7 @@ class UIUCMechanism:
         tt3 = temperature * tt2
         #        tt4 = 1.0 / temperature
         #        tt5 = tt4 * tt4
-        tt6 = actx.np.log(tt0)
+        tt6 = self.np.log(tt0)
 
         s_high = (
             2.036111e00 * tt6
@@ -369,7 +363,7 @@ class UIUCMechanism:
             + 2.698844e-11 * 0.25 * tt3
             + 4.097331e00
         )
-        sr0 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr0 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         s_high = (
             3.282538e00 * tt6
@@ -387,7 +381,7 @@ class UIUCMechanism:
             + 3.243728e-12 * 0.25 * tt3
             + 3.657676e00
         )
-        sr1 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr1 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         s_high = (
             3.857460e00 * tt6
@@ -405,7 +399,7 @@ class UIUCMechanism:
             - 1.436995e-13 * 0.25 * tt3
             + 9.901052e00
         )
-        sr2 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr2 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         s_high = (
             2.715186e00 * tt6
@@ -423,7 +417,7 @@ class UIUCMechanism:
             - 9.044245e-13 * 0.25 * tt3
             + 3.508409e00
         )
-        sr3 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr3 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         s_high = (
             3.033992e00 * tt6
@@ -441,7 +435,7 @@ class UIUCMechanism:
             + 1.771978e-12 * 0.25 * tt3
             - 8.490322e-01
         )
-        sr4 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr4 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         s_high = (
             3.337279e00 * tt6
@@ -459,7 +453,7 @@ class UIUCMechanism:
             - 7.376118e-12 * 0.25 * tt3
             + 6.830102e-01
         )
-        sr5 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr5 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         s_high = (
             2.926640e00 * tt6
@@ -477,7 +471,7 @@ class UIUCMechanism:
             - 2.444854e-12 * 0.25 * tt3
             + 3.950372e00
         )
-        sr6 = actx.np.where(tt0 < 1.000000e03, s_low, s_high)
+        sr6 = self.np.where(tt0 < 1.000000e03, s_low, s_high)
 
         return make_obj_array([sr0, sr1, sr2, sr3, sr4, sr5, sr6])
 
@@ -489,9 +483,8 @@ class UIUCMechanism:
 
     def get_equilibrium_constants(self, temperature):
 
-        actx = temperature.array_context
         rt = self.gas_constant * temperature
-        c0 = actx.np.log(self.one_atm / rt)
+        c0 = self.np.log(self.one_atm / rt)
 
         g0rt = self.get_species_gibbs(temperature)
 
@@ -501,8 +494,6 @@ class UIUCMechanism:
         return make_obj_array([k_eq1, k_eq2])
 
     def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
-
-        actx = enthalpy_or_energy.array_context
 
         if do_energy is False:
             pv_fun = self.get_mixture_specific_heat_cp_mass
@@ -520,8 +511,8 @@ class UIUCMechanism:
             j = -pv_fun(t_i, y)
             dt = -f / j
             t_i += dt
-            tresid = actx.np.abs(dt)
-            maxerr = self.discr.norm(tresid, np.inf)
+            tresid = realnp.abs(dt)
+            maxerr = self.np.linalg.norm(tresid, realnp.inf)
             if maxerr < tol:
                 break
 
@@ -529,18 +520,17 @@ class UIUCMechanism:
 
     def get_rate_coefficients(self, temperature, concentrations):
 
-        actx = temperature.array_context
-        logt = actx.np.log(temperature)
+        logt = self.np.log(temperature)
         invt = 1.0 / temperature
-        k_eq = actx.np.min(self.big_number,
+        k_eq = self.np.min(self.big_number,
                            self.get_equilibrium_constants(temperature))
 
-        k_fwd0 = actx.np.exp(2.659486e01 - 1.786429e04 * invt)
-        k_fwd1 = actx.np.exp(1.269378e01 + 7.000000e-01 * logt - 6.038634e03 * invt)
-        k_fwd2 = actx.np.exp(1.830257e01 - 1.761268e04 * invt)
+        k_fwd0 = self.np.exp(2.659486e01 - 1.786429e04 * invt)
+        k_fwd1 = self.np.exp(1.269378e01 + 7.000000e-01 * logt - 6.038634e03 * invt)
+        k_fwd2 = self.np.exp(1.830257e01 - 1.761268e04 * invt)
 
         k_fwd = make_obj_array([k_fwd0, k_fwd1, k_fwd2])
-        k_rev = k_fwd * actx.np.exp(k_eq)
+        k_rev = k_fwd * self.np.exp(k_eq)
 
         return k_fwd, k_rev
 
