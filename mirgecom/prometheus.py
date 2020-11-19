@@ -502,8 +502,6 @@ class UIUCMechanism:
 
     def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
 
-        actx = enthalpy_or_energy.array_context
-
         if do_energy is False:
             pv_fun = self.get_mixture_specific_heat_cp_mass
             he_fun = self.get_mixture_enthalpy_mass
@@ -520,9 +518,7 @@ class UIUCMechanism:
             j = -pv_fun(t_i, y)
             dt = -f / j
             t_i += dt
-            tresid = actx.np.abs(dt)
-            maxerr = self.discr.norm(tresid, np.inf)
-            if maxerr < tol:
+            if self.discr.norm(dt, np.inf) < tol:
                 break
 
         return t_i
