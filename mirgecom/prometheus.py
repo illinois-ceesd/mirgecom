@@ -46,7 +46,7 @@ class UIUCMechanism:
 
     def get_mix_molecular_weight(self, massfractions):
 
-        return 1.0 / self.npctx.dot(self.iwts, massfractions)
+        return 1.0 / np.dot(self.iwts, massfractions)
 
     def get_concentrations(self, rho, massfractions):
 
