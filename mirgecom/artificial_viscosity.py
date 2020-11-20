@@ -96,8 +96,8 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
     #partition boundaries flux
     #flux across partition boundaries
     def my_facialflux_r_partition(q):
-        qin = cross_rank_trace_pairs(discr,q)
-        return  sum(_facial_flux_r(discr,q_tpair=part_pair) for part_pair in cross_rank_trace_pairs(discr,make_obj_array([q])) )
+        qin = cross_rank_trace_pairs(discr,make_obj_array([q]))
+        return  sum(_facial_flux_r(discr,q_tpair=part_pair) for part_pair in qin )
     
     pbf_r = obj_array_vectorize(my_facialflux_r_partition,r)
     
@@ -159,7 +159,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
     #flux across partition boundaries
     def my_facialflux_q_partition(q):
         qin = cross_rank_trace_pairs(discr,q)
-        return  sum(_facial_flux_q(discr,q_tpair=part_pair) for part_pair in cross_rank_trace_pairs(discr,make_obj_array([q])) )
+        return  sum(_facial_flux_q(discr,q_tpair=part_pair) for part_pair in qin)
     
     pbf_q = obj_array_vectorize(my_facialflux_q_partition,q)
     #pbf_q = sum(
