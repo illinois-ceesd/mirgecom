@@ -133,8 +133,6 @@ def main(ctx_factory=cl.create_some_context):
     get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
                            dt=current_dt, cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
-    def my_av(state):
-        return (heat_operator(discr,alpha=1.0e-3,w=state) )
 
     def my_rhs(t, state):
         return (
