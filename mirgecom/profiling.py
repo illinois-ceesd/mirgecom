@@ -37,7 +37,7 @@ from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
-.. automethod:: add_nonloopy_profiling_result
+.. autofunction:: add_nonloopy_profiling_result
 """
 
 # {{{ Support for non-Loopy results (e.g., pyopencl kernels)
