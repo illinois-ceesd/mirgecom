@@ -37,6 +37,7 @@ from grudge.eager import (
 )
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.tag_cells import smoothness_indicator
 
 
 def _facial_flux_r(discr, q_tpair):
@@ -73,6 +74,12 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
     r"""Compute artifical viscosity for the euler equations
 
     """
+    #Get smoothness indicator
+    epsilon = np.zeros((2+discr.dim,),dtype=object)
+    indicator = make_obj_array([smoothness_indicator(r[0],discr)])
+    for i in range(2+discr.dim):
+        epsilon[i] = indicator
+
     #compute dissapation flux
 
     #Cannot call weak_grad on obj of nd arrays, use obj_array_vectorize as work around
@@ -139,7 +146,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
             
         
     #Compute q, half way done!
-    q = discr.inverse_mass( -alpha * (dflux_r - discr.face_mass(iff_r + pbf_r + dbf_r)))
+    q = discr.inverse_mass( -alpha * epsilon * (dflux_r - discr.face_mass(iff_r + pbf_r + dbf_r)))
 
     #flux of q
     

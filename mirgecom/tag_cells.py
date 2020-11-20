@@ -62,7 +62,7 @@ def compute_smoothness_indicator():
         0<=idof<ndiscr_nodes_out and
         0<=j<ndiscr_nodes_in and
         0<=k<ndiscr_nodes_in}""",
-        "result[iel,idof] = sum(k,vec[iel,k]*vec[iel,k]*modes[k])/sum(j, vec[iel,j]*vec[iel,j])",
+        "result[iel,idof] = sum(k,vec[iel,k]*vec[iel,k]*modes[k])/sum(j, vec[iel,j]*vec[iel,j]+1.0e-12/ndiscr_nodes_in)",
         name="smooth_comp")
     #knl = lp.tag_array_axes(knl, "vec", "stride:auto,stride:auto")
     return knl
@@ -101,7 +101,6 @@ def smoothness_indicator(u,discr):
         highest_mode = np.ones(modes)
         for mode_index,mode_id in enumerate(mode_ids):
             highest_mode[mode_index] = highest_mode[mode_index] * (sum(mode_id)==order)
-            print(highest_mode[mode_index])
         
         actx.call_loopy(
             get_indicator(),
@@ -109,6 +108,19 @@ def smoothness_indicator(u,discr):
             vec=uhat[group.index],
             modes=actx.from_numpy(highest_mode))
 
+    #Take log10 of indicator
+    indicator = actx.np.log10(indicator+1.0e-12)
+
+    #No special meaning to these values
+    #Should be exposed as tuning parameters
+    kappa=0.5
+    so = -7.0
+
+    #Compute artificail viscosity percentage based on idicator and set parameters
+    yesnol = indicator > (so-kappa)
+    yesnou = indicator > (so+kappa)
+    sin_indicator = actx.np.where(yesnol,0.5*(1.0+actx.np.sin(np.pi *(indicator - so)/(2.0*kappa))),0.0*indicator)
+    indicator = actx.np.where(yesnou,1.0+0.0*indicator,sin_indicator)
 
     return indicator
      
