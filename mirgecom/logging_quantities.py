@@ -42,6 +42,8 @@ from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
 
 
+# {{{ Package versions
+
 def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> None:
     """Add the output of the emirge version.sh script to the log.
 
@@ -83,6 +85,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
     mgr.set_constant("emirge_package_versions", output)
 
+# }}}
 
 def set_state(mgr: LogManager, state: ndarray) -> None:
     """Update the state of all :class:`StateConsumer` of the log manager `mgr`.

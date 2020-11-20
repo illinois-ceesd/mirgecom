@@ -38,7 +38,15 @@ __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
 """
 
+# {{{ Support for non-Loopy results (e.g., pyopencl kernels)
+
 nonloopy_profile_results = {}
+
+
+def pyopencl_monkey_del(self):
+    print("monkeyed")
+
+# cl.array.Array.__del__ = pyopencl_monkey_del
 
 
 @dataclass(eq=True, frozen=True)
@@ -59,6 +67,9 @@ def add_nonloopy_profiling_result(name, time, flops=0,
     new = ProfileResult(time, flops, bytes_accessed, footprint_bytes)
     global nonloopy_profile_results
     nonloopy_profile_results.setdefault(knl, []).append(new)
+
+
+# }}}
 
 
 @dataclass
