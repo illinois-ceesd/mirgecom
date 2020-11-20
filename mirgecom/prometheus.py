@@ -343,8 +343,6 @@ class UIUCMechanism:
         tt1 = temperature * tt0
         tt2 = temperature * tt1
         tt3 = temperature * tt2
-        #        tt4 = 1.0 / temperature
-        #        tt5 = tt4 * tt4
         tt6 = self.npctx.log(tt0)
 
         s_high = (

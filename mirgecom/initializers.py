@@ -9,6 +9,7 @@ Solution Initializers
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
 .. autoclass:: MultiLump
+.. autoclass:: MixtureInitializer
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
 """
@@ -343,8 +344,6 @@ class Lump:
             self, numdim, nspecies=0,
             rho0=1.0, rhoamp=1.0, p0=1.0,
             center=None, velocity=None,
-            spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None
     ):
         r"""Initialize Lump parameters.
 
@@ -371,30 +370,12 @@ class Lump:
         assert len(center) == numdim
         assert len(velocity) == numdim
 
-        if nspecies > 0:
-            if spec_y0s is None:
-                spec_y0s = np.ones(shape=(nspecies,))
-            if spec_centers is None:
-                spec_centers = make_obj_array([np.zeros(shape=numdim,)
-                                               for i in range(nspecies)])
-            if spec_amplitudes is None:
-                spec_amplitudes = np.ones(shape=(nspecies,))
-            assert len(spec_y0s) == nspecies
-            assert len(spec_amplitudes) == nspecies
-            assert len(spec_centers) == nspecies
-            for i in range(nspecies):
-                assert len(spec_centers[i]) == numdim
-
-        self._nspecies = nspecies
         self._dim = numdim
         self._velocity = velocity
         self._center = center
         self._p0 = p0
         self._rho0 = rho0
         self._rhoamp = rhoamp
-        self._spec_y0s = spec_y0s
-        self._spec_centers = spec_centers
-        self._spec_amplitudes = spec_amplitudes
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         """
@@ -414,20 +395,6 @@ class Lump:
         """
         assert len(x_vec) == self._dim
         amplitude = self._rhoamp
-        # mass0 = self._rho0
-
-        # if ispec >= 0 and self._nspecies > 0:
-        #     if spec_center is not None:
-        #         assert len(spec_center) == self._dim
-        #         self._spec_center[ispec] = spec_center
-        #     else:
-        #         self._spec_center[ispec] = self._center
-        #     lump_loc = self._spec_center[ispec] + t * self._velocity
-        #     if spec_amp > 0:
-        #         amplitude = spec_amp
-        #     if y0 > 0:
-        #         mass0 = y0
-        # else:
         lump_loc = self._center + t * self._velocity
 
         # coordinates relative to lump center
@@ -439,9 +406,6 @@ class Lump:
         expterm = amplitude * actx.np.exp(1 - r ** 2)
 
         mass = expterm + self._rho0
-        #        mass = 0.0 * rel_center[0] + self._rho0
-        #        if ispec > 0:
-        #            massfrac =
         mom = self._velocity * make_obj_array([mass])
 
         gamma = eos.gamma()
@@ -710,6 +674,79 @@ class MultiLump:
                                       for i in range(self._nspecies)])
 
         return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
+
+
+class MixtureInitializer:
+    r"""Solution initializer for multi-species mixture.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+    def __init__(
+            self, numdim=3, nspecies=0,
+            pressure=101500.0, temperature=300.0,
+            massfractions=None, velocity=None,
+    ):
+        r"""Initialize mixture parameters.
+
+        Parameters
+        ----------
+        numdim: int
+            specifies the number of dimensions for the lump
+        nspeces: int
+            specifies the number of mixture species
+        pressure: float
+            specifies the value of :math:`p_0`
+        temperature: float
+            specifies the  value of :math:`T_0`
+        massfractions: numpy.ndarray
+            specifies the mass fraction for each species
+        velocity: numpy.ndarray
+            fixed uniform flow velocity used for kinetic energy
+        """
+        if velocity is None:
+            velocity = np.zeros(shape=(numdim,))
+        if massfractions is None:
+            if nspecies > 0:
+                massfractions = np.zeros(shape=(nspecies,))
+        self._nspecies = nspecies
+        self._dim = numdim
+        self._velocity = velocity
+        self._pressure = pressure
+        self._temperature = temperature
+        self._massfracs = massfractions
+
+    def __call__(self, eos, x_vec, t=0.0):
+        """
+        Create the mixture state at locations *x_vec* (t is ignored).
+
+        Parameters
+        ----------
+        t: float
+            Time is ignored by this solution intitializer
+        x_vec: numpy.ndarray
+            Coordinates at which solution is desired
+        """
+        assert len(x_vec) == self._dim
+
+        ones = (1.0 + x_vec[0]) - x_vec[0]
+        pressure = self._pressure * ones
+        temperature = self._temperature * ones
+        velocity = make_obj_array([self._velocity[i] * ones
+                                   for i in range(self._dim)])
+        massfracs = None
+        if self._nspecies > 0:
+            massfracs = make_obj_array([self._massfracs[i] * ones
+                                        for i in range(self._nspecies)])
+        mass = eos.get_density(pressure, temperature, massfracs)
+        mom = make_obj_array([mass]) * velocity
+        internal_energy = eos.get_internal_energy(temperature, massfracs)
+        kinetic_energy = 0.5 * np.dot(velocity, velocity)
+        energy = mass*(internal_energy + kinetic_energy)
+
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, massfractions=massfracs)
 
 
 class AcousticPulse:

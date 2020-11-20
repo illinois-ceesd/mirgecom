@@ -31,16 +31,22 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+import pytest
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
+from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
 
 from mirgecom.prometheus import UIUCMechanism
 from mirgecom.eos import IdealSingleGas, PrometheusMixture
-from mirgecom.initializers import Vortex2D
-from mirgecom.initializers import Lump, MultiLump
+from mirgecom.initializers import (
+    Vortex2D, Lump, MultiLump,
+    MixtureInitializer
+)
 from mirgecom.euler import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
@@ -51,7 +57,8 @@ from pyopencl.tools import (  # noqa
 logger = logging.getLogger(__name__)
 
 
-def test_prometheus_mixture(ctx_factory):
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_prometheus_mixture(ctx_factory, dim):
     """Test PrometheusMixture with mass lump.
 
     Tests that PrometheusMixture EOS returns
@@ -62,16 +69,16 @@ def test_prometheus_mixture(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    dim = 1
-    nel_1d = 2
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
 
-    order = 1
+    order = 4
+
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -111,8 +118,20 @@ def test_prometheus_mixture(ctx_factory):
     #    assert kerr < 1e-15
     #    assert terr < 1e-15
 
+    y0s = np.zeros(shape=(nspecies,))
+    for i in range(1, nspecies):
+        y0s[i] = 1.0 / (10.0 ** i)
+    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
+    y0s[0] = 1.0 - spec_sum
+    velocity = np.zeros(shape=(dim,))
+    initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+                                     pressure=101500.0, temperature=300.0,
+                                     massfractions=y0s, velocity=velocity)
+    current_state = initializer(eos=eos, t=0, x_vec=nodes)
 
-def test_idealsingle_lump(ctx_factory):
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_idealsingle_lump(ctx_factory, dim):
     """Test IdealSingle EOS with mass lump.
 
     Tests that the IdealSingleGas EOS returns
@@ -123,13 +142,12 @@ def test_idealsingle_lump(ctx_factory):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    dim = 2
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
     )
 
     order = 3
@@ -141,7 +159,6 @@ def test_idealsingle_lump(ctx_factory):
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
     velocity = np.zeros(shape=(dim,))
-    center[0] = 5
     velocity[0] = 1
     lump = Lump(numdim=dim, center=center, velocity=velocity)
     eos = IdealSingleGas()
