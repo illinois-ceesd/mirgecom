@@ -165,6 +165,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     def __init__(self, discr: Discretization, quantity: str, op: str,
                  unit: str = None, dim: int = None, name: str = None):
         if unit is None:
+            from warnings import warn
             if quantity == "mass":
                 unit = "kg/m^3"
             elif quantity == "energy":
@@ -176,6 +177,7 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
                 unit = "kg*m/s/m^3"
             else:
                 unit = ""
+            warn(f"Inferred unit for quantity {quantity} : {unit}")
 
         if name is None:
             name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
@@ -207,12 +209,14 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
     def __init__(self, discr: Discretization, eos: GasEOS,
                  quantity: str, op: str, unit: str = None, name: str = None):
         if unit is None:
+            from warnings import warn
             if quantity == "temperature":
                 unit = "K"
             elif quantity == "pressure":
                 unit = "P"
             else:
                 unit = ""
+            warn(f"Inferred unit for quantity {quantity} : {unit}")
 
         if name is None:
             name = f"{op}_{quantity}"
