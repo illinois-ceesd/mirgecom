@@ -87,6 +87,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 # }}}
 
+
 def set_state(mgr: LogManager, state: ndarray) -> None:
     """Update the state of all :class:`StateConsumer` of the log manager `mgr`.
 

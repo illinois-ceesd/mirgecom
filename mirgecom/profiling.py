@@ -33,9 +33,11 @@ from dataclasses import dataclass
 import pytools
 from logpyle import LogManager
 from mirgecom.logging_quantities import KernelProfile
+from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
+.. automethod:: add_nonloopy_profiling_result
 """
 
 # {{{ Support for non-Loopy results (e.g., pyopencl kernels)
@@ -44,9 +46,22 @@ nonloopy_profile_results = {}
 
 
 def pyopencl_monkey_del(self):
-    print("monkeyed")
+    """Monkey patches pyopencl.array destructor to grab profile data."""
+    if self.events and self.queue and \
+          self.queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
+        cl.wait_for_events(self.events)
+        times = []
+        for evt in self.events:
+            time = evt.profile.end - evt.profile.start
+            times.append(time)
 
-# cl.array.Array.__del__ = pyopencl_monkey_del
+        add_nonloopy_profiling_result("pyopencl.array",
+                int(mean(times)))
+
+        del self.events[:]
+
+
+cl.array.Array.__del__ = pyopencl_monkey_del
 
 
 @dataclass(eq=True, frozen=True)
@@ -60,14 +75,13 @@ class NonLoopyProfilekernel:
     name: str
 
 
-def add_nonloopy_profiling_result(name, time, flops=0,
-                              bytes_accessed=0, footprint_bytes=0) -> None:
+def add_nonloopy_profiling_result(name: str, time: float, flops: float = None,
+                bytes_accessed: float = None, footprint_bytes: float = None) -> None:
     """Add a non-loopy profile result to the profiling framework."""
     knl = NonLoopyProfilekernel(name)
     new = ProfileResult(time, flops, bytes_accessed, footprint_bytes)
     global nonloopy_profile_results
     nonloopy_profile_results.setdefault(knl, []).append(new)
-
 
 # }}}
 
@@ -208,11 +222,15 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             times = [v.time / 1e9 for v in value]
 
-            flops = [v.flops / 1e9 for v in value]
-            flops_per_sec = [f / t for f, t in zip(flops, times)]
+            flops = [v.flops / 1e9 if v.flops is not None and v.flops > 0 else None
+                     for v in value]
+            flops_per_sec = [f / t if f is not None else None
+                             for f, t in zip(flops, times)]
 
-            bytes_accessed = [v.bytes_accessed / 1e9 for v in value]
-            bandwidth_access = [b / t for b, t in zip(bytes_accessed, times)]
+            bytes_accessed = [v.bytes_accessed / 1e9
+                            if v.bytes_accessed is not None else None for v in value]
+            bandwidth_access = [b / t if b is not None else None
+                                for b, t in zip(bytes_accessed, times)]
 
             fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in value],
                 None)
@@ -226,17 +244,33 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min = "--"
                 fprint_max = "--"
 
-            bytes_per_flop = [f / b if b > 0 else None
+            bytes_per_flop = [f / b if b is not None and f is not None and b > 0
+                              else None
                               for f, b in zip(flops, bytes_accessed)]
+
+            bytes_per_flop_mean = f"{mean(bytes_per_flop):{g}}" \
+                                   if None not in bytes_per_flop else "--"
+
+            flops_per_sec_min = f"{min(flops_per_sec):{g}}" \
+                                 if None not in flops_per_sec else "--"
+            flops_per_sec_mean = f"{mean(flops_per_sec):{g}}" \
+                                  if None not in flops_per_sec else "--"
+            flops_per_sec_max = f"{max(flops_per_sec):{g}}" \
+                                 if None not in flops_per_sec else "--"
+
+            bandwidth_access_min = f"{min(bandwidth_access):{g}}" \
+                                    if None not in bandwidth_access else "--"
+            bandwidth_access_mean = f"{mean(bandwidth_access):{g}}" \
+                                     if None not in bandwidth_access else "--"
+            bandwidth_access_max = f"{max(bandwidth_access):{g}}" \
+                                    if None not in bandwidth_access else "--"
 
             tbl.add_row([key.name, num_values,
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
-                f"{min(flops_per_sec):{g}}", f"{mean(flops_per_sec):{g}}",
-                f"{max(flops_per_sec):{g}}",
-                f"{min(bandwidth_access):{g}}", f"{mean(bandwidth_access):{g}}",
-                f"{max(bandwidth_access):{g}}",
+                flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
+                bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
                 fprint_min, f"{fprint_mean:{g}}", fprint_max,
-                f"{mean(bytes_per_flop):{g}}"])
+                bytes_per_flop_mean])
 
         return tbl
 
