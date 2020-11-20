@@ -103,8 +103,10 @@ def main(ctx_factory=cl.create_some_context):
 
 
     from meshmode.mesh.io import read_gmsh, generate_gmsh, ScriptWithFilesSource
-    local_mesh = read_gmsh("doubleMach1.msh",force_ambient_dim=2)
-    global_nelements = local_mesh.nelements
+
+    gen_grid = partial(read_gmsh,"doubleMach2.msh",force_ambient_dim=2)
+    
+    local_mesh, global_nelements = create_parallel_grid(comm, gen_grid)
 
     local_nelements = local_mesh.nelements
 
