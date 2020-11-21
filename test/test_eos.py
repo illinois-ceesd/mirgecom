@@ -44,7 +44,7 @@ from meshmode.array_context import (  # noqa
 from mirgecom.prometheus import UIUCMechanism
 from mirgecom.eos import IdealSingleGas, PrometheusMixture
 from mirgecom.initializers import (
-    Vortex2D, Lump, MultiLump,
+    Vortex2D, Lump,
     MixtureInitializer
 )
 from mirgecom.euler import split_conserved
@@ -52,18 +52,86 @@ from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-
+import cantera
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
-def test_prometheus_mixture(ctx_factory, dim):
-    """Test PrometheusMixture with mass lump.
+@pytest.mark.parametrize("y0", [0, 1])
+def test_pyrometheus_uiuc(ctx_factory, y0):
+    """Test pyrometheus uiuc mechanism.
 
-    Tests that PrometheusMixture EOS returns
-    the correct (uniform) pressure for the Lump
-    solution field.
+    Tests that the pyrometheus uiuc mechanism
+    gets the same thermo properties as Cantera.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = 1
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 4
+
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
+    # Init soln with Vortex
+    prometheus_mechanism = UIUCMechanism(actx.np)
+    nspecies = prometheus_mechanism.num_species
+    print(f"PrometheusMixture::NumSpecies = {nspecies}")
+
+    press = 101500.0
+    tempin = 300.0
+    y0s = np.zeros(shape=(nspecies,))
+    for i in range(1, nspecies):
+        y0s[i] = y0 / (10.0 ** i)
+    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
+    y0s[0] = 1.0 - spec_sum
+
+    cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    cantera_soln.TPX = tempin, press, y0s
+    cantera_soln.equilibrate("UV")
+    can_t, can_rho, can_y = cantera_soln.TDY
+    can_p = cantera_soln.P
+    can_e = cantera_soln.int_energy_mass
+
+    ones = (1.0 + nodes[0]) - nodes[0]
+    tin = can_t * ones
+    pin = can_p * ones
+    yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+
+    prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
+    prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+    prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
+    prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
+
+    print(f"can(rho, y, p, t) = ({can_rho}, {can_y}, {can_p}, {can_t}, {can_e})")
+    print(f"prom(rho, y, p, t) = ({prom_rho}, {y0s}, {prom_p}, {prom_t}, {prom_e})")
+
+    tol = 1e-6
+    assert discr.norm((can_t - prom_t) / can_t, np.inf) < tol
+    assert discr.norm((can_rho - prom_rho) / can_rho, np.inf) < tol
+    assert discr.norm((can_p - prom_p) / can_p, np.inf) < tol
+    assert discr.norm((can_e - prom_e) / can_e, np.inf) < tol
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("y0", [0, 1])
+@pytest.mark.parametrize("vel", [0.0, 1.0])
+def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
+    """Test PyrometheusMixture EOS for uiuc mechanism.
+
+    Tests that the pyrometheus uiuc mechanism
+    gets the same thermo properties as Cantera.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -88,46 +156,57 @@ def test_prometheus_mixture(ctx_factory, dim):
     prometheus_mechanism = UIUCMechanism(actx.np)
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
-    eos = PrometheusMixture(prometheus_mechanism)
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-    spec_y0s = np.ones(shape=(nspecies,))
-    spec_amplitudes = np.ones(shape=(nspecies,))
 
-    velocity = np.ones(shape=(dim,))
-
-    lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
-                     velocity=velocity, spec_y0s=spec_y0s,
-                     spec_amplitudes=spec_amplitudes)
-
-    lump_soln = lump(0, nodes)
-    cv = split_conserved(dim, lump_soln)
-    p = eos.pressure(cv)
-    pmax = discr.norm(p, np.inf)
-    assert(pmax > 0)
-    #    exp_ke = 0.5 * cv.mass
-    #    ke = eos.kinetic_energy(cv)
-    #    kerr = discr.norm(ke - exp_ke, np.inf)
-
-    #    te = eos.total_energy(cv, p)
-    #    terr = discr.norm(te - cv.energy, np.inf)
-
-    logger.info(f"lump_soln = {lump_soln}")
-    logger.info(f"pressure = {p}")
-
-    #    assert errmax < 1e-15
-    #    assert kerr < 1e-15
-    #    assert terr < 1e-15
-
+    press = 101500.0
+    tempin = 300.0
     y0s = np.zeros(shape=(nspecies,))
     for i in range(1, nspecies):
-        y0s[i] = 1.0 / (10.0 ** i)
+        y0s[i] = y0 / (10.0 ** i)
     spec_sum = sum([y0s[i] for i in range(1, nspecies)])
     y0s[0] = 1.0 - spec_sum
-    velocity = np.zeros(shape=(dim,))
+    velocity = vel * np.ones(shape=(dim,))
+
+    cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    cantera_soln.TPX = tempin, press, y0s
+    cantera_soln.equilibrate("UV")
+    can_t, can_rho, can_y = cantera_soln.TDY
+    can_p = cantera_soln.P
+    can_e = cantera_soln.int_energy_mass
+
+    ones = (1.0 + nodes[0]) - nodes[0]
+    tin = can_t * ones
+    pin = can_p * ones
+    yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+
+    pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
+    pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+    pyro_t = prometheus_mechanism.get_temperature(pyro_e, tin, yin, True)
+    pyro_p = prometheus_mechanism.get_pressure(pyro_rho, tin, yin)
+
+    print(f"can(rho, y, p, t, e) = ({can_rho}, {can_y}, {can_p}, {can_t}, {can_e})")
+    print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s},"
+          f" {pyro_p}, {pyro_t}, {pyro_e})")
+
+    eos = PrometheusMixture(prometheus_mechanism)
     initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
-                                     pressure=101500.0, temperature=300.0,
-                                     massfractions=y0s, velocity=velocity)
-    current_state = initializer(eos=eos, t=0, x_vec=nodes)
+                                     pressure=can_p, temperature=can_t,
+                                     massfractions=can_y, velocity=velocity)
+
+    q = initializer(eos=eos, t=0, x_vec=nodes)
+    cv = split_conserved(dim, q)
+
+    p = eos.pressure(cv)
+    temperature = eos.temperature(cv)
+    internal_energy = eos.get_internal_energy(tin, yin)
+
+    print(f"pyro_eos.p = {p}")
+    print(f"pyro_eos.temp = {temperature}")
+    print(f"pyro_eos.e = {internal_energy}")
+
+    tol = 1e-6
+    assert discr.norm((temperature - pyro_t) / pyro_t, np.inf) < tol
+    assert discr.norm((internal_energy - pyro_e) / pyro_e, np.inf) < tol
+    assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

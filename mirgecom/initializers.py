@@ -734,13 +734,12 @@ class MixtureInitializer:
         temperature = self._temperature * ones
         velocity = make_obj_array([self._velocity[i] * ones
                                    for i in range(self._dim)])
-        massfracs = None
-        if self._nspecies > 0:
-            massfracs = make_obj_array([self._massfracs[i] * ones
-                                        for i in range(self._nspecies)])
-        mass = eos.get_density(pressure, temperature, massfracs)
+        y = make_obj_array([self._massfracs[i] * ones
+                            for i in range(self._nspecies)])
+        mass = eos.get_density(pressure, temperature, y)
+        massfracs = make_obj_array([mass]) * y
         mom = make_obj_array([mass]) * velocity
-        internal_energy = eos.get_internal_energy(temperature, massfracs)
+        internal_energy = eos.get_internal_energy(temperature, y)
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass*(internal_energy + kinetic_energy)
 
