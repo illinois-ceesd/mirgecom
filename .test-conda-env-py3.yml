@@ -2,6 +2,7 @@ name: test-conda-env-py3
 channels:
 - conda-forge
 - nodefaults
+- cantera/label/dev
 dependencies:
 - git
 - conda-forge::numpy
@@ -15,3 +16,5 @@ dependencies:
 - pip
 - pytest
 - libhwloc=1
+- cantera
+
