@@ -102,7 +102,7 @@ def main(ctx_factory=cl.create_some_context):
 
     casename = "uiuc_mixture"
     prometheus_mechanism = UIUCMechanism(actx.np)
-    nspecies = prometheus_mechanism.num_species()
+    nspecies = prometheus_mechanism.num_species
     eos = PrometheusMixture(prometheus_mechanism)
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
     y0s = np.ones(shape=(nspecies,))
