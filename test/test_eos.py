@@ -89,39 +89,46 @@ def test_pyrometheus_uiuc(ctx_factory, y0):
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
 
-    press = 101500.0
-    tempin = 300.0
+    press0 = 101500.0
+    temp0 = 300.0
     y0s = np.zeros(shape=(nspecies,))
     for i in range(1, nspecies):
         y0s[i] = y0 / (10.0 ** i)
     spec_sum = sum([y0s[i] for i in range(1, nspecies)])
     y0s[0] = 1.0 - spec_sum
 
-    cantera_soln = cantera.Solution("uiuc.cti", "gas")
-    cantera_soln.TPX = tempin, press, y0s
-    cantera_soln.equilibrate("UV")
-    can_t, can_rho, can_y = cantera_soln.TDY
-    can_p = cantera_soln.P
-    can_e = cantera_soln.int_energy_mass
+    for fac in range(1, 11):
+        pressin = fac * press0
+        tempin = fac * temp0
 
-    ones = (1.0 + nodes[0]) - nodes[0]
-    tin = can_t * ones
-    pin = can_p * ones
-    yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+        print(f"Testing (t,P) = ({tempin}, {pressin})")
+        cantera_soln = cantera.Solution("uiuc.cti", "gas")
+        cantera_soln.TPX = tempin, pressin, y0s
+        cantera_soln.equilibrate("UV")
+        can_t, can_rho, can_y = cantera_soln.TDY
+        can_p = cantera_soln.P
+        can_e = cantera_soln.int_energy_mass
 
-    prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
-    prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-    prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
-    prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
+        ones = (1.0 + nodes[0]) - nodes[0]
+        tin = can_t * ones
+        pin = can_p * ones
+        yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
 
-    print(f"can(rho, y, p, t) = ({can_rho}, {can_y}, {can_p}, {can_t}, {can_e})")
-    print(f"prom(rho, y, p, t) = ({prom_rho}, {y0s}, {prom_p}, {prom_t}, {prom_e})")
+        prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
+        prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+        prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
+        prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
 
-    tol = 1e-6
-    assert discr.norm((can_t - prom_t) / can_t, np.inf) < tol
-    assert discr.norm((can_rho - prom_rho) / can_rho, np.inf) < tol
-    assert discr.norm((can_p - prom_p) / can_p, np.inf) < tol
-    assert discr.norm((can_e - prom_e) / can_e, np.inf) < tol
+        print(f"can(rho, y, p, t) = ({can_rho}, {can_y}, "
+              f"{can_p}, {can_t}, {can_e})")
+        print(f"prom(rho, y, p, t) = ({prom_rho}, {y0s}, "
+              f"{prom_p}, {prom_t}, {prom_e})")
+
+        tol = 1e-6
+        assert discr.norm((prom_t - can_t) / can_t, np.inf) < tol
+        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < tol
+        assert discr.norm((prom_p - can_p) / can_p, np.inf) < tol
+        assert discr.norm((prom_e - can_e) / can_e, np.inf) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -157,8 +164,8 @@ def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
 
-    press = 101500.0
-    tempin = 300.0
+    press0 = 101500.0
+    temp0 = 300.0
     y0s = np.zeros(shape=(nspecies,))
     for i in range(1, nspecies):
         y0s[i] = y0 / (10.0 ** i)
@@ -166,47 +173,49 @@ def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
     y0s[0] = 1.0 - spec_sum
     velocity = vel * np.ones(shape=(dim,))
 
-    cantera_soln = cantera.Solution("uiuc.cti", "gas")
-    cantera_soln.TPX = tempin, press, y0s
-    cantera_soln.equilibrate("UV")
-    can_t, can_rho, can_y = cantera_soln.TDY
-    can_p = cantera_soln.P
-    can_e = cantera_soln.int_energy_mass
+    for fac in range(1, 11):
+        tempin = fac * temp0
+        pressin = fac * press0
 
-    ones = (1.0 + nodes[0]) - nodes[0]
-    tin = can_t * ones
-    pin = can_p * ones
-    yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+        print(f"Testing (t,P) = ({tempin}, {pressin})")
 
-    pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
-    pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-    pyro_t = prometheus_mechanism.get_temperature(pyro_e, tin, yin, True)
-    pyro_p = prometheus_mechanism.get_pressure(pyro_rho, tin, yin)
+        ones = (1.0 + nodes[0]) - nodes[0]
+        tin = tempin * ones
+        pin = pressin * ones
+        yin = make_obj_array([y0s[i] * ones for i in range(nspecies)])
+        tguess = 300.0
 
-    print(f"can(rho, y, p, t, e) = ({can_rho}, {can_y}, {can_p}, {can_t}, {can_e})")
-    print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s},"
-          f" {pyro_p}, {pyro_t}, {pyro_e})")
+        pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
+        pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin, True)
+        pyro_p = prometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
 
-    eos = PrometheusMixture(prometheus_mechanism)
-    initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
-                                     pressure=can_p, temperature=can_t,
-                                     massfractions=can_y, velocity=velocity)
+        print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
+              f"{pyro_p}, {pyro_t}, {pyro_e})")
 
-    q = initializer(eos=eos, t=0, x_vec=nodes)
-    cv = split_conserved(dim, q)
+        eos = PrometheusMixture(prometheus_mechanism)
+        initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+                                         pressure=pyro_p, temperature=pyro_t,
+                                         massfractions=y0s, velocity=velocity)
 
-    p = eos.pressure(cv)
-    temperature = eos.temperature(cv)
-    internal_energy = eos.get_internal_energy(tin, yin)
+        q = initializer(eos=eos, t=0, x_vec=nodes)
+        cv = split_conserved(dim, q)
 
-    print(f"pyro_eos.p = {p}")
-    print(f"pyro_eos.temp = {temperature}")
-    print(f"pyro_eos.e = {internal_energy}")
+        p = eos.pressure(cv)
+        temperature = eos.temperature(cv)
+        internal_energy = eos.get_internal_energy(tin, yin)
+        y = eos.mass_fractions(cv)
 
-    tol = 1e-6
-    assert discr.norm((temperature - pyro_t) / pyro_t, np.inf) < tol
-    assert discr.norm((internal_energy - pyro_e) / pyro_e, np.inf) < tol
-    assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
+        print(f"pyro_y = {y}")
+        print(f"pyro_eos.p = {p}")
+        print(f"pyro_eos.temp = {temperature}")
+        print(f"pyro_eos.e = {internal_energy}")
+
+        tol = 1e-6
+        assert discr.norm((cv.mass - pyro_rho) / pyro_rho, np.inf) < tol
+        assert discr.norm((temperature - pyro_t) / pyro_t, np.inf) < tol
+        assert discr.norm((internal_energy - pyro_e) / pyro_e, np.inf) < tol
+        assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

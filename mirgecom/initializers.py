@@ -741,7 +741,7 @@ class MixtureInitializer:
         mom = make_obj_array([mass]) * velocity
         internal_energy = eos.get_internal_energy(temperature, y)
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
-        energy = mass*(internal_energy + kinetic_energy)
+        energy = mass * (internal_energy + kinetic_energy)
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
