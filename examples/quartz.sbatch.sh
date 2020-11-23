@@ -8,8 +8,8 @@
 # Put any environment activation here, e.g.:
 # source ../../config/activate_env.sh
 
-# Put any device selection here, e.g.:
-# export PYOPENCL_CTX=":"
+# OpenCL device selection here:
+# export PYOPENCL_CTX="port:pthread"  # Run on CPU with pocl
 
 nnodes=$SLURM_JOB_NUM_NODES
 nproc=$nnodes # 1 rank per node
