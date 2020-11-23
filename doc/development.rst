@@ -47,7 +47,7 @@ What do these packages do?
    * - :mod:`mirgecom` (`GitHub <https://github.com/illinois-ceesd/mirgecom>`__)
      - Where the main science code lives (flow, combustion, walls).
    * - :mod:`meshmode` (`GitHub <https://github.com/inducer/meshmode>`__)
-     - (Unstructured, high-order) discontinuous piecewise polynomial discretizations
+     - (Unstructured, high-order) discontinuous piecewise polynomial discretizations.
    * - :mod:`grudge` (`GitHub <https://github.com/inducer/meshmode>`__)
      - 1/2/3D discontinuous Galerkin based on meshmode.
    * - :mod:`loopy` (`GitHub <https://github.com/inducer/loopy>`__)
