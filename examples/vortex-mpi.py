@@ -57,7 +57,8 @@ from logpyle import (LogManager, IntervalTimer, add_general_quantities,
         add_simulation_quantities, add_run_info)
 
 from mirgecom.logging_quantities import (DependentDiscretizationBasedQuantity,
-    ConservedDiscretizationBasedQuantity, KernelProfile, add_package_versions)
+    ConservedDiscretizationBasedQuantity, KernelProfile, add_package_versions,
+    add_device_name)
 
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         queue = cl.CommandQueue(cl_ctx)
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    if use_logmgr:
+        add_device_name(logmgr, queue)
 
     dim = 2
     nel_1d = 16

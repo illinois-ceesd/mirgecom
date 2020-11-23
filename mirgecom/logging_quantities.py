@@ -40,6 +40,7 @@ from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
+import pyopencl as cl
 
 
 # {{{ Package versions
@@ -87,6 +88,16 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 # }}}
 
+
+# {{{ Device name
+
+def add_device_name(mgr: LogManager, queue: cl.CommandQueue) -> None:
+    """Add the device name to the log."""
+
+    mgr.set_constant("device_name", str(queue.get_info(cl.command_queue_info.DEVICE)))
+
+
+# }}}
 
 def set_state(mgr: LogManager, state: ndarray) -> None:
     """Update the state of all :class:`StateConsumer` of the log manager `mgr`.
