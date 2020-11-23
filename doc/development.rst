@@ -120,7 +120,7 @@ Creating a new pull request
    assignee, and choose appropriate labels (if any). Note that this can
    usually not be done for a PR from a forked repository.
 
-6. After the pull request has been merged, you can delete the branch
+6. After the pull request has been merged, please delete the branch
    (locally and remotely):
 
    .. code:: bash
@@ -146,7 +146,29 @@ use this sparingly.
 Dependent pull requests
 ^^^^^^^^^^^^^^^^^^^^^^^
 
+It is likely that you will need to propose changes to supporting packages
+(e.g. grudge, meshmode, loopy, pyopencl) in order to implement a feature in
+mirgecom, thus creating a mirgecom PR that depends on a PR in the other package.
+In a situation where both PRs are under review at the same time, mirgecom has a way
+to express this dependency to make it easier to review and test both PRs jointly.
 
+You can express this dependency by modifying the branch of a dependent package
+inside mirgecom's ``requirements.txt`` file in the main mirgecom folder. In
+the following example, assume that we want to create a feature in mirgecom
+that depends on the ``my_branch`` branch in meshmode::
+
+   git+https://github.com/inducer/meshmode.git#egg=meshmode
+   # change to:
+   git+https://github.com/inducer/meshmode.git@my_branch#egg=meshmode
+
+With this change, new emirge installations and CI tests will automatically use
+the ``my_branch`` branch of meshmode.
+
+.. important::
+
+   You will need to merge the dependent PR first (ie., meshmode in the above
+   example), then restore the original ``requirements.txt`` of mirgecom, and
+   then merge the mirgecom PR.
 
 Reviewing/CI
 ^^^^^^^^^^^^
@@ -209,7 +231,7 @@ GUI
 - `Fork <https://git-fork.com/>`__ (Mac, Windows)
 - `GitHub Desktop <https://desktop.github.com/>`__ (Mac, Windows)
 - `Sublime Merge <https://www.sublimemerge.com/>`__ (Linux, Mac, Windows)
-
+- `Magit <https://magit.vc>`__ (Emacs)
 
 Overview of the Setup
 ---------------------
