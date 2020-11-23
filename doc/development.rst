@@ -62,7 +62,7 @@ Forking the repository
 
 In most cases, it will be necessary to fork the repository (that is, create a
 copy of the repository in your own GitHub account), since creating a pull
-requests requires creating a branch in the repo, which requires write access.
+request requires creating a branch in the repo, which requires write access.
 You can fork a repository directly on the GitHub website.
 
 Creating a new pull request
