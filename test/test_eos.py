@@ -57,6 +57,104 @@ import cantera
 logger = logging.getLogger(__name__)
 
 
+def test_prometheus_uiuc_mre(ctx_factory):
+    """Test pyrometheus uiuc mechanism.
+
+    Tests that the pyrometheus uiuc mechanism
+    gets the same thermo properties as Cantera.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = 1
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 4
+
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
+    # Init soln with Vortex
+    prometheus_mechanism = UIUCMechanism(actx.np)
+    nspecies = prometheus_mechanism.num_species
+    print(f"PrometheusMixture::NumSpecies = {nspecies}")
+
+    y0 = 1.0
+    press0 = 101500.0
+    temp0 = 300.0
+    y0s = np.zeros(shape=(nspecies,))
+    for i in range(1, nspecies):
+        y0s[i] = y0 / (10.0 ** i)
+    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
+    y0s[0] = 1.0 - spec_sum
+
+    for fac in range(1, 11):
+        pressin = fac * press0
+        tempin = fac * temp0
+
+        print(f"Testing (t,P) = ({tempin}, {pressin})")
+        cantera_soln = cantera.Solution("uiuc.cti", "gas")
+        cantera_soln.TPX = tempin, pressin, y0s
+        cantera_soln.equilibrate("UV")
+        can_t, can_rho, can_y = cantera_soln.TDY
+        can_p = cantera_soln.P
+        can_e = cantera_soln.int_energy_mass
+        print(f"can(rho, y, p, t) = ({can_rho}, {can_y}, "
+              f"{can_p}, {can_t}, {can_e})")
+
+        tguess = 300.0 
+        ones = (1.0 + nodes[0]) - nodes[0]
+        tin = can_t * ones
+        pin = can_p * ones
+        yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+        press_in = pressin * ones
+        temp_in = tempin * ones
+        y_in = make_obj_array([y0s[i] * ones for i in range(nspecies)])
+        tguess_in = tguess * ones
+
+        print(f"y_in = {y_in}")
+        print(f"yin = {yin}")
+
+        prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
+        prom_e_1 = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+        prom_e_2 = prometheus_mechanism.get_mixture_internal_energy_mass(temp_in,
+                                                                         y_in)
+        prom_e_3 = prometheus_mechanism.get_mixture_internal_energy_mass(tguess_in,
+                                                                         y_in)
+        
+        prom_t_1 = prometheus_mechanism.get_temperature(prom_e_1, tin, yin, True)        
+        prom_t_2 = prometheus_mechanism.get_temperature(prom_e_2, temp_in, y_in, True)
+        prom_t_3 = prometheus_mechanism.get_temperature(prom_e_3, tguess_in,y_in, True)
+        prom_p = prometheus_mechanism.get_pressure(prom_rho, temp_in, y_in)
+
+        print(f"prom(rho) = {prom_rho}")
+        print(f"y0s = {y0s}")
+        print(f"prom(t_cantera) = {prom_t_1}")
+        print(f"prom(t_input) = {prom_t_2}")
+        print(f"prom(t_guess={tguess}) = {prom_t_3}")
+        print(f"prom(e_cantera) = {prom_t_1}")
+        print(f"prom(e_input) = {prom_t_2}")
+        print(f"prom(e_guess) = {prom_t_3}")
+
+        assert discr.norm(prom_e_2 - prom_e_1, np.inf) == 0
+        assert discr.norm(prom_t_2 - prom_t_1, np.inf) == 0
+
+        tol = 1e-6
+        #        assert discr.norm((prom_t - can_t) / can_t, np.inf) < tol
+        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < tol
+        assert discr.norm((prom_p - can_p) / can_p, np.inf) < tol
+        #        assert discr.norm((prom_e - can_e) / can_e, np.inf) < tol
+
+
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_uiuc(ctx_factory, y0):
     """Test pyrometheus uiuc mechanism.
