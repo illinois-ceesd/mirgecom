@@ -93,8 +93,8 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 def add_device_name(mgr: LogManager, queue: cl.CommandQueue) -> None:
     """Add the device name to the log."""
-
-    mgr.set_constant("device_name", str(queue.get_info(cl.command_queue_info.DEVICE)))
+    mgr.set_constant("device_name",
+                     str(queue.get_info(cl.command_queue_info.DEVICE)))
 
 
 # }}}
