@@ -174,9 +174,19 @@ Reviewing/CI
 ^^^^^^^^^^^^
 
 Each pull requests for mirgecom needs one manual approval by a reviewer and
-needs to pass the Continuous Integration (CI) tests before merging. We use
-GitHub actions as the CI provider to test each pull request. The CI tests are
-triggered automatically when a pull request is created or updated.
+needs to pass the Continuous Integration (CI) tests before merging. For the
+manual reviews, please select at least one reviewer (someone that has
+knowledge about the code you are modifying) in the "Reviewers" box at the top
+right of a PR. You can set the PR as a "draft" PR to indicate that it is still
+in progress and only a high-level review is requested.
+
+We use GitHub actions as the CI provider to test each pull request. The CI
+tests are triggered automatically when a pull request is created or updated.
+The CI tests comprise style-related tests to see if the PR conforms to our
+coding guidelines (using the ``flake8``, ``pylint``, and ``pydocstyle``
+packages), as well as functional tests using the ``pytest`` package. When a
+test fails, please take a look at the CI outputs to fix the error. Both draft
+PRs and full PRs will undergo CI tests.
 
 Merging a pull request
 ^^^^^^^^^^^^^^^^^^^^^^
