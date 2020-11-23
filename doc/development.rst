@@ -68,7 +68,7 @@ You can fork a repository directly on the GitHub website.
 Creating a new pull request
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1. Create a new branch for your pull request
+1. Create a new branch for your pull request:
 
    .. code:: bash
 
@@ -77,7 +77,7 @@ Creating a new pull request
       $ git checkout featureX # Activate the branch
       # Edit files
 
-2. Check that your changes pass tests
+2. Check that your changes pass tests:
 
    .. code:: bash
 
@@ -86,13 +86,13 @@ Creating a new pull request
       $ pydocstyle
       $ pytest
 
-3. Commit your changes to the new branch
+3. Commit your changes to the new branch:
 
    .. code:: bash
 
       $ git commit
 
-4. Push your changes
+4. Push your changes:
 
    .. code:: bash
 
