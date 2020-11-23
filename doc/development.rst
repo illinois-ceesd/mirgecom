@@ -282,13 +282,6 @@ Installing on a Cluster/DOE Machine
 
    Write this.
 
-Proposing Changes
------------------
-
-.. todo::
-
-   Write this.
-
 Building this Documentation
 ---------------------------
 
