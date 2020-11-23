@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 import logging
-from mpi4py import MPI
+from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 import pyopencl as cl
@@ -62,6 +62,7 @@ from mirgecom.initializers import (
 from mirgecom.eos import IdealSingleGas
 
 
+@mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -98,6 +99,7 @@ def main(ctx_factory=cl.create_some_context):
     box_ll = -0.5
     box_ur = 0.5
 
+    from mpi4py import MPI
     comm = MPI.COMM_WORLD
     nproc = comm.Get_size()
     rank = comm.Get_rank()
