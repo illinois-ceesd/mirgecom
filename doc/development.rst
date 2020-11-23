@@ -193,21 +193,22 @@ later.
 Tools
 ^^^^^
 
-Apart from the `git` tool, there are other tools that help to simplify various
+Apart from the ``git`` tool, there are other tools that help to simplify various
 aspects of working with GitHub:
 
 Command line:
 ~~~~~~~~~~~~~
 
--  https://hub.github.com/
--  https://github.com/cli/cli
+
+- `GitHub's "hub" client <https://hub.github.com/>`__
+- `GitHub's "cli" client <https://github.com/cli/cli>`__
 
 GUI
 ~~~
 
--  Fork
--  GitHub Desktop
--  Sublime Merge
+- `Fork <https://git-fork.com/>`__ (Mac, Windows)
+- `GitHub Desktop <https://desktop.github.com/>`__ (Mac, Windows)
+- `Sublime Merge <https://www.sublimemerge.com/>`__ (Linux, Mac, Windows)
 
 
 Overview of the Setup
