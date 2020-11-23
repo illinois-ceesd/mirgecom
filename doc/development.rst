@@ -228,8 +228,8 @@ Tools
 Apart from the ``git`` tool, there are other tools that help to simplify various
 aspects of working with GitHub:
 
-Command line:
-~~~~~~~~~~~~~
+Command line
+~~~~~~~~~~~~
 
 
 - `GitHub's "hub" client <https://hub.github.com/>`__
