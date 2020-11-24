@@ -35,6 +35,7 @@ import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 from functools import partial
 from mpi4py import MPI
+import math
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -142,7 +143,7 @@ def main(ctx_factory=cl.create_some_context):
     dim = 3
     order = 1
     exittol = .09
-    t_final = 0.1
+    t_final = 1.e-8
     current_cfl = 1.0
     vel_init = np.zeros(shape=(dim,))
     vel_inflow = np.zeros(shape=(dim,))
@@ -151,21 +152,58 @@ def main(ctx_factory=cl.create_some_context):
     orig[2] = 0.001
     #    vel[0] = 340.0
     vel_inflow[0] = 100.0  # m/s
-    current_dt = 1e-8
+    current_dt = 1e-11
     current_t = 0
     casename = "pseudoY0"
     constant_cfl = False
-    nstatus = 10
-    nviz = 10
+    nstatus = 1
+    nviz = 1
     rank = 0
     checkpoint_t = current_t
     current_step = 0
 
+    # working gas: CO2 #
+    #   gamma = 1.289
+    #   MW=44.009  g/mol
+    #   cp = 37.135 J/mol-K,
+    #   rho= 1.977 kg/m^3 @298K
+    gamma_CO2 = 1.289
+    R_CO2 = 8314.59/44.009
+
+    # background
+    #   100 Pa
+    #   298 K
+    #   rho = 1.77619667e-3 kg/m^3
+    #   velocity = 0,0,0
+    rho_bkrnd=1.77619667e-3
+    pres_bkrnd=100
+    temp_bkrnd=298
+     
+    # nozzle inflow #
+    # 
+    # stagnation tempertuare 298 K
+    # stagnation pressure 1.5e Pa
+    # 
+    # isentropic expansion based on the area ratios between the inlet (r=13e-3m) and the throat (r=6.3e-3)
+    #
+    #  MJA, this is calculated offline, add some code to do it for us
+    # 
+    #   Mach number=0.139145
+    #   pressure=148142
+    #   temperature=297.169
+    #   density=2.63872
+    #   gamma=1.289
+    pres_inflow=148142
+    temp_inflow=297.169
+    rho_inflow=2.63872
+    mach_inflow=infloM = 0.139145
+    vel_inflow[0] = mach_inflow*math.sqrt(gamma_CO2*pres_inflow/rho_inflow)
+
     timestepper = rk4_step
-    eos = IdealSingleGas()
-    bulk_init = Lump(numdim=dim, rho0=1.225, p0=100000.0,
+    eos = IdealSingleGas(gamma=gamma_CO2, gas_const=R_CO2)
+    bulk_init = Lump(numdim=dim, rho0=rho_bkrnd, p0=pres_bkrnd,
                      center=orig, velocity=vel_init, rhoamp=0.0)
-    inflow_init = Lump(numdim=dim, rho0=2.0, p0=200000.0,
+    inflow_init = Lump(numdim=dim, rho0=rho_inflow, p0=pres_inflow,
                        center=orig, velocity=vel_inflow, rhoamp=0.0)
     wall = AdiabaticSlipBoundary()
     dummy = DummyBoundary()
@@ -193,7 +231,7 @@ def main(ctx_factory=cl.create_some_context):
 
     if rank == 0:
         logging.info("Initializing soln.")
-    current_state = bulk_init(0, nodes)
+    current_state = bulk_init(0, nodes, eos=eos)
     #    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
 
     if rank == 0:

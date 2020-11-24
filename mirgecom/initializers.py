@@ -414,6 +414,7 @@ class Lump:
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
         gamma = eos.gamma()
+
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
         mom = self._velocity * make_obj_array([mass])
