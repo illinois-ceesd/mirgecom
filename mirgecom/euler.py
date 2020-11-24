@@ -82,21 +82,21 @@ class ConservedVars:  # FIXME: Name?
     mass_fraction) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
-    .. attribute:: dim
+    .. attribute:: dim: int
 
-    .. attribute:: mass
+    .. attribute:: mass: numpy.ndarray
 
         Mass per unit volume
 
-    .. attribute:: energy
+    .. attribute:: energy: numpy.ndarray
 
         Energy per unit volume
 
-    .. attribute:: momentum
+    .. attribute:: momentum: numpy.ndarray
 
         Momentum vector per unit volume
 
-    .. attribute:: massfractions
+    .. attribute:: massfractions: numpy.ndarray
 
         Species mass fraction per unit volume
 
