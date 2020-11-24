@@ -36,7 +36,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.eos import IdealSingleGas
+#from mirgecom.eos import IdealSingleGas
 # from mirgecom.euler import split_conserved
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import split_conserved, join_conserved
@@ -61,7 +61,7 @@ class PrescribedBoundary:
         self._userfunc = userfunc
 
     def boundary_pair(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, btag, eos, t=0.0 
     ):
         """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
@@ -73,7 +73,7 @@ class PrescribedBoundary:
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
     def exterior_sol(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior solution on the boundary."""
         actx = q[0].array_context
@@ -95,24 +95,120 @@ class DummyBoundary:
         self.test = 1
 
     def boundary_pair(
-        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+        self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
     def exterior_sol(
-        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+        self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
 
 class AdiabaticSlipBoundary:
-    """Adiabatic slip boundary for inviscid flows.
+    r"""Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
 
+    This class implements an adiabatic reflective slip boundary given
+    by
+    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
+    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
+    wherein the normal component of velocity at the wall is 0, and
+    tangential components are preserved. These perfectly reflecting
+    conditions are used by the forward-facing step case in
+    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
+    boundary conditions described in detail in [Poinsot_1992]_.
+
+    .. automethod:: boundary_pair
+    """
+
+    def boundary_pair(
+            self, discr, q, btag, eos, t=0.0
+    ):
+        """Get the interior and exterior solution on the boundary.
+
+        The exterior solution is set such that there will be vanishing
+        flux through the boundary, preserving mass, momentum (magnitude) and
+        energy.
+        rho_plus = rho_minus
+        v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
+        mom_plus = rho_plus * v_plus
+        E_plus = E_minus
+        """
+        # Grab some boundary-relevant data
+        dim = discr.dim
+        cv = split_conserved(dim, q)
+        actx = cv.mass.array_context
+
+        # Grab a unit normal to the boundary
+        nhat = thaw(actx, discr.normal(btag))
+
+        # Get the interior/exterior solns
+        int_soln = discr.project("vol", btag, q)
+        int_cv = split_conserved(dim, int_soln)
+
+        # Subtract out the 2*wall-normal component
+        # of velocity from the velocity at the wall to
+        # induce an equal but opposite wall-normal (reflected) wave
+        # preserving the tangential component
+        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
+        wnorm_mom = nhat * make_obj_array([mom_normcomp])  # wall-normal mom vec
+        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
+
+        # Form the external boundary solution with the new momentum
+        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
+                                    energy=int_cv.energy,
+                                    momentum=ext_mom)
+
+        return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+
+    def exterior_sol(
+            self, discr, q, btag, eos, t=0.0
+    ):
+        """Get the interior and exterior solution on the boundary.
+
+        The exterior solution is set such that there will be vanishing
+        flux through the boundary, preserving mass, momentum (magnitude) and
+        energy.
+        rho_plus = rho_minus
+        v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
+        mom_plus = rho_plus * v_plus
+        E_plus = E_minus
+        """
+        # Grab some boundary-relevant data
+        dim = discr.dim
+        cv = split_conserved(dim, q)
+        actx = cv.mass.array_context
+
+        # Grab a unit normal to the boundary
+        nhat = thaw(actx, discr.normal(btag))
+
+        # Get the interior/exterior solns
+        int_soln = discr.project("vol", btag, q)
+        int_cv = split_conserved(dim, int_soln)
+
+        # Subtract out the 2*wall-normal component
+        # of velocity from the velocity at the wall to
+        # induce an equal but opposite wall-normal (reflected) wave
+        # preserving the tangential component
+        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
+        wnorm_mom = nhat * make_obj_array([mom_normcomp])  # wall-normal mom vec
+        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
+
+        # Form the external boundary solution with the new momentum
+        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
+                                    energy=int_cv.energy,
+                                    momentum=ext_mom)
+
+        return bndry_soln
+
+class AdiabaticSlipBoundaryWyatt:
+    """Adiabatic slip boundary for inviscid flows.
+    a.k.a. Reflective inviscid wall boundary
     This class implements an adiabatic reflective slip boundary
     wherein the normal component of velocity at the wall is 0, and
     tangential components are preserved. These perfectly reflecting
@@ -120,7 +216,6 @@ class AdiabaticSlipBoundary:
     JSH/TW Nodal DG Methods, Section 6.6 DOI: 10.1007/978-0-387-72067-8 and
     described in detail by Poinsot and Lele's JCP paper
     http://acoustics.ae.illinois.edu/pdfs/poinsot-lele-1992.pdf
-
     .. automethod:: boundary_pair
     """
 
@@ -129,10 +224,9 @@ class AdiabaticSlipBoundary:
         self.test = 1
 
     def boundary_pair(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary.
-
         The exterior solution is set such that there will be vanishing
         flux through the boundary, preserving mass, momentum (magnitude) and
         energy.
@@ -177,10 +271,9 @@ class AdiabaticSlipBoundary:
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
     def exterior_sol(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+            self, discr, q, btag, eos, t=0.0
     ):
         """Get the interior and exterior solution on the boundary.
-
         The exterior solution is set such that there will be vanishing
         flux through the boundary, preserving mass, momentum (magnitude) and
         energy.
