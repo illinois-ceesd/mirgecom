@@ -82,7 +82,7 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     _velocity = velocity
     _gamma = eos.gamma()
 
-    mom0 = _velocity * make_obj_array([_rho])
+    mom0 = _velocity * _rho
     e0 = _p / (_gamma - 1.0)
     ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
 
@@ -91,7 +91,7 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     ones = zeros + 1.0
 
     mass = zeros + _rho
-    mom = mom0 * make_obj_array([ones])
+    mom = mom0 * ones
     energy = e0 + ke0 + zeros
 
     return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
@@ -407,8 +407,7 @@ class Lump:
         expterm = amplitude * actx.np.exp(1 - r ** 2)
 
         mass = expterm + self._rho0
-        mom = self._velocity * make_obj_array([mass])
-
+        mom = self._velocity * mass
         gamma = eos.gamma()
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
@@ -445,12 +444,12 @@ class Lump:
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
 
-        v = self._velocity * make_obj_array([1.0 / mass])
+        v = self._velocity / mass
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
         massrhs = -2 * rdotv * mass
         energyrhs = -v2 * rdotv * mass
-        momrhs = v * make_obj_array([-2 * mass * rdotv])
+        momrhs = v * (-2 * mass * rdotv)
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
@@ -588,7 +587,7 @@ class MultiLump:
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
         expterm = amplitude * actx.np.exp(- r ** 2)
         mass = expterm + self._rho0
-        mom = self._velocity * make_obj_array([mass])
+        mom = self._velocity * mass
         gamma = eos.gamma()
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
@@ -646,15 +645,15 @@ class MultiLump:
         expterm = self._rhoamp * actx.np.exp(- r ** 2)
         mass = expterm + self._rho0
 
-        mom = self._velocity * make_obj_array([mass])
-
-        v = mom * make_obj_array([1 / mass])
+        mom = self._velocity * mass  # make_obj_array([mass])
+        # * make_obj_array([1 / mass])
+        v = mom / mass
 
         rdotv = np.dot(rel_center, v)
 
         massrhs = 0 * mass
         energyrhs = 0 * mass
-        momrhs = v * make_obj_array([0 * mass * rdotv])
+        momrhs = v * mass * rdotv  # make_obj_array([0 * mass * rdotv])
 
         # process the species components independently
         specrhs = None
@@ -738,8 +737,8 @@ class MixtureInitializer:
         y = make_obj_array([self._massfracs[i] * ones
                             for i in range(self._nspecies)])
         mass = eos.get_density(pressure, temperature, y)
-        massfracs = make_obj_array([mass]) * y
-        mom = make_obj_array([mass]) * velocity
+        massfracs = mass * y
+        mom = mass * velocity
         internal_energy = eos.get_internal_energy(temperature, y)
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
@@ -898,11 +897,11 @@ class Uniform:
         """
         gamma = eos.gamma()
         mass = 0.0 * x_vec[0] + self._rho
-        mom = self._velocity * make_obj_array([mass])
+        mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
         massfrac = None
         if self._massfrac is not None:
-            massfrac = self._massfrac * make_obj_array([mass])
+            massfrac = self._massfrac * mass
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
