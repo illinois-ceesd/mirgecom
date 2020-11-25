@@ -30,7 +30,7 @@ THE SOFTWARE.
 import math
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import make_obj_array, obj_array_vectorize
+from pytools.obj_array import obj_array_vectorize
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.symbolic.primitives import TracePair
@@ -39,7 +39,7 @@ from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 
 def _q_flux(discr, alpha, u_tpair):
     normal = thaw(u_tpair.int.array_context, discr.normal(u_tpair.dd))
-    flux_weak = make_obj_array([math.sqrt(alpha)*u_tpair.avg])*normal
+    flux_weak = math.sqrt(alpha)*u_tpair.avg*normal
     return discr.project(u_tpair.dd, "all_faces", flux_weak)
 
 
