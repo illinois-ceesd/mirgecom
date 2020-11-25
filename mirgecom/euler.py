@@ -225,7 +225,7 @@ def inviscid_flux(discr, eos, q):
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom)/cv.mass + np.eye(dim)*p,
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim) * p,
             massfractions=massfrac)
 
 
