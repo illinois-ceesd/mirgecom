@@ -63,7 +63,12 @@ Forking the repository
 In most cases, it will be necessary to fork the repository (that is, create a
 copy of the repository in your own GitHub account), since creating a pull
 request requires creating a branch in the repo, which requires write access.
-You can fork a repository directly on the GitHub website.
+You can fork a repository directly on the GitHub website. You can add the URL of
+the fork to your local cloned copy of the repository with the following command:
+
+.. code:: bash
+
+   $ git remote add my_fork git@github.com:MYUSERNAME/<repo>
 
 Creating a new pull request
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
