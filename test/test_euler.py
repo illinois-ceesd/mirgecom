@@ -528,12 +528,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         rhoe_rhs = rhs_split.energy
         rhov_rhs = rhs_split.momentum
 
-        message = (
+        logger.info(
             f"rho_rhs  = {rho_rhs}\n"
             f"rhoe_rhs = {rhoe_rhs}\n"
             f"rhov_rhs = {rhov_rhs}"
         )
-        logger.info(message)
 
         assert discr.norm(rho_resid, np.inf) < tolerance
         assert discr.norm(rhoe_resid, np.inf) < tolerance
@@ -571,11 +570,10 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             if err_max > maxxerr:
                 maxxerr = err_max
 
-    message = (
+    logger.info(
         f"V == 0 Errors:\n{eoc_rec0}"
         f"V != 0 Errors:\n{eoc_rec1}"
     )
-    print(message)
 
     assert (
         eoc_rec0.order_estimate() >= order - 0.5
@@ -627,11 +625,10 @@ def test_vortex_rhs(actx_factory, order):
         err_max = discr.norm(inviscid_rhs, np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
-    message = (
+    logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
-    logger.info(message)
 
     assert (
         eoc_rec.order_estimate() >= order - 0.5
@@ -686,11 +683,11 @@ def test_lump_rhs(actx_factory, dim, order):
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
     logger.info(f"Max error: {maxxerr}")
 
-    message = (
+    logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
-    logger.info(message)
+
     assert (
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < tolerance
@@ -754,11 +751,11 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
     logger.info(f"Max error: {maxxerr}")
 
-    message = (
+    logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
-    logger.info(message)
+
     assert (
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < tolerance
@@ -799,7 +796,7 @@ def _euler_flow_stepper(actx, parameters):
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    message = (
+    logger.info(
         f"Num {dim}d order-{order} elements: {mesh.nelements}\n"
         f"Timestep:        {dt}\n"
         f"Final time:      {t_final}\n"
@@ -807,7 +804,6 @@ def _euler_flow_stepper(actx, parameters):
         f"Initialization:  {initname}\n"
         f"EOS:             {eosname}"
     )
-    logger.info(message)
 
     vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
 
@@ -920,11 +916,11 @@ def test_isentropic_vortex(actx_factory, order):
         maxerr = _euler_flow_stepper(actx, flowparams)
         eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 
-    message = (
+    logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
         f"{eoc_rec}"
     )
-    logger.info(message)
+
     assert (
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < 1e-11
