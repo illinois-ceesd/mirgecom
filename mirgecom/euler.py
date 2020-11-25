@@ -65,7 +65,6 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
@@ -204,11 +203,6 @@ def join_conserved(dim, mass, energy, momentum, massfractions=None):
     return result
 
 
-def scalar(s):
-    """Create an object array for a scalar."""
-    return make_obj_array([s])
-
-
 def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
@@ -226,12 +220,12 @@ def inviscid_flux(discr, eos, q):
     if cv.massfractions is not None:
         # mass fractions require a reshape here to get the right numpy
         # broadcast behavior. Reshaped to [numspecies x 1] object.
-        massfrac = mom * cv.massfractions.reshape(-1, 1) / scalar(cv.mass)
+        massfrac = mom * cv.massfractions.reshape(-1, 1) / cv.mass
 
     return join_conserved(dim,
             mass=mom,
-            energy=mom * scalar((cv.energy + p) / cv.mass),
-            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p),
+            energy=mom * (cv.energy + p) / cv.mass,
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
             massfractions=massfrac)
 
 
@@ -239,7 +233,7 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
     """Return the maximum wavespeed in for flow solution *q*."""
     actx = cv.mass.array_context
 
-    v = cv.momentum / scalar(cv.mass)
+    v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
@@ -279,7 +273,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
-        - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
+        - 0.5 * lam * (q_tpair.ext - q_tpair.int))
 
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)
