@@ -60,10 +60,9 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux(actx_factory, nspecies, dim):
-    """Identity test - directly check inviscid flux
-    routine :func:`mirgecom.euler.inviscid_flux` against the exact
-    expected result. This test is designed to fail
-    if the flux routine is broken.
+    """Identity test - directly check inviscid flux routine
+    :func:`mirgecom.euler.inviscid_flux` against the exact expected result.
+    This test is designed to fail if the flux routine is broken.
 
     The expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI, rhoY V>
@@ -148,16 +147,15 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
 
-    Checks that the Euler-internal inviscid flux
-    routine :func:`mirgecom.euler.inviscid_flux` returns exactly the
-    expected result with a constant pressure and
-    no flow.
+    Checks that the Euler-internal inviscid flux routine
+    :func:`mirgecom.euler.inviscid_flux` returns exactly the expected result
+    with a constant pressure and no flow.
+
     Expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
 
     Checks that only diagonal terms of the momentum flux:
-      [ rho(V.x.V) + pI ]
-    are non-zero and return the correctly calculated p.
+      [ rho(V.x.V) + pI ] are non-zero and return the correctly calculated p.
     """
 
     queue = actx_factory().queue
@@ -237,8 +235,9 @@ def test_inviscid_flux_components(actx_factory, dim):
     ])
 def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     r"""Constant pressure, V != 0:
-    Checks that the flux terms are returned in the proper
-    order by running only 1 non-zero velocity component at-a-time.
+
+    Checks that the flux terms are returned in the proper order by running
+    only 1 non-zero velocity component at-a-time.
     """
 
     queue = actx_factory().queue
@@ -346,15 +345,13 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_facial_flux(actx_factory, nspecies, order, dim):
-    """Check the flux across element faces by
-    prescribing states (q) with known fluxes. Only
-    uniform states are tested currently - ensuring
-    that the Lax-Friedrichs flux terms which are
-    proportional to jumps in state data vanish.
+    """Check the flux across element faces by prescribing states (q)
+    with known fluxes. Only uniform states are tested currently - ensuring
+    that the Lax-Friedrichs flux terms which are proportional to jumps in
+    state data vanish.
 
-    Since the returned fluxes use state data which
-    has been interpolated to-and-from the element
-    faces, this test is grid-dependent.
+    Since the returned fluxes use state data which has been interpolated
+    to-and-from the element faces, this test is grid-dependent.
     """
     actx = actx_factory()
 
@@ -472,10 +469,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_uniform_rhs(actx_factory, nspecies, dim, order):
-    """Tests the inviscid rhs using a trivial
-    constant/uniform state which should
-    yield rhs = 0 to FP.  The test is performed
-    for 1, 2, and 3 dimensions.
+    """Tests the inviscid rhs using a trivial constant/uniform state which
+    should yield rhs = 0 to FP.  The test is performed for 1, 2, and 3 dimensions.
     """
     actx = actx_factory()
 
@@ -595,11 +590,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_vortex_rhs(actx_factory, order):
-    """Tests the inviscid rhs using the non-trivial
-    2D isentropic vortex case configured to yield
-    rhs = 0. Checks several different orders
-    and refinement levels to check error
-    behavior.
+    """Tests the inviscid rhs using the non-trivial 2D isentropic vortex
+    case configured to yield rhs = 0. Checks several different orders and
+    refinement levels to check error behavior.
     """
     actx = actx_factory()
 
@@ -650,9 +643,8 @@ def test_vortex_rhs(actx_factory, order):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_lump_rhs(actx_factory, dim, order):
-    """Tests the inviscid rhs using the non-trivial
-    1, 2, and 3D mass lump case against the analytic
-    expressions of the RHS. Checks several different
+    """Tests the inviscid rhs using the non-trivial 1, 2, and 3D mass lump
+    case against the analytic expressions of the RHS. Checks several different
     orders and refinement levels to check error behavior.
     """
     actx = actx_factory()
@@ -710,10 +702,9 @@ def test_lump_rhs(actx_factory, dim, order):
 @pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
 def test_multilump_rhs(actx_factory, dim, order, v0):
-    """Tests the inviscid rhs using the non-trivial
-    1, 2, and 3D mass lump case against the analytic
-    expressions of the RHS. Checks several different
-    orders and refinement levels to check error behavior.
+    """Tests the inviscid rhs using the non-trivial 1, 2, and 3D mass lump case
+    against the analytic expressions of the RHS. Checks several different orders
+    and refinement levels to check error behavior.
     """
     actx = actx_factory()
     nspecies = 10
@@ -886,14 +877,12 @@ def _euler_flow_stepper(actx, parameters):
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_isentropic_vortex(actx_factory, order):
-    """Advance the 2D isentropic vortex case in
-    time with non-zero velocities using an RK4
-    timestepping scheme. Check the advanced field
-    values against the exact/analytic expressions.
+    """Advance the 2D isentropic vortex case in time with non-zero velocities
+    using an RK4 timestepping scheme. Check the advanced field values against
+    the exact/analytic expressions.
 
-    This tests all parts of the Euler module working
-    together, with results converging at the expected
-    rates vs. the order.
+    This tests all parts of the Euler module working together, with results
+    converging at the expected rates vs. the order.
     """
     actx = actx_factory()
 
