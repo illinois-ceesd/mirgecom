@@ -645,15 +645,14 @@ class MultiLump:
         expterm = self._rhoamp * actx.np.exp(- r ** 2)
         mass = expterm + self._rho0
 
-        mom = self._velocity * mass  # make_obj_array([mass])
-        # * make_obj_array([1 / mass])
+        mom = self._velocity * mass
         v = mom / mass
 
         rdotv = np.dot(rel_center, v)
 
         massrhs = 0 * mass
         energyrhs = 0 * mass
-        momrhs = v * mass * rdotv  # make_obj_array([0 * mass * rdotv])
+        momrhs = v * 0 * mass * rdotv
 
         # process the species components independently
         specrhs = None
