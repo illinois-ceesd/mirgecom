@@ -178,6 +178,12 @@ def join_conserved(dim, mass, energy, momentum, massfractions=None):
     nspec = 0
     if massfractions is not None:
         nspec = len(massfractions)
+#    aux_shape = single_valued(*([
+#        _aux_shape(mass, ()),
+#        _aux_shape(energy, ()),
+#        _aux_shape(momentum, (dim,)), ]
+#        + ([_aux_shape(massfractions, (nspec,))])
+#        if nspec > 0 else []))
         aux_shape = single_valued([
             _aux_shape(mass, ()),
             _aux_shape(energy, ()),

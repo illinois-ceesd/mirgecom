@@ -450,11 +450,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
 
-    message = (
+    logger.info(
         f"standalone Errors:\n{eoc_rec0}"
         f"boundary Errors:\n{eoc_rec1}"
     )
-    logger.info(message)
     assert (
         eoc_rec0.order_estimate() >= order - 0.5
         or eoc_rec0.max_error() < 1e-9
