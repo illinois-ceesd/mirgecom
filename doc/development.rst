@@ -68,7 +68,7 @@ the fork to your local cloned copy of the repository with the following command:
 
 .. code:: bash
 
-   $ git remote add my_fork git@github.com:MYUSERNAME/<repo>
+   $ git remote add my_fork git@github.com:MYUSERNAME/REPONAME
 
 Creating a new pull request
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
