@@ -23,10 +23,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
+import numpy.random
 import numpy.linalg as la  # noqa
-import pyopencl as cl
-import pyopencl.clrandom
-import pyopencl.clmath
+import pyopencl.clmath  # noqa
 import logging
 import pytest
 
@@ -35,8 +34,7 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-# from meshmode.dof_array import thaw, unflatten
-from meshmode.dof_array import thaw
+from meshmode.dof_array import DOFArray, thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
@@ -83,20 +81,15 @@ def test_inviscid_flux(actx_factory, dim):
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
-    mass = cl.clrandom.rand(
-        actx.queue, (mesh.nelements,), dtype=np.float64
-    )
-    energy = cl.clrandom.rand(
-        actx.queue, (mesh.nelements,), dtype=np.float64
-    )
-    mom = make_obj_array(
-        [
-            cl.clrandom.rand(
-                actx.queue, (mesh.nelements,), dtype=np.float64
-            )
-            for i in range(dim)
-        ]
-    )
+    def rand():
+        ary = discr.zeros(actx)
+        for grp_ary in ary:
+            grp_ary.set(np.random.rand(*grp_ary.shape))
+        return ary
+
+    mass = rand()
+    energy = rand()
+    mom = make_obj_array([rand() for _ in range(dim)])
 
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
@@ -108,7 +101,7 @@ def test_inviscid_flux(actx_factory, dim):
 
     expected_flux = np.zeros((dim + 2, dim), dtype=object)
     expected_flux[0] = mom
-    expected_flux[1] = mom * make_obj_array([escale])
+    expected_flux[1] = mom * escale
 
     for i in range(dim):
         for j in range(dim):
@@ -126,6 +119,15 @@ def test_inviscid_flux(actx_factory, dim):
             assert (la.norm(flux_resid[i, j].get())) == 0.0
 
 
+class MyDiscr:
+    def __init__(self, dim, nnodes):
+        self.dim = dim
+        self.nnodes = nnodes
+
+    def zeros(self, actx, dtype=np.float64):
+        return DOFArray(actx, (actx.zeros((1, self.nnodes), dtype=dtype),))
+
+
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
@@ -141,14 +143,9 @@ def test_inviscid_flux_components(actx_factory, dim):
       [ rho(V.x.V) + pI ]
     are non-zero and return the correctly calculated p.
     """
-
-    queue = actx_factory().queue
+    actx = actx_factory()
 
     eos = IdealSingleGas()
-
-    class MyDiscr:
-        def __init__(self, dim=1):
-            self.dim = dim
 
     from mirgecom.euler import inviscid_flux
 
@@ -162,40 +159,25 @@ def test_inviscid_flux_components(actx_factory, dim):
     # === with V = 0, fixed P = p0
     tolerance = 1e-15
     for ntestnodes in [1, 10]:
-        fake_dis = MyDiscr(dim)
-        mass = cl.clrandom.rand(
-            queue, (ntestnodes,), dtype=np.float64
-        )
-        energy = cl.clrandom.rand(
-            queue, (ntestnodes,), dtype=np.float64
-        )
-        mom = make_obj_array(
-            [
-                cl.clrandom.rand(
-                    queue, (ntestnodes,), dtype=np.float64
-                )
-                for i in range(dim)
-            ]
-        )
-        p = cl.clrandom.rand(queue, (ntestnodes,), dtype=np.float64)
-
-        for i in range(ntestnodes):
-            mass[i] = 1.0 + i
-            p[i] = p0
-            for j in range(dim):
-                mom[j][i] = 0.0 * mass[i]
+        discr = MyDiscr(dim, ntestnodes)
+        mass = discr.zeros(actx)
+        mass_values = np.empty((1, ntestnodes), dtype=np.float64)
+        mass_values[0] = np.linspace(1., ntestnodes, ntestnodes, dtype=np.float64)
+        mass[0].set(mass_values)
+        mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
+        p = discr.zeros(actx) + p0
         energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
         q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
         cv = split_conserved(dim, q)
         p = eos.pressure(cv)
-        flux = inviscid_flux(fake_dis, eos, q)
+        flux = inviscid_flux(discr, eos, q)
 
         logger.info(f"{dim}d flux = {flux}")
 
         # for velocity zero, these components should be == zero
         for i in range(2):
             for j in range(dim):
-                assert (flux[i, j].get() == 0.0).all()
+                assert (flux[i, j][0].get() == 0.0).all()
 
         # The momentum diagonal should be p
         # Off-diagonal should be identically 0
@@ -203,10 +185,10 @@ def test_inviscid_flux_components(actx_factory, dim):
             for j in range(dim):
                 print(f"(i,j) = ({i},{j})")
                 if i != j:
-                    assert (flux[2 + i, j].get() == 0.0).all()
+                    assert (flux[2 + i, j][0].get() == 0.0).all()
                 else:
-                    assert (flux[2 + i, j] == p).get().all()
-                    assert (np.abs(flux[2 + i, j] - p0) < tolerance).all()
+                    assert (flux[2 + i, j] == p)[0].get().all()
+                    assert (np.abs(flux[2 + i, j][0].get() - p0) < tolerance).all()
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -222,14 +204,9 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     Checks that the flux terms are returned in the proper
     order by running only 1 non-zero velocity component at-a-time.
     """
-
-    queue = actx_factory().queue
+    actx = actx_factory()
 
     eos = IdealSingleGas()
-
-    class MyDiscr:
-        def __init__(self, dim=1):
-            self.dim = dim
 
     p0 = 1.0
 
@@ -238,31 +215,15 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     tolerance = 1e-15
     for livedim in range(dim):
         for ntestnodes in [1, 10]:
-            fake_dis = MyDiscr(dim)
-            mass = cl.clrandom.rand(
-                queue, (ntestnodes,), dtype=np.float64
-            )
-            energy = cl.clrandom.rand(
-                queue, (ntestnodes,), dtype=np.float64
-            )
-            mom = make_obj_array(
-                [
-                    cl.clrandom.rand(
-                        queue, (ntestnodes,), dtype=np.float64
-                    )
-                    for i in range(dim)
-                ]
-            )
-            p = cl.clrandom.rand(
-                queue, (ntestnodes,), dtype=np.float64
-            )
-
-            for i in range(ntestnodes):
-                mass[i] = 1.0 + i
-                p[i] = p0
-                for j in range(dim):
-                    mom[j][i] = 0.0 * mass[i]
-                    mom[livedim][i] = mass[i]
+            discr = MyDiscr(dim, ntestnodes)
+            mass = discr.zeros(actx)
+            mass_values = np.empty((1, ntestnodes), dtype=np.float64)
+            mass_values[0] = np.linspace(1., ntestnodes, ntestnodes,
+                        dtype=np.float64)
+            mass[0].set(mass_values)
+            mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
+            mom[livedim] = mass
+            p = discr.zeros(actx) + p0
             energy = (
                 p / (eos.gamma() - 1.0)
                 + 0.5 * np.dot(mom, mom) / mass
@@ -271,7 +232,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             cv = split_conserved(dim, q)
             p = eos.pressure(cv)
 
-            flux = inviscid_flux(fake_dis, eos, q)
+            flux = inviscid_flux(discr, eos, q)
 
             logger.info(f"{dim}d flux = {flux}")
 
@@ -279,22 +240,20 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             expected_flux = mom
             logger.info("Testing continuity")
             for i in range(dim):
-                assert la.norm((flux[0, i] - expected_flux[i]).get()) == 0.0
+                assert la.norm((flux[0, i] - expected_flux[i])[0].get()) == 0.0
                 if i != livedim:
-                    assert la.norm(flux[0, i].get()) == 0.0
+                    assert la.norm(flux[0, i][0].get()) == 0.0
                 else:
-                    assert la.norm(flux[0, i].get()) > 0.0
+                    assert la.norm(flux[0, i][0].get()) > 0.0
 
             logger.info("Testing energy")
-            expected_flux = mom * make_obj_array(
-                [(energy + p) / mass]
-            )
+            expected_flux = mom * (energy + p) / mass
             for i in range(dim):
-                assert la.norm((flux[1, i] - expected_flux[i]).get()) == 0.0
+                assert la.norm((flux[1, i] - expected_flux[i])[0].get()) == 0.0
                 if i != livedim:
-                    assert la.norm(flux[1, i].get()) == 0.0
+                    assert la.norm(flux[1, i][0].get()) == 0.0
                 else:
-                    assert la.norm(flux[1, i].get()) > 0.0
+                    assert la.norm(flux[1, i][0].get()) > 0.0
 
             logger.info("Testing momentum")
             xpmomflux = make_obj_array(
@@ -308,20 +267,20 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             for i in range(dim):
                 expected_flux = xpmomflux[i * dim: (i + 1) * dim]
                 for j in range(dim):
-                    assert la.norm((flux[2+i, j] - expected_flux[j]).get()) == 0
+                    assert la.norm((flux[2+i, j] - expected_flux[j])[0].get()) == 0
                     if i == j:
                         if i == livedim:
                             assert (
-                                la.norm(flux[2+i, j].get())
+                                la.norm(flux[2+i, j][0].get())
                                 > 0.0
                             )
                         else:
                             # just for sanity - make sure the flux recovered the
                             # prescribed value of p0 (within fp tol)
-                            for k in range(ntestnodes):
-                                assert np.abs(flux[2+i, j][k] - p0) < tolerance
+                            assert (np.abs(flux[2 + i, j][0].get() - p0)
+                                < tolerance).all()
                     else:
-                        assert la.norm(flux[2+i, j].get()) == 0.0
+                        assert la.norm(flux[2+i, j][0].get()) == 0.0
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -395,9 +354,9 @@ def test_facial_flux(actx_factory, order, dim):
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
         # Check the boundary facial fluxes as called on a boundary
-        dir_mass = discr.interp("vol", BTAG_ALL, mass_input)
-        dir_e = discr.interp("vol", BTAG_ALL, energy_input)
-        dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
+        dir_mass = discr.project("vol", BTAG_ALL, mass_input)
+        dir_e = discr.project("vol", BTAG_ALL, energy_input)
+        dir_mom = discr.project("vol", BTAG_ALL, mom_input)
 
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom)
