@@ -106,9 +106,8 @@ def _make_pulse(amp, r0, w, r):
 
         G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
 
-    Where $\vec{r}$ is the position, and the parameters are
-    the pulse amplitude $a_0$, the pulse location $\vec{r_0}$, and the
-    RMS width of the pulse, $w$.
+    Where $\vec{r}$ is the position, and the parameters are the pulse amplitude
+    $a_0$, the pulse location $\vec{r_0}$, and the RMS width of the pulse, $w$.
 
     Parameters
     ----------
@@ -157,10 +156,9 @@ class Vortex2D:
          \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
          p = \rho^{\gamma}
 
-    A call to this object after creation/init creates
-    the isentropic vortex solution at a given time (t)
-    relative to the configured origin (center) and
-    background flow velocity (velocity).
+    A call to this object after creation/init creates the isentropic
+    vortex solution at a given time (t) relative to the configured
+    origin (center) and background flow velocity (velocity).
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -318,22 +316,19 @@ class Lump:
          {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
          {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
-    Where $V_0$ is the fixed velocity specified
-    by the user at init time, and $\gamma$ is taken
-    from the equation-of-state object (eos).
+    Where $V_0$ is the fixed velocity specified by the user at init
+    time, and $\gamma$ is taken from the equation-of-state object (eos).
 
-    A call to this object after creation/init creates
-    the lump solution at a given time (t)
-    relative to the configured origin (center) and
+    A call to this object after creation/init creates the lump solution
+    at a given time (t) relative to the configured origin (center) and
     background flow velocity (velocity).
 
-    This object also functions as a boundary condition
-    by providing the "get_boundary_flux" method to
-    prescribe exact field values on the given boundary.
+    This object also functions as a boundary condition by providing the
+    "get_boundary_flux" method to prescribe exact field values on the
+    given boundary.
 
-    This object also supplies the exact expected RHS
-    terms from the analytic expression in the
-    "expected_rhs" method.
+    This object also supplies the exact expected RHS terms from the
+    analytic expression in the "expected_rhs" method.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -367,8 +362,11 @@ class Lump:
             center = np.zeros(shape=(numdim,))
         if velocity is None:
             velocity = np.zeros(shape=(numdim,))
-        assert len(center) == numdim
-        assert len(velocity) == numdim
+        dimmsg = f"is expected to be {numdim}-dimensional"
+        if len(center) != numdim:
+            raise ValueError(f"Lump center {dimmsg}.")
+        if len(velocity) != numdim:
+            raise ValueError(f"Lump velocity {dimmsg}.")
 
         self._dim = numdim
         self._velocity = velocity
@@ -393,7 +391,10 @@ class Lump:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        assert len(x_vec) == self._dim
+        if len(x_vec) != self._dim:
+            raise ValueError(f"Position vector has unexpected dimenionality,"
+                             f" expected {self._dim}.")
+
         amplitude = self._rhoamp
         lump_loc = self._center + t * self._velocity
 
@@ -465,9 +466,8 @@ class MultiLump:
          {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
          {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
-    Where :math:`V_0` is the fixed velocity specified
-    by the user at init time, and :math:`\gamma` is taken
-    from the equation-of-state object (eos).
+    Where :math:`V_0` is the fixed velocity specified by the user at init time,
+    and :math:`\gamma` is taken from the equation-of-state object (eos).
 
     For multi-species or mixtures, :math:`\rho=1`, and each mixture component
     is assigned by:
@@ -481,18 +481,15 @@ class MultiLump:
     user-specified vector of amplitudes for each species, *spec_amplitudes*, and
     :math:`c_\alpha` is the user-specified origin for each species, *spec_centers*.
 
-    A call to this object after creation/init creates
-    the lump solution at a given time (t)
-    relative to the configured origin (center) and
-    background flow velocity (velocity).
+    A call to this object after creation/init creates the lump solution at a given
+    time (*t*) relative to the configured origin (*center*) and background flow
+    velocity (*velocity*).
 
-    This object also functions as a boundary condition
-    by providing the "get_boundary_flux" method to
-    prescribe exact field values on the given boundary.
+    This object also functions as a boundary condition by providing the
+    "get_boundary_flux" method to prescribe exact field values on the given boundary.
 
-    This object also supplies the exact expected RHS
-    terms from the analytic expression in the
-    "expected_rhs" method.
+    This object also supplies the exact expected RHS terms from the analytic
+    expression in the "expected_rhs" method.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -528,8 +525,8 @@ class MultiLump:
             center = np.zeros(shape=(numdim,))
         if velocity is None:
             velocity = np.zeros(shape=(numdim,))
-        assert len(center) == numdim
-        assert len(velocity) == numdim
+        if len(center) != numdim or len(velocity) != numdim:
+            raise ValueError(f"Expected {numdim}-dimensional inputs.")
 
         if nspecies > 0:
             if spec_y0s is None:
@@ -539,11 +536,14 @@ class MultiLump:
                                                for i in range(nspecies)])
             if spec_amplitudes is None:
                 spec_amplitudes = np.ones(shape=(nspecies,))
-            assert len(spec_y0s) == nspecies
-            assert len(spec_amplitudes) == nspecies
-            assert len(spec_centers) == nspecies
+            if len(spec_y0s) != nspecies or\
+               len(spec_amplitudes) != nspecies or\
+                   len(spec_centers) != nspecies:
+                raise ValueError(f"Expected nspecies={nspecies} inputs.")
             for i in range(nspecies):
-                assert len(spec_centers[i]) == numdim
+                if len(spec_centers[i]) != numdim:
+                    raise ValueError(f"Expected {numdim}-dimensional "
+                                     f"inputs for spec_centers.")
 
         self._nspecies = nspecies
         self._dim = numdim
@@ -572,8 +572,9 @@ class MultiLump:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
+        if len(x_vec) != self._dim:
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        assert len(x_vec) == self._dim
         amplitude = self._rhoamp
         actx = x_vec[0].array_context
 
@@ -789,8 +790,8 @@ class AcousticPulse:
             self._center = center
         else:
             self._center = np.zeros(shape=(numdim,))
-
-        assert len(self._center) == numdim
+        if len(self._center) != numdim:
+            raise ValueError(f"Expected {numdim}-dimensional inputs.")
 
         self._amp = amplitude
         self._width = width
@@ -809,7 +810,9 @@ class AcousticPulse:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
-        assert len(x_vec) == self._dim
+        if len(x_vec) != self._dim:
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
+
         cv = split_conserved(self._dim, q)
         return cv.replace(
             energy=cv.energy + _make_pulse(
@@ -872,7 +875,8 @@ class Uniform:
             self._massfrac = None
             self._nspecies = 0
 
-        assert len(self._velocity) == numdim
+        if len(self._velocity) != numdim:
+            raise ValueError(f"Expected {numdim}-dimensional inputs.")
 
         self._p = p
         self._rho = rho
@@ -903,13 +907,6 @@ class Uniform:
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, massfractions=massfrac)
-    # Save this - some things in Uniform flow generator are broken
-    # and one or the other of the above or below fixes the issue.
-    # =======
-    #         return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
-    #                                  pressure=self._p, energy=self._e,
-    #                                  velocity=self._velocity, eos=eos)
-    # >>>>>>> master
 
     def exact_rhs(self, discr, q, t=0.0):
         """

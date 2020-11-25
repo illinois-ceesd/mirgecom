@@ -82,21 +82,21 @@ class ConservedVars:  # FIXME: Name?
     mass_fraction) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
-    .. attribute:: dim
+    .. attribute:: dim: int
 
-    .. attribute:: mass
+    .. attribute:: mass: numpy.ndarray
 
         Mass per unit volume
 
-    .. attribute:: energy
+    .. attribute:: energy: numpy.ndarray
 
         Energy per unit volume
 
-    .. attribute:: momentum
+    .. attribute:: momentum: numpy.ndarray
 
         Momentum vector per unit volume
 
-    .. attribute:: massfractions
+    .. attribute:: massfractions: numpy.ndarray
 
         Species mass fraction per unit volume
 
@@ -178,6 +178,12 @@ def join_conserved(dim, mass, energy, momentum, massfractions=None):
     nspec = 0
     if massfractions is not None:
         nspec = len(massfractions)
+#    aux_shape = single_valued(*([
+#        _aux_shape(mass, ()),
+#        _aux_shape(energy, ()),
+#        _aux_shape(momentum, (dim,)), ]
+#        + ([_aux_shape(massfractions, (nspec,))])
+#        if nspec > 0 else []))
         aux_shape = single_valued([
             _aux_shape(mass, ()),
             _aux_shape(energy, ()),
