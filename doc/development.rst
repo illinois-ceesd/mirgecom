@@ -66,7 +66,8 @@ set up a working version of mirgecom and all its dependencies:
 
 .. note::
 
-   These instructions work on macOS or Linux. If you have a Windows machine, try
+   These instructions work on macOS or Linux, including on clusters and DOE supercomputers.
+   If you have a Windows machine, try
    `WSL <https://docs.microsoft.com/en-us/windows/wsl/install-win10>`__.
    If that works, please submit a pull request updating this documentation
    with a procedure that worked for you.
