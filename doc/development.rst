@@ -71,44 +71,40 @@ The source repository (and current branch) of most of these packages
 in use is determined by the file
 `requirements.txt in mirgecom <https://github.com/illinois-ceesd/mirgecom/blob/master/requirements.txt>`__.
 
-Overview of the Setup
----------------------
+Installation
+------------
 
 The `emirge repository <https://github.com/illinois-ceesd/emirge>`__ contains some
 scripts to help with installation and simultaneously has its checkout serve as a root
 directory for development.
 
-.. todo:
+See the installation instructions for `emirge
+<https://github.com/illinois-ceesd/emirge/>`_ for comprehensive instructions.
+In most cases, running emirge's ``install.sh`` script should be sufficient to
+set up a working version of mirgecom and all its dependencies:
 
-    - Conda environment
-    - Editable installation
+.. code-block:: bash
 
-Installation
-------------
+   # Clone and install emirge
+   $ git clone https://github.com/illinois-ceesd/emirge
+   $ cd emirge
+   $ ./install.sh
 
-See the installation instructions for the `emirge
-<https://github.com/illinois-ceesd/emirge/>`_ installation infrastructure.
+   # Activate the just installed packages
+   $ source config/activate_env.sh
+
+   # Run a quick test
+   $ cd mirgecom/examples
+   $ python ./wave-eager.py
+
 
 .. note::
 
-    Should we move those here?
-
-Installing on Your Personal Machine
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. note::
-
-    These instructions work on macOS or Linux. If you have a Windows machine, try
-    `WSL <https://docs.microsoft.com/en-us/windows/wsl/install-win10>`__.
-    If that works, please submit a pull request updating this documentation
-    with a procedure that worked for you.
-
-Installing on a Cluster/DOE Machine
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. todo::
-
-   Write this.
+   These instructions work on macOS or Linux, including on clusters and DOE supercomputers.
+   If you have a Windows machine, try
+   `WSL <https://docs.microsoft.com/en-us/windows/wsl/install-win10>`__.
+   If that works, please submit a pull request updating this documentation
+   with a procedure that worked for you.
 
 Proposing Changes
 -----------------
