@@ -73,39 +73,31 @@ Creating a new pull request
    .. code:: bash
 
       $ cd mirgecom           # or loopy, meshmode, ...
-      $ git branch featureX   # Create new branch for your feature
-      $ git checkout featureX # Activate the branch
+      $ git switch -c featureX   # Create new branch for your feature and switch to it
       # Edit files
 
 2. Check that your changes pass tests:
 
    .. code:: bash
 
-      # Install these with 'pip install wheel flake8 pep8-naming flake8-quotes pytest pylint'
-      $ flake8
-      $ pydocstyle
-      $ pytest
+      # Install these with 'pip install wheel flake8 pep8-naming flake8-quotes pytest pylint' if needed
+      # (emirge will have installed them for you automatically)
+      $ flake8 mirgecom test
+      $ pydocstyle mirgecom test
+      $ (cd test && python -m pytest)
 
 3. Commit your changes to the new branch:
 
    .. code:: bash
 
+      $ git add file1.py file2.py
       $ git commit
 
 4. Push your changes:
 
    .. code:: bash
 
-      $ git push -u
-      # alternatively:
-      $ git push -u origin featureX
-
-   If you do not have write privileges to this repository, you can push
-   the change to your fork instead:
-
-   .. code:: bash
-
-      $ git push -u <forked_repo> featureX
+      $ git push -u my_fork featureX
 
 5. Create pull request:
 
@@ -114,11 +106,6 @@ Creating a new pull request
    The `base` branch should be the `master` branch of the repo you want to
    merge into in most cases. The `compare` branch is the branch with your
    changes.
-
-   When creating the pull request, select at least one reviewer (someone that
-   has knowledge about the code you are modifying), add yourself as the
-   assignee, and choose appropriate labels (if any). Note that this can
-   usually not be done for a PR from a forked repository.
 
 6. After the pull request has been merged, please delete the branch
    (locally and remotely):
@@ -159,7 +146,7 @@ that depends on the ``my_branch`` branch in meshmode::
 
    git+https://github.com/inducer/meshmode.git#egg=meshmode
    # change to:
-   git+https://github.com/inducer/meshmode.git@my_branch#egg=meshmode
+   git+https://github.com/MYUSERNAME/meshmode.git@featureX#egg=meshmode
 
 With this change, new emirge installations and CI tests will automatically use
 the ``my_branch`` branch of meshmode.
