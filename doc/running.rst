@@ -76,7 +76,7 @@ There are multiple ways in which this selection can happen:
    ``meshmode.array_context.pytest_generate_tests_for_pyopencl_array_context()``
    functions used in the default simulation drivers and tests. It is also
    possible to write your own device selection code with
-   :func:`pyopencl.get_platforms`, ``pyopencl.Platform.get_info()``, and
+   :func:`pyopencl.get_platforms`, ``pyopencl.Platform.get_devices()``, and
    :class:`pyopencl.Context`.
 
 .. note::
