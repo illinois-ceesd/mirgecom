@@ -281,7 +281,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0,
-                      get_chemical_sources=None):
+                      sources=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -342,14 +342,13 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0,
         for part_pair in cross_rank_trace_pairs(discr, q)
     )
 
-    # Chemical source terms
-    chemical_sources = 0.0
-    if get_chemical_sources is not None:
-        species_sources = get_chemical_sources(discr, q=q, eos=eos)
+    source_terms = 0
+    if sources is not None:
+        source_terms = sum(source(discr, q=q, eos=eos) for source in sources)
 
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux) + chemical_sources
+                                + partition_boundary_flux) + source_terms
     )
 
 

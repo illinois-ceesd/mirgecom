@@ -84,6 +84,7 @@ def main(ctx_factory=cl.create_some_context):
     timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
+    error_state = 0
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD

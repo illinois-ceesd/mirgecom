@@ -488,8 +488,9 @@ class UIUCMechanism:
 
         k_eq1 = c0 + (g0rt[2]) - (g0rt[3] + g0rt[1])
         k_eq2 = c0 + (g0rt[4]) - (g0rt[5] + g0rt[1])
+        k_eq0 = 0 * k_eq1
 
-        return make_obj_array([k_eq1, k_eq2])
+        return make_obj_array([k_eq0, k_eq1, k_eq2])
 
     def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
 
@@ -518,8 +519,7 @@ class UIUCMechanism:
 
         logt = self.npctx.log(temperature)
         invt = 1.0 / temperature
-        k_eq = self.npctx.min(self.big_number,
-                           self.get_equilibrium_constants(temperature))
+        k_eq = self.get_equilibrium_constants(temperature)
 
         k_fwd0 = self.npctx.exp(2.659486e01 - 1.786429e04 * invt)
         k_fwd1 = self.npctx.exp(1.269378e01 + 7.000000e-01

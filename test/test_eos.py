@@ -57,12 +57,12 @@ import cantera
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.parametrize("mechname", ["uiuc", ])
 @pytest.mark.parametrize("y0", [0, 1])
-def test_pyrometheus_uiuc(ctx_factory, y0):
-    """Test pyrometheus uiuc mechanism.
+def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
+    """Test known pyrometheus mechanisms.
 
-    Tests that the Pyrometheus uiuc mechanism
-    gets the same thermo properties as the
+    Tests that the Pyrometheus mechanism code  gets the same thermo properties as the
     corresponding mechanism in Cantera.
     """
     cl_ctx = ctx_factory()
@@ -103,12 +103,13 @@ def test_pyrometheus_uiuc(ctx_factory, y0):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution("uiuc.cti", "gas")
+        cantera_soln = cantera.Solution(f"{mechname}.cti", "gas")
         cantera_soln.TPX = tempin, pressin, y0s
         cantera_soln.equilibrate("UV")
         can_t, can_rho, can_y = cantera_soln.TDY
         can_p = cantera_soln.P
         can_e = cantera_soln.int_energy_mass
+        can_k = cantera_soln.forward_rate_constants
 
         ones = (1.0 + nodes[0]) - nodes[0]
         tin = can_t * ones
@@ -119,28 +120,31 @@ def test_pyrometheus_uiuc(ctx_factory, y0):
         prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
         prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
         prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
+        prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
+        prom_k, prom_rk = prometheus_mechanism.get_rate_coefficients(prom_t, prom_c)
 
-        print(f"can(rho, y, p, t) = ({can_rho}, {can_y}, "
-              f"{can_p}, {can_t}, {can_e})")
-        print(f"prom(rho, y, p, t) = ({prom_rho}, {y0s}, "
-              f"{prom_p}, {prom_t}, {prom_e})")
+        print(f"can(rho, y, p, t, k) = ({can_rho}, {can_y}, "
+              f"{can_p}, {can_t}, {can_e}, {can_k})")
+        print(f"prom(rho, y, p, t, k) = ({prom_rho}, {y0s}, "
+              f"{prom_p}, {prom_t}, {prom_e}, {prom_k})")
 
-        tol = 1e-6
+        tol = 1e-4
         assert discr.norm((prom_t - can_t) / can_t, np.inf) < tol
         assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < tol
         assert discr.norm((prom_p - can_p) / can_p, np.inf) < tol
         assert discr.norm((prom_e - can_e) / can_e, np.inf) < tol
+        assert discr.norm((prom_k - can_k) / can_k, np.inf) < tol
 
 
+@pytest.mark.parametrize("mechname", ["uiuc", ])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
-def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
-    """Test PyrometheusMixture EOS for uiuc mechanism.
+def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
+    """Test PyrometheusMixture EOS for all available mechanisms.
 
-    Tests that the PyrometheusMixture EOS with uiuc
-    gets the same thermo properties as the Pyrometheus-native
-    mechanism code.
+    Tests that the PyrometheusMixture EOS with gets the same thermo properties as the
+    Pyrometheus-native mechanism code.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -164,6 +168,7 @@ def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
     # Init soln with Vortex
     prometheus_mechanism = UIUCMechanism(actx.np)
     nspecies = prometheus_mechanism.num_species
+    print(f"PrometheusMixture::Mechanism = {mechname}")
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
 
     press0 = 101500.0
@@ -179,7 +184,7 @@ def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
         tempin = fac * temp0
         pressin = fac * press0
 
-        print(f"Testing (t,P) = ({tempin}, {pressin})")
+        print(f"Testing {mechname}(t,P) = ({tempin}, {pressin})")
 
         ones = (1.0 + nodes[0]) - nodes[0]
         tin = tempin * ones
@@ -224,9 +229,8 @@ def test_pyrometheus_eos_uiuc(ctx_factory, dim, y0, vel):
 def test_idealsingle_lump(ctx_factory, dim):
     """Test IdealSingle EOS with mass lump.
 
-    Tests that the IdealSingleGas EOS returns
-    the correct (uniform) pressure for the Lump
-    solution field.
+    Tests that the IdealSingleGas EOS returns the correct (uniform) pressure for the
+    Lump solution field.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -277,9 +281,8 @@ def test_idealsingle_lump(ctx_factory, dim):
 def test_idealsingle_vortex(ctx_factory):
     r"""Test EOS with isentropic vortex.
 
-    Tests that the IdealSingleGas EOS returns
-    the correct pressure (p) for the Vortex2D solution
-    field (i.e. $p = \rho^{\gamma}$).
+    Tests that the IdealSingleGas EOS returns the correct pressure (p) for the
+    Vortex2D solution field (i.e. $p = \rho^{\gamma}$).
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
