@@ -65,7 +65,6 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
@@ -82,21 +81,21 @@ class ConservedVars:  # FIXME: Name?
     mass_fraction) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
-    .. attribute:: dim
+    .. attribute:: dim: int
 
-    .. attribute:: mass
+    .. attribute:: mass: numpy.ndarray
 
         Mass per unit volume
 
-    .. attribute:: energy
+    .. attribute:: energy: numpy.ndarray
 
         Energy per unit volume
 
-    .. attribute:: momentum
+    .. attribute:: momentum: numpy.ndarray
 
         Momentum vector per unit volume
 
-    .. attribute:: massfractions
+    .. attribute:: massfractions: numpy.ndarray
 
         Species mass fraction per unit volume
 
@@ -178,6 +177,12 @@ def join_conserved(dim, mass, energy, momentum, massfractions=None):
     nspec = 0
     if massfractions is not None:
         nspec = len(massfractions)
+#    aux_shape = single_valued(*([
+#        _aux_shape(mass, ()),
+#        _aux_shape(energy, ()),
+#        _aux_shape(momentum, (dim,)), ]
+#        + ([_aux_shape(massfractions, (nspec,))])
+#        if nspec > 0 else []))
         aux_shape = single_valued([
             _aux_shape(mass, ()),
             _aux_shape(energy, ()),
@@ -198,11 +203,6 @@ def join_conserved(dim, mass, energy, momentum, massfractions=None):
     return result
 
 
-def scalar(s):
-    """Create an object array for a scalar."""
-    return make_obj_array([s])
-
-
 def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
@@ -220,12 +220,12 @@ def inviscid_flux(discr, eos, q):
     if cv.massfractions is not None:
         # mass fractions require a reshape here to get the right numpy
         # broadcast behavior. Reshaped to [numspecies x 1] object.
-        massfrac = mom * cv.massfractions.reshape(-1, 1) / scalar(cv.mass)
+        massfrac = mom * cv.massfractions.reshape(-1, 1) / cv.mass
 
     return join_conserved(dim,
             mass=mom,
-            energy=mom * scalar((cv.energy + p) / cv.mass),
-            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p),
+            energy=mom * (cv.energy + p) / cv.mass,
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim) * p,
             massfractions=massfrac)
 
 
@@ -233,7 +233,7 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
     """Return the maximum wavespeed in for flow solution *q*."""
     actx = cv.mass.array_context
 
-    v = cv.momentum / scalar(cv.mass)
+    v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
@@ -273,7 +273,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
-        - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
+        - 0.5 * lam * (q_tpair.ext - q_tpair.int))
 
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)

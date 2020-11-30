@@ -28,7 +28,6 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
-from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -50,7 +49,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import MultiLump
+from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 
 from mirgecom.prometheus import UIUCMechanism
@@ -69,11 +68,11 @@ def main(ctx_factory=cl.create_some_context):
     dim = 3
     nel_1d = 16
     order = 3
-    exittol = .09
-    t_final = 0.01
+    exittol = 10.0
+    t_final = 0.002
     current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
+    velocity = np.zeros(shape=(dim,))
+    velocity[:dim] = 1.0
     current_dt = .001
     current_t = 0
     constant_cfl = False
@@ -99,24 +98,25 @@ def main(ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-
+    nodes = thaw(actx, discr.nodes())
     casename = "uiuc_mixture"
     prometheus_mechanism = UIUCMechanism(actx.np)
     nspecies = prometheus_mechanism.num_species
     eos = PrometheusMixture(prometheus_mechanism)
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-    y0s = np.ones(shape=(nspecies,))
-    for i in range(1, nspecies):
-        y0s[i] = 1.0 / (10.0 ** i)
-    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
-    y0s[0] = 1.0 - spec_sum
-    amplitudes = np.zeros(shape=(nspecies,))
-    initializer = MultiLump(numdim=dim, nspecies=nspecies, p0=101500.0,
-                            spec_centers=centers, velocity=vel,
-                            spec_y0s=y0s, spec_amplitudes=amplitudes)
+
+    y0s = np.zeros(shape=(nspecies,))
+    for i in range(nspecies-1):
+        y0s[i] = 1.0 / (10.0 ** (i + 1))
+    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
+    y0s[nspecies-1] = 1.0 - spec_sum
+
+    # Mixture defaults to STP (p, T) = (1atm, 300K)
+    initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+                                     massfractions=y0s, velocity=velocity)
+
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+    current_state = initializer(eos=eos, x_vec=nodes, t=0)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -141,6 +141,8 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        global checkpoint_t
+        checkpoint_t = t
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
@@ -157,12 +159,12 @@ def main(ctx_factory=cl.create_some_context):
         current_t = ex.t
         current_state = ex.state
 
-    #    if current_t != checkpoint_t:
-    if rank == 0:
-        logger.info("Checkpointing final state ...")
-    my_checkpoint(current_step, t=current_t,
-                  dt=(current_t - checkpoint_t),
-                  state=current_state)
+    if current_t != checkpoint_t:  # This check because !overwrite
+        if rank == 0:
+            logger.info("Checkpointing final state ...")
+        my_checkpoint(current_step, t=current_t,
+                      dt=(current_t - checkpoint_t),
+                      state=current_state)
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")

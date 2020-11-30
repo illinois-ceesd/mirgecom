@@ -6,6 +6,8 @@ dependencies:
 - python=3.8
 - mpi4py
 - islpy
+- pip
+- pyopencl
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"

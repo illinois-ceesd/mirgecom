@@ -33,7 +33,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.eos import IdealSingleGas
@@ -67,7 +66,7 @@ class PrescribedBoundary:
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(t, nodes)
+        ext_soln = self._userfunc(eos=eos, t=t, x_vec=nodes)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
@@ -134,7 +133,7 @@ class AdiabaticSlipBoundary:
         # induce an equal but opposite wall-normal (reflected) wave
         # preserving the tangential component
         mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
-        wnorm_mom = nhat * make_obj_array([mom_normcomp])  # wall-normal mom vec
+        wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
         ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
         # Form the external boundary solution with the new momentum
