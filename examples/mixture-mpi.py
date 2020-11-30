@@ -155,6 +155,7 @@ def main(ctx_factory=cl.create_some_context):
                           get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
+        error_state = 1
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state
@@ -167,7 +168,10 @@ def main(ctx_factory=cl.create_some_context):
                       state=current_state)
 
     if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
+        error_state = 1
+
+    if error_state:
+        raise ValueError("Simulation did not complete successfully.")
 
 
 if __name__ == "__main__":
