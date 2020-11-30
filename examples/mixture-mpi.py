@@ -159,7 +159,6 @@ def main(ctx_factory=cl.create_some_context):
         current_t = ex.t
         current_state = ex.state
 
-
     if current_t != checkpoint_t:  # This check because !overwrite
         if rank == 0:
             logger.info("Checkpointing final state ...")
