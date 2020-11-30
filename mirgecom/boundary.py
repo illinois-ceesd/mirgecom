@@ -66,7 +66,7 @@ class PrescribedBoundary:
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(t, nodes)
+        ext_soln = self._userfunc(eos=eos, t=t, x_vec=nodes)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
