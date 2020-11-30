@@ -68,8 +68,8 @@ def main(ctx_factory=cl.create_some_context):
     dim = 3
     nel_1d = 16
     order = 3
-    exittol = .09
-    t_final = 0.01
+    exittol = 10.0
+    t_final = 0.002
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     velocity[:dim] = 1.0
@@ -141,6 +141,8 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        global checkpoint_t
+        checkpoint_t = t
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
@@ -157,10 +159,10 @@ def main(ctx_factory=cl.create_some_context):
         current_t = ex.t
         current_state = ex.state
 
-    if rank == 0:
-        logger.info("Checkpointing final state ...")
 
     if current_t != checkpoint_t:  # This check because !overwrite
+        if rank == 0:
+            logger.info("Checkpointing final state ...")
         my_checkpoint(current_step, t=current_t,
                       dt=(current_t - checkpoint_t),
                       state=current_state)
