@@ -58,7 +58,7 @@ from logpyle import (LogManager, IntervalTimer, add_general_quantities,
 
 from mirgecom.logging_quantities import (DependentDiscretizationBasedQuantity,
     ConservedDiscretizationBasedQuantity, KernelProfile, add_package_versions,
-    add_device_name)
+    add_device_name, MemoryProfile)
 
 
 logger = logging.getLogger(__name__)
@@ -152,10 +152,14 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
-        logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
+
+        if use_profiling:
+            logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
+
+        logmgr.add_quantity(MemoryProfile())
 
         logmgr.add_watches(["step.max", "t_step.max", "min_pressure",
-                            "min_temperature", "min_momentum1", "t_vis.max"])
+                            "min_temperature", "min_momentum1", "memory_usage.max"])
 
     visualizer = make_visualizer(discr, order + 3 if discr.dim == 2 else order)
     initname = initializer.__class__.__name__

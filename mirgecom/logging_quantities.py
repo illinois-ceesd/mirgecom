@@ -298,3 +298,23 @@ class KernelProfile(LogQuantity):
         return(self.actx.get_profiling_data_for_kernel(self.kernel_name, self.stat))
 
 # }}}
+
+
+# {{{ Memory profiling
+
+class MemoryProfile(LogQuantity):
+    """Logging support for memory profile."""
+
+    def __init__(self, name: str = None):
+
+        if name is None:
+            name = "memory_usage"
+
+        super().__init__(name, "MByte", name)
+
+    def __call__(self):
+        """Return the memory usage."""
+        from memory_profiler import memory_usage
+        return(memory_usage(-1)[0])
+
+# }}}
