@@ -59,10 +59,12 @@ There are multiple ways in which this selection can happen:
   device in the form of a value for the ``PYOPENCL_TEST`` environment
   variable that can be used for subsequent executions.
 
-- **Through the PYOPENCL_TEST environment variable.** Pyopencl will use the
-  value of the ``PYOPENCL_TEST`` environment variable when available for device
-  selection. This value can either be list indices (such as ``0:1`` for first
-  driver, second device), or named abbreviations (such as ``port:tesla`` for pocl (=Portable OpenCL) and the first Nvidia Tesla GPU).
+- **Through the PYOPENCL_TEST or PYOPENCL_CTX environment variables.** 
+  Pyopencl will use the value of the ``PYOPENCL_TEST`` or ``PYOPENCL_CTX``
+  environment variables when set for device selection. The value of either variable
+  can either be list indices (such as ``0:1`` for first driver, second device),
+  or named abbreviations (such as ``port:tesla`` for pocl (=Portable OpenCL)
+  and the first Nvidia Tesla GPU).
 
 - **Default device.** When not using one of the options above, pyopencl will
   run on the first available device (which might not be the device you want)
