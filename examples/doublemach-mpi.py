@@ -67,9 +67,9 @@ def main(ctx_factory=cl.create_some_context):
     order = 3
     # tolerate large errors; case is unstable
     exittol = 2.0 #.2
-    t_final = 1.0
+    t_final = 0.0001
     current_cfl = 0.1
-    current_dt = .00031250
+    current_dt = .000001
     current_t = 0
     eos = IdealSingleGas()
     initializer = DoubleMachReflection(dim)
@@ -84,7 +84,7 @@ def main(ctx_factory=cl.create_some_context):
                   sym.DTAG_BOUNDARY("out"): AdiabaticSlipBoundary()}
     constant_cfl = False
     nstatus = 10
-    nviz = 25
+    nviz = 100
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -95,11 +95,6 @@ def main(ctx_factory=cl.create_some_context):
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-
-    #from meshmode.mesh.generation import generate_regular_rect_mesh
-    #generate_grid = partial(generate_regular_rect_mesh, a=box_ll,
-    #                        b=box_ur, n=nel )
-    #local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
 
 
     from meshmode.mesh.io import read_gmsh, generate_gmsh, ScriptWithFilesSource
@@ -139,7 +134,7 @@ def main(ctx_factory=cl.create_some_context):
     def my_rhs(t, state):
         return (
                inviscid_operator(discr, q=state, t=t,boundaries=boundaries, eos=eos) 
-               + artificial_viscosity(discr,t=t, r=state, eos=eos, boundaries=boundaries, alpha=4.0e-2)
+               + artificial_viscosity(discr,t=t, r=state, eos=eos, boundaries=boundaries, alpha=2.0e-2)
                 )
         #return (
         #       inviscid_operator(discr, q=state, t=t,boundaries=boundaries, eos=eos) 
