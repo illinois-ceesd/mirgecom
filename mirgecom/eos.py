@@ -310,6 +310,17 @@ class PrometheusMixture(GasEOS):
         return self._prometheus_mech.get_mixture_internal_energy_mass(
             temperature, massfractions)
 
+    def get_species_molecular_weights(self):
+        """Get the species molecular weights."""
+        return self._prometheus_mech.wts
+
+    def get_production_rates(self, cv: ConservedVars):
+        """Get the production rate for each species."""
+        temperature = self.temperature(cv)
+        return self._prometheus_mech.get_net_production_rates(cv.mass,
+                                                              temperature,
+                                                              cv.massfractions)
+
     def mass_fractions(self, cv: ConservedVars):
         r"""Get mass fractions :math:`\Y_\alpha` from species densities."""
 

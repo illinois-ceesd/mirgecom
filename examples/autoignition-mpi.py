@@ -1,4 +1,4 @@
-"""Demonstrate auto-ignition case with Prometheus."""
+"""Demonstrate combustive mixture with Prometheus."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -49,42 +49,44 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import MultiLump
+from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
-
+from mirgecom.euler import split_conserved, join_conserved
 from mirgecom.prometheus import UIUCMechanism
+import cantera
 
 logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
-    """Drive auto-ignition example."""
+    """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 3
-    nel_1d = 16
-    order = 3
-    exittol = .09
-    t_final = 0.01
+    nel_1d = 2
+    order = 1
+
+    t_final = 1e-4
     current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
-    current_dt = .001
+    velocity = np.zeros(shape=(dim,))
+    # velocity[:dim] = 1.0
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
     nstatus = 1
-    nviz = 1
+    nviz = 5
     rank = 0
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
-    box_ll = -5.0
-    box_ur = 5.0
+    box_ll = -0.5
+    box_ur = 0.5
+    error_state = 0
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -99,24 +101,53 @@ def main(ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
+    nodes = thaw(actx, discr.nodes())
 
-    casename = "uiuc_mixture"
+    casename = "autoignition"
     prometheus_mechanism = UIUCMechanism(actx.np)
     nspecies = prometheus_mechanism.num_species
     eos = PrometheusMixture(prometheus_mechanism)
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-    y0s = np.ones(shape=(nspecies,))
-    for i in range(1, nspecies):
-        y0s[i] = 1.0 / (10.0 ** i)
-    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
-    y0s[0] = 1.0 - spec_sum
-    amplitudes = np.zeros(shape=(nspecies,))
-    initializer = MultiLump(numdim=dim, nspecies=nspecies, p0=101500.0,
-                            spec_centers=centers, velocity=vel,
-                            spec_y0s=y0s, spec_amplitudes=amplitudes)
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+
+    # Homogeneous reactor to get test data
+    cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    init_temperature = 800.0
+    equiv_ratio = 1.0
+    ox_di_ratio = 0.21
+    stoich_ratio = 0.5
+    i_fu = cantera_soln.species_index("H2")
+    i_ox = cantera_soln.species_index("O2")
+    i_di = cantera_soln.species_index("N2")
+    x = np.zeros(nspecies)
+    x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
+    x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
+    x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
+    print(f"Input state (T,P,X) = ({init_temperature}, {cantera.one_atm}, {x}")
+    cantera_soln.TPX = init_temperature, cantera.one_atm, x
+    cantera_soln.equilibrate("UV")
+    can_t, can_rho, can_y = cantera_soln.TDY
+    can_p = cantera_soln.P
+    print(f"Equilibrated state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
+    initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+                                     pressure=can_p, temperature=can_t,
+                                     massfractions=can_y, velocity=velocity)
+
+    my_boundary = AdiabaticSlipBoundary()
+    boundaries = {BTAG_ALL: my_boundary}
+    current_state = initializer(eos=eos, x_vec=nodes, t=0)
+    cv = split_conserved(dim, current_state)
+    print(f"cv.mass = {cv.mass}")
+
+    def my_chem_sources(discr, q, eos):
+        cv = split_conserved(dim, q)
+        omega = eos.get_production_rates(cv)
+        w = eos.get_species_molecular_weights()
+        species_sources = 1e-5 * omega
+        rho_source = 0 * species_sources[0]
+        mom_source = make_obj_array([0 * species_sources[0] for _ in range(dim)])
+        energy_source = 0 * species_sources[0]
+        return join_conserved(dim, rho_source, energy_source, mom_source,
+                              species_sources)
+    sources = {my_chem_sources}
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -138,13 +169,16 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos)
+                                 boundaries=boundaries, eos=eos,
+                                 sources=sources)
 
     def my_checkpoint(step, t, dt, state):
+        global checkpoint_t
+        checkpoint_t = t
         return sim_checkpoint(discr, visualizer, eos, q=state,
-                              exact_soln=initializer, vizname=casename, step=step,
+                              vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+                              constant_cfl=constant_cfl, comm=comm)
 
     try:
         (current_step, current_t, current_state) = \
@@ -153,19 +187,23 @@ def main(ctx_factory=cl.create_some_context):
                           get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
+        error_state = 1
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state
 
-    #    if current_t != checkpoint_t:
-    if rank == 0:
-        logger.info("Checkpointing final state ...")
-    my_checkpoint(current_step, t=current_t,
-                  dt=(current_t - checkpoint_t),
-                  state=current_state)
+    if current_t != checkpoint_t:  # This check because !overwrite
+        if rank == 0:
+            logger.info("Checkpointing final state ...")
+        my_checkpoint(current_step, t=current_t,
+                      dt=(current_t - checkpoint_t),
+                      state=current_state)
 
     if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
+        error_state = 1
+
+    if error_state:
+        raise ValueError("Simulation did not complete successfully.")
 
 
 if __name__ == "__main__":
