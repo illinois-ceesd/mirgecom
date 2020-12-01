@@ -314,7 +314,10 @@ class MemoryProfile(LogQuantity):
 
     def __call__(self):
         """Return the memory usage."""
-        from memory_profiler import memory_usage #noqa: E0401
-        return(memory_usage(-1)[0])
+        try:
+            from memory_profiler import memory_usage #noqa: E0401
+            return memory_usage(-1)[0]
+        except ModuleNotFoundError:
+            return None
 
 # }}}
