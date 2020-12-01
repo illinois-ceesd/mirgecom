@@ -560,7 +560,7 @@ class UIUCMechanism:
         omega3 = 2 * r_net[0] - r_net[1]
         omega4 = r_net[2]
         omega5 = 2 * r_net[0] - r_net[2]
-        omega6 = -(omega0 + omega1 + omega2 + omega3 + omega4 + omega5)
+        omega6 = 0 * omega0
 
         return make_obj_array([omega0, omega1, omega2,
                                omega3, omega4, omega5, omega6])

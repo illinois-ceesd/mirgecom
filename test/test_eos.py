@@ -110,6 +110,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         can_p = cantera_soln.P
         can_e = cantera_soln.int_energy_mass
         can_k = cantera_soln.forward_rate_constants
+        reactor = cantera.IdealGasConstPressureReactor(cantera_soln)
 
         ones = (1.0 + nodes[0]) - nodes[0]
         tin = can_t * ones
@@ -123,17 +124,50 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
         prom_k, prom_rk = prometheus_mechanism.get_rate_coefficients(prom_t, prom_c)
 
-        print(f"can(rho, y, p, t, k) = ({can_rho}, {can_y}, "
+        print(f"can(rho, y, p, t, e, k) = ({can_rho}, {can_y}, "
               f"{can_p}, {can_t}, {can_e}, {can_k})")
-        print(f"prom(rho, y, p, t, k) = ({prom_rho}, {y0s}, "
+        print(f"prom(rho, y, p, t, e, k) = ({prom_rho}, {y0s}, "
               f"{prom_p}, {prom_t}, {prom_e}, {prom_k})")
 
-        tol = 1e-4
-        assert discr.norm((prom_t - can_t) / can_t, np.inf) < tol
-        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < tol
-        assert discr.norm((prom_p - can_p) / can_p, np.inf) < tol
-        assert discr.norm((prom_e - can_e) / can_e, np.inf) < tol
-        assert discr.norm((prom_k - can_k) / can_k, np.inf) < tol
+        state_tol = 1e-6
+        rate_tol = 1e-4
+        assert discr.norm((prom_t - can_t) / can_t, np.inf) < state_tol
+        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < state_tol
+        assert discr.norm((prom_p - can_p) / can_p, np.inf) < state_tol
+        assert discr.norm((prom_e - can_e) / can_e, np.inf) < state_tol
+        assert discr.norm((prom_k - can_k) / can_k, np.inf) < rate_tol
+
+        sim = cantera.ReactorNet([reactor])
+        time = 0.0
+        nsteps = 50
+        for step in range(nsteps):
+            time += 1.0e-6
+            sim.advance(time)
+            # Cantera kinetics
+            can_r = reactor.kinetics.net_rates_of_progress
+            can_omega = reactor.kinetics.net_production_rates
+            # Get state from Cantera
+            can_t = reactor.T
+            can_rho = reactor.density
+            can_y = reactor.Y
+
+            ones = (1.0 + nodes[0]) - nodes[0]
+            tin = can_t * ones
+            pin = can_p * ones
+            yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+
+            pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
+            pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+            pyro_t = prometheus_mechanism.get_temperature(pyro_e, tin, yin, True)
+            pyro_c = prometheus_mechanism.get_concentrations(pyro_rho, yin)
+            pyro_r = prometheus_mechanism.get_net_rates_of_progress(pyro_t, pyro_c)
+            pyro_omega = prometheus_mechanism.get_net_production_rates(pyro_rho,
+                                                                       pyro_t, yin)
+
+            assert discr.norm((pyro_rho - can_rho) / can_rho, np.inf) < 1e-6
+            assert discr.norm((pyro_t - can_t) / can_t, np.inf) < 1e-6
+            #            assert discr.norm(pyro_r - can_r, np.inf) < .1
+            #            assert discr.norm(pyro_omega - can_omega, np.inf) < .1
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", ])

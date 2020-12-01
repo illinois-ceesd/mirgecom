@@ -310,6 +310,9 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0,
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
+    sources
+        Dictionary of source functions, one for each source
+
     Returns
     -------
     numpy.ndarray
