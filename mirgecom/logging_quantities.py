@@ -315,7 +315,7 @@ class MemoryProfile(LogQuantity):
     def __call__(self):
         """Return the memory usage."""
         try:
-            from memory_profiler import memory_usage #noqa: E0401
+            from memory_profiler import memory_usage  # pylint: disable=import-error
             return memory_usage(-1)[0]
         except ModuleNotFoundError:
             return None
