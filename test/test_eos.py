@@ -135,19 +135,19 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         assert discr.norm((prom_p - can_p) / can_p, np.inf) < state_tol
         assert discr.norm((prom_e - can_e) / can_e, np.inf) < state_tol
         assert discr.norm((prom_k - can_k) / can_k, np.inf) < rate_tol
-        #        min_rk = np.abs(can_rk).min()
-        #        if min_rk == 0.0:
-        #            assert discr.norm(prom_rk - min_rk, np.inf) < .1
-        #        else:
-        #            assert discr.norm((prom_rk - can_rk) / can_rk, np.inf) < rate_tol
-        
+        #      min_rk = np.abs(can_rk).min()
+        #      if min_rk == 0.0:
+        #          assert discr.norm(prom_rk - min_rk, np.inf) < .1
+        #      else:
+        #          assert discr.norm((prom_rk - can_rk) / can_rk, np.inf) < rate_tol
+
 
 @pytest.mark.parametrize("mechname", ["uiuc", ])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     """Test known pyrometheus reaction mechanisms.
 
-    Tests that the Pyrometheus mechanism code gets the same chemical properties 
+    Tests that the Pyrometheus mechanism code gets the same chemical properties
     as the corresponding mechanism in Cantera.
     """
     cl_ctx = ctx_factory()
@@ -195,7 +195,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     cantera_soln.TPX = tempin, pressin, x
     cantera_soln.equilibrate("UV")
     can_t, can_rho, can_y = cantera_soln.TDY
-    can_p = cantera_soln.P
+    #    can_p = cantera_soln.P
 
     reactor = cantera.IdealGasConstPressureReactor(cantera_soln)
     sim = cantera.ReactorNet([reactor])
