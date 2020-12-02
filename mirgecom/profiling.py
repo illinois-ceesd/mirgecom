@@ -55,7 +55,7 @@ def pyopencl_monkey_del(self):
             time = evt.profile.end - evt.profile.start
             times.append(time)
 
-        add_nonloopy_profiling_result("pyopencl.array",
+        add_nonloopy_profiling_result("pyopencl_array",
                 int(mean(times)))
 
         del self.events[:]
@@ -344,6 +344,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
 
             if self.logmgr:
+                if "pyopencl_array_time" not in self.logmgr.quantity_data:
+                    self.logmgr.add_quantity(
+                        KernelProfile(self, "pyopencl_array", "time"))
                 for stat in ["num_calls", "time", "flops", "bytes_accessed"]:
                     # Since kernel names are not unique, find the next free ID
                     # to append to the logging name
