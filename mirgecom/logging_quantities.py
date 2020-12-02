@@ -46,7 +46,7 @@ import pyopencl as cl
 
 
 class MirgecomLogManager(LogManager):
-    """Extension of :class:`LogManager` with some convenience functions."""
+    """Extension of :class:`logpyle.LogManager` with some convenience functions."""
 
     def __init__(self, filename: str = None, mode: str = "wu", mpi_comm=None):
         super().__init__(filename=filename, mode=mode, mpi_comm=mpi_comm)
