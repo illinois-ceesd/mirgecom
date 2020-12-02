@@ -68,7 +68,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     comm = MPI.COMM_WORLD
 
     if use_logmgr:
-        logmgr = MirgecomLogManager("vortex.sqlite", "wo", mpi_comm=comm)
+        logmgr = MirgecomLogManager("vortex.sqlite", "wu", mpi_comm=comm)
     else:
         logmgr = None
 
