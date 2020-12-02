@@ -25,6 +25,7 @@ THE SOFTWARE.
 """
 
 __doc__ = """
+.. autoclass:: MirgecomLogManager
 .. autoclass:: StateConsumer
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: ConservedDiscretizationBasedQuantity
@@ -34,13 +35,51 @@ __doc__ = """
 .. autofunction:: set_state
 """
 
-from logpyle import LogQuantity, LogManager, MultiLogQuantity
+from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
+    add_general_quantities, add_simulation_quantities)
 from numpy import ndarray
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
 from meshmode.dof_array import DOFArray
 import pyopencl as cl
+
+
+class MirgecomLogManager(LogManager):
+    """Extension of :class:`LogManager` with some convenience functions."""
+
+    def __init__(self, filename: str = None, mode: str = "wu", mpi_comm=None):
+        super().__init__(filename=filename, mode=mode, mpi_comm=mpi_comm)
+
+        add_run_info(self)
+        add_package_versions(self)
+        add_general_quantities(self)
+        add_simulation_quantities(self)
+
+    def add_discretization_quantities(self, discr, eos, dim):
+        """Add all discretization quantities to the logmgr."""
+        for quantity in ["pressure", "temperature"]:
+            for op in ["min", "max", "sum"]:
+                self.add_quantity(DependentDiscretizationBasedQuantity(
+                    discr, eos, quantity, op))
+        for quantity in ["mass", "energy"]:
+            for op in ["min", "max", "sum"]:
+                self.add_quantity(ConservedDiscretizationBasedQuantity(
+                    discr, quantity, op))
+
+        for dim in range(dim):
+            for op in ["min", "max", "sum"]:
+                self.add_quantity(ConservedDiscretizationBasedQuantity(
+                    discr, "momentum", op, dim=dim))
+
+    def add_memory_profile(self):
+        """Add the memory profile to the logmgr."""
+        self.add_quantity(MemoryProfile())
+
+    def add_device_name(self, queue: cl.CommandQueue):
+        """Add the device name to the log."""
+        self.set_constant("device_name",
+                     str(queue.get_info(cl.command_queue_info.DEVICE)))
 
 
 # {{{ Package versions
@@ -89,15 +128,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 # }}}
 
 
-# {{{ Device name
-
-def add_device_name(mgr: LogManager, queue: cl.CommandQueue) -> None:
-    """Add the device name to the log."""
-    mgr.set_constant("device_name",
-                     str(queue.get_info(cl.command_queue_info.DEVICE)))
-
-
-# }}}
+# {{{ State handling
 
 def set_state(mgr: LogManager, state: ndarray) -> None:
     """Update the state of all :class:`StateConsumer` of the log manager `mgr`.
@@ -126,6 +157,8 @@ class StateConsumer:
     def set_state(self, state: ndarray) -> None:
         """Set the state of the object."""
         self.state = state
+
+# }}}
 
 # {{{ Discretization-based quantities
 
@@ -274,7 +307,7 @@ class KernelProfile(MultiLogQuantity):
     """
 
     def __init__(self, actx: PyOpenCLArrayContext,
-                 kernel_name: str, name: str = None):
+                 kernel_name: str, name: str = None) -> None:
 
         if name is None:
             name = kernel_name
@@ -287,7 +320,7 @@ class KernelProfile(MultiLogQuantity):
         self.kernel_name = kernel_name
         self.actx = actx
 
-    def __call__(self):
+    def __call__(self) -> list:
         """Return the requested kernel profile quantity."""
         return self.actx.get_profiling_data_for_kernel(self.kernel_name)
 
@@ -304,9 +337,9 @@ class MemoryProfile(LogQuantity):
         if name is None:
             name = "memory_usage"
 
-        super().__init__(name, "MByte", name)
+        super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
-    def __call__(self):
+    def __call__(self) -> float:
         """Return the memory usage."""
         try:
             from memory_profiler import memory_usage  # pylint: disable=import-error

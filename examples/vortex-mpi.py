@@ -53,12 +53,9 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
-from logpyle import (LogManager, IntervalTimer, add_general_quantities,
-        add_simulation_quantities, add_run_info)
+from logpyle import IntervalTimer
 
-from mirgecom.logging_quantities import (DependentDiscretizationBasedQuantity,
-    ConservedDiscretizationBasedQuantity, KernelProfile, add_package_versions,
-    add_device_name, MemoryProfile)
+from mirgecom.logging_quantities import MirgecomLogManager
 
 
 logger = logging.getLogger(__name__)
@@ -71,11 +68,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     comm = MPI.COMM_WORLD
 
     if use_logmgr:
-        logmgr = LogManager("vortex.dat", "wu", mpi_comm=comm)
-        add_run_info(logmgr)
-        add_package_versions(logmgr)
-        add_general_quantities(logmgr)
-        add_simulation_quantities(logmgr)
+        logmgr = MirgecomLogManager("vortex.dat", "wo", mpi_comm=comm)
     else:
         logmgr = None
 
@@ -90,9 +83,6 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         queue = cl.CommandQueue(cl_ctx)
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
-    if use_logmgr:
-        add_device_name(logmgr, queue)
 
     dim = 2
     nel_1d = 16
@@ -135,28 +125,13 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     vis_timer = None
 
-    if use_logmgr:
-        for quantity in ["pressure", "temperature"]:
-            for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(DependentDiscretizationBasedQuantity(
-                    discr, eos, quantity, op))
-        for quantity in ["mass", "energy"]:
-            for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
-                    discr, quantity, op))
-
-        for dim in range(dim):
-            for op in ["min", "max", "sum"]:
-                logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
-                    discr, "momentum", op, dim=dim))
+    if logmgr:
+        logmgr.add_discretization_quantities(discr, eos, dim)
+        logmgr.add_memory_profile()
+        logmgr.add_device_name(queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
-
-        if use_profiling:
-            logmgr.add_quantity(KernelProfile(actx, "diff"))
-
-        logmgr.add_quantity(MemoryProfile())
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "min_momentum1", "memory_usage.max"])
@@ -210,7 +185,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
 
-    if use_logmgr:
+    if logmgr:
         logmgr.close()
     elif use_profiling:
         print(actx.tabulate_profiling_data())
