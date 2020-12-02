@@ -1,86 +1,85 @@
-import numpy as np
 from pytools.obj_array import make_obj_array
-
+import numpy as np
 
 class UIUCMechanism:
-    def __init__(self, npctx):
-
-        self.model_name = "uiuc"
-        self.num_elements = 4
-        self.num_species = 7
-        self.num_reactions = 3
-        self.num_falloff = 0
-        self.one_atm = 1.01325e5
-        self.one_third = 1.0 / 3.0
-        self.gas_constant = 8314.4621
-        self.big_number = 1.0e300
+    def __init__(self, npctx=np):
         self.npctx = npctx
+        self.model_name    = "uiuc.cti"
+        self.num_elements  = 4
+        self.num_species   = 7
+        self.one_third = 1 / 3
+        self.num_reactions = 3
+        self.num_falloff   = 0
+        
+        self.one_atm = 101325.0
+        self.gas_constant = 8314.46261815324
+        self.big_number = 1.0e300
 
-        self.wts = np.array(
-            [
-                2.805400e01,
-                3.199800e01,
-                4.400900e01,
-                2.801000e01,
-                1.801500e01,
-                2.016000e00,
-                2.801400e01,
-            ]
-        )
-        self.iwts = 1.0 / self.wts
-        return
+        self.species_names = ['C2H4', 'O2', 'CO2', 'CO', 'H2O', 'H2', 'N2']
+        self.species_indices = {'C2H4': 0, 'O2': 1, 'CO2': 2, 'CO': 3, 'H2O': 4, 'H2': 5, 'N2': 6}
 
-    def get_density(self, p, temperature, massfractions):
+        self.wts = np.array([28.054, 31.998, 44.009, 28.009999999999998, 18.015, 2.016, 28.014])
+        self.iwts = 1 / self.wts
 
-        mmw = self.get_mix_molecular_weight(massfractions)
-        rt = self.gas_constant * temperature
-        rho = p * mmw / rt
-        return rho
+    def species_name(self, species_index):
+        return self.species_name[species_index]
 
-    def get_pressure(self, rho, temperature, massfractions):
+    def species_index(self, species_name):
+        return self.species_indices[species_name]
 
-        mmw = self.get_mix_molecular_weight(massfractions)
-        rt = self.gas_constant * temperature
-        p = rho * rt / mmw
-        return p
+    def get_specific_gas_constant(self, Y):
+        return self.gas_constant * np.dot( self.iwts, Y )
 
-    def get_mix_molecular_weight(self, massfractions):
+    def get_density(self, p, T, Y):
+        mmw = self.get_mix_molecular_weight( Y )
+        RT  = self.gas_constant * T
+        return p * mmw / RT
 
-        return 1.0 / np.dot(self.iwts, massfractions)
+    def get_pressure(self, rho, T, Y):
+        mmw = self.get_mix_molecular_weight( Y )
+        RT  = self.gas_constant * T
+        return rho * RT / mmw
 
-    def get_concentrations(self, rho, massfractions):
+    def get_mix_molecular_weight(self, Y):
+        return 1/np.dot( self.iwts, Y )
 
-        return self.iwts * rho * massfractions
+    def get_concentrations(self, rho, Y):
+        return self.iwts * rho * Y
 
     def get_mixture_specific_heat_cp_mass(self, temperature, massfractions):
-
-        cp0_r = self.get_species_specific_heats(temperature)
+        cp0_r = self.get_species_specific_heats_R(temperature)
         cpsum = sum([massfractions[i] * cp0_r[i] * self.iwts[i]
                      for i in range(self.num_species)])
         return self.gas_constant * cpsum
 
     def get_mixture_specific_heat_cv_mass(self, temperature, massfractions):
-
-        cp0_r = self.get_species_specific_heats(temperature) - 1.0
+        cp0_r = self.get_species_specific_heats_R(temperature) - 1.0
         cpsum = sum([massfractions[i] * cp0_r[i] * self.iwts[i]
                      for i in range(self.num_species)])
         return self.gas_constant * cpsum
 
     def get_mixture_enthalpy_mass(self, temperature, massfractions):
-
-        h0_rt = self.get_species_enthalpies(temperature)
+        h0_rt = self.get_species_enthalpies_RT(temperature)
         hsum = sum([massfractions[i] * h0_rt[i] * self.iwts[i]
                     for i in range(self.num_species)])
         return self.gas_constant * temperature * hsum
 
     def get_mixture_internal_energy_mass(self, temperature, massfractions):
 
-        e0_rt = self.get_species_enthalpies(temperature) - 1.0
+        e0_rt = self.get_species_enthalpies_RT(temperature) - 1.0
         esum = sum([massfractions[i] * e0_rt[i] * self.iwts[i]
                     for i in range(self.num_species)])
         return self.gas_constant * temperature * esum
 
-    def get_species_specific_heats(self, temperature):
+#    def get_mixture_internal_energy_mass(self, temperature, massfractions):
+#        e0_rt = self.get_species_enthalpies_RT(temperature) - 1.0
+#        mflist = sum([massfractions[i] * self.iwts[i] * e0_rt[i]
+#                      for i in range(self.num_species)])
+#        esum = sum([massfractions[i] * e0_rt[i] * self.iwts[i]
+#                    for i in range(self.num_species)])
+#        return self.gas_constant * temperature * esum
+
+    def get_species_specific_heats_R(self, temperature):
 
         tt0 = temperature
         tt1 = temperature * tt0
@@ -201,7 +200,7 @@ class UIUCMechanism:
 
         return make_obj_array([cpr0, cpr1, cpr2, cpr3, cpr4, cpr5, cpr6])
 
-    def get_species_enthalpies(self, temperature):
+    def get_species_enthalpies_RT(self, temperature):
 
         tt0 = temperature
         tt1 = temperature * tt0
@@ -337,7 +336,7 @@ class UIUCMechanism:
 
         return make_obj_array([hrt0, hrt1, hrt2, hrt3, hrt4, hrt5, hrt6])
 
-    def get_species_entropies(self, temperature):
+    def get_species_entropies_R(self, temperature):
 
         tt0 = temperature
         tt1 = temperature * tt0
@@ -473,25 +472,6 @@ class UIUCMechanism:
 
         return make_obj_array([sr0, sr1, sr2, sr3, sr4, sr5, sr6])
 
-    def get_species_gibbs(self, temperature):
-
-        h0rt = self.get_species_enthalpies(temperature)
-        s0r = self.get_species_entropies(temperature)
-        return h0rt - s0r
-
-    def get_equilibrium_constants(self, temperature):
-
-        rt = self.gas_constant * temperature
-        c0 = self.npctx.log(self.one_atm / rt)
-
-        g0rt = self.get_species_gibbs(temperature)
-
-        k_eq1 = c0 + (g0rt[2]) - (g0rt[3] + g0rt[1])
-        k_eq2 = c0 + (g0rt[4]) - (g0rt[5] + g0rt[1])
-        k_eq0 = 0 * k_eq1
-
-        return make_obj_array([k_eq0, k_eq1, k_eq2])
-
     def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
 
         if do_energy is False:
@@ -503,7 +483,8 @@ class UIUCMechanism:
 
         num_iter = 500
         tol = 1.0e-6
-        t_i = t_guess * enthalpy_or_energy * 1.0 / enthalpy_or_energy
+        ones = (1 + enthalpy_or_energy) - enthalpy_or_energy
+        t_i = t_guess * ones
 
         for iter in range(num_iter):
             f = enthalpy_or_energy - he_fun(t_i, y)
@@ -515,52 +496,68 @@ class UIUCMechanism:
 
         return t_i
 
-    def get_rate_coefficients(self, temperature, concentrations):
+    def get_species_gibbs_RT(self, T):
+        h0_RT = self.get_species_enthalpies_RT(T)
+        s0_R  = self.get_species_entropies_R(T)
+        return h0_RT - s0_R
 
-        logt = self.npctx.log(temperature)
-        invt = 1.0 / temperature
-        k_eq = self.get_equilibrium_constants(temperature)
+    def get_equilibrium_constants(self, T):
+        RT = self.gas_constant * T
+        C0 = self.npctx.log( self.one_atm / RT )
 
-        k_fwd0 = self.npctx.exp(2.659486e01 - 1.786429e04 * invt)
-        k_fwd1 = self.npctx.exp(1.269378e01 + 7.000000e-01
-                                * logt - 6.038634e03 * invt)
-        k_fwd2 = self.npctx.exp(1.830257e01 - 1.761268e04 * invt)
+        g0_RT = self.get_species_gibbs_RT( T )
+        return make_obj_array([-86*T, g0_RT[2] + C0 / 2 - (g0_RT[3] + 0.5*g0_RT[1]),
+                               g0_RT[4] + C0 / 2 - (g0_RT[5] + 0.5*g0_RT[1]), ])
 
-        k_fwd = make_obj_array([k_fwd0, k_fwd1, k_fwd2])
-        k_rev = k_fwd * self.npctx.exp(k_eq)
 
-        return k_fwd, k_rev
+    def get_falloff_rates(self, T, C, k_fwd):
+        k_high = np.array([
+        ])
 
-    def get_net_rates_of_progress(self, temperature, concentrations):
+        k_low = np.array([
+        ])
 
-        k_fwd, k_rev = self.get_rate_coefficients(temperature, concentrations)
+        reduced_pressure = np.array([
+        ])
 
-        r_fwd0 = k_fwd[0] * concentrations[0] * concentrations[1]
-        r_rev0 = 0.0 * r_fwd0
+        falloff_center = np.array([
+        ])
 
-        r_fwd1 = k_fwd[1] * concentrations[3] * concentrations[1]
-        r_rev1 = k_rev[1] * concentrations[2]
+        falloff_function = np.array([
+        ])*reduced_pressure/(1+reduced_pressure)
 
-        r_fwd2 = k_fwd[2] * concentrations[5] * concentrations[1]
-        r_rev2 = k_rev[2] * concentrations[4]
+        return
 
-        r_fwd = make_obj_array([r_fwd0, r_fwd1, r_fwd2])
-        r_rev = make_obj_array([r_rev0, r_rev1, r_rev2])
+    def get_fwd_rate_coefficients(self, T, C):
+        k_fwd = make_obj_array([
+            self.npctx.exp(26.594857854425133 + -1*(17864.293439206183 / T)),
+            self.npctx.exp(12.693776816787125
+                           + 0.7*self.npctx.log(T) + -1*(6038.634401985189 / T)),
+            self.npctx.exp(18.302572655472037 + -1*(17612.683672456802 / T)),
+        ])
+        return k_fwd
 
-        return r_fwd - r_rev
+    def get_net_rates_of_progress(self, T, C):
+        k_fwd = self.get_fwd_rate_coefficients(T, C)
+        log_k_eq = self.get_equilibrium_constants(T)
+        k_eq = self.npctx.exp(log_k_eq)
+        #        k_eq = self.npctx.where(self.npctx.exp(log_k_eq) < self.big_number,
+        #            self.npctx.exp(log_k_eq), self.big_number)
+        return make_obj_array([k_fwd[0]*C[0]**0.5*C[1]**0.65,
+                               k_fwd[1]*(C[3]*C[1]**0.5 + -1*k_eq[1]*C[2]),
+                               k_fwd[2]*(C[5]*C[1]**0.5 + -1*k_eq[2]*C[4]), ])
 
-    def get_net_production_rates(self, rho, temperature, massfractions):
+    def get_net_production_rates(self, rho, T, Y):
+        C = self.get_concentrations(rho, Y)
+        r_net = self.get_net_rates_of_progress(T, C)
+        return make_obj_array([
+                -1*r_net[0],
+                -1*(r_net[0] + 0.5*r_net[1] + 0.5*r_net[2]),
+                r_net[1],
+                2.0*r_net[0] + -1*r_net[1],
+                r_net[2],
+                2.0*r_net[0] + -1*r_net[2],
+                0*r_net[0],
+            ])
 
-        concentrations = self.get_concentrations(rho, massfractions)
-        r_net = self.get_net_rates_of_progress(temperature, concentrations)
 
-        omega0 = -r_net[0]
-        omega1 = sum([-r_net[i] for i in range(3)])
-        omega2 = r_net[1]
-        omega3 = 2 * r_net[0] - r_net[1]
-        omega4 = r_net[2]
-        omega5 = 2 * r_net[0] - r_net[2]
-        omega6 = 0 * omega0
-
-        return make_obj_array([omega0, omega1, omega2,
-                               omega3, omega4, omega5, omega6])

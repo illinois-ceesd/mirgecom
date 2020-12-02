@@ -71,11 +71,11 @@ def main(ctx_factory=cl.create_some_context):
     nel_1d = 2
     order = 1
 
-    t_final = 1e-4
+    t_final = 1e-5
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     # velocity[:dim] = 1.0
-    current_dt = 1e-6
+    current_dt = 1e-8
     current_t = 0
     constant_cfl = False
     nstatus = 1
@@ -110,7 +110,7 @@ def main(ctx_factory=cl.create_some_context):
 
     # Homogeneous reactor to get test data
     cantera_soln = cantera.Solution("uiuc.cti", "gas")
-    init_temperature = 800.0
+    init_temperature = 1500.0
     equiv_ratio = 1.0
     ox_di_ratio = 0.21
     stoich_ratio = 0.5
@@ -125,10 +125,10 @@ def main(ctx_factory=cl.create_some_context):
 
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
     cantera_soln.TPX = init_temperature, one_atm, x
-    cantera_soln.equilibrate("UV")
+    #  cantera_soln.equilibrate("UV")
     can_t, can_rho, can_y = cantera_soln.TDY
     can_p = cantera_soln.P
-    print(f"Equilibrated state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
+    print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)

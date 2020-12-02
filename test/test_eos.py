@@ -109,7 +109,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         can_p = cantera_soln.P
         can_e = cantera_soln.int_energy_mass
         can_k = cantera_soln.forward_rate_constants
-        can_rk = cantera_soln.reverse_rate_constants
+        can_c = cantera_soln.concentrations
+        can_r = cantera_soln.net_rates_of_progress
+        can_omega = cantera_soln.net_production_rates
 
         ones = (1.0 + nodes[0]) - nodes[0]
         tin = can_t * ones
@@ -121,25 +123,39 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
         prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
         prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
-        prom_k, prom_rk = prometheus_mechanism.get_rate_coefficients(prom_t, prom_c)
+        prom_k = prometheus_mechanism.get_fwd_rate_coefficients(prom_t, prom_c)
+        prom_r = prometheus_mechanism.get_net_rates_of_progress(prom_t, prom_c)
+        prom_omega = prometheus_mechanism.get_net_production_rates(prom_rho, prom_t,
+                                                                   yin)
 
         print(f"can(rho, y, p, t, e, k, rk) = ({can_rho}, {can_y}, "
-              f"{can_p}, {can_t}, {can_e}, {can_k}, {can_rk})")
+              f"{can_p}, {can_t}, {can_e}, {can_k})")
         print(f"prom(rho, y, p, t, e, k, rk) = ({prom_rho}, {y0s}, "
-              f"{prom_p}, {prom_t}, {prom_e}, {prom_k}, {prom_rk})")
+              f"{prom_p}, {prom_t}, {prom_e}, {prom_k})")
+        print(f"can_r = {can_r}")
+        print(f"prom_r = {prom_r}")
+        print(f"can_omega = {can_omega}")
+        print(f"prom_omega = {prom_omega}")
 
-        state_tol = 1e-6
-        rate_tol = 1e-4
-        assert discr.norm((prom_t - can_t) / can_t, np.inf) < state_tol
-        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < state_tol
-        assert discr.norm((prom_p - can_p) / can_p, np.inf) < state_tol
-        assert discr.norm((prom_e - can_e) / can_e, np.inf) < state_tol
-        assert discr.norm((prom_k - can_k) / can_k, np.inf) < rate_tol
-        #      min_rk = np.abs(can_rk).min()
-        #      if min_rk == 0.0:
-        #          assert discr.norm(prom_rk - min_rk, np.inf) < .1
-        #      else:
-        #          assert discr.norm((prom_rk - can_rk) / can_rk, np.inf) < rate_tol
+        assert discr.norm((prom_c - can_c) / can_c, np.inf) < 1e-14
+        assert discr.norm((prom_t - can_t) / can_t, np.inf) < 1e-14
+        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < 1e-14
+        assert discr.norm((prom_p - can_p) / can_p, np.inf) < 1e-14
+        assert discr.norm((prom_e - can_e) / can_e, np.inf) < 1e-6
+        assert discr.norm((prom_k - can_k) / can_k, np.inf) < 1e-10
+        rate_tol = 1e-12
+        for i, rate in enumerate(can_r):
+            rmax = np.abs(rate).max()
+            if rmax > 1e-18:
+                assert discr.norm((prom_r[i] - rate), np.inf) < rate_tol
+            else:  # don't compare them when they're dinky
+                assert discr.norm(prom_r[i], np.inf) < rate_tol
+        for i, rate in enumerate(can_omega):
+            rmax = np.abs(rate).max()
+            if rmax > 1e-18:
+                assert discr.norm((prom_omega[i] - rate), np.inf) < rate_tol
+            else:  # don't compare them when they're dinky
+                assert discr.norm(prom_omega[i], np.inf) < rate_tol
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", ])
@@ -193,7 +209,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
 
     cantera_soln.TPX = tempin, pressin, x
-    cantera_soln.equilibrate("UV")
+    #    cantera_soln.equilibrate("UV")
     can_t, can_rho, can_y = cantera_soln.TDY
     #    can_p = cantera_soln.P
 
@@ -226,17 +242,25 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
         pyro_omega = pyro.get_net_production_rates(rhoin, tin, yin)
 
         # Print
-        max_r = np.abs(can_r).max()  # discr.norm(can_r, np.inf)
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
-        if max_r > 1e-14:
-            assert discr.norm((pyro_r - can_r) / can_r, np.inf) < 1e-6
-        else:
-            assert discr.norm(pyro_r, np.inf) < 1e-14
+        abs_diff = discr.norm(pyro_r - can_r, np.inf)
+        if abs_diff > 1e-14:   
+            for i, rate in enumerate(can_r):
+                min_r = np.abs(can_r)
+                if min_r > 0:
+                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < 1e-12
+                else:
+                    assert discr.norm(pyro_r, np.inf) < 1e-12
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
-        assert discr.norm((pyro_omega - can_omega) / can_omega, np.inf) < 1e-6
+        for i, omega in enumerate(can_omega):
+            omin = np.abs(omega).min()
+            if omin > 1e-12:
+                assert discr.norm((pyro_omega[i] - omega) / omega, np.inf) < 1e-8
+            else:
+                assert discr.norm(pyro_omega[i], np.inf) < 1e-12
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", ])
