@@ -350,20 +350,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             if self.logmgr:
                 if "pyopencl_array_time" not in self.logmgr.quantity_data:
-                    self.logmgr.add_quantity(
-                        KernelProfile(self, "pyopencl_array"))
+                    self.logmgr.add_quantity(KernelProfile(self, "pyopencl_array"))
 
-                # Since kernel names are not unique, find the next free ID
-                # to append to the logging name
-                i = 0
-                while True:
-                    if (f"{program.name}_{i}_time" not in
-                            self.logmgr.quantity_data):
-                        name = f"{program.name}_{i}"
-                        break
-                    i += 1
-                self.logmgr.add_quantity(
-                    KernelProfile(self, program.name, name))
+                if f"{program.name}_time" not in self.logmgr.quantity_data:
+                    self.logmgr.add_quantity(KernelProfile(self, program.name))
 
             return res
 

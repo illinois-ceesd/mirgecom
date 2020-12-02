@@ -300,20 +300,14 @@ class KernelProfile(MultiLogQuantity):
 
     kernel_name
         Name of the kernel to profile.
-
-    name
-        Name under which the statistic will be stored
-        (optional, default = kernel_name).
     """
 
     def __init__(self, actx: PyOpenCLArrayContext,
-                 kernel_name: str, name: str = None) -> None:
+                 kernel_name: str) -> None:
 
-        if name is None:
-            name = kernel_name
         units = ["s", "GFlops", "1", "GByte"]
-        names = [f"{name}_time", f"{name}_flops",
-                 f"{name}_num_calls", f"{name}_bytes_accessed"]
+        names = [f"{kernel_name}_time", f"{kernel_name}_flops",
+                 f"{kernel_name}_num_calls", f"{kernel_name}_bytes_accessed"]
 
         super().__init__(names, units)
 
