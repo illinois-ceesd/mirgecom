@@ -154,11 +154,11 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr.add_quantity(vis_timer)
 
         if use_profiling:
-            logmgr.add_quantity(KernelProfile(actx, "diff", "flops"))
+            logmgr.add_quantity(KernelProfile(actx, "diff"))
 
         logmgr.add_quantity(MemoryProfile())
 
-        logmgr.add_watches(["step.max", "t_step.max", "min_pressure",
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "min_momentum1", "memory_usage.max"])
 
     visualizer = make_visualizer(discr, order + 3 if discr.dim == 2 else order)

@@ -34,7 +34,7 @@ __doc__ = """
 .. autofunction:: set_state
 """
 
-from logpyle import LogQuantity, LogManager
+from logpyle import LogQuantity, LogManager, MultiLogQuantity
 from numpy import ndarray
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
@@ -255,7 +255,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 # {{{ Kernel profile quantities
 
 
-class KernelProfile(LogQuantity):
+class KernelProfile(MultiLogQuantity):
     """Logging support for statistics of the OpenCL kernel profiling (time, \
     num_calls, flops, bytes_accessed).
 
@@ -263,46 +263,33 @@ class KernelProfile(LogQuantity):
     ----------
     actx
         The array context from which to collect statistics. Must have profiling
-        enabled.
+        enabled in the OpenCL command queue.
 
     kernel_name
         Name of the kernel to profile.
 
-    stat
-        Statistic to collect (can be one of "time", "num_calls", "flops",
-        "bytes_accessed").
-
     name
-        Name under which the statistic will be stored (optional).
-
+        Name under which the statistic will be stored
+        (optional, default = kernel_name).
     """
 
     def __init__(self, actx: PyOpenCLArrayContext,
-                 kernel_name: str, stat: str, name: str = None):
-        if stat == "time":
-            unit = "s"
-        elif stat == "flops":
-            unit = "GFlops"
-        elif stat == "num_calls":
-            unit = "1"
-        elif stat == "bytes_accessed":
-            unit = "GByte"
-        else:
-            raise ValueError(f"Unknown stat ${stat}. "
-                "Must be one of 'time', 'num_calls', 'flops' or 'bytes_accessed'.")
+                 kernel_name: str, name: str = None):
 
         if name is None:
-            name = f"{kernel_name}_{stat}"
+            name = kernel_name
+        units = ["s", "GFlops", "1", "GByte"]
+        names = [f"{name}_time", f"{name}_flops",
+                 f"{name}_num_calls", f"{name}_bytes_accessed"]
 
-        super().__init__(name, unit, f"{stat} of '{kernel_name}'")
+        super().__init__(names, units)
 
         self.kernel_name = kernel_name
         self.actx = actx
-        self.stat = stat
 
     def __call__(self):
         """Return the requested kernel profile quantity."""
-        return(self.actx.get_profiling_data_for_kernel(self.kernel_name, self.stat))
+        return self.actx.get_profiling_data_for_kernel(self.kernel_name)
 
 # }}}
 

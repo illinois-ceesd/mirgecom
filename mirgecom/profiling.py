@@ -55,8 +55,7 @@ def pyopencl_monkey_del(self):
             time = evt.profile.end - evt.profile.start
             times.append(time)
 
-        add_nonloopy_profiling_result("pyopencl_array",
-                int(mean(times)))
+        add_nonloopy_profiling_result("pyopencl_array", mean(times))
 
         del self.events[:]
 
@@ -158,43 +157,49 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return res
 
-    def get_profiling_data_for_kernel(self, kernel_name: str, stat: str,
+    def get_profiling_data_for_kernel(self, kernel_name: str,
                                       wait_for_events=True) -> float:
         """Return value of profiling result for kernel `kernel_name`."""
         if wait_for_events:
             self._finish_profile_events()
 
-        num_calls = 0
-        flops = []
-        times = []
-        bytes_accessed = []
-        # fprint_bytes = []
+        def _gather_data(results_list: list):
+            results = [key for key in results_list if key.name == kernel_name]
+            num_calls = 0
+            times = []
+            flops = []
+            bytes_accessed = []
+            # fprint_bytes = []
 
-        for key, value in self.profile_results.items():
-            if key.name != kernel_name:
-                continue
+            for key in results:
+                value = results_list[key]
 
-            num_calls += len(value)
+                num_calls += len(value)
 
-            times += [v.time / 1e9 for v in value]
-            flops += [v.flops / 1e9 for v in value]
+                times += [v.time / 1e9 for v in value]
+                flops += [v.flops / 1e9 if v.flops is not None else 0
+                         for v in value]
 
-            bytes_accessed += [v.bytes_accessed / 1e9 for v in value]
-            # fprint_bytes += np.ma.masked_equal([v.footprint_bytes for v in value],
-            # None)
+                bytes_accessed += [v.bytes_accessed / 1e9
+                              if v.bytes_accessed is not None else 0 for v in value]
+                # fprint_bytes += np.ma.masked_equal(
+                #   [v.footprint_bytes for v in value], None)
+
+                del results_list[key]
+
+            return num_calls, times, flops, bytes_accessed
+
+        num_calls, times, flops, bytes_accessed = \
+            _gather_data(self.profile_results)
 
         if num_calls == 0:
-            return 0
-        else:
-            from statistics import mean
-            if stat == "num_calls":
-                return num_calls
-            if stat == "time":
-                return mean(times)
-            elif stat == "flops":
-                return mean(flops)
-            elif stat == "bytes_accessed":
-                return mean(bytes_accessed)
+            num_calls, times, flops, bytes_accessed = \
+                _gather_data(nonloopy_profile_results)
+
+        if num_calls == 0:
+            return [0, 0, 0, 0]
+
+        return [mean(times), mean(flops), num_calls, mean(bytes_accessed)]
 
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
@@ -346,19 +351,20 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             if self.logmgr:
                 if "pyopencl_array_time" not in self.logmgr.quantity_data:
                     self.logmgr.add_quantity(
-                        KernelProfile(self, "pyopencl_array", "time"))
-                for stat in ["num_calls", "time", "flops", "bytes_accessed"]:
-                    # Since kernel names are not unique, find the next free ID
-                    # to append to the logging name
-                    i = 0
-                    while True:
-                        if (f"{program.name}_{i}_{stat}" not in
-                                self.logmgr.quantity_data):
-                            name = f"{program.name}_{i}_{stat}"
-                            break
-                        i += 1
-                    self.logmgr.add_quantity(
-                        KernelProfile(self, program.name, stat, name))
+                        KernelProfile(self, "pyopencl_array"))
+
+                # Since kernel names are not unique, find the next free ID
+                # to append to the logging name
+                i = 0
+                while True:
+                    if (f"{program.name}_{i}_time" not in
+                            self.logmgr.quantity_data):
+                        name = f"{program.name}_{i}"
+                        break
+                    i += 1
+                self.logmgr.add_quantity(
+                    KernelProfile(self, program.name, name))
+
             return res
 
     def call_loopy(self, program, **kwargs) -> dict:
