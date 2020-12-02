@@ -281,8 +281,15 @@ class KernelProfile(LogQuantity):
                  kernel_name: str, stat: str, name: str = None):
         if stat == "time":
             unit = "s"
+        elif stat == "flops":
+            unit = "GFlops"
+        elif stat == "num_calls":
+            unit = "1"
+        elif stat == "bytes_accessed":
+            unit = "GByte"
         else:
-            unit = ""
+            raise ValueError(f"Unknown stat ${stat}. "
+                "Must be one of 'time', 'num_calls', 'flops' or 'bytes_accessed'.")
 
         if name is None:
             name = f"{kernel_name}_{stat}"
@@ -294,7 +301,7 @@ class KernelProfile(LogQuantity):
         self.stat = stat
 
     def __call__(self):
-        """Return the requested quantity."""
+        """Return the requested kernel profile quantity."""
         return(self.actx.get_profiling_data_for_kernel(self.kernel_name, self.stat))
 
 # }}}
