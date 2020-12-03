@@ -173,33 +173,28 @@ def split_conserved(dim, q):
 
 def join_conserved(dim, mass, energy, momentum, massfractions=None):
     """Create an agglomerated solution array from the conserved quantities."""
-    from pytools import single_valued
-    nspec = 0
+    aux_shapes = [
+        _aux_shape(mass, ()),
+        _aux_shape(energy, ()),
+        _aux_shape(momentum, (dim,))]
+
     if massfractions is not None:
         nspec = len(massfractions)
-#    aux_shape = single_valued(*([
-#        _aux_shape(mass, ()),
-#        _aux_shape(energy, ()),
-#        _aux_shape(momentum, (dim,)), ]
-#        + ([_aux_shape(massfractions, (nspec,))])
-#        if nspec > 0 else []))
-        aux_shape = single_valued([
-            _aux_shape(mass, ()),
-            _aux_shape(energy, ()),
-            _aux_shape(momentum, (dim,)),
-            _aux_shape(massfractions, (nspec,))])
+        aux_shapes.append(_aux_shape(massfractions, (nspec,)))
     else:
-        aux_shape = single_valued([
-            _aux_shape(mass, ()),
-            _aux_shape(energy, ()),
-            _aux_shape(momentum, (dim,))])
+        nspec = 0
+
+    from pytools import single_valued
+    aux_shape = single_valued(aux_shapes)
 
     result = np.zeros((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
     result[1] = energy
     result[2:dim+2] = momentum
-    if nspec > 0:
+
+    if massfractions is not None:
         result[dim+2:] = massfractions
+
     return result
 
 
