@@ -34,7 +34,6 @@ import pyopencl as cl
 import numpy.linalg as la  # noqa
 import pyopencl.array as cla  # noqa
 from functools import partial
-from mpi4py import MPI
 import math
 
 from meshmode.array_context import PyOpenCLArrayContext
@@ -51,9 +50,9 @@ from mirgecom.simutil import (
     sim_checkpoint,
     create_parallel_grid
 )
-from mirgecom.io import (
-    make_init_message,
-)
+from mirgecom.io import make_init_message
+from mirgecom.mpi import mpi_entry_point
+import pyopencl.tools as cl_tools
 # from mirgecom.checkstate import compare_states
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -137,18 +136,21 @@ def get_pseudo_y0_mesh():
     return mesh
 
 
+@mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
     """Drive the Y0 example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
 
     dim = 3
     order = 1
     exittol = .09
-    t_final = 0.001
+    #t_final = 0.001
+    t_final = 5.e-7
     current_cfl = 1.0
     vel_init = np.zeros(shape=(dim,))
     vel_inflow = np.zeros(shape=(dim,))
@@ -157,12 +159,12 @@ def main(ctx_factory=cl.create_some_context):
     orig[2] = 0.001
     #vel[0] = 340.0
     #vel_inflow[0] = 100.0  # m/s
-    current_dt = 1e-9
+    current_dt = 5e-8
     current_t = 0
     casename = "pseudoY0"
     constant_cfl = False
-    nstatus = 10
-    nviz = 100
+    nstatus = 1
+    nviz = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -208,7 +210,7 @@ def main(ctx_factory=cl.create_some_context):
     eos = IdealSingleGas(gamma=gamma_CO2, gas_const=R_CO2)
     #bulk_init = Lump(numdim=dim, rho0=rho_bkrnd, p0=pres_bkrnd,
                      #center=orig, velocity=vel_init, rhoamp=0.0)
-    bulk_init = Discontinuity(dim=dim, x0=-.31,sigma=0.03,
+    bulk_init = Discontinuity(dim=dim, x0=-.31,sigma=0.04,
                               rhol=rho_inflow, rhor=rho_bkrnd,
                               pl=pres_inflow, pr=pres_bkrnd,
                               ul=vel_inflow[0], ur=0.)
@@ -223,6 +225,7 @@ def main(ctx_factory=cl.create_some_context):
                   sym.DTAG_BOUNDARY("Outflow"): dummy,
                   sym.DTAG_BOUNDARY("Wall"): wall}
 
+    from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
