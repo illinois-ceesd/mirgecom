@@ -45,22 +45,57 @@ __doc__ = """
 nonloopy_profile_results = {}
 
 
-def pyopencl_monkey_del(self):
-    """Monkey patches pyopencl.array destructor to grab profile data."""
-    if self.events and self.queue and \
-          self.queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
-        cl.wait_for_events(self.events)
+def add_nonloopy_pyopencl_results(queue, events: list) -> None:
+    """Gather and store pyopencl.array results."""
+    if queue and \
+      queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
+
         times = []
-        for evt in self.events:
+        for evt in events:
             time = evt.profile.end - evt.profile.start
             times.append(time)
 
         add_nonloopy_profiling_result("pyopencl_array", mean(times))
 
+
+def pyopencl_monkey_del(self):
+    """Monkey patches ``pyopencl.array.Array.__del__`  to grab profile data."""
+    if self.events:
+        cl.wait_for_events(self.events)
+
+        add_nonloopy_pyopencl_results(self.queue, self.events)
+
+        del self.events[:]
+
+
+def pyopencl_monkey_add_event(self, evt):
+    """Monkey patches :meth:`pyopencl.array.Array.add_event` to grab profile data."""
+    n_wait = 4
+
+    self.events.append(evt)
+
+    if len(self.events) > 3*n_wait:
+        wait_events = self.events[:n_wait]
+        cl.wait_for_events(wait_events)
+
+        add_nonloopy_pyopencl_results(self.queue, self.events[:n_wait])
+
+        del self.events[:n_wait]
+
+
+def pyopencl_monkey_finish(self):
+    """Monkey patches :meth:`pyopencl.array.Array.finish` to grab profile data."""
+    if self.events:
+        cl.wait_for_events(self.events)
+
+        add_nonloopy_pyopencl_results(self.queue, self.events)
+
         del self.events[:]
 
 
 cl.array.Array.__del__ = pyopencl_monkey_del
+cl.array.Array.finish = pyopencl_monkey_finish
+cl.array.Array.add_event = pyopencl_monkey_add_event
 
 
 @dataclass(eq=True, frozen=True)
@@ -169,8 +204,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
                 bytes_accessed += [v.bytes_accessed / 1e9
                               if v.bytes_accessed is not None else 0 for v in value]
-                # fprint_bytes += np.ma.masked_equal(
-                #   [v.footprint_bytes for v in value], None)
+                # fprint_bytes += [v.footprint_bytes if v.footprint_bytes
+                #                  is not None else 0 for v in value]
 
                 del results_list[key]
 
