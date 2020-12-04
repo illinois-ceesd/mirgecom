@@ -334,7 +334,7 @@ class MemoryProfile(LogQuantity):
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
         try:
-            from memory_profiler import memory_usage
+            from memory_profiler import memory_usage  # noqa: F401
         except ModuleNotFoundError:
             from warnings import warn
             warn("memory_profiler module missing, will not log memory usage.")

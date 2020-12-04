@@ -93,9 +93,11 @@ def pyopencl_monkey_finish(self):
         del self.events[:]
 
 
-cl.array.Array.__del__ = pyopencl_monkey_del
-cl.array.Array.finish = pyopencl_monkey_finish
-cl.array.Array.add_event = pyopencl_monkey_add_event
+def init_monkey_patch():
+    """Initialize the :mod:`pyopencl` monkey patching."""
+    cl.array.Array.__del__ = pyopencl_monkey_del
+    cl.array.Array.finish = pyopencl_monkey_finish
+    cl.array.Array.add_event = pyopencl_monkey_add_event
 
 
 @dataclass(eq=True, frozen=True)
@@ -369,6 +371,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 footprint_bytes=footprint_bytes)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
+
+            init_monkey_patch()
 
             if self.logmgr:
                 if "pyopencl_array_time" not in self.logmgr.quantity_data:
