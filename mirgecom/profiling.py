@@ -59,7 +59,7 @@ def add_nonloopy_pyopencl_results(queue, events: list) -> None:
 
 
 def pyopencl_monkey_del(self):
-    """Monkey patches ``pyopencl.array.Array.__del__`  to grab profile data."""
+    """Monkey patches ``pyopencl.array.Array.__del__``  to grab profile data."""
     if self.events:
         cl.wait_for_events(self.events)
 
