@@ -36,14 +36,14 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import inviscid_operator, split_conserved
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    sim_checkpoint,
     create_parallel_grid,
-    ExactSolutionMismatch,
+    write_visualization_file,
+    check_step
 )
-from mirgecom.io import make_init_message
+from mirgecom.io import make_init_message, make_status_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
@@ -127,32 +127,44 @@ def main(ctx_factory=cl.create_some_context):
         return inviscid_operator(discr, q=state, t=t,
                                  boundaries=boundaries, eos=eos)
 
+    def write_vis(step, t, cv, dv, exact_cv):
+        io_fields = [
+            ("cv", cv),
+            ("dv", dv),
+            ("exact_cv", exact_cv),
+        ]
+        write_visualization_file(discr, visualizer, fields=io_fields,
+                    basename=casename, step=step, t=t, comm=comm)
+
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
-                              exact_soln=initializer, vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+        cv = split_conserved(dim, state)
+        dv = eos.dependent_vars(cv)
+        exact_state = initializer(t, nodes)
+        exact_cv = split_conserved(dim, exact_state)
+        from mirgecom.mpi import comm_any
+        if comm_any(comm, discr.norm(state - exact_state, np.inf) > exittol):
+            write_vis(step, t, cv, dv, exact_cv)
+            raise RuntimeError("Exact solution mismatch.")
+        if check_step(step, nviz):
+            write_vis(step, t, cv, dv, exact_cv)
+        if check_step(step, nstatus):
+            # There's probably a way to make this not explicitly depend on dv
+            statusmsg = make_status_message(discr=discr, t=t, step=step, dt=dt,
+                                         cfl=current_cfl, dependent_vars=dv)
+            if rank == 0:
+                logger.info(statusmsg)
 
-    try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
-    except ExactSolutionMismatch as ex:
-        current_step = ex.step
-        current_t = ex.t
-        current_state = ex.state
+    (current_step, current_t, current_state) = \
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      checkpoint=my_checkpoint,
+                      get_timestep=get_timestep, state=current_state,
+                      t=current_t, t_final=t_final)
 
-    #    if current_t != checkpoint_t:
     if rank == 0:
         logger.info("Checkpointing final state ...")
     my_checkpoint(current_step, t=current_t,
                   dt=(current_t - checkpoint_t),
                   state=current_state)
-
-    if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
 
 
 if __name__ == "__main__":

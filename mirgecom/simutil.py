@@ -3,6 +3,7 @@
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
+.. autofunction:: write_visualization_file
 .. autofunction:: sim_checkpoint
 .. autofunction:: create_parallel_grid
 """
@@ -74,6 +75,20 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     if (t + mydt) > t_final:
         mydt = t_final - t
     return mydt
+
+
+def write_visualization_file(discr, visualizer, fields, basename, step, t,
+            comm=None, overwrite=False):
+    """Write a VTK visualization file."""
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
+
+    from mirgecom.io import make_rank_fname, make_par_fname
+    rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
+    visualizer.write_parallel_vtk_file(
+        comm, rank_fn, fields, overwrite=overwrite,
+        par_manifest_filename=make_par_fname(basename=basename, step=step, t=t))
 
 
 class ExactSolutionMismatch(Exception):
