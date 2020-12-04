@@ -34,6 +34,12 @@ Time Step Computation
 
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
+
+Logging
+^^^^^^^
+
+.. autofunction:: logmgr_add_inviscid_quantities
+
 """
 
 __copyright__ = """
@@ -352,32 +358,6 @@ def get_inviscid_cfl(discr, eos, dt, q):
     return dt / wanted_dt
 
 
-# By default, run unitless
-NAME_TO_UNITS = {
-    "mass": "",
-    "energy": "",
-    "momentum": "",
-    "temperature": "",
-    "pressure": ""
-}
-
-
-def units_for_logging(quantity: str) -> str:
-    """Return unit for quantity."""
-    return NAME_TO_UNITS[quantity]
-
-
-def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
-    """Extract state vars."""
-    cv = split_conserved(dim, state)
-    dv = eos.dependent_vars(cv)
-
-    from mirgecom.utils import asdict_shallow
-    name_to_field = asdict_shallow(cv)
-    name_to_field.update(asdict_shallow(dv))
-    return name_to_field
-
-
 def get_inviscid_timestep(discr, eos, cfl, q):
     """Routine (will) return the (local) maximum stable inviscid timestep.
 
@@ -399,3 +379,29 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 #    wavespeeds = _get_wavespeed(w,eos=eos)
 #    max_v = clmath.max(wavespeeds)
 #    return c*dt_ngf*dt_gf/max_v
+
+
+def logmgr_add_inviscid_quantities(logmgr, discr, eos, quantity_to_unit=None):
+    """Add Euler discretization quantities to the logmgr."""
+    def extract_vars_for_logging(state):
+        cv = split_conserved(discr.dim, state)
+        dv = eos.dependent_vars(cv)
+        from mirgecom.utils import asdict_shallow
+        name_to_field = asdict_shallow(cv)
+        name_to_field.update(asdict_shallow(dv))
+        return name_to_field
+
+    def units_for_logging(quantity):
+        return quantity_to_unit[quantity] if quantity_to_unit is not None else ""
+
+    from functools import partial
+    from mirgecom.logging_quantities import logmgr_add_discretization_quantity
+    add_quantity = partial(logmgr_add_discretization_quantity, logmgr, discr,
+        extract_vars_for_logging, units_for_logging)
+
+    add_quantity("mass")
+    add_quantity("energy")
+    for d in range(discr.dim):
+        add_quantity("momentum", axis=d)
+    add_quantity("temperature")
+    add_quantity("pressure")

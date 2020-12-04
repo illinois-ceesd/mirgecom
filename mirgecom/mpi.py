@@ -1,6 +1,7 @@
 """MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
+.. autofunction:: comm_any
 """
 
 __copyright__ = """
@@ -32,6 +33,7 @@ import os
 import sys
 
 from contextlib import contextmanager
+import numpy as np
 
 
 @contextmanager
@@ -154,3 +156,11 @@ def mpi_entry_point(func):
         func(*args, **kwargs)
 
     return wrapped_func
+
+
+def comm_any(comm, local_value):
+    """Return True if *local_value* is True on any rank in *comm*."""
+    reduced_value = np.array([int(local_value)])
+    from mpi4py import MPI
+    comm.Allreduce(MPI.IN_PLACE, reduced_value, op=MPI.MAX)
+    return bool(reduced_value[0])

@@ -37,15 +37,20 @@ from grudge.shortcuts import make_visualizer
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from mirgecom.euler import inviscid_operator
-from mirgecom.simutil import (
-    inviscid_sim_timestep,
-    sim_checkpoint,
-    create_parallel_grid,
-    ExactSolutionMismatch,
+from mirgecom.euler import (
+    inviscid_operator,
+    split_conserved,
+    get_inviscid_timestep,
 )
-from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import (
+    create_parallel_grid,
+    sim_checkpoint,
+)
+from mirgecom.io import (
+    make_init_message,
+    write_visualization_file,
+)
+from mirgecom.mpi import mpi_entry_point, comm_any
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -54,10 +59,9 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
-from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name)
+from mirgecom.logging_quantities import initialize_logmgr, logmgr_add_device_name
+from mirgecom.euler import logmgr_add_inviscid_quantities
 
 
 logger = logging.getLogger(__name__)
@@ -100,10 +104,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     casename = "vortex"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
-    nstatus = 10
+    nstatus = -1
     nviz = 10
     rank = 0
-    checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
     box_ll = -5.0
@@ -130,8 +133,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
+        logmgr_add_inviscid_quantities(logmgr, discr, eos)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "L2_norm_momentum1"])
@@ -149,54 +151,49 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
 
-    initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order,
+    init_message = make_init_message(dim=dim, order=order, casename=casename,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
-                                     nviz=nviz, cfl=current_cfl,
-                                     constant_cfl=constant_cfl, initname=initname,
-                                     eosname=eosname, casename=casename)
+                                     nviz=nviz)
     if rank == 0:
         logger.info(init_message)
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
-                           t_final=t_final, constant_cfl=constant_cfl)
+    def get_timestep(state):
+        return get_inviscid_timestep(discr=discr, q=state, cfl=current_cfl,
+            eos=eos) if constant_cfl else current_dt
 
-    def my_rhs(t, state):
+    def rhs(t, state):
         return inviscid_operator(discr, q=state, t=t,
                                  boundaries=boundaries, eos=eos)
 
-    def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
-                              exact_soln=initializer, vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm,
-                              vis_timer=vis_timer)
+    def write_vis(step, t, state):
+        cv = split_conserved(dim, state)
+        exact_cv = split_conserved(dim, initializer(nodes, t=t))
+        io_fields = [
+            ("cv", cv),
+            ("dv", eos.dependent_vars(cv)),
+            ("exact_cv", exact_cv),
+        ]
+        return write_visualization_file(visualizer, fields=io_fields,
+                    basename=casename, step=step, t=t, comm=comm, timer=vis_timer)
 
-    try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
-                          dim=dim)
-    except ExactSolutionMismatch as ex:
-        current_step = ex.step
-        current_t = ex.t
-        current_state = ex.state
+    def checkpoint(step, t, dt, state):
+        exact_state = initializer(nodes, t=t)
+        if comm_any(comm, discr.norm(state - exact_state, np.inf) > exittol):
+            write_vis(step, t, state)
+            raise RuntimeError(f"Exact solution mismatch at step {step}.")
+        return sim_checkpoint(state=state, step=step, t=t, dt=dt, nstatus=nstatus,
+            nviz=nviz, write_vis=write_vis, comm=comm)
 
-    #    if current_t != checkpoint_t:
+    (current_step, current_t, current_state) = \
+        advance_state(rhs=rhs, timestepper=timestepper,
+                      checkpoint=checkpoint, get_timestep=get_timestep,
+                      state=current_state, t=current_t, t_final=t_final,
+                      logmgr=logmgr)
+
     if rank == 0:
-        logger.info("Checkpointing final state ...")
-    my_checkpoint(current_step, t=current_t,
-                  dt=(current_t - checkpoint_t),
-                  state=current_state)
-
-    if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
+        logger.info("Timestepping completed.")
 
     if logmgr:
         logmgr.close()

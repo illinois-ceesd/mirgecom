@@ -1,8 +1,6 @@
 """Provide some utilities for building simulation applications.
 
 .. autofunction:: check_step
-.. autofunction:: inviscid_sim_timestep
-.. autoexception:: ExactSolutionMismatch
 .. autofunction:: sim_checkpoint
 .. autofunction:: create_parallel_grid
 """
@@ -33,12 +31,7 @@ THE SOFTWARE.
 
 import logging
 
-import numpy as np
-from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
-from mirgecom.euler import (
-    get_inviscid_timestep,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -64,104 +57,20 @@ def check_step(step, interval):
     return False
 
 
-def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
-                          t_final, constant_cfl=False):
-    """Return the maximum stable dt."""
-    mydt = dt
-    if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
-                                     cfl=cfl, eos=eos)
-    if (t + mydt) > t_final:
-        mydt = t_final - t
-    return mydt
-
-
-class ExactSolutionMismatch(Exception):
-    """Exception class for solution mismatch.
-
-    .. attribute:: step
-    .. attribute:: t
-    .. attribute:: state
-    """
-
-    def __init__(self, step, t, state):
-        """Record the simulation state on creation."""
-        self.step = step
-        self.t = t
-        self.state = state
-
-
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
-                   vis_timer=None):
+def sim_checkpoint(state, step=0, t=0, dt=0, nstatus=-1,
+        get_extra_status=None, nviz=-1, write_vis=None, comm=None):
     """Check simulation health, status, viz dumps, and restart."""
-    do_viz = check_step(step=step, interval=nviz)
-    do_status = check_step(step=step, interval=nstatus)
-    if do_viz is False and do_status is False:
-        return 0
+    rank = comm.Get_rank() if comm is not None else 0
 
-    from mirgecom.euler import split_conserved
-    cv = split_conserved(discr.dim, q)
-    dependent_vars = eos.dependent_vars(cv)
-
-    rank = 0
-    if comm is not None:
-        rank = comm.Get_rank()
-
-    maxerr = 0.0
-    if exact_soln is not None:
-        actx = cv.mass.array_context
-        nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-        exp_resid = q - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
-        maxerr = max(err_norms)
-
-    if do_viz:
-        io_fields = [
-            ("cv", cv),
-            ("dv", dependent_vars)
-        ]
-        if exact_soln is not None:
-            exact_list = [
-                ("exact_soln", expected_state),
-            ]
-            io_fields.extend(exact_list)
-        if viz_fields is not None:
-            io_fields.extend(viz_fields)
-
-        from mirgecom.io import make_rank_fname, make_par_fname
-        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
-
-        from contextlib import nullcontext
-
-        if vis_timer:
-            ctm = vis_timer.start_sub_timer()
-        else:
-            ctm = nullcontext()
-
-        with ctm:
-            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
-                overwrite=overwrite, par_manifest_filename=make_par_fname(
-                    basename=vizname, step=step, t=t))
-
-    if do_status is True:
-        #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-        #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
-                                         cfl=cfl, dependent_vars=dependent_vars)
-        if exact_soln is not None:
-            statusmesg += (
-                "\n------- errors="
-                + ", ".join("%.3g" % en for en in err_norms))
-
+    if check_step(step, nstatus):
+        statusmsg = make_status_message(step=step, t=t, dt=dt,
+            extra_status=get_extra_status(step=step, t=t, dt=dt, state=state) if
+            get_extra_status else None)
         if rank == 0:
-            logger.info(statusmesg)
-
-    if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=q)
+            logger.info(statusmsg)
+    if check_step(step, nviz):
+        if write_vis is not None:
+            write_vis(step, t, state)
 
 
 def create_parallel_grid(comm, generate_grid):

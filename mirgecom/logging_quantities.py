@@ -75,22 +75,13 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     logmgr.set_constant("cl_device_name", str(queue.device))
 
 
-def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
-      extract_vars_for_logging, units_for_logging):
-    """Add default discretization quantities to the logmgr."""
+def logmgr_add_discretization_quantity(logmgr: LogManager, discr,
+        extract_vars_for_logging, units_for_logging, quantity, axis=None):
+    """Add a discretization quantity's min/max/L2 norm to the logmgr."""
     for op in ["min", "max", "L2_norm"]:
-        for quantity in ["pressure", "temperature"]:
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
-
-        for quantity in ["mass", "energy"]:
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
-
-        for d in range(dim):
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=d))
+        logmgr.add_quantity(DiscretizationBasedQuantity(
+            discr, quantity, op, extract_vars_for_logging, units_for_logging,
+            axis=axis))
 
 
 # {{{ Package versions
@@ -144,7 +135,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 # {{{ State handling
 
-def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
+def set_sim_state(mgr: LogManager, state) -> None:
     """Update the simulation state of all :class:`StateConsumer` of the log manager.
 
     Parameters
@@ -162,7 +153,7 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
                 extract_state_vars_func = gd.quantity.extract_state_vars
                 if extract_state_vars_func not in state_vars:
                     state_vars[extract_state_vars_func] = \
-                        extract_state_vars_func(dim, state, eos)
+                        extract_state_vars_func(state)
 
                 gd.quantity.set_state_vars(state_vars[extract_state_vars_func])
 
@@ -179,7 +170,7 @@ class StateConsumer:
 
         Parameters
         ----------
-        extract_vars_for_logging(dim, state, eos)
+        extract_vars_for_logging(state)
             Returns a dict(quantity_name: values) of the state vars for a particular
             state.
         """

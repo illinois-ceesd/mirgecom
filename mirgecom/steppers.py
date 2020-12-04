@@ -32,7 +32,7 @@ from mirgecom.logging_quantities import set_sim_state
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
+                  state, t_final, t=0.0, istep=0, logmgr=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -78,7 +78,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         dt = get_timestep(state=state)
         if dt < 0:
-            return istep, t, state
+            raise ValueError(f"Invalid timestep {dt}")
+        dt = min(dt, t_final - t)
 
         checkpoint(state=state, step=istep, t=t, dt=dt)
 
@@ -89,7 +90,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state)
             logmgr.tick_after()
 
     return istep, t, state

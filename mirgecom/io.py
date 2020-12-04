@@ -1,8 +1,10 @@
 """I/O - related functions and utilities.
 
+.. autofunction:: make_init_message
 .. autofunction:: make_status_message
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
+.. autofunction:: write_visualization_file
 """
 
 __copyright__ = """
@@ -32,37 +34,26 @@ THE SOFTWARE.
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
-def make_init_message(*, dim, order, dt, t_final,
-                      nstatus, nviz, cfl, constant_cfl,
-                      initname, eosname, casename,
-                      nelements=0, global_nelements=0):
+def make_init_message(*, dim, order, dt, t_final, nstatus, nviz, casename,
+        extra_init=None, nelements=0, global_nelements=0):
     """Create a summary of some general simulation parameters and inputs."""
-    return(
+    initmsg = (
         f"Initialization for Case({casename})\n"
         f"===\n"
         f"Num {dim}d order-{order} elements: {nelements}\n"
         f"Num global elements: {global_nelements}\n"
         f"Timestep:        {dt}\n"
-        f"Final time:      {t_final}\n"
-        f"CFL:             {cfl}\n"
-        f"Constant CFL:    {constant_cfl}\n"
-        f"Initialization:  {initname}\n"
-        f"EOS:             {eosname}\n"
-    )
+        f"Final time:      {t_final}\n")
+    if extra_init is not None:
+        initmsg += extra_init
+    return initmsg
 
 
-def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
+def make_status_message(*, t, step, dt, extra_status=None):
     r"""Make simulation status and health message."""
-    dv = dependent_vars
-    from functools import partial
-    _min = partial(discr.nodal_min, "vol")
-    _max = partial(discr.nodal_max, "vol")
-    statusmsg = (
-        f"Status: {step=} {t=}\n"
-        f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"
-        f"------- T({_min(dv.temperature):.3g}, {_max(dv.temperature):.3g})\n"
-        f"------- {dt=} {cfl=}"
-    )
+    statusmsg = f"Status: {step=} {t=} {dt=}\n"
+    if extra_status is not None:
+        statusmsg += extra_status
     return statusmsg
 
 
@@ -74,3 +65,20 @@ def make_rank_fname(basename, rank=0, step=0, t=0):
 def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename."""
     return f"{basename}-{step:06d}.pvtu"
+
+
+def write_visualization_file(visualizer, fields, basename, step, t, comm=None,
+        overwrite=False, timer=None):
+    """Write a VTK visualization file."""
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
+
+    from mirgecom.io import make_rank_fname, make_par_fname
+    rank_fn = make_rank_fname(basename=basename, rank=rank, step=step, t=t)
+
+    from contextlib import nullcontext
+    with timer.start_sub_timer() if timer is not None else nullcontext():
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, fields, overwrite=overwrite,
+            par_manifest_filename=make_par_fname(basename=basename, step=step, t=t))
