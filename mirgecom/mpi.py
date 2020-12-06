@@ -51,7 +51,7 @@ def mpi_entry_point(func):
                         "point. Check for prior imports.")
 
         # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
-        # (don't ask). See https://github.com/illinois-ceesd/emirge/issues/73
+        # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
         # for details.
         import pyopencl as cl
         cl.get_platforms()
