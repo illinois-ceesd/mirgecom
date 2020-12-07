@@ -67,15 +67,15 @@ def main(ctx_factory=cl.create_some_context):
     actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 3
+    dim = 2
     nel_1d = 2
     order = 1
 
-    t_final = 1e-5
+    t_final = 1e-4
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     # velocity[:dim] = 1.0
-    current_dt = 1e-8
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
     nstatus = 1
@@ -84,8 +84,8 @@ def main(ctx_factory=cl.create_some_context):
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
-    box_ll = -0.5
-    box_ur = 0.5
+    box_ll = -0.005
+    box_ur = 0.005
     error_state = 0
 
     from mpi4py import MPI
@@ -113,21 +113,21 @@ def main(ctx_factory=cl.create_some_context):
     init_temperature = 1500.0
     equiv_ratio = 1.0
     ox_di_ratio = 0.21
-    stoich_ratio = 0.5
-    i_fu = cantera_soln.species_index("H2")
+    stoich_ratio = 3.0
+    i_fu = cantera_soln.species_index("C2H4")
     i_ox = cantera_soln.species_index("O2")
     i_di = cantera_soln.species_index("N2")
     x = np.zeros(nspecies)
     x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
     x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
-    one_atm = 101325.0
+    one_atm = cantera.one_atm
 
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
     cantera_soln.TPX = init_temperature, one_atm, x
-    #  cantera_soln.equilibrate("UV")
     can_t, can_rho, can_y = cantera_soln.TDY
     can_p = cantera_soln.P
+
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
@@ -162,8 +162,18 @@ def main(ctx_factory=cl.create_some_context):
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
                                      eosname=eosname, casename=casename)
+    cantera_soln.equilibrate("UV")
+    can_eq_t, can_eq_rho, can_eq_y = cantera_soln.TDY
+    can_eq_p = cantera_soln.P
+    #    can_eq_e = cantera_soln.int_energy_mass
+    #    can_eq_k = cantera_soln.forward_rate_constants
+    #    can_eq_c = cantera_soln.concentrations
+    #    can_eq_r = cantera_soln.net_rates_of_progress
+    #    can_eq_omega = cantera_soln.net_production_rates
     if rank == 0:
         logger.info(init_message)
+        logger.info(f"Expected (p,T,rho, y) = ({can_eq_p}, {can_eq_t},"
+                    f" {can_eq_rho}, {can_eq_y})")
 
     get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
                            dt=current_dt, cfl=current_cfl, eos=eos,
@@ -176,11 +186,14 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_checkpoint(step, t, dt, state):
         global checkpoint_t
-        checkpoint_t = t
+        cv = split_conserved(dim, state)
+        reaction_rates = eos.get_production_rates(cv)
+        viz_fields = [("reaction_rates", reaction_rates)]
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              constant_cfl=constant_cfl, comm=comm)
+                              constant_cfl=constant_cfl, comm=comm,
+                              viz_fields=viz_fields)
 
     try:
         (current_step, current_t, current_state) = \

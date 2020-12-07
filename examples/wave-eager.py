@@ -45,6 +45,7 @@ def bump(actx, discr, t=0):
     source_omega = 3
 
     nodes = thaw(actx, discr.nodes())
+
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -70,8 +71,9 @@ def main(use_profiling=False):
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 2
-    nel_1d = 16
+    dim = 3
+    nel_1d = 2
+    order=1
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
@@ -79,7 +81,7 @@ def main(use_profiling=False):
         b=(0.5,)*dim,
         n=(nel_1d,)*dim)
 
-    order = 3
+    #    order = 3
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
@@ -93,6 +95,9 @@ def main(use_profiling=False):
     print("%d elements" % mesh.nelements)
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    print(f"nodes = {nodes.__repr__()}")
+    assert False
 
     fields = flat_obj_array(
         bump(actx, discr),

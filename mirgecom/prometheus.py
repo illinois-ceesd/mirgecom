@@ -44,7 +44,11 @@ class UIUCMechanism:
         return 1/np.dot( self.iwts, Y )
 
     def get_concentrations(self, rho, Y):
-        return self.iwts * rho * Y
+        conctest = self.iwts * rho * Y
+        zero = 0 * conctest[0]
+        for i, conc in enumerate(conctest):
+            conctest[i] = self.npctx.where(conctest[i] > 0, conctest[i], zero)
+        return conctest
 
     def get_mixture_specific_heat_cp_mass(self, temperature, massfractions):
         cp0_r = self.get_species_specific_heats_R(temperature)

@@ -245,7 +245,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
         abs_diff = discr.norm(pyro_r - can_r, np.inf)
-        if abs_diff > 1e-14:   
+        if abs_diff > 1e-14:
             for i, rate in enumerate(can_r):
                 min_r = np.abs(can_r)
                 if min_r > 0:
@@ -345,7 +345,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"pyro_eos.temp = {temperature}")
         print(f"pyro_eos.e = {internal_energy}")
 
-        tol = 1e-6
+        tol = 1e-14
         assert discr.norm((cv.mass - pyro_rho) / pyro_rho, np.inf) < tol
         assert discr.norm((temperature - pyro_t) / pyro_t, np.inf) < tol
         assert discr.norm((internal_energy - pyro_e) / pyro_e, np.inf) < tol

@@ -351,8 +351,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0,
 
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux) + source_terms
-    )
+                                + partition_boundary_flux)) + source_terms
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
