@@ -37,7 +37,6 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from pytools.obj_array import make_obj_array
 
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -254,10 +253,11 @@ class PrometheusMixture(GasEOS):
     Inherits from (and implements) :class:`GasEOS`.
     """
 
-    def __init__(self, prometheus_mech):
+    def __init__(self, prometheus_mech, tguess=300.0):
         """Initialize Prometheus EOS with mechanism class."""
         self._prometheus_mech = prometheus_mech
         self._gamma = 1.4
+        self._tguess = tguess
 
     def gamma(self):
         """Get specific heat ratio Cp/Cv."""
@@ -317,14 +317,15 @@ class PrometheusMixture(GasEOS):
     def get_production_rates(self, cv: ConservedVars):
         """Get the production rate for each species."""
         temperature = self.temperature(cv)
+        y = self.mass_fractions(cv)
         return self._prometheus_mech.get_net_production_rates(cv.mass,
                                                               temperature,
-                                                              cv.massfractions)
+                                                              y)
 
     def mass_fractions(self, cv: ConservedVars):
         r"""Get mass fractions :math:`\Y_\alpha` from species densities."""
 
-        return cv.massfractions * make_obj_array([1.0/cv.mass])
+        return cv.massfractions / cv.mass
 
     def pressure(self, cv: ConservedVars):
         r"""Get thermodynamic pressure of the gas.
@@ -367,8 +368,7 @@ class PrometheusMixture(GasEOS):
         """
         y = self.mass_fractions(cv)
         e = self.internal_energy(cv) / cv.mass
-        tguess = 300.0
-        return self._prometheus_mech.get_temperature(e, tguess, y, True)
+        return self._prometheus_mech.get_temperature(e, self._tguess, y, True)
 
     def total_energy(self, cv, pressure):
         r"""

@@ -71,11 +71,11 @@ def main(ctx_factory=cl.create_some_context):
     nel_1d = 2
     order = 1
 
-    t_final = 1e-4
+    t_final = 1e-3
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     # velocity[:dim] = 1.0
-    current_dt = 1e-6
+    current_dt = 1e-8
     current_t = 0
     constant_cfl = False
     nstatus = 1
@@ -103,13 +103,9 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
 
-    casename = "autoignition"
-    prometheus_mechanism = UIUCMechanism(actx.np)
-    nspecies = prometheus_mechanism.num_species
-    eos = PrometheusMixture(prometheus_mechanism)
-
-    # Homogeneous reactor to get test data
+    # Use Cantera for initialization (and soon for pyro code gen)
     cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    nspecies = cantera_soln.n_species
     init_temperature = 1500.0
     equiv_ratio = 1.0
     ox_di_ratio = 0.21
@@ -128,6 +124,10 @@ def main(ctx_factory=cl.create_some_context):
     can_t, can_rho, can_y = cantera_soln.TDY
     can_p = cantera_soln.P
 
+    casename = "autoignition"
+    prometheus_mechanism = UIUCMechanism(actx.np)
+    eos = PrometheusMixture(prometheus_mechanism, tguess=init_temperature)
+
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
@@ -137,7 +137,15 @@ def main(ctx_factory=cl.create_some_context):
     boundaries = {BTAG_ALL: my_boundary}
     current_state = initializer(eos=eos, x_vec=nodes, t=0)
     cv = split_conserved(dim, current_state)
-    print(f"cv.mass = {cv.mass}")
+
+    print(f"Initial CV rho: {cv.mass}")
+    print(f"Initial CV rhoE: {cv.energy}")
+    print(f"Initial CV rhoV: {cv.momentum}")
+    print(f"Initial CV rhoY: {cv.massfractions}")
+    print(f"Initial Y: {cv.massfractions / cv.mass}")
+
+    print(f"Initial DV pressure: {eos.pressure(cv)}")
+    print(f"Initial DV temperature: {eos.temperature(cv)}")
 
     def my_chem_sources(discr, q, eos):
         cv = split_conserved(dim, q)

@@ -19,7 +19,7 @@ class UIUCMechanism:
         self.species_indices = {'C2H4': 0, 'O2': 1, 'CO2': 2, 'CO': 3, 'H2O': 4, 'H2': 5, 'N2': 6}
 
         self.wts = np.array([28.054, 31.998, 44.009, 28.009999999999998, 18.015, 2.016, 28.014])
-        self.iwts = 1 / self.wts
+        self.iwts = 1.0 / self.wts
 
     def species_name(self, species_index):
         return self.species_name[species_index]
@@ -41,7 +41,7 @@ class UIUCMechanism:
         return rho * RT / mmw
 
     def get_mix_molecular_weight(self, Y):
-        return 1/np.dot( self.iwts, Y )
+        return 1.0 / np.dot( self.iwts, Y )
 
     def get_concentrations(self, rho, Y):
         conctest = self.iwts * rho * Y
@@ -545,8 +545,6 @@ class UIUCMechanism:
         k_fwd = self.get_fwd_rate_coefficients(T, C)
         log_k_eq = self.get_equilibrium_constants(T)
         k_eq = self.npctx.exp(log_k_eq)
-        #        k_eq = self.npctx.where(self.npctx.exp(log_k_eq) < self.big_number,
-        #            self.npctx.exp(log_k_eq), self.big_number)
         return make_obj_array([k_fwd[0]*C[0]**0.5*C[1]**0.65,
                                k_fwd[1]*(C[3]*C[1]**0.5 + -1*k_eq[1]*C[2]),
                                k_fwd[2]*(C[5]*C[1]**0.5 + -1*k_eq[2]*C[4]), ])
@@ -554,6 +552,7 @@ class UIUCMechanism:
     def get_net_production_rates(self, rho, T, Y):
         C = self.get_concentrations(rho, Y)
         r_net = self.get_net_rates_of_progress(T, C)
+
         return make_obj_array([
                 -1*r_net[0],
                 -1*(r_net[0] + 0.5*r_net[1] + 0.5*r_net[2]),
