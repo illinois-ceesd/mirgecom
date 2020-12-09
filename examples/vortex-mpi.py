@@ -111,6 +111,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     rank = comm.Get_rank()
 
+    if dim != 2:
+        raise ValueError("This example must be run with dim = 2.")
+
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
