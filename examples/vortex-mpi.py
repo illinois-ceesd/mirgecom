@@ -137,6 +137,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                             "min_temperature", "min_momentum1", "memory_usage.max"])
 
     visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
