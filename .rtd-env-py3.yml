@@ -17,3 +17,6 @@ dependencies:
   - "git+https://github.com/inducer/meshmode.git#egg=meshmode"
   - "git+https://github.com/inducer/grudge.git#egg=grudge"
   - "sphinx-math-dollar"
+  - "sphinx-copybutton"
+  - "furo"
+

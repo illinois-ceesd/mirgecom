@@ -75,6 +75,8 @@ Table of Contents
     running
     faq
     misc
+    🚀 Github <https://github.com/illinois-ceesd/mirgecom>
+    💾 Download Releases <https://pypi.pythonorg/project/mirgecom>
 
 Indices and tables
 ==================
