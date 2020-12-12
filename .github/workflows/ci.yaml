@@ -129,6 +129,6 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
             conda install sphinx graphviz
-            pip install sphinx-math-dollar
+            pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
