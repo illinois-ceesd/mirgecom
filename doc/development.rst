@@ -312,6 +312,7 @@ The following should do the job::
 
     # make sure your conda env is active
     conda install sphinx graphviz
+    pip install furo sphinx-copybutton
     cd mirgecom/doc
     make html
 
