@@ -1,5 +1,5 @@
 Building this Documentation
----------------------------
+===========================
 
 The following should do the job::
 
