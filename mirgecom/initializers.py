@@ -460,21 +460,16 @@ class MultiLump:
 
     .. math::
 
-         {\rho}(r) = {\rho}_{0} + {\rho}_{a}{e}^{(1-r^{2})}\\
+         \rho = 1.0\\
          {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^
+         {\rho~Y_\alpha}(r) = {\rho~Y_\alpha}_{0}
+         + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})}\\
 
     Where :math:`V_0` is the fixed velocity specified by the user at init time,
     and :math:`\gamma` is taken from the equation-of-state object (eos).
 
-    For multi-species or mixutres, :math:`\rho=1`, and each mixture component
-    is assigned by:
-
-    .. math::
-
-         {\rho}Y_\alpha = \bar{Y_\alpha} + a_\alpha{e}^{-(r - c_\alpha)^2}
-
-    :math:`\bar{Y_\alpha}` is the user-specified vector of initial values
+    :math:`{Y_\alpha}_0` is the user-specified vector of initial values
     for the mass fraction of each species, *spec_y0s*, and :math:`a_\alpha` is the
     user-specified vector of amplitudes for each species, *spec_amplitudes*, and
     :math:`c_\alpha` is the user-specified origin for each species, *spec_centers*.
@@ -593,7 +588,7 @@ class MultiLump:
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         # process the species components independently
-        massfracs = None
+        mass_fracs = None
         if self._nspecies > 0:
             lump_locs = make_obj_array([self._spec_centers[i] + loc_update
                                        for i in range(self._nspecies)])
@@ -605,10 +600,10 @@ class MultiLump:
                 [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
                  for i in range(self._nspecies)]
             )
-            massfracs = make_obj_array([self._spec_y0s[i] + expterms[i]
+            mass_fracs = make_obj_array([self._spec_y0s[i] + expterms[i]
                                         for i in range(self._nspecies)])
 
-        return flat_obj_array(mass, energy, mom, massfracs)
+        return flat_obj_array(mass, energy, mom, mass_fracs)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -759,7 +754,7 @@ class Uniform:
 
     def __init__(
             self, numdim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
-            velocity=None, massfracs=None
+            velocity=None, mass_fracs=None
     ):
         r"""Initialize uniform flow parameters.
 
@@ -791,14 +786,14 @@ class Uniform:
         else:
             self._velocity = np.zeros(shape=(numdim,))
 
-        if massfracs is not None:
-            self._nspecies = len(massfracs)
-            self._massfrac = massfracs
+        if mass_fracs is not None:
+            self._nspecies = len(mass_fracs)
+            self._mass_frac = mass_fracs
         elif nspecies > 0:
             self._nspecies = nspecies
-            self._massfrac = np.zeros(shape=(nspecies,))
+            self._mass_frac = np.zeros(shape=(nspecies,))
         else:
-            self._massfrac = None
+            self._mass_frac = None
             self._nspecies = 0
 
         if len(self._velocity) != numdim:
@@ -826,13 +821,13 @@ class Uniform:
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        massfrac = None
-        if self._massfrac is not None:
-            massfrac = self._massfrac * mass
+        mass_frac = None
+        if self._mass_frac is not None:
+            mass_frac = self._mass_frac * mass
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, massfractions=massfrac)
+                              momentum=mom, mass_fractions=mass_frac)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -853,7 +848,7 @@ class Uniform:
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
-        if self._massfrac is not None:
+        if self._mass_frac is not None:
             yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
         return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)

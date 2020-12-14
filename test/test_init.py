@@ -80,13 +80,13 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
-    massfracs = None
+    mass_fracs = None
     if nspecies > 0:
-        massfracs = np.ones(shape=(nspecies,))
+        mass_fracs = np.ones(shape=(nspecies,))
         for ispec in range(nspecies):
-            massfracs[ispec] = massfracs[ispec]*(ispec+1)
+            mass_fracs[ispec] = mass_fracs[ispec]*(ispec+1)
 
-    initializer = Uniform(numdim=dim, massfracs=massfracs, velocity=velocity)
+    initializer = Uniform(numdim=dim, mass_fracs=mass_fracs, velocity=velocity)
     init_soln = initializer(0, nodes)
     cv = split_conserved(dim, init_soln)
 
@@ -101,8 +101,8 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     eerrmax = discr.norm(cv.energy - exp_energy, np.inf)
 
     if nspecies > 1:
-        exp_massfracs = massfracs
-        mferrmax = discr.norm(cv.massfractions - exp_massfracs, np.inf)
+        exp_mass_fracs = mass_fracs
+        mferrmax = discr.norm(cv.mass_fractions - exp_mass_fracs, np.inf)
         assert mferrmax < 1e-15
 
     assert perrmax < 1e-15
@@ -385,15 +385,15 @@ def test_multilump(ctx_factory, dim, nspecies):
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
-    assert cv.massfractions is not None
-    massfractions = cv.massfractions
+    assert cv.mass_fractions is not None
+    mass_fractions = cv.mass_fractions
 
     spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
     r2 = make_obj_array([np.dot(spec_r[i], spec_r[i]) for i in range(nspecies)])
     expfactor = make_obj_array([spec_amplitudes[i] * actx.np.exp(- r2[i])
                                 for i in range(nspecies)])
     exp_mass = make_obj_array([spec_y0s[i] + expfactor[i] for i in range(nspecies)])
-    mass_resid = massfractions - exp_mass
+    mass_resid = mass_fractions - exp_mass
 
     print(f"exp_mass = {exp_mass}")
     print(f"mass_resid = {mass_resid}")

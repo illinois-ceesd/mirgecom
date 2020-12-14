@@ -92,10 +92,10 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     energy = rand()
     mom = make_obj_array([rand() for _ in range(dim)])
 
-    massfracs = make_obj_array([rand() for _ in range(nspecies)])
+    mass_fracs = make_obj_array([rand() for _ in range(nspecies)])
 
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       massfractions=massfracs)
+                       mass_fractions=mass_fracs)
     cv = split_conserved(dim, q)
 
     # {{{ create the expected result
@@ -115,7 +115,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
             #    if nspecies > 1:
     for i in range(nspecies):
-        expected_flux[dim+2+i] = mom * make_obj_array([massfracs[i] / mass])
+        expected_flux[dim+2+i] = mom * make_obj_array([mass_fracs[i] / mass])
 
     # }}}
 
@@ -332,13 +332,13 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         mom_input = flat_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
-        massfrac_input = flat_obj_array(
+        mass_frac_input = flat_obj_array(
             [ones / ((i + 1) * 10) for i in range(nspecies)]
         )
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            massfractions=massfrac_input)
+            mass_fractions=mass_frac_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -356,7 +356,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         iff_split = split_conserved(dim, interior_face_flux)
         assert fnorm(iff_split.mass) < tolerance
         assert fnorm(iff_split.energy) < tolerance
-        assert mynorm(iff_split.massfractions) < tolerance
+        assert mynorm(iff_split.mass_fractions) < tolerance
 
         # The expected pressure 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
@@ -379,13 +379,13 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_e = discr.interp("vol", BTAG_ALL, energy_input)
         dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
         dir_mf = None
-        if massfrac_input is not None:
-            dir_mf = discr.interp("vol", BTAG_ALL, massfrac_input)
+        if mass_frac_input is not None:
+            dir_mf = discr.interp("vol", BTAG_ALL, mass_frac_input)
 
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                  massfractions=dir_mf)
+                                  mass_fractions=dir_mf)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                massfractions=dir_mf)
+                                mass_fractions=dir_mf)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
@@ -395,7 +395,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         bf_split = split_conserved(dim, boundary_flux)
         assert fnorm(bf_split.mass) < tolerance
         assert fnorm(bf_split.energy) < tolerance
-        assert mynorm(bf_split.massfractions) < tolerance
+        assert mynorm(bf_split.mass_fractions) < tolerance
 
         momerr = fnorm(bf_split.momentum) - p0
         assert momerr < tolerance
@@ -453,13 +453,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-        massfrac_input = flat_obj_array(
+        mass_frac_input = flat_obj_array(
             [ones / ((i + 1) * 10) for i in range(nspecies)]
         )
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            massfractions=massfrac_input)
+            mass_fractions=mass_frac_input)
 
         expected_rhs = make_obj_array(
             [discr.zeros(actx) for i in range(len(fields))]

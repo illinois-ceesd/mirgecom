@@ -13,9 +13,7 @@ where:
 -  flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
 -  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
--  sources $\mathbf{S} = [{(\partial_t{\rho})}_s,
-    {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s,
-    {(\partial_t{\rho{Y}_\alpha})}_s]$
+-  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_\alpha]$
 -  vector of species mass fractions ${Y}_\alpha$.
 
 State Vector Handling
@@ -81,23 +79,27 @@ class ConservedVars:  # FIXME: Name?
     mass_fraction) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
-    .. attribute:: dim: int
+    .. attribute:: dim
 
-    .. attribute:: mass: numpy.ndarray
+        Integer indicating spatial dimension of the state
 
-        Mass per unit volume
+    .. attribute:: mass
 
-    .. attribute:: energy: numpy.ndarray
+        DOFArray for the scalar mass per unit volume
 
-        Energy per unit volume
+    .. attribute:: energy
 
-    .. attribute:: momentum: numpy.ndarray
+        DOFArray for total energy per unit volume
 
-        Momentum vector per unit volume
+    .. attribute:: momentum
 
-    .. attribute:: massfractions: numpy.ndarray
+        Object array of DOFArrays for momentum density,
+        shape=(ndim,)
 
-        Species mass fraction per unit volume
+    .. attribute:: mass_fractions
+
+        Object array of DOFArrays for species mass densities,
+        $\rho~Y_\alpha$ shape=(nspecies,).
 
     .. automethod:: join
     .. automethod:: replace
@@ -106,7 +108,7 @@ class ConservedVars:  # FIXME: Name?
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
-    massfractions: np.ndarray = None
+    mass_fractions: np.ndarray = None
 
     @property
     def dim(self):
@@ -120,7 +122,7 @@ class ConservedVars:  # FIXME: Name?
             mass=self.mass,
             energy=self.energy,
             momentum=self.momentum,
-            massfractions=self.massfractions)
+            mass_fractions=self.mass_fractions)
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
@@ -166,21 +168,21 @@ def split_conserved(dim, q):
     nspec = get_num_species(dim, q)
     if nspec > 0:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                             massfractions=q[2+dim:2+dim+nspec])
+                             mass_fractions=q[2+dim:2+dim+nspec])
     else:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def join_conserved(dim, mass, energy, momentum, massfractions=None):
+def join_conserved(dim, mass, energy, momentum, mass_fractions=None):
     """Create an agglomerated solution array from the conserved quantities."""
     aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
         _aux_shape(momentum, (dim,))]
 
-    if massfractions is not None:
-        nspec = len(massfractions)
-        aux_shapes.append(_aux_shape(massfractions, (nspec,)))
+    if mass_fractions is not None:
+        nspec = len(mass_fractions)
+        aux_shapes.append(_aux_shape(mass_fractions, (nspec,)))
     else:
         nspec = 0
 
@@ -192,8 +194,8 @@ def join_conserved(dim, mass, energy, momentum, massfractions=None):
     result[1] = energy
     result[2:dim+2] = momentum
 
-    if massfractions is not None:
-        result[dim+2:] = massfractions
+    if mass_fractions is not None:
+        result[dim+2:] = mass_fractions
 
     return result
 
@@ -211,17 +213,17 @@ def inviscid_flux(discr, eos, q):
 
     mom = cv.momentum
 
-    massfrac = None
-    if cv.massfractions is not None:
+    mass_frac = None
+    if cv.mass_fractions is not None:
         # mass fractions require a reshape here to get the right numpy
         # broadcast behavior. Reshaped to [numspecies x 1] object.
-        massfrac = mom * cv.massfractions.reshape(-1, 1) / cv.mass
+        mass_frac = mom * cv.mass_fractions.reshape(-1, 1) / cv.mass
 
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            massfractions=massfrac)
+            mass_fractions=mass_frac)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
