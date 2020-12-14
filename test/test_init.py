@@ -80,11 +80,8 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
-    mass_fracs = None
-    if nspecies > 0:
-        mass_fracs = np.ones(shape=(nspecies,))
-        for ispec in range(nspecies):
-            mass_fracs[ispec] = mass_fracs[ispec]*(ispec+1)
+    mass_fracs = (np.array([(ispec+1) for ispec in range(nspecies)])
+                  if nspecies > 0 else None)
 
     initializer = Uniform(numdim=dim, mass_fracs=mass_fracs, velocity=velocity)
     init_soln = initializer(0, nodes)
