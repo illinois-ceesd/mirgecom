@@ -1,3 +1,4 @@
+====================================
 Welcome to mirgecom's documentation!
 ====================================
 
@@ -62,18 +63,17 @@ Here’s an example, to give you an impression:
 source distribution.)
 
 Table of Contents
------------------
+=================
 
 .. toctree::
-    :maxdepth: 2
     :numbered:
 
-    model
-    operators
-    support
-    development
-    running
-    faq
+    model/model
+    operators/operators
+    support/support
+    development/development
+    running/running
+    faq/faq
     misc
     🚀 Github <https://github.com/illinois-ceesd/mirgecom>
     💾 Download Releases <https://pypi.pythonorg/project/mirgecom>
