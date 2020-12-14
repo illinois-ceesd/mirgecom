@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("nspecies", [0, 1, 2, 10])
+@pytest.mark.parametrize("nspecies", [0, 10])
 def test_uniform_init(ctx_factory, dim, nspecies):
     """Test the uniform flow initializer.
 
@@ -334,15 +334,15 @@ def test_pulse(ctx_factory, dim):
     assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
 
 
-@pytest.mark.parametrize("nspecies", [1, 2, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_multilump(ctx_factory, dim, nspecies):
+def test_multilump(ctx_factory, dim):
     """Test the multispecies lump initializer."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 4
+    nspecies = 10
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
