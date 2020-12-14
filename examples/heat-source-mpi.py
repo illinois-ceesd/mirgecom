@@ -31,11 +31,13 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
-from grudge.symbolic.primitives import TracePair
 from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
 from mirgecom.integrators import rk4_step
-from mirgecom.diffusion import diffusion_operator
+from mirgecom.diffusion import (
+    diffusion_operator,
+    DirichletDiffusionBoundary,
+    NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
@@ -99,38 +101,13 @@ def main():
 
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
-    dirichlet_btag = grudge_sym.DTAG_BOUNDARY("dirichlet")
-    neumann_btag = grudge_sym.DTAG_BOUNDARY("neumann")
-
-    def u_dirichlet(discr, u):
-        dir_u = discr.project("vol", dirichlet_btag, u)
-        return TracePair(dirichlet_btag, interior=dir_u, exterior=-dir_u)
-
-    def q_dirichlet(discr, q):
-        dir_q = discr.project("vol", dirichlet_btag, q)
-        return TracePair(dirichlet_btag, interior=dir_q, exterior=dir_q)
-
-    def u_neumann(discr, u):
-        dir_u = discr.project("vol", neumann_btag, u)
-        return TracePair(neumann_btag, interior=dir_u, exterior=dir_u)
-
-    def q_neumann(discr, q):
-        dir_q = discr.project("vol", neumann_btag, q)
-        return TracePair(neumann_btag, interior=dir_q, exterior=-dir_q)
-
-    u_boundaries = {
-        dirichlet_btag: u_dirichlet,
-        neumann_btag: u_neumann
-    }
-
-    q_boundaries = {
-        dirichlet_btag: q_dirichlet,
-        neumann_btag: q_neumann
+    boundaries = {
+        grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(),
+        grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary()
     }
 
     def rhs(t, u):
-        return (diffusion_operator(discr, alpha=1, u_boundaries=u_boundaries,
-                q_boundaries=q_boundaries, u=u)
+        return (diffusion_operator(discr, alpha=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()

@@ -1,6 +1,9 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
 .. autofunction:: diffusion_operator
+.. autoclass:: DiffusionBoundary
+.. autoclass:: DirichletDiffusionBoundary
+.. autoclass:: NeumannDiffusionBoundary
 """
 
 __copyright__ = """
@@ -27,6 +30,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import abc
 import math
 import numpy as np
 import numpy.linalg as la  # noqa
@@ -34,6 +38,7 @@ from pytools.obj_array import obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
+from grudge.symbolic.primitives import TracePair
 
 
 def _q_flux(discr, alpha, u_tpair):
@@ -48,7 +53,85 @@ def _u_flux(discr, alpha, q_tpair):
     return discr.project(q_tpair.dd, "all_faces", flux_weak)
 
 
-def diffusion_operator(discr, alpha, u_boundaries, q_boundaries, u):
+class DiffusionBoundary(metaclass=abc.ABCMeta):
+    """
+    Diffusion boundary base class.
+
+    .. automethod:: get_q_flux
+    .. automethod:: get_u_flux
+    """
+
+    @abc.abstractmethod
+    def get_q_flux(self, discr, alpha, dd, u):
+        """Compute the flux for *q* on the boundary corresponding to *dd*."""
+        pass
+
+    @abc.abstractmethod
+    def get_u_flux(self, discr, alpha, dd, q):
+        """Compute the flux for *u* on the boundary corresponding to *dd*."""
+        pass
+
+
+class DirichletDiffusionBoundary(DiffusionBoundary):
+    """
+    Dirichlet boundary condition for the diffusion operator.
+
+    .. automethod:: __init__
+    """
+
+    def __init__(self, value=0.):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        value: float or meshmode.dof_array.DOFArray
+            the value(s) along the boundary
+        """
+        self.value = value
+
+    def get_q_flux(self, discr, alpha, dd, u):  # noqa: D102
+        dir_u = discr.project("vol", dd, u)
+        u_tpair = TracePair(dd, interior=dir_u, exterior=2.*self.value-dir_u)
+        return _q_flux(discr, alpha, u_tpair)
+
+    def get_u_flux(self, discr, alpha, dd, q):  # noqa: D102
+        dir_q = discr.project("vol", dd, q)
+        q_tpair = TracePair(dd, interior=dir_q, exterior=dir_q)
+        return _u_flux(discr, alpha, q_tpair)
+
+
+class NeumannDiffusionBoundary(DiffusionBoundary):
+    """
+    Neumann boundary condition for the diffusion operator.
+
+    .. automethod:: __init__
+    """
+
+    def __init__(self, value=0.):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        value: float or meshmode.dof_array.DOFArray
+            the value(s) along the boundary
+        """
+        self.value = value
+
+    def get_q_flux(self, discr, alpha, dd, u):  # noqa: D102
+        dir_u = discr.project("vol", dd, u)
+        u_tpair = TracePair(dd, interior=dir_u, exterior=dir_u)
+        return _q_flux(discr, alpha, u_tpair)
+
+    def get_u_flux(self, discr, alpha, dd, q):  # noqa: D102
+        ones = discr.zeros(q[0].array_context) + 1.
+        dir_ones = discr.project("vol", dd, ones)
+        flux_weak = alpha*self.value*dir_ones
+        return discr.project(dd, "all_faces", flux_weak)
+
+
+def diffusion_operator(discr, alpha, boundaries, u):
     r"""
     Compute the diffusion operator.
 
@@ -62,14 +145,11 @@ def diffusion_operator(discr, alpha, u_boundaries, q_boundaries, u):
         the discretization to use
     alpha: float
         the (constant) diffusivity
-    u_boundaries:
-        dictionary (or object array of dictionaries) of boundary functions for *u*,
-        one for each valid btag
-    q_boundaries:
-        dictionary (or object array of dictionaries) of boundary functions for
-        :math:`q = \sqrt{\alpha}\nabla u`, one for each valid btag
+    boundaries:
+        dictionary (or object array of dictionaries) mapping boundary tags to
+        :class:`DiffusionBoundary` instances
     u: meshmode.dof_array.DOFArray or numpy.ndarray
-        the DOF array or object array of DOF arrays to which the operator should be
+        the DOF array (or object array of DOF arrays) to which the operator should be
         applied
 
     Returns
@@ -78,13 +158,17 @@ def diffusion_operator(discr, alpha, u_boundaries, q_boundaries, u):
         the diffusion operator applied to *u*
     """
     if isinstance(u, np.ndarray):
-        if not isinstance(u_boundaries, np.ndarray) or len(u_boundaries) != len(u):
-            raise RuntimeError("u_boundaries must be the same length as u")
-        if not isinstance(q_boundaries, np.ndarray) or len(q_boundaries) != len(u):
-            raise RuntimeError("q_boundaries must be the same length as u")
-        return obj_array_vectorize_n_args(lambda u_boundaries_i, q_boundaries_i, u_i:
-            diffusion_operator(discr, alpha, u_boundaries_i, q_boundaries_i, u_i),
-            u_boundaries, q_boundaries, u)
+        if not isinstance(boundaries, np.ndarray):
+            raise TypeError("boundaries must be an array if u is an array")
+        if len(boundaries) != len(u):
+            raise TypeError("boundaries must be the same length as u")
+        return obj_array_vectorize_n_args(lambda boundaries_i, u_i:
+            diffusion_operator(discr, alpha, boundaries_i, u_i), boundaries, u)
+
+    for btag, bdry in boundaries.items():
+        if not isinstance(bdry, DiffusionBoundary):
+            raise TypeError(f"Unrecognized boundary type for tag {btag}. "
+                "Must be an instance of DiffusionBoundary.")
 
     q = discr.inverse_mass(
         -math.sqrt(alpha)*discr.weak_grad(u)
@@ -92,8 +176,8 @@ def diffusion_operator(discr, alpha, u_boundaries, q_boundaries, u):
         discr.face_mass(
             _q_flux(discr, alpha=alpha, u_tpair=interior_trace_pair(discr, u))
             + sum(
-                _q_flux(discr, alpha=alpha, u_tpair=u_boundaries[btag](discr, u))
-                for btag in u_boundaries
+                bdry.get_q_flux(discr, alpha=alpha, dd=btag, u=u)
+                for btag, bdry in boundaries.items()
             )
             + sum(
                 _q_flux(discr, alpha=alpha, u_tpair=tpair)
@@ -108,8 +192,8 @@ def diffusion_operator(discr, alpha, u_boundaries, q_boundaries, u):
             discr.face_mass(
                 _u_flux(discr, alpha=alpha, q_tpair=interior_trace_pair(discr, q))
                 + sum(
-                    _u_flux(discr, alpha=alpha, q_tpair=q_boundaries[btag](discr, q))
-                    for btag in q_boundaries
+                    bdry.get_u_flux(discr, alpha=alpha, dd=btag, q=q)
+                    for btag, bdry in boundaries.items()
                 )
                 + sum(
                     _u_flux(discr, alpha=alpha, q_tpair=tpair)
