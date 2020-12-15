@@ -2,6 +2,8 @@
 Welcome to mirgecom's documentation!
 ====================================
 
+.. module:: mirgecom
+
 Math, Intermediate Representation, Compressible Flow, For Scramjets.
 MirgeCOM aims to be a library of parts from which scramjet simulations
 for the Center for Exascale-Enabled Scramjet Design (CEESD) at the
