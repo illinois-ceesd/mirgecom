@@ -1,0 +1,4 @@
+Diffusion
+=========
+
+.. automodule:: mirgecom.diffusion
