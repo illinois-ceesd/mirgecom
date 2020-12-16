@@ -148,10 +148,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return tbl
 
-    def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) -> ProfileResult:
+    def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) \
+      -> ProfileResult:
         return self.kernel_stats[program][args_tuple]
 
-    def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) -> tuple:
+    def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) \
+      -> tuple:
         """Generates the kernel stats for a program with its args."""
 
         # We need a tuple to index the cache
@@ -161,7 +163,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         # Are kernel stats already in the cache?
         try:
-            x = self.kernel_stats[program][args_tuple]
+            x = self.kernel_stats[program][args_tuple]  # noqa
             return args_tuple
         except KeyError:
             # If not, calculate and cache the stats
