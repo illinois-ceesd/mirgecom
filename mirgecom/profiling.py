@@ -53,7 +53,7 @@ class ProfileEvent:
 
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
-    kwargs: dict
+    args_tuple: tuple
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
@@ -85,7 +85,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # Then, collect all events and store them
         for t in self.profile_events:
             program = t.program
-            r = self._get_kernel_stats(program, t.kwargs)
+            r = self._get_kernel_stats(program, t.args_tuple)
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
             new = ProfileResult(time, r.flops, r.bytes_accessed, r.footprint_bytes)
@@ -148,7 +148,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return tbl
 
-    def _get_kernel_stats(self, program, kwargs: dict) -> ProfileResult:
+    def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) -> ProfileResult:
+        return self.kernel_stats[program][args_tuple]
+
+    def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) -> tuple:
+        """Generates the kernel stats for a program with its args."""
+
         # We need a tuple to index the cache
         args_tuple = tuple(
             (key, value.shape) if hasattr(value, "shape") else (key, value)
@@ -156,10 +161,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         # Are kernel stats already in the cache?
         try:
-            return self.kernel_stats[program][args_tuple]
+            x = self.kernel_stats[program][args_tuple]
+            return args_tuple
         except KeyError:
             # If not, calculate and cache the stats
-            kwargs = dict(kwargs)
             executor = program.target.get_kernel_executor(program, self.queue)
             info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
@@ -216,7 +221,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 footprint_bytes=footprint_bytes)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
-            return res
+            return args_tuple
 
     def call_loopy(self, program, **kwargs) -> dict:
         """Execute the loopy kernel."""
@@ -226,6 +231,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
-        self.profile_events.append(ProfileEvent(evt, program, kwargs))
+        # Generate the stats here so we don't need to carry around the kwargs
+        args_tuple = self._cache_kernel_stats(program, kwargs)
+
+        self.profile_events.append(ProfileEvent(evt, program, args_tuple))
 
         return result
