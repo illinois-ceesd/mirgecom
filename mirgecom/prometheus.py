@@ -75,14 +75,6 @@ class UIUCMechanism:
                     for i in range(self.num_species)])
         return self.gas_constant * temperature * esum
 
-#    def get_mixture_internal_energy_mass(self, temperature, massfractions):
-#        e0_rt = self.get_species_enthalpies_RT(temperature) - 1.0
-#        mflist = sum([massfractions[i] * self.iwts[i] * e0_rt[i]
-#                      for i in range(self.num_species)])
-#        esum = sum([massfractions[i] * e0_rt[i] * self.iwts[i]
-#                    for i in range(self.num_species)])
-#        return self.gas_constant * temperature * esum
-
     def get_species_specific_heats_R(self, temperature):
 
         tt0 = temperature
