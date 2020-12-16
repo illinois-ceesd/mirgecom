@@ -33,7 +33,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 #from mirgecom.eos import IdealSingleGas
@@ -156,7 +155,7 @@ class AdiabaticSlipBoundary:
         # induce an equal but opposite wall-normal (reflected) wave
         # preserving the tangential component
         mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
-        wnorm_mom = nhat * make_obj_array([mom_normcomp])  # wall-normal mom vec
+        wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
         ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
         # Form the external boundary solution with the new momentum
