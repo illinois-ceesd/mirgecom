@@ -8,8 +8,9 @@
 # Put any environment activation here, e.g.:
 # source ../../config/activate_env.sh
 
-# Put any device selection here, e.g.:
-# export PYOPENCL_CTX=":"
+# OpenCL device selection:
+# export PYOPENCL_CTX="port:tesla"    # Run on Nvidia GPU with pocl
+# export PYOPENCL_CTX="port:pthread"  # Run on CPU with pocl
 
 nnodes=$(echo $LSB_MCPU_HOSTS | wc -w)
 nnodes=$((nnodes/2-1))
