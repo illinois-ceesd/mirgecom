@@ -154,9 +154,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
     def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) \
       -> tuple:
-        """Generates the kernel stats for a program with its args."""
-
-        # We need a tuple to index the cache
+        """Generate the kernel stats for a program with its args."""
         args_tuple = tuple(
             (key, value.shape) if hasattr(value, "shape") else (key, value)
             for key, value in kwargs.items())
