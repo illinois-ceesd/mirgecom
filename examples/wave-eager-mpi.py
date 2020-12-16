@@ -27,10 +27,10 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from pytools.obj_array import flat_obj_array
+from pytools.obj_array import flat_obj_array, obj_array_vectorize
 
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw, unflatten, flatten
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -40,6 +40,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
+import pickle
 
 
 def bump(actx, discr, t=0):
@@ -62,7 +63,7 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main():
+def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -71,63 +72,94 @@ def main():
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
-    num_parts = comm.Get_size()
+    rank = comm.Get_rank()
 
-    from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-    mesh_dist = MPIMeshDistributor(comm)
+    if restart_step is None:
+        num_parts = comm.Get_size()
 
-    dim = 2
-    nel_1d = 16
+        from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
+        mesh_dist = MPIMeshDistributor(comm)
 
-    if mesh_dist.is_mananger_rank():
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(-0.5,)*dim,
-            b=(0.5,)*dim,
-            n=(nel_1d,)*dim)
+        dim = 2
+        nel_1d = 16
 
-        print("%d elements" % mesh.nelements)
+        if mesh_dist.is_mananger_rank():
+            from meshmode.mesh.generation import generate_regular_rect_mesh
+            mesh = generate_regular_rect_mesh(
+                a=(-0.5,)*dim, b=(0.5,)*dim, n=(nel_1d,)*dim)
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            print("%d elements" % mesh.nelements)
+            part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
 
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+            del mesh
 
-        del mesh
+        else:
+            local_mesh = mesh_dist.receive_mesh_part()
+
+        fields = None
 
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        with open(snapshot_pattern.format(step=restart_step, rank=rank), "rb") as f:
+            restart_data = pickle.load(f)
+
+        local_mesh = restart_data["local_mesh"]
+        nel_1d = restart_data["nel_1d"]
+        assert comm.Get_size() == restart_data["num_parts"]
 
     order = 3
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                     mpi_communicator=comm)
 
-    if dim == 2:
+    if local_mesh.dim == 2:
         # no deep meaning here, just a fudge factor
         dt = 0.75/(nel_1d*order**2)
-    elif dim == 3:
+    elif local_mesh.dim == 3:
         # no deep meaning here, just a fudge factor
         dt = 0.45/(nel_1d*order**2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
-    fields = flat_obj_array(
-        bump(actx, discr),
-        [discr.zeros(actx) for i in range(discr.dim)]
-        )
+    t_final = 3
 
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+    if restart_step is None:
+        t = 0
+        istep = 0
+
+        fields = flat_obj_array(
+            bump(actx, discr),
+            [discr.zeros(actx) for i in range(discr.dim)]
+            )
+
+    else:
+        t = restart_data["t"]
+        istep = restart_step
+        assert istep == restart_step
+
+        fields = unflatten(
+            actx, discr.discr_from_dd("vol"),
+            obj_array_vectorize(actx.from_numpy, restart_data["fields"]))
+
+    vis = make_visualizer(discr, order+3 if local_mesh.dim == 2 else order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
 
-    rank = comm.Get_rank()
-
-    t = 0
-    t_final = 3
-    istep = 0
     while t < t_final:
-        fields = rk4_step(fields, t, dt, rhs)
+        # restart must happen at beginning of step
+        if istep % 100 == 0 and (
+                # Do not overwrite the restart file that we just read.
+                istep != restart_step):
+            with open(snapshot_pattern.format(step=istep, rank=rank), "wb") as f:
+                pickle.dump({
+                    "local_mesh": local_mesh,
+                    "fields": obj_array_vectorize(actx.to_numpy, flatten(fields)),
+                    "t": t,
+                    "step": istep,
+                    "nel_1d": nel_1d,
+                    "num_parts": num_parts,
+                    }, f)
 
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))
@@ -136,6 +168,8 @@ def main():
                         ("u", fields[0]),
                         ("v", fields[1:]),
                         ])
+
+        fields = rk4_step(fields, t, dt, rhs)
 
         t += dt
         istep += 1
