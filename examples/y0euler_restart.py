@@ -37,8 +37,11 @@ from functools import partial
 from mpi4py import MPI
 import math
 
+from pytools.obj_array import obj_array_vectorize
+import pickle
+
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw, flatten, unflatten
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -48,6 +51,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
+    check_step,
     create_parallel_grid
 )
 from mirgecom.io import (
@@ -132,7 +136,9 @@ def get_pseudo_y0_mesh():
     return mesh
 
 
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context,
+         snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl",
+         restart_step=None):
     """Drive the Y0 example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -142,7 +148,6 @@ def main(ctx_factory=cl.create_some_context):
 
     dim = 3
     order = 1
-    exittol = .09
     t_final = 1.e-8
     current_cfl = 1.0
     vel_init = np.zeros(shape=(dim,))
@@ -153,60 +158,59 @@ def main(ctx_factory=cl.create_some_context):
     #    vel[0] = 340.0
     vel_inflow[0] = 100.0  # m/s
     current_dt = 1e-11
-    current_t = 0
     casename = "pseudoY0"
     constant_cfl = False
     nstatus = 1
     nviz = 1
+    nrestart = 100  # steps
     rank = 0
-    checkpoint_t = current_t
-    current_step = 0
 
     # working gas: CO2 #
     #   gamma = 1.289
     #   MW=44.009  g/mol
     #   cp = 37.135 J/mol-K,
     #   rho= 1.977 kg/m^3 @298K
-    gamma_CO2 = 1.289
-    R_CO2 = 8314.59/44.009
+    gamma_co2 = 1.289
+    r_co2 = 8314.59/44.009
 
     # background
     #   100 Pa
     #   298 K
     #   rho = 1.77619667e-3 kg/m^3
     #   velocity = 0,0,0
-    rho_bkrnd=1.77619667e-3
-    pres_bkrnd=100
-    temp_bkrnd=298
-     
+    rho_bkrnd = 1.77619667e-3
+    pres_bkrnd = 100
+    #    temp_bkrnd = 298
+
     # nozzle inflow #
-    # 
+    #
     # stagnation tempertuare 298 K
     # stagnation pressure 1.5e Pa
-    # 
-    # isentropic expansion based on the area ratios between the inlet (r=13e-3m) and the throat (r=6.3e-3)
+    #
+    # isentropic expansion based on the area ratios between the inlet (r=13e-3m) and
+    # the throat (r=6.3e-3)
     #
     #  MJA, this is calculated offline, add some code to do it for us
-    # 
+    #
     #   Mach number=0.139145
     #   pressure=148142
     #   temperature=297.169
     #   density=2.63872
     #   gamma=1.289
-    pres_inflow=148142
-    temp_inflow=297.169
-    rho_inflow=2.63872
-    mach_inflow=infloM = 0.139145
-    vel_inflow[0] = mach_inflow*math.sqrt(gamma_CO2*pres_inflow/rho_inflow)
+    pres_inflow = 148142
+    #    temp_inflow = 297.169
+    rho_inflow = 2.63872
+    mach_inflow = 0.139145
+    vel_inflow[0] = mach_inflow*math.sqrt(gamma_co2*pres_inflow/rho_inflow)
 
     timestepper = rk4_step
-    eos = IdealSingleGas(gamma=gamma_CO2, gas_const=R_CO2)
+    eos = IdealSingleGas(gamma=gamma_co2, gas_const=r_co2)
+    wall = AdiabaticSlipBoundary()
+    dummy = DummyBoundary()
     bulk_init = Lump(numdim=dim, rho0=rho_bkrnd, p0=pres_bkrnd,
                      center=orig, velocity=vel_init, rhoamp=0.0)
     inflow_init = Lump(numdim=dim, rho0=rho_inflow, p0=pres_inflow,
                        center=orig, velocity=vel_inflow, rhoamp=0.0)
-    wall = AdiabaticSlipBoundary()
-    dummy = DummyBoundary()
 
     from grudge import sym
 #    boundaries = {BTAG_ALL: DummyBoundary}
@@ -216,11 +220,25 @@ def main(ctx_factory=cl.create_some_context):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    nparts = comm.Get_size()
 
-    local_mesh, global_nelements = create_parallel_grid(comm,
-                                                        get_pseudo_y0_mesh)
+    current_t = 0
+    checkpoint_t = current_t
+    current_step = 0
 
-    local_nelements = local_mesh.nelements
+    if restart_step is None:
+        local_mesh, global_nelements = create_parallel_grid(comm,
+                                                            get_pseudo_y0_mesh)
+        local_nelements = local_mesh.nelements
+
+    else:  # Restart
+        with open(snapshot_pattern.format(step=restart_step, rank=rank), "rb") as f:
+            restart_data = pickle.load(f)
+
+        local_mesh = restart_data["local_mesh"]
+        local_nelements = local_mesh.nelements
+        global_nelements = restart_data["global_nelements"]
+        assert comm.Get_size() == restart_data["nparts"]
 
     if rank == 0:
         logging.info("Making discretization")
@@ -229,19 +247,21 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
 
-    if rank == 0:
-        logging.info("Initializing soln.")
-    current_state = bulk_init(0, nodes, eos=eos)
-    #    current_state = set_uniform_solution(t=0.0, x_vec=nodes)
+    if restart_step is None:
+        if rank == 0:
+            logging.info("Initializing soln.")
+        current_state = bulk_init(0, nodes, eos=eos)
+    else:
+        current_t = restart_data["t"]
+        current_step = restart_step
 
-    if rank == 0:
-        logging.info("Adding pulse.")
-    #    current_state[1] = current_state[1] + _make_pulse(amp=50000.0, w=.002,
-    #                                                      r0=orig, r=nodes)
+        current_state = unflatten(
+            actx, discr.discr_from_dd("vol"),
+            obj_array_vectorize(actx.from_numpy, restart_data["state"]))
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
-    #    initname = initializer.__class__.__name__
+
     initname = "pseudoY0"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -265,11 +285,22 @@ def main(ctx_factory=cl.create_some_context):
                                  q=state, t=t)
 
     def my_checkpoint(step, t, dt, state):
+        write_restart = (check_step(step, nrestart)
+                         if step != restart_step else False)
+        if write_restart is True:
+            with open(snapshot_pattern.format(step=step, rank=rank), "wb") as f:
+                pickle.dump({
+                    "local_mesh": local_mesh,
+                    "state": obj_array_vectorize(actx.to_numpy, flatten(state)),
+                    "t": t,
+                    "step": step,
+                    "global_nelements": global_nelements,
+                    "num_parts": nparts,
+                    }, f)
         return sim_checkpoint(discr=discr, visualizer=visualizer, eos=eos,
                               q=state, vizname=casename,
                               step=step, t=t, dt=dt, nstatus=nstatus,
-                              nviz=nviz, exittol=exittol,
-                              constant_cfl=constant_cfl, comm=comm)
+                              nviz=nviz, constant_cfl=constant_cfl, comm=comm)
 
     if rank == 0:
         logging.info("Stepping.")
