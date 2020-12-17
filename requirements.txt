@@ -13,6 +13,7 @@ git+https://github.com/inducer/leap.git#egg=leap
 git+https://github.com/inducer/modepy.git#egg=modepy
 git+https://github.com/inducer/meshmode.git#egg=meshmode
 git+https://github.com/inducer/grudge.git#egg=grudge
+git+https://github.com/inducer/pyrometheus@kinetics-mirge-generator#egg=pyrometheus
 
 # Toy Fortran parser for Loopy
 #
