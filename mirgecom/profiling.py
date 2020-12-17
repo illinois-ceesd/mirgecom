@@ -138,7 +138,7 @@ class ProfileEvent:
 
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
-    kwargs: dict
+    args_tuple: tuple
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
@@ -172,7 +172,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # Then, collect all events and store them
         for t in self.profile_events:
             program = t.program
-            r = self._get_kernel_stats(program, t.kwargs)
+            r = self._get_kernel_stats(program, t.args_tuple)
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
             new = ProfileResult(time, r.flops, r.bytes_accessed, r.footprint_bytes)
@@ -303,18 +303,23 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return tbl
 
-    def _get_kernel_stats(self, program, kwargs: dict) -> ProfileResult:
-        # We need a tuple to index the cache
+    def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) \
+      -> ProfileResult:
+        return self.kernel_stats[program][args_tuple]
+
+    def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) \
+      -> tuple:
+        """Generate the kernel stats for a program with its args."""
         args_tuple = tuple(
             (key, value.shape) if hasattr(value, "shape") else (key, value)
             for key, value in kwargs.items())
 
         # Are kernel stats already in the cache?
         try:
-            return self.kernel_stats[program][args_tuple]
+            x = self.kernel_stats[program][args_tuple]  # noqa
+            return args_tuple
         except KeyError:
             # If not, calculate and cache the stats
-            kwargs = dict(kwargs)
             executor = program.target.get_kernel_executor(program, self.queue)
             info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
 
@@ -381,7 +386,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 if f"{program.name}_time" not in self.logmgr.quantity_data:
                     self.logmgr.add_quantity(KernelProfile(self, program.name))
 
-            return res
+            return args_tuple
 
     def call_loopy(self, program, **kwargs) -> dict:
         """Execute the loopy kernel."""
@@ -391,7 +396,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
-        self.profile_events.append(ProfileEvent(evt, program, kwargs))
+        # Generate the stats here so we don't need to carry around the kwargs
+        args_tuple = self._cache_kernel_stats(program, kwargs)
+
+        self.profile_events.append(ProfileEvent(evt, program, args_tuple))
 
         if self.logmgr and not self.kernel_stats:
             # Call _get_kernel_stats() once to add
