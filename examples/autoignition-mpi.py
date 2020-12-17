@@ -52,7 +52,12 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 from mirgecom.euler import split_conserved, join_conserved
-# from mirgecom.prometheus import UIUCMechanism, UIUCMechanism2
+# from mirgecom.prometheus import (
+#    UIUCMechanism,
+#    UIUCMechanism2,
+#     UIUCMechanism3,
+#     UIUCMechanism4,
+# )
 
 import cantera
 import pyrometheus as pyro
@@ -70,13 +75,13 @@ def main(ctx_factory=cl.create_some_context):
 
     dim = 2
     nel_1d = 8
-    order = 3
+    order = 1
 
-    t_final = 1e-3
+    t_final = 3e-9
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     # velocity[:dim] = 1.0
-    current_dt = 1e-6
+    current_dt = 1e-9
     current_t = 0
     constant_cfl = False
     nstatus = 1
@@ -127,7 +132,7 @@ def main(ctx_factory=cl.create_some_context):
     can_p = cantera_soln.P
 
     casename = "autoignition"
-    # prometheus_mechanism = UIUCMechanism2(actx.np)
+    # prometheus_mechanism = UIUCMechanism4(actx.np)
     prometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PrometheusMixture(prometheus_mechanism, tguess=init_temperature)
 
@@ -139,16 +144,16 @@ def main(ctx_factory=cl.create_some_context):
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
     current_state = initializer(eos=eos, x_vec=nodes, t=0)
-    cv = split_conserved(dim, current_state)
 
-    print(f"Initial CV rho: {cv.mass}")
-    print(f"Initial CV rhoE: {cv.energy}")
-    print(f"Initial CV rhoV: {cv.momentum}")
-    print(f"Initial CV rhoY: {cv.mass_fractions}")
-    print(f"Initial Y: {cv.mass_fractions / cv.mass}")
-
-    print(f"Initial DV pressure: {eos.pressure(cv)}")
-    print(f"Initial DV temperature: {eos.temperature(cv)}")
+    # Inspection at physics debugging time
+    #    cv = split_conserved(dim, current_state)
+    #    print(f"Initial CV rho: {cv.mass}")
+    #    print(f"Initial CV rhoE: {cv.energy}")
+    #    print(f"Initial CV rhoV: {cv.momentum}")
+    #    print(f"Initial CV rhoY: {cv.mass_fractions}")
+    #    print(f"Initial Y: {cv.mass_fractions / cv.mass}")
+    #    print(f"Initial DV pressure: {eos.pressure(cv)}")
+    #    print(f"Initial DV temperature: {eos.temperature(cv)}")
 
     def my_chem_sources(discr, q, eos):
         cv = split_conserved(dim, q)

@@ -288,8 +288,8 @@ class PrometheusMixture(GasEOS):
         """
         return (cv.energy - self.kinetic_energy(cv))
 
-    def get_density(self, pressure, temperature, mass_fractions):
-        r"""Get the density from pressure, temperature, and massfractions.
+    def get_density(self, pressure, temperature, species_fractions):
+        r"""Get the density from pressure, temperature, and species fractions (Y).
 
         The gas density :math:`\rho` is calculated from:
         .. :math::
@@ -297,10 +297,10 @@ class PrometheusMixture(GasEOS):
             \rho = \frac{p}{R_{\mathtt{mix} T}
         """
         return self._prometheus_mech.get_density(pressure, temperature,
-                                                 mass_fractions)
+                                                 species_fractions)
 
-    def get_internal_energy(self, temperature, mass_fractions):
-        r"""Get the gas thermal energy from temperature, and massfractions.
+    def get_internal_energy(self, temperature, species_fractions):
+        r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas density :math:`e` is calculated from:
         .. :math::
@@ -308,7 +308,7 @@ class PrometheusMixture(GasEOS):
             e = R T \sum{Y_\alpha h_\alpha}
         """
         return self._prometheus_mech.get_mixture_internal_energy_mass(
-            temperature, mass_fractions)
+            temperature, species_fractions)
 
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
@@ -317,13 +317,13 @@ class PrometheusMixture(GasEOS):
     def get_production_rates(self, cv: ConservedVars):
         """Get the production rate for each species."""
         temperature = self.temperature(cv)
-        y = self.mass_fractions(cv)
+        y = self.species_fractions(cv)
         return self._prometheus_mech.get_net_production_rates(cv.mass,
                                                               temperature,
                                                               y)
 
-    def mass_fractions(self, cv: ConservedVars):
-        r"""Get mass fractions :math:`\Y_\alpha` from species densities."""
+    def species_fractions(self, cv: ConservedVars):
+        r"""Get species fractions :math:`\Y_\alpha` from fractional mass density."""
 
         return cv.mass_fractions / cv.mass
 
@@ -337,7 +337,7 @@ class PrometheusMixture(GasEOS):
             p = (\gamma - 1)e
         """
         temperature = self.temperature(cv)
-        y = self.mass_fractions(cv)
+        y = self.species_fractions(cv)
         return self._prometheus_mech.get_pressure(cv.mass, temperature, y)
 
     def sound_speed(self, cv: ConservedVars):
@@ -366,7 +366,7 @@ class PrometheusMixture(GasEOS):
 
             T = \frac{(\gamma - 1)e}{R\rho}
         """
-        y = self.mass_fractions(cv)
+        y = self.species_fractions(cv)
         e = self.internal_energy(cv) / cv.mass
         return self._prometheus_mech.get_temperature(e, self._tguess, y, True)
 
