@@ -53,8 +53,10 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 from mirgecom.euler import split_conserved, join_conserved
-from mirgecom.prometheus import UIUCMechanism, UIUCMechanism2
+# from mirgecom.prometheus import UIUCMechanism, UIUCMechanism2
+
 import cantera
+import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +127,8 @@ def main(ctx_factory=cl.create_some_context):
     can_p = cantera_soln.P
 
     casename = "autoignition"
-    prometheus_mechanism = UIUCMechanism2(actx.np)
+    # prometheus_mechanism = UIUCMechanism2(actx.np)
+    prometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PrometheusMixture(prometheus_mechanism, tguess=init_temperature)
 
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")

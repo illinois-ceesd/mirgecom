@@ -52,7 +52,9 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 
-from mirgecom.prometheus import UIUCMechanism
+# from mirgecom.prometheus import UIUCMechanism
+import cantera
+import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,9 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
     casename = "uiuc_mixture"
-    prometheus_mechanism = UIUCMechanism(actx.np)
+    # prometheus_mechanism = UIUCMechanism(actx.np)
+    sol = cantera.Solution("uiuc.cti", "gas")
+    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
     eos = PrometheusMixture(prometheus_mechanism)
 
