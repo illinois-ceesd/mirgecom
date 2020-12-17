@@ -145,7 +145,7 @@ def main(ctx_factory=cl.create_some_context):
     print(f"Initial CV rhoE: {cv.energy}")
     print(f"Initial CV rhoV: {cv.momentum}")
     print(f"Initial CV rhoY: {cv.massfractions}")
-    print(f"Initial Y: {cv.massfractions / cv.mass}")
+    print(f"Initial Y: {cv.mass_fractions / cv.mass}")
 
     print(f"Initial DV pressure: {eos.pressure(cv)}")
     print(f"Initial DV temperature: {eos.temperature(cv)}")
