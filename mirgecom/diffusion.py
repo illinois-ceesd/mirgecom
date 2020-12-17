@@ -73,8 +73,18 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
 
 class DirichletDiffusionBoundary(DiffusionBoundary):
-    """
+    r"""
     Dirichlet boundary condition for the diffusion operator.
+
+    For boundary condition $u|_\Gamma = f$, uses external data
+
+    .. math::
+
+                 u^+ &= 2 f - u^-
+
+        \mathbf{q}^+ &= \mathbf{q}^-
+
+    to compute boundary fluxes as shown in [Hesthaven_2008]_, Section 7.1.
 
     .. automethod:: __init__
     """
@@ -102,8 +112,27 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
-    """
+    r"""
     Neumann boundary condition for the diffusion operator.
+
+    For boundary condition $\frac{\partial u}{\partial \mathbf{n}}|_\Gamma = g$, uses
+    external data
+
+    .. math::
+
+        u^+ = u^-
+
+    to compute boundary fluxes for $\mathbf{q} = \sqrt{\alpha}\nabla u$, and computes
+    boundary fluxes for $u_t = \nabla \cdot (\sqrt{\alpha} \mathbf{q})$ using
+
+    .. math::
+
+        \mathbf{F}\cdot\mathbf{\hat{n}} &= \alpha\nabla u\cdot\mathbf{\hat{n}}
+
+                                        &= \alpha\frac{\partial u}{\partial
+                                                \mathbf{n}}
+
+                                        &= \alpha g
 
     .. automethod:: __init__
     """
