@@ -221,7 +221,8 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
                 unit = "kg*m/s/m^3"
             else:
                 unit = ""
-            warn(f"Inferred unit for quantity {quantity} : {unit}")
+            warn(f"Logging had to guess units for '{quantity}': '{unit}'."
+                "It should not have to. Some other component should tell it.")
 
         if name is None:
             name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
@@ -260,7 +261,8 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
                 unit = "P"
             else:
                 unit = ""
-            warn(f"Inferred unit for quantity {quantity} : {unit}")
+            warn(f"Logging had to guess units for '{quantity}': '{unit}'."
+                "It should not have to. Some other component should tell it.")
 
         if name is None:
             name = f"{op}_{quantity}"
@@ -323,7 +325,7 @@ class KernelProfile(MultiLogQuantity):
 
 # {{{ Memory profiling
 
-class MemoryProfile(LogQuantity):
+class PythonMemoryUsage(LogQuantity):
     """Logging support for memory profile."""
 
     def __init__(self, name: str = None):
