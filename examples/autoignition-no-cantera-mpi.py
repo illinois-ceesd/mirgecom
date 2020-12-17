@@ -28,7 +28,6 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
-from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -53,8 +52,9 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 from mirgecom.euler import split_conserved, join_conserved
-from mirgecom.prometheus import UIUCMechanism
-# import cantera
+# from mirgecom.prometheus import UIUCMechanism
+import cantera
+import prometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,10 @@ def main(ctx_factory=cl.create_some_context):
     nodes = thaw(actx, discr.nodes())
 
     casename = "autoignition"
-    prometheus_mechanism = UIUCMechanism(actx.np)
+    cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    prometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    # prometheus_mechanism = UIUCMechanism(actx.np)
+
     init_temperature = 1500.0
     eos = PrometheusMixture(prometheus_mechanism, tguess=init_temperature)
 
@@ -162,9 +165,9 @@ def main(ctx_factory=cl.create_some_context):
         omega = eos.get_production_rates(cv)
         w = eos.get_species_molecular_weights()
         species_sources = w * omega
-        rho_source = 0 * species_sources[0]
-        mom_source = make_obj_array([0 * species_sources[0] for _ in range(dim)])
-        energy_source = 0 * species_sources[0]
+        rho_source = 0 * cv.mass
+        mom_source = 0 * cv.momentum
+        energy_source = 0 * cv.energy
         return join_conserved(dim, rho_source, energy_source, mom_source,
                               species_sources)
     sources = {my_chem_sources}
