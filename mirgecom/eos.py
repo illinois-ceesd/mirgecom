@@ -288,7 +288,7 @@ class PrometheusMixture(GasEOS):
         """
         return (cv.energy - self.kinetic_energy(cv))
 
-    def get_density(self, pressure, temperature, massfractions):
+    def get_density(self, pressure, temperature, mass_fractions):
         r"""Get the density from pressure, temperature, and massfractions.
 
         The gas density :math:`\rho` is calculated from:
@@ -297,9 +297,9 @@ class PrometheusMixture(GasEOS):
             \rho = \frac{p}{R_{\mathtt{mix} T}
         """
         return self._prometheus_mech.get_density(pressure, temperature,
-                                                 massfractions)
+                                                 mass_fractions)
 
-    def get_internal_energy(self, temperature, massfractions):
+    def get_internal_energy(self, temperature, mass_fractions):
         r"""Get the gas thermal energy from temperature, and massfractions.
 
         The gas density :math:`e` is calculated from:
@@ -308,12 +308,12 @@ class PrometheusMixture(GasEOS):
             e = R T \sum{Y_\alpha h_\alpha}
         """
         return self._prometheus_mech.get_mixture_internal_energy_mass(
-            temperature, massfractions)
+            temperature, mass_fractions)
 
     def mass_fractions(self, cv: ConservedVars):
         r"""Get mass fractions :math:`\Y_\alpha` from species densities."""
 
-        return cv.massfractions * make_obj_array([1.0/cv.mass])
+        return cv.mass_fractions * make_obj_array([1.0/cv.mass])
 
     def pressure(self, cv: ConservedVars):
         r"""Get thermodynamic pressure of the gas.
