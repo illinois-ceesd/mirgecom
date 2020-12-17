@@ -95,9 +95,6 @@ def main(use_profiling=False):
     print("%d elements" % mesh.nelements)
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    print(f"nodes = {nodes.__repr__()}")
-    assert False
 
     fields = flat_obj_array(
         bump(actx, discr),
