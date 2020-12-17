@@ -128,7 +128,8 @@ def main(ctx_factory=cl.create_some_context):
     #    cantera_soln.TPX = init_temperature, one_atm, x
     #    can_t, can_rho, can_y = cantera_soln.TDY
     #    can_p = cantera_soln.P
-    # Cantera state (rho,T,P,Y) = (0.23397065362031969, 1500.0, 101325.0, [0.06372925 0.21806609 0.         0.         0.         0. 0.71820466]
+    # Cantera state (rho,T,P,Y) = (0.23397065362031969, 1500.0, 101325.0,
+    # [0.06372925 0.21806609 0.         0.         0.         0. 0.71820466]
 
     can_t = init_temperature
     can_p = 101325.0
