@@ -73,7 +73,7 @@ def main(use_profiling=False):
 
     dim = 3
     nel_1d = 2
-    order=1
+    order = 1
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
