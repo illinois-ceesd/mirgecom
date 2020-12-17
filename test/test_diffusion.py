@@ -113,8 +113,8 @@ def get_decaying_trig(dim, alpha):
 
     def get_boundaries(discr, actx, t):
         return {
-            grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(),
-            grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(),
+            grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
+            grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.),
         }
 
     return HeatProblem(dim, alpha, get_mesh, sym_u, get_boundaries)
@@ -171,9 +171,9 @@ def get_decaying_trig_truncated_domain(dim, alpha):
         upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
 
         return {
-            dirichlet_lower_btag: DirichletDiffusionBoundary(),
+            dirichlet_lower_btag: DirichletDiffusionBoundary(0.),
             dirichlet_upper_btag: DirichletDiffusionBoundary(upper_u),
-            neumann_lower_btag: NeumannDiffusionBoundary(),
+            neumann_lower_btag: NeumannDiffusionBoundary(0.),
             neumann_upper_btag: NeumannDiffusionBoundary(upper_grad_u_dot_n)
         }
 

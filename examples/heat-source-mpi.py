@@ -102,8 +102,8 @@ def main():
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
     boundaries = {
-        grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(),
-        grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary()
+        grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
+        grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
     }
 
     def rhs(t, u):

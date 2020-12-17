@@ -64,12 +64,12 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def get_q_flux(self, discr, alpha, dd, u):
         """Compute the flux for *q* on the boundary corresponding to *dd*."""
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def get_u_flux(self, discr, alpha, dd, q):
         """Compute the flux for *u* on the boundary corresponding to *dd*."""
-        pass
+        raise NotImplementedError
 
 
 class DirichletDiffusionBoundary(DiffusionBoundary):
@@ -79,7 +79,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     .. automethod:: __init__
     """
 
-    def __init__(self, value=0.):
+    def __init__(self, value):
         """
         Initialize the boundary condition.
 
@@ -91,13 +91,13 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_q_flux(self, discr, alpha, dd, u):  # noqa: D102
-        dir_u = discr.project("vol", dd, u)
-        u_tpair = TracePair(dd, interior=dir_u, exterior=2.*self.value-dir_u)
+        u_int = discr.project("vol", dd, u)
+        u_tpair = TracePair(dd, interior=u_int, exterior=2.*self.value-u_int)
         return _q_flux(discr, alpha, u_tpair)
 
     def get_u_flux(self, discr, alpha, dd, q):  # noqa: D102
-        dir_q = discr.project("vol", dd, q)
-        q_tpair = TracePair(dd, interior=dir_q, exterior=dir_q)
+        q_int = discr.project("vol", dd, q)
+        q_tpair = TracePair(dd, interior=q_int, exterior=q_int)
         return _u_flux(discr, alpha, q_tpair)
 
 
@@ -108,7 +108,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     .. automethod:: __init__
     """
 
-    def __init__(self, value=0.):
+    def __init__(self, value):
         """
         Initialize the boundary condition.
 
@@ -120,14 +120,14 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_q_flux(self, discr, alpha, dd, u):  # noqa: D102
-        dir_u = discr.project("vol", dd, u)
-        u_tpair = TracePair(dd, interior=dir_u, exterior=dir_u)
+        u_int = discr.project("vol", dd, u)
+        u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
         return _q_flux(discr, alpha, u_tpair)
 
     def get_u_flux(self, discr, alpha, dd, q):  # noqa: D102
         ones = discr.zeros(q[0].array_context) + 1.
-        dir_ones = discr.project("vol", dd, ones)
-        flux_weak = alpha*self.value*dir_ones
+        bdry_ones = discr.project("vol", dd, ones)
+        flux_weak = alpha*self.value*bdry_ones
         return discr.project(dd, "all_faces", flux_weak)
 
 
