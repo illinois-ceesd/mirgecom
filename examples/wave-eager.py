@@ -73,7 +73,6 @@ def main(use_profiling=False):
 
     dim = 2
     nel_1d = 16
-    order = 3
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -82,7 +81,7 @@ def main(use_profiling=False):
         b=(0.5,)*dim,
         n=(nel_1d,)*dim)
 
-    #    order = 3
+    order = 3
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
