@@ -360,7 +360,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
         print(f"pyro_r = {pyro_r}")
         abs_diff = discr.norm(pyro_r - can_r, np.inf)
         tol = 1e-12
-        if mechname = "sanDiego":
+        if mechname == "sanDiego":
             tol = 1e-8
         if abs_diff > 1e-14:
             for i, rate in enumerate(can_r):
