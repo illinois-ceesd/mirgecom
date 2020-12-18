@@ -1,4 +1,4 @@
-"""Demonstrate simple gas mixture with Prometheus."""
+"""Demonstrate combustive mixture with Prometheus."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -48,11 +48,17 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
+from mirgecom.euler import split_conserved, join_conserved
+# from mirgecom.prometheus import (
+#    UIUCMechanism,
+#    UIUCMechanism2,
+#     UIUCMechanism3,
+#     UIUCMechanism4,
+# )
 
-# from mirgecom.prometheus import UIUCMechanism
 import cantera
 import pyrometheus as pyro
 
@@ -67,25 +73,25 @@ def main(ctx_factory=cl.create_some_context):
     actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 3
-    nel_1d = 16
-    order = 3
-    exittol = 10.0
-    t_final = 0.002
+    dim = 2
+    nel_1d = 8
+    order = 1
+
+    t_final = 3e-9
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
-    velocity[:dim] = 1.0
-    current_dt = .001
+    # velocity[:dim] = 1.0
+    current_dt = 1e-9
     current_t = 0
     constant_cfl = False
     nstatus = 1
-    nviz = 1
+    nviz = 5
     rank = 0
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
-    box_ll = -5.0
-    box_ur = 5.0
+    box_ll = -0.005
+    box_ur = 0.005
     error_state = 0
 
     from mpi4py import MPI
@@ -102,26 +108,64 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    casename = "uiuc_mixture"
-    # prometheus_mechanism = UIUCMechanism(actx.np)
-    sol = cantera.Solution("uiuc.cti", "gas")
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
-    nspecies = prometheus_mechanism.num_species
-    eos = PrometheusMixture(prometheus_mechanism)
 
-    y0s = np.zeros(shape=(nspecies,))
-    for i in range(nspecies-1):
-        y0s[i] = 1.0 / (10.0 ** (i + 1))
-    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
-    y0s[nspecies-1] = 1.0 - spec_sum
+    # Use Cantera for initialization (and soon for pyro code gen)
+    cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    nspecies = cantera_soln.n_species
+    init_temperature = 1500.0
+    equiv_ratio = 1.0
+    ox_di_ratio = 0.21
+    stoich_ratio = 3.0
+    i_fu = cantera_soln.species_index("C2H4")
+    i_ox = cantera_soln.species_index("O2")
+    i_di = cantera_soln.species_index("N2")
+    x = np.zeros(nspecies)
+    x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
+    x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
+    x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
+    # one_atm = cantera.one_atm
+    one_atm = 101325.0
 
-    # Mixture defaults to STP (p, T) = (1atm, 300K)
+    print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
+    cantera_soln.TPX = init_temperature, one_atm, x
+    can_t, can_rho, can_y = cantera_soln.TDY
+    can_p = cantera_soln.P
+
+    casename = "autoignition"
+    # prometheus_mechanism = UIUCMechanism4(actx.np)
+    prometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    eos = PrometheusMixture(prometheus_mechanism, tguess=init_temperature)
+
+    print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
-                                     massfractions=y0s, velocity=velocity)
+                                     pressure=can_p, temperature=can_t,
+                                     massfractions=can_y, velocity=velocity)
 
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    nodes = thaw(actx, discr.nodes())
+    my_boundary = AdiabaticSlipBoundary()
+    boundaries = {BTAG_ALL: my_boundary}
     current_state = initializer(eos=eos, x_vec=nodes, t=0)
+
+    # Inspection at physics debugging time
+    #    cv = split_conserved(dim, current_state)
+    #    print(f"Initial CV rho: {cv.mass}")
+    #    print(f"Initial CV rhoE: {cv.energy}")
+    #    print(f"Initial CV rhoV: {cv.momentum}")
+    #    print(f"Initial CV rhoY: {cv.mass_fractions}")
+    #    print(f"Initial Y: {cv.mass_fractions / cv.mass}")
+    #    print(f"Initial DV pressure: {eos.pressure(cv)}")
+    #    print(f"Initial DV temperature: {eos.temperature(cv)}")
+
+    def my_chem_sources(discr, q, eos):
+        cv = split_conserved(dim, q)
+        omega = eos.get_production_rates(cv)
+        w = eos.get_species_molecular_weights()
+        species_sources = w * omega
+        rho_source = 0 * cv.mass
+        mom_source = 0 * cv.momentum
+        energy_source = 0 * cv.energy
+        return join_conserved(dim, rho_source, energy_source, mom_source,
+                              species_sources)
+    sources = {my_chem_sources}
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -134,8 +178,18 @@ def main(ctx_factory=cl.create_some_context):
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
                                      eosname=eosname, casename=casename)
+    cantera_soln.equilibrate("UV")
+    can_eq_t, can_eq_rho, can_eq_y = cantera_soln.TDY
+    can_eq_p = cantera_soln.P
+    #    can_eq_e = cantera_soln.int_energy_mass
+    #    can_eq_k = cantera_soln.forward_rate_constants
+    #    can_eq_c = cantera_soln.concentrations
+    #    can_eq_r = cantera_soln.net_rates_of_progress
+    #    can_eq_omega = cantera_soln.net_production_rates
     if rank == 0:
         logger.info(init_message)
+        logger.info(f"Expected (p,T,rho, y) = ({can_eq_p}, {can_eq_t},"
+                    f" {can_eq_rho}, {can_eq_y})")
 
     get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
                            dt=current_dt, cfl=current_cfl, eos=eos,
@@ -143,15 +197,19 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos)
+                                 boundaries=boundaries, eos=eos,
+                                 sources=sources)
 
     def my_checkpoint(step, t, dt, state):
         global checkpoint_t
-        checkpoint_t = t
+        cv = split_conserved(dim, state)
+        reaction_rates = eos.get_production_rates(cv)
+        viz_fields = [("reaction_rates", reaction_rates)]
         return sim_checkpoint(discr, visualizer, eos, q=state,
-                              exact_soln=initializer, vizname=casename, step=step,
+                              vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+                              constant_cfl=constant_cfl, comm=comm,
+                              viz_fields=viz_fields)
 
     try:
         (current_step, current_t, current_state) = \
