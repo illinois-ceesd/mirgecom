@@ -58,8 +58,7 @@ from pyopencl.tools import (  # noqa
 logger = logging.getLogger(__name__)
 
 
-# @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
-@pytest.mark.parametrize("mechname", ["uiuc"])
+@pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     """Test known pyrometheus mechanisms.
@@ -74,7 +73,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     actx = PyOpenCLArrayContext(queue)
 
     dim = 1
-    nel_1d = 4
+    nel_1d = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -140,9 +139,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         prom_omega = prometheus_mechanism.get_net_production_rates(prom_rho,
                                                                    prom_t, yin)
 
-        print(f"can(rho, y, p, t, e, k, rk) = ({can_rho}, {can_y}, "
+        print(f"can(rho, y, p, t, e, k) = ({can_rho}, {can_y}, "
               f"{can_p}, {can_t}, {can_e}, {can_k})")
-        print(f"prom(rho, y, p, t, e, k, rk) = ({prom_rho}, {y0s}, "
+        print(f"prom(rho, y, p, t, e, k) = ({prom_rho}, {y0s}, "
               f"{prom_p}, {prom_t}, {prom_e}, {prom_k})")
 
         # For pyro chem testing
@@ -160,6 +159,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
 
         # Pyro chem test comparisons
         rate_tol = 1e-12
+        if mechname == "sanDiego":
+            rate_tol = 1e-8
+
         for i, rate in enumerate(can_r):
             rmax = np.abs(rate).max()
             if rmax > 1e-18:
@@ -265,8 +267,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
 
 
-# @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
-@pytest.mark.parametrize("mechname", ["uiuc"])
+@pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     """Test known pyrometheus reaction mechanisms.
@@ -360,11 +361,11 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
         abs_diff = discr.norm(pyro_r - can_r, np.inf)
         if abs_diff > 1e-14:
             for i, rate in enumerate(can_r):
-                min_r = np.abs(can_r)
+                min_r = (np.abs(can_r)).min()
                 if min_r > 0:
-                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < 1e-12
+                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < 1e-8
                 else:
-                    assert discr.norm(pyro_r, np.inf) < 1e-12
+                    assert discr.norm(pyro_r, np.inf) < 1e-8
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
