@@ -34,7 +34,7 @@ import abc
 import math
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import obj_array_vectorize_n_args
+from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
@@ -179,7 +179,7 @@ def diffusion_operator(discr, alpha, boundaries, u):
     alpha: float
         the (constant) diffusivity
     boundaries:
-        dictionary (or object array of dictionaries) mapping boundary tags to
+        dictionary (or list of dictionaries) mapping boundary tags to
         :class:`DiffusionBoundary` instances
     u: meshmode.dof_array.DOFArray or numpy.ndarray
         the DOF array (or object array of DOF arrays) to which the operator should be
@@ -191,12 +191,13 @@ def diffusion_operator(discr, alpha, boundaries, u):
         the diffusion operator applied to *u*
     """
     if isinstance(u, np.ndarray):
-        if not isinstance(boundaries, np.ndarray):
-            raise TypeError("boundaries must be an array if u is an array")
+        if not isinstance(boundaries, list):
+            raise TypeError("boundaries must be a list if u is an object array")
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
         return obj_array_vectorize_n_args(lambda boundaries_i, u_i:
-            diffusion_operator(discr, alpha, boundaries_i, u_i), boundaries, u)
+            diffusion_operator(discr, alpha, boundaries_i, u_i),
+            make_obj_array(boundaries), u)
 
     for btag, bdry in boundaries.items():
         if not isinstance(bdry, DiffusionBoundary):

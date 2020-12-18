@@ -382,7 +382,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         / discr.norm(expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
 
-    boundaries_vector = make_obj_array([boundaries, boundaries])
+    boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
     diffusion_u_vector = diffusion_operator(discr, alpha=p.alpha,
