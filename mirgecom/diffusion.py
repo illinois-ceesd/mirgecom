@@ -100,6 +100,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         """
         self.value = value
 
+    # Observe: Dirichlet BC enforced on q, not u
     def get_q_flux(self, discr, alpha, dd, u):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2.*self.value-u_int)
