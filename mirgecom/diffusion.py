@@ -157,9 +157,12 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def get_u_flux(self, discr, alpha, dd, q):  # noqa: D102
         ones = discr.zeros(q[0].array_context) + 1.
         bdry_ones = discr.project("vol", dd, ones)
-        # Computing the flux directly instead of constructing an external q value
-        # avoids some potential nastiness with sqrt(alpha) and overintegration in
-        # the variable alpha case
+        # Compute the flux directly instead of constructing an external q value
+        # (and the associated TracePair); this approach is simpler in the
+        # spatially-varying alpha case (the other approach would result in a
+        # q_tpair that lives in the quadrature discretization, as it involves
+        # computing sqrt(alpha); _u_flux would need to be modified to accept such
+        # values).
         flux_weak = alpha*self.value*bdry_ones
         return discr.project(dd, "all_faces", flux_weak)
 
