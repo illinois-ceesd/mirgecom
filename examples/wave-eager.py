@@ -71,9 +71,10 @@ def main(use_profiling=False):
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 3
-    nel_1d = 2
-    order = 1
+    dim = 2
+    nel_1d = 16
+    order = 3
+
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
