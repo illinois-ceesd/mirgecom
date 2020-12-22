@@ -420,9 +420,4 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events.append(ProfileEvent(evt, program, args_tuple))
 
-        if self.logmgr and not self.kernel_stats:
-            # Call _get_kernel_stats() once to add
-            # profiling quantities to the logmgr
-            self._get_kernel_stats(program, kwargs)
-
         return result
