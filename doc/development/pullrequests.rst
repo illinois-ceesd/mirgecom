@@ -149,7 +149,7 @@ commit, you can use a git hook such as the following one (save this script as
    #!/bin/bash
 
    if [[ $(command -v "flake8") ]]; then
-       flake8
+       flake8 mirgecom/ test/ examples/ setup.py doc/conf.py
        res=$?
        if [[ $res -ne 0 ]]; then
            echo "Error: flake8 check failed. Fix the errors (or run git with --no-verify to bypass the check)."
