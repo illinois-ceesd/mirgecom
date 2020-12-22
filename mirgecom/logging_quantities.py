@@ -74,7 +74,7 @@ class MirgecomLogManager(LogManager):
 
     def add_memory_profile(self):
         """Add the memory profile to the logmgr."""
-        self.add_quantity(MemoryProfile())
+        self.add_quantity(PythonMemoryUsage())
 
     def add_device_name(self, queue: cl.CommandQueue):
         """Add the device name to the log."""
@@ -100,10 +100,15 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
     import subprocess
     from warnings import warn
 
+    output = None
+
     # Find emirge's version.sh in any parent directory
     if path_to_version_sh is None:
         import pathlib
-        p = pathlib.Path(".").resolve()
+        import mirgecom
+
+        p = pathlib.Path(mirgecom.__file__).resolve()
+
         for d in p.parents:
             candidate = pathlib.Path(d).joinpath("version.sh")
             if candidate.is_file():
@@ -113,15 +118,13 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
                         break
 
     if path_to_version_sh is None:
-        output = "Could not find emirge's version.sh. No package versions recorded."
-        warn(output)
+        warn("Could not find emirge's version.sh.")
 
     else:
         try:
             output = subprocess.check_output(path_to_version_sh)
-        except OSError:
-            output = "Could not record emirge's package versions."
-            warn(output)
+        except OSError as e:
+            warn("Could not record emirge's package versions: " + str(e))
 
     mgr.set_constant("emirge_package_versions", output)
 
@@ -155,7 +158,7 @@ class StateConsumer:
         self.state = None
 
     def set_state(self, state: ndarray) -> None:
-        """Set the state of the object."""
+        """Update the state vector of the object."""
         self.state = state
 
 # }}}
@@ -306,6 +309,8 @@ class KernelProfile(MultiLogQuantity):
 
     def __init__(self, actx: PyOpenCLArrayContext,
                  kernel_name: str) -> None:
+        from mirgecom.profiling import PyOpenCLProfilingArrayContext
+        assert isinstance(actx, PyOpenCLProfilingArrayContext)
 
         units = ["s", "GFlops", "1", "GByte"]
         names = [f"{kernel_name}_time", f"{kernel_name}_flops",
@@ -326,7 +331,10 @@ class KernelProfile(MultiLogQuantity):
 # {{{ Memory profiling
 
 class PythonMemoryUsage(LogQuantity):
-    """Logging support for memory profile."""
+    """Logging support for Python memory usage (RSS, host).
+
+    Uses :mod:`memory_profiler` to track memory usage. Virtually no overhead.
+    """
 
     def __init__(self, name: str = None):
 
@@ -335,18 +343,12 @@ class PythonMemoryUsage(LogQuantity):
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
-        try:
-            from memory_profiler import memory_usage  # noqa: F401
-        except ModuleNotFoundError:
-            from warnings import warn
-            warn("memory_profiler module missing, will not log memory usage.")
+        # Make sure this module is available
+        from memory_profiler import memory_usage  # noqa: F401
 
     def __call__(self) -> float:
         """Return the memory usage."""
-        try:
-            from memory_profiler import memory_usage  # pylint: disable=import-error
-            return memory_usage(-1)[0]
-        except ModuleNotFoundError:
-            return None
+        from memory_profiler import memory_usage  # pylint: disable=import-error
+        return memory_usage(-1)[0]
 
 # }}}
