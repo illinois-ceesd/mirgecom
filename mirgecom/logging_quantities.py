@@ -295,7 +295,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 
 class KernelProfile(MultiLogQuantity):
     """Logging support for statistics of the OpenCL kernel profiling (time, \
-    num_calls, flops, bytes_accessed).
+    num_calls, flops, bytes_accessed, footprint).
 
     Parameters
     ----------
@@ -312,9 +312,10 @@ class KernelProfile(MultiLogQuantity):
         from mirgecom.profiling import PyOpenCLProfilingArrayContext
         assert isinstance(actx, PyOpenCLProfilingArrayContext)
 
-        units = ["s", "GFlops", "1", "GByte"]
+        units = ["s", "GFlops", "1", "GByte", "GByte"]
         names = [f"{kernel_name}_time", f"{kernel_name}_flops",
-                 f"{kernel_name}_num_calls", f"{kernel_name}_bytes_accessed"]
+                 f"{kernel_name}_num_calls", f"{kernel_name}_bytes_accessed",
+                 f"{kernel_name}_footprint"]
 
         super().__init__(names, units)
 

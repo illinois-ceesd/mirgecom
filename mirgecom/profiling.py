@@ -95,18 +95,26 @@ def pyopencl_monkey_finish(self):
     orig_finish(self)
 
 
-def init_monkey_patch():
+def init_pyopencl_array_monkey_patch():
     """Initialize the :mod:`pyopencl` monkey patching."""
     cl.array.Array.__del__ = pyopencl_monkey_del
     cl.array.Array.finish = pyopencl_monkey_finish
     cl.array.Array.add_event = pyopencl_monkey_add_event
 
 
+def del_pyopencl_array_monkey_patch():
+    """Remove the :mod:`pyopencl` monkey patching."""
+    cl.array.Array.__del__ = None
+    cl.array.Array.finish = orig_finish
+    cl.array.Array.add_event = orig_add_event
+
+
 @dataclass(eq=True, frozen=True)
 class NonLoopyProfilekernel:
     """Class to hold the name for a non-loopy profile result.
 
-    This is necessary so that :meth:`tabulate_profiling_data` etc. can
+    This is necessary so that :meth:`tabulate_profiling_data` and
+    :meth:`get_profiling_data_for_kernel` can
     access the 'name' field of the non-Loopy kernel.
     """
 
@@ -166,6 +174,14 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.kernel_stats = {}
         self.logmgr = logmgr
 
+    def __del__(self):
+        """Release resources and undo monkey patching."""
+        del self.profile_events[:]
+        self.profile_results.clear()
+        self.kernel_stats.clear()
+
+        del_pyopencl_array_monkey_patch()
+
     def _finish_profile_events(self) -> None:
         # First, wait for completion of all events
         if self.profile_events:
@@ -195,7 +211,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             times = []
             flops = []
             bytes_accessed = []
-            # fprint_bytes = []
+            fprint_bytes = []
 
             for key in results:
                 value = results_list[key]
@@ -208,24 +224,25 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
                 bytes_accessed += [v.bytes_accessed / 1e9
                               if v.bytes_accessed is not None else 0 for v in value]
-                # fprint_bytes += [v.footprint_bytes if v.footprint_bytes
-                #                  is not None else 0 for v in value]
+                fprint_bytes += [v.footprint_bytes / 1e9 if v.footprint_bytes
+                                 is not None else 0 for v in value]
 
                 del results_list[key]
 
-            return num_calls, times, flops, bytes_accessed
+            return num_calls, times, flops, bytes_accessed, fprint_bytes
 
-        num_calls, times, flops, bytes_accessed = \
+        num_calls, times, flops, bytes_accessed, fprint_bytes = \
             _gather_data(self.profile_results)
 
         if num_calls == 0:
-            num_calls, times, flops, bytes_accessed = \
+            num_calls, times, flops, bytes_accessed, fprint_bytes = \
                 _gather_data(nonloopy_profile_results)
 
         if num_calls == 0:
-            return [0, 0, 0, 0]
+            return [0, 0, 0, 0, 0]
 
-        return [mean(times), mean(flops), num_calls, mean(bytes_accessed)]
+        return [mean(times), mean(flops), num_calls, mean(bytes_accessed),
+                mean(fprint_bytes)]
 
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
@@ -379,7 +396,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
 
-            init_monkey_patch()
+            init_pyopencl_array_monkey_patch()
 
             if self.logmgr:
                 if "pyopencl_array_time" not in self.logmgr.quantity_data:
