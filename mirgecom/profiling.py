@@ -44,6 +44,9 @@ __doc__ = """
 
 nonloopy_profile_results = {}
 
+orig_finish = cl.array.Array.finish
+orig_add_event = cl.array.Array.add_event
+
 
 def add_nonloopy_pyopencl_results(queue, events: list) -> None:
     """Gather and store pyopencl.array results."""
@@ -72,8 +75,6 @@ def pyopencl_monkey_add_event(self, evt):
     """Monkey patches :meth:`pyopencl.array.Array.add_event` to grab profile data."""
     n_wait = 4
 
-    self.events.append(evt)
-
     if len(self.events) > 3*n_wait:
         wait_events = self.events[:n_wait]
         cl.wait_for_events(wait_events)
@@ -82,15 +83,16 @@ def pyopencl_monkey_add_event(self, evt):
 
         del self.events[:n_wait]
 
+    orig_add_event(self, evt)
+
 
 def pyopencl_monkey_finish(self):
     """Monkey patches :meth:`pyopencl.array.Array.finish` to grab profile data."""
     if self.events:
         cl.wait_for_events(self.events)
-
         add_nonloopy_pyopencl_results(self.queue, self.events)
 
-        del self.events[:]
+    orig_finish(self)
 
 
 def init_monkey_patch():
