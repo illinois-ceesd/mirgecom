@@ -344,8 +344,12 @@ class PythonMemoryUsage(LogQuantity):
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
-        # Make sure this module is available
-        from memory_profiler import memory_usage  # pylint: disable=import-error
+        # Make sure the memory_profiler module is available
+        import importlib
+        found = importlib.util.find_spec("memory_profiler")
+        if found is None:
+            raise ImportError("memory_profiler module not found. "
+                "Install it with 'pip install memory-profiler'.")
 
     def __call__(self) -> float:
         """Return the memory usage."""
