@@ -131,18 +131,20 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if logmgr:
         logmgr.add_discretization_quantities(discr, eos, dim)
 
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
+                            "min_temperature", "min_momentum1"])
+
         try:
             logmgr.add_memory_profile()
+            logmgr.add_watches(["memory_usage.max"])
         except ImportError:
-            pass
+            from warnings import warn
+            warn("memory_profile module not found, not tracking memory consumption.")
 
         logmgr.add_device_name(queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
-
-        logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
-                            "min_temperature", "min_momentum1", "memory_usage.max"])
 
     visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
 
