@@ -290,8 +290,8 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 
 # }}}
 
-# {{{ Kernel profile quantities
 
+# {{{ Kernel profile quantities
 
 class KernelProfile(MultiLogQuantity):
     """Logging support for statistics of the OpenCL kernel profiling (time, \
@@ -354,6 +354,6 @@ class PythonMemoryUsage(LogQuantity):
     def __call__(self) -> float:
         """Return the memory usage."""
         from memory_profiler import memory_usage  # pylint: disable=import-error
-        return memory_usage(-1)[0]
+        return memory_usage(-1, 0)[0]
 
 # }}}
