@@ -130,7 +130,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     if logmgr:
         logmgr.add_discretization_quantities(discr, eos, dim)
-        logmgr.add_memory_profile()
+
+        try:
+            logmgr.add_memory_profile()
+        except ImportError:
+            pass
+
         logmgr.add_device_name(queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
