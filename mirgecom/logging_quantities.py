@@ -37,7 +37,7 @@ __doc__ = """
 
 from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
-from numpy import ndarray
+# from numpy import ndarray
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
@@ -68,6 +68,7 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
 
 
 def logmgr_add_device_name(logmgr, queue):
+    """Add the OpenCL device name to the log."""
     logmgr.set_constant("device_name",
              str(queue.get_info(cl.command_queue_info.DEVICE)))
 
@@ -176,7 +177,10 @@ class StateConsumer:
 
 
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
-    """Logging support for physical quantities."""
+    """Logging support for physical quantities.
+
+    Possible rank aggregation operations (`op`) are: min, max, sum.
+    """
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
                  name: str):
@@ -189,6 +193,9 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         self.quantity = quantity
 
         from functools import partial
+
+        if op not in ["min", "max", "sum"]:
+            raise ValueError("op must be one of 'min', 'max', 'sum'.")
 
         if op == "min":
             self._discr_reduction = partial(self.discr.nodal_min, "vol")

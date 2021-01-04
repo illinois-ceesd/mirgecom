@@ -298,10 +298,13 @@ def get_inviscid_cfl(discr, eos, dt, q):
     wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
 
+
 def extract_vars(dim, state, eos):
+    """Extract state vars."""
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
     return (cv, dv)
+
 
 def get_inviscid_timestep(discr, eos, cfl, q):
     """Routine (will) return the (local) maximum stable inviscid timestep.
