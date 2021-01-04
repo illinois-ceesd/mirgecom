@@ -41,7 +41,6 @@ from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 from mirgecom.eos import GasEOS
-from meshmode.dof_array import DOFArray
 import pyopencl as cl
 
 
@@ -261,9 +260,9 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
         cq = getattr(self.conserved_vars, self.quantity)
         self.conserved_vars = None
 
-        if not isinstance(cq, DOFArray):
+        if self.dim is not None:  # momentum
             return self._discr_reduction(cq[self.dim])
-        else:
+        else:  # mass, energy
             return self._discr_reduction(cq)
 
 
