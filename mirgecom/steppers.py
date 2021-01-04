@@ -28,11 +28,12 @@ THE SOFTWARE.
 """
 
 from logpyle import set_dt
-from mirgecom.logging_quantities import set_state
+from mirgecom.logging_quantities import set_sim_state
+from mirgecom.euler import extract_vars
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None):
+                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -89,7 +90,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             set_dt(logmgr, dt)
-            set_state(logmgr, state)
+            cv, dv = extract_vars(dim, state, eos)
+            set_sim_state(logmgr, cv, dv)
             logmgr.tick_after()
 
     return istep, t, state

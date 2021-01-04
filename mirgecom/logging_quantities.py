@@ -45,41 +45,48 @@ from meshmode.dof_array import DOFArray
 import pyopencl as cl
 
 
-class MirgecomLogManager(LogManager):
-    """Extension of :class:`logpyle.LogManager` with some convenience functions."""
+def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
+        filename: str = None, mode: str = "wu", mpi_comm=None) -> LogManager:
+    """Create and initialize a mirgecom-specific :class:`LogManager`."""
+    if not enable_logmgr:
+        return None
 
-    def __init__(self, filename: str = None, mode: str = "wu", mpi_comm=None):
-        super().__init__(filename=filename, mode=mode, mpi_comm=mpi_comm)
+    logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 
-        add_run_info(self)
-        add_package_versions(self)
-        add_general_quantities(self)
-        add_simulation_quantities(self)
+    add_run_info(logmgr)
+    add_package_versions(logmgr)
+    add_general_quantities(logmgr)
+    add_simulation_quantities(logmgr)
 
-    def add_discretization_quantities(self, discr, eos, dim):
-        """Add all discretization quantities to the logmgr."""
-        for quantity in ["pressure", "temperature"]:
-            for op in ["min", "max", "sum"]:
-                self.add_quantity(DependentDiscretizationBasedQuantity(
-                    discr, eos, quantity, op))
-        for quantity in ["mass", "energy"]:
-            for op in ["min", "max", "sum"]:
-                self.add_quantity(ConservedDiscretizationBasedQuantity(
-                    discr, quantity, op))
+    try:
+        logmgr.add_quantity(PythonMemoryUsage())
+    except ImportError:
+        from warnings import warn
+        warn("memory_profile module not found, not tracking memory consumption.")
 
-        for dim in range(dim):
-            for op in ["min", "max", "sum"]:
-                self.add_quantity(ConservedDiscretizationBasedQuantity(
-                    discr, "momentum", op, dim=dim))
+    return logmgr
 
-    def add_memory_profile(self):
-        """Add the memory profile to the logmgr."""
-        self.add_quantity(PythonMemoryUsage())
 
-    def add_device_name(self, queue: cl.CommandQueue):
-        """Add the device name to the log."""
-        self.set_constant("device_name",
-                     str(queue.get_info(cl.command_queue_info.DEVICE)))
+def logmgr_add_device_name(logmgr, queue):
+    logmgr.set_constant("device_name",
+             str(queue.get_info(cl.command_queue_info.DEVICE)))
+
+
+def logmgr_add_discretization_quantities(logmgr, discr, eos, dim):
+    """Add all discretization quantities to the logmgr."""
+    for quantity in ["pressure", "temperature"]:
+        for op in ["min", "max", "sum"]:
+            logmgr.add_quantity(DependentDiscretizationBasedQuantity(
+                discr, eos, quantity, op))
+    for quantity in ["mass", "energy"]:
+        for op in ["min", "max", "sum"]:
+            logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
+                discr, quantity, op))
+
+    for dim in range(dim):
+        for op in ["min", "max", "sum"]:
+            logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
+                discr, "momentum", op, dim=dim))
 
 
 # {{{ Package versions
@@ -90,7 +97,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
     Parameters
     ----------
     mgr
-        The :class:LogManager to add the versions to.
+        The :class:`LogManager` to add the versions to.
 
     path_to_version_sh
         Path to emirge's version.sh script. The function will attempt to find this
@@ -133,13 +140,13 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 # {{{ State handling
 
-def set_state(mgr: LogManager, state: ndarray) -> None:
-    """Update the state of all :class:`StateConsumer` of the log manager `mgr`.
+def set_sim_state(mgr: LogManager, conserved_vars, dependent_vars) -> None:
+    """Update the simulation state of all :class:`StateConsumer` of the log manager.
 
     Parameters
     ----------
     mgr
-        The :class:LogManager to set the state of.
+        The :class:`LogManager` to set the state of.
 
     state
         The state vector to the set the state to.
@@ -148,18 +155,20 @@ def set_state(mgr: LogManager, state: ndarray) -> None:
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
             if isinstance(gd.quantity, StateConsumer):
-                gd.quantity.set_state(state)
+                gd.quantity.set_sim_state(conserved_vars, dependent_vars)
 
 
 class StateConsumer:
     """Base class for quantities that require a state for logging."""
 
     def __init__(self):
-        self.state = None
+        self.conserved_vars = None
+        self.dependent_vars = None
 
-    def set_state(self, state: ndarray) -> None:
+    def set_sim_state(self, conserved_vars, dependent_vars) -> None:
         """Update the state vector of the object."""
-        self.state = state
+        self.conserved_vars = conserved_vars
+        self.dependent_vars = dependent_vars
 
 # }}}
 
@@ -236,14 +245,11 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 
     def __call__(self):
         """Return the requested conserved quantity."""
-        if self.state is None:
+        if self.conserved_vars is None:
             return None
 
-        from mirgecom.euler import split_conserved
-
-        cv = split_conserved(self.discr.dim, self.state)
-        self.state = None
-        cq = getattr(cv, self.quantity)
+        cq = getattr(self.conserved_vars, self.quantity)
+        self.conserved_vars = None
 
         if not isinstance(cq, DOFArray):
             return self._discr_reduction(cq[self.dim])
@@ -276,15 +282,11 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
 
     def __call__(self):
         """Return the requested dependent quantity."""
-        if self.state is None:
+        if self.dependent_vars is None:
             return None
 
-        from mirgecom.euler import split_conserved
-
-        cv = split_conserved(self.discr.dim, self.state)
-        dv = self.eos.dependent_vars(cv)
-
-        self.state = None
+        dv = self.dependent_vars
+        self.dependent_vars = None
 
         return self._discr_reduction(getattr(dv, self.quantity))
 

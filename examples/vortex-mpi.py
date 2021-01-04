@@ -55,7 +55,8 @@ from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer
 
-from mirgecom.logging_quantities import MirgecomLogManager
+from mirgecom.logging_quantities import (initialize_logmgr,
+    logmgr_add_discretization_quantities, logmgr_add_device_name)
 
 
 logger = logging.getLogger(__name__)
@@ -67,10 +68,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
 
-    if use_logmgr:
-        logmgr = MirgecomLogManager("vortex.sqlite", "wu", mpi_comm=comm)
-    else:
-        logmgr = None
+    logmgr = initialize_logmgr(use_logmgr, use_profiling, filename="vortex.sqlite",
+        mode="wu", mpi_comm=comm)
 
     cl_ctx = ctx_factory()
     if use_profiling:
@@ -129,19 +128,19 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     vis_timer = None
 
     if logmgr:
-        logmgr.add_discretization_quantities(discr, eos, dim)
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_discretization_quantities(logmgr, discr, eos, dim)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "min_momentum1"])
 
         try:
-            logmgr.add_memory_profile()
             logmgr.add_watches(["memory_usage.max"])
-        except ImportError:
-            from warnings import warn
-            warn("memory_profile module not found, not tracking memory consumption.")
+        except KeyError:
+            pass
 
-        logmgr.add_device_name(queue)
+        if use_profiling:
+            logmgr.add_watches(["pyopencl_array_time.max"])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -180,7 +179,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr)
+                          t=current_t, t_final=t_final, logmgr=logmgr, eos=eos, dim=dim)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
