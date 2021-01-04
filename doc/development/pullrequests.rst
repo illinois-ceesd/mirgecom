@@ -140,6 +140,38 @@ packages), as well as functional tests using the ``pytest`` package. When a
 test fails, please take a look at the CI outputs to fix the error. Both draft
 PRs and full PRs will undergo CI tests.
 
+To check the code automatically on your local machine before creating the git
+commit, you can use a git hook such as the following one (save this script as
+``.git/pre-commit`` in the mirgecom/ folder and make it executable):
+
+.. code-block:: bash
+
+   #!/bin/bash
+
+   if [[ $(command -v "flake8") ]]; then
+       flake8 mirgecom/ test/ examples/ setup.py doc/conf.py
+       res=$?
+       if [[ $res -ne 0 ]]; then
+           echo "Error: flake8 check failed. Fix the errors (or run git with --no-verify to bypass the check)."
+           exit $res
+       fi
+   else
+       echo "Warning: flake8 not found. Run 'pip install flake8' to install it."
+   fi
+
+
+   if [[ $(command -v "pydocstyle") ]]; then
+       pydocstyle mirgecom/
+       res=$?
+       if [[ $res -ne 0 ]]; then
+           echo "Error: pydocstyle check failed. Fix the errors (or run git with --no-verify to bypass the check)."
+           exit $res
+       fi
+   else
+       echo "Warning: pydocstyle not found. Run 'pip install pydocstyle' to install it."
+   fi
+
+
 Merging a pull request
 ----------------------
 
