@@ -132,7 +132,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr_add_discretization_quantities(logmgr, discr, eos, dim)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
-                            "min_temperature", "min_momentum1"])
+                            "min_temperature", "norm_momentum1"])
 
         try:
             logmgr.add_watches(["memory_usage.max"])

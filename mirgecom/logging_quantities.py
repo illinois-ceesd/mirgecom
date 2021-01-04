@@ -76,16 +76,16 @@ def logmgr_add_device_name(logmgr, queue):
 def logmgr_add_discretization_quantities(logmgr, discr, eos, dim):
     """Add all discretization quantities to the logmgr."""
     for quantity in ["pressure", "temperature"]:
-        for op in ["min", "max", "sum"]:
+        for op in ["min", "max", "sum", "norm"]:
             logmgr.add_quantity(DependentDiscretizationBasedQuantity(
                 discr, eos, quantity, op))
     for quantity in ["mass", "energy"]:
-        for op in ["min", "max", "sum"]:
+        for op in ["min", "max", "sum", "norm"]:
             logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
                 discr, quantity, op))
 
     for dim in range(dim):
-        for op in ["min", "max", "sum"]:
+        for op in ["min", "max", "sum", "norm"]:
             logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
                 discr, "momentum", op, dim=dim))
 
@@ -179,7 +179,7 @@ class StateConsumer:
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
-    Possible rank aggregation operations (`op`) are: min, max, sum.
+    Possible rank aggregation operations (`op`) are: min, max, sum, norm.
     """
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
@@ -194,8 +194,8 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         from functools import partial
 
-        if op not in ["min", "max", "sum"]:
-            raise ValueError("op must be one of 'min', 'max', 'sum'.")
+        if op not in ["min", "max", "sum", "norm"]:
+            raise ValueError("op must be one of 'min', 'max', 'sum', 'norm'.")
 
         if op == "min":
             self._discr_reduction = partial(self.discr.nodal_min, "vol")
@@ -206,6 +206,9 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         elif op == "sum":
             self._discr_reduction = partial(self.discr.nodal_sum, "vol")
             self.rank_aggr = sum
+        elif op == "norm":
+            self._discr_reduction = partial(self.discr.norm)
+            self.rank_aggr = max
         else:
             raise RuntimeError(f"unknown operation {op}")
 
