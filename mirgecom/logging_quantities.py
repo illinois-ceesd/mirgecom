@@ -241,14 +241,19 @@ class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
             elif quantity == "energy":
                 unit = "J/m^3"
             elif quantity == "momentum":
-                if dim is None:
-                    raise RuntimeError("Missing 'dim' parameter for dimensional "
-                                       f"ConservedQuantity '{quantity}'.")
                 unit = "kg*m/s/m^3"
             else:
                 unit = ""
             warn(f"Logging had to guess units for '{quantity}': '{unit}'."
                 "It should not have to. Some other component should tell it.")
+
+        if dim is None and quantity == "momentum":
+            raise RuntimeError("Missing 'dim' parameter for dimensional "
+                              f"ConservedQuantity '{quantity}'.")
+
+        if dim is not None and quantity != "momentum":
+            raise RuntimeError("Cannot specify 'dim' parameter for non-dimensional "
+                              f"ConservedQuantity '{quantity}'.")
 
         if name is None:
             name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
