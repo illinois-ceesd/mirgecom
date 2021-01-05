@@ -68,13 +68,13 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
     return logmgr
 
 
-def logmgr_add_device_name(logmgr, queue):
+def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     """Add the OpenCL device name to the log."""
     logmgr.set_constant("device_name",
              str(queue.get_info(cl.command_queue_info.DEVICE)))
 
 
-def logmgr_add_discretization_quantities(logmgr, discr, eos, dim):
+def logmgr_add_discretization_quantities(logmgr: LogManager, discr, eos, dim):
     """Add all discretization quantities to the logmgr."""
     for quantity in ["pressure", "temperature"]:
         for op in ["min", "max", "sum", "norm"]:
@@ -150,8 +150,11 @@ def set_sim_state(mgr: LogManager, conserved_vars, dependent_vars) -> None:
     mgr
         The :class:`logpyle.LogManager` to set the state of.
 
-    state
-        The state vector to the set the state to.
+    conserved_vars
+        The conserved variables to the set the state to.
+
+    dependent_vars
+        The dependent variables to the set the state to.
     """
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
