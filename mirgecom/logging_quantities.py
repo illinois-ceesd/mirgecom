@@ -25,14 +25,16 @@ THE SOFTWARE.
 """
 
 __doc__ = """
-.. autoclass:: MirgecomLogManager
 .. autoclass:: StateConsumer
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: ConservedDiscretizationBasedQuantity
 .. autoclass:: DependentDiscretizationBasedQuantity
 .. autoclass:: KernelProfile
+.. autofunction:: initialize_logmgr
+.. autofunction:: logmgr_add_device_name
+.. autofunction:: logmgr_add_discretization_quantities
 .. autofunction:: add_package_versions
-.. autofunction:: set_state
+.. autofunction:: set_sim_state
 """
 
 from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
@@ -46,7 +48,7 @@ import pyopencl as cl
 
 def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
         filename: str = None, mode: str = "wu", mpi_comm=None) -> LogManager:
-    """Create and initialize a mirgecom-specific :class:`LogManager`."""
+    """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
 
@@ -97,7 +99,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
     Parameters
     ----------
     mgr
-        The :class:`LogManager` to add the versions to.
+        The :class:`logpyle.LogManager` to add the versions to.
 
     path_to_version_sh
         Path to emirge's version.sh script. The function will attempt to find this
@@ -146,7 +148,7 @@ def set_sim_state(mgr: LogManager, conserved_vars, dependent_vars) -> None:
     Parameters
     ----------
     mgr
-        The :class:`LogManager` to set the state of.
+        The :class:`logpyle.LogManager` to set the state of.
 
     state
         The state vector to the set the state to.
