@@ -31,7 +31,7 @@ from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from meshmode.dof_array import thaw, flat_norm, DOFArray
+from meshmode.dof_array import thaw, DOFArray
 from grudge.symbolic import DTAG_BOUNDARY
 
 from meshmode.array_context import (  # noqa
@@ -382,13 +382,16 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             ndgctx.octave.eval("[rhs] = HeatCRHS1D(u,t)", verbose=False)
             diffusion_u_ndg = ndgctx.pull_dof_array(actx, "rhs")
 
-            err = (flat_norm(diffusion_u_mirgecom-diffusion_u_ndg, np.inf)
-                        / flat_norm(diffusion_u_ndg, np.inf))
+            def inf_norm(f):
+                return actx.np.linalg.norm(f, np.inf)
+
+            err = (inf_norm(diffusion_u_mirgecom-diffusion_u_ndg)
+                        / inf_norm(diffusion_u_ndg))
 
             if print_err:
                 diffusion_u_exact = sym_eval_mirgecom(sym_diffusion_u)
-                err_exact = (flat_norm(diffusion_u_mirgecom-diffusion_u_exact,
-                            np.inf) / flat_norm(diffusion_u_exact, np.inf))
+                err_exact = (inf_norm(diffusion_u_mirgecom-diffusion_u_exact)
+                            / inf_norm(diffusion_u_exact))
                 print(err, err_exact)
 
             assert err < 1e-9
