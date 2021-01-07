@@ -391,7 +391,7 @@ class Lump:
             Equation of state class to be used in construction of soln (if needed)
         """
         if len(x_vec) != self._dim:
-            raise ValueError(f"Position vector has unexpected dimenionality,"
+            raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
         amplitude = self._rhoamp
@@ -509,17 +509,17 @@ class MultiLump:
         p0: float
             specifies the value of :math:`p_0`
         center: numpy.ndarray
-            center of lump, shape ``(2,)``
+            center of lump, shape ``(numdim,)``
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
-            shape ``(2,)``
+            shape ``(numdim,)``
         """
         if center is None:
             center = np.zeros(shape=(numdim,))
         if velocity is None:
             velocity = np.zeros(shape=(numdim,))
         if len(center) != numdim or len(velocity) != numdim:
-            raise ValueError(f"Expected {numdim}-dimensional inputs.")
+            raise ValueError(f"Expected {numdim}-dimensional vector inputs.")
 
         if nspecies > 0:
             if spec_y0s is None:

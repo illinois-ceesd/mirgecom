@@ -85,7 +85,7 @@ class ConservedVars:  # FIXME: Name?
 
     .. attribute:: mass
 
-        DOFArray for the scalar mass per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for the scalar mass per unit volume
 
     .. attribute:: energy
 
@@ -93,8 +93,8 @@ class ConservedVars:  # FIXME: Name?
 
     .. attribute:: momentum
 
-        Object array of DOFArrays for momentum density,
-        shape=(ndim,)
+        Object array of DOFArrays for momentum density
+        of shape ``(ndim,)``
 
     .. attribute:: mass_fractions
 
