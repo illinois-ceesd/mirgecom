@@ -77,16 +77,16 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_discretization_quantities(logmgr: LogManager, discr, eos, dim):
     """Add all discretization quantities to the logmgr."""
     for quantity in ["pressure", "temperature"]:
-        for op in ["min", "max", "sum", "norm"]:
+        for op in ["min", "max", "norm"]:
             logmgr.add_quantity(DependentDiscretizationBasedQuantity(
                 discr, eos, quantity, op))
     for quantity in ["mass", "energy"]:
-        for op in ["min", "max", "sum", "norm"]:
+        for op in ["min", "max", "norm"]:
             logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
                 discr, quantity, op))
 
     for dim in range(dim):
-        for op in ["min", "max", "sum", "norm"]:
+        for op in ["min", "max", "norm"]:
             logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
                 discr, "momentum", op, dim=dim))
 
@@ -183,7 +183,7 @@ class StateConsumer:
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
-    Possible rank aggregation operations (`op`) are: min, max, sum, norm.
+    Possible rank aggregation operations (`op`) are: min, max, norm.
     """
 
     def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
@@ -198,8 +198,8 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         from functools import partial
 
-        if op not in ["min", "max", "sum", "norm"]:
-            raise ValueError("op must be one of 'min', 'max', 'sum', 'norm'.")
+        if op not in ["min", "max", "norm"]:
+            raise ValueError("op must be one of 'min', 'max', 'norm'.")
 
         if op == "min":
             self._discr_reduction = partial(self.discr.nodal_min, "vol")
@@ -207,9 +207,6 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         elif op == "max":
             self._discr_reduction = partial(self.discr.nodal_max, "vol")
             self.rank_aggr = max
-        elif op == "sum":
-            self._discr_reduction = partial(self.discr.nodal_sum, "vol")
-            self.rank_aggr = sum
         elif op == "norm":
             self._discr_reduction = partial(self.discr.norm)
             self.rank_aggr = max
