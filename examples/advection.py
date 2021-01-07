@@ -96,7 +96,11 @@ def main(use_profiling=False):
         flux_type=flux_type)
 
     bound_op = bind(discr, op.sym_operator())
-    u = bind(discr, u_analytic(sym.nodes(dim)))(actx, t=0)
+    # u = bind(discr, u_analytic(sym.nodes(dim)))(actx, t=0)
+    u = flat_obj_array(
+        bump(actx, discr),
+        [discr.zeros(actx) for i in range(discr.dim)]
+        )
 
     def rhs(t, u):
         return bound_op(t=t, u=u)
@@ -110,7 +114,7 @@ def main(use_profiling=False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t)
+            print(istep, t, type(u[0]))
 
         t += dt
         istep += 1
