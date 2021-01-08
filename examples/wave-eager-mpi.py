@@ -27,10 +27,10 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from pytools.obj_array import flat_obj_array, obj_array_vectorize
+from pytools.obj_array import flat_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw, unflatten, flatten
+from meshmode.dof_array import thaw, array_context_for_pickling
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -73,9 +73,9 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=1
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    num_parts = comm.Get_size()
 
     if restart_step is None:
-        num_parts = comm.Get_size()
 
         from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
         mesh_dist = MPIMeshDistributor(comm)
@@ -100,8 +100,10 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=1
         fields = None
 
     else:
-        with open(snapshot_pattern.format(step=restart_step, rank=rank), "rb") as f:
-            restart_data = pickle.load(f)
+        with array_context_for_pickling(actx):
+            with open(snapshot_pattern.format(step=restart_step, rank=rank), "rb") \
+                    as f:
+                restart_data = pickle.load(f)
 
         local_mesh = restart_data["local_mesh"]
         nel_1d = restart_data["nel_1d"]
@@ -136,10 +138,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=1
         t = restart_data["t"]
         istep = restart_step
         assert istep == restart_step
-
-        fields = unflatten(
-            actx, discr.discr_from_dd("vol"),
-            obj_array_vectorize(actx.from_numpy, restart_data["fields"]))
+        fields = restart_data["fields"]
 
     vis = make_visualizer(discr, order+3 if local_mesh.dim == 2 else order)
 
@@ -151,15 +150,16 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=1
         if istep % 100 == 0 and (
                 # Do not overwrite the restart file that we just read.
                 istep != restart_step):
-            with open(snapshot_pattern.format(step=istep, rank=rank), "wb") as f:
-                pickle.dump({
-                    "local_mesh": local_mesh,
-                    "fields": obj_array_vectorize(actx.to_numpy, flatten(fields)),
-                    "t": t,
-                    "step": istep,
-                    "nel_1d": nel_1d,
-                    "num_parts": num_parts,
-                    }, f)
+            with array_context_for_pickling(actx):
+                with open(snapshot_pattern.format(step=istep, rank=rank), "wb") as f:
+                    pickle.dump({
+                        "local_mesh": local_mesh,
+                        "fields": fields,
+                        "t": t,
+                        "step": istep,
+                        "nel_1d": nel_1d,
+                        "num_parts": num_parts,
+                        }, f)
 
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))
