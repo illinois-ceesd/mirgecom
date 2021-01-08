@@ -9,12 +9,12 @@ Euler's equations of gas dynamics:
 
 where:
 
--   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
--   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
--   domain boundary :math:`\partial\Omega`,
--   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-    {(\partial_t{\rho\vec{V}})}_s]`
+-   state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]$
+-   flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]$,
+-   domain boundary $\partial\Omega$,
+-   sources $\mathbf{S} = [{(\partial_t{\rho})}_s,
+    {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s]$
 
 
 State Vector Handling
@@ -64,7 +64,6 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
@@ -78,7 +77,7 @@ class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum)
-    per unit volume = :math:`(\rho,\rho{E},\rho\vec{V})` from an agglomerated
+    per unit volume = $(\rho,\rho{E},\rho\vec{V})$ from an agglomerated
     object array.
 
     .. attribute:: dim
@@ -165,16 +164,11 @@ def join_conserved(dim, mass, energy, momentum):
     return result
 
 
-def scalar(s):
-    """Create an object array for a scalar."""
-    return make_obj_array([s])
-
-
 def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
+    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})$
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -183,15 +177,15 @@ def inviscid_flux(discr, eos, q):
     mom = cv.momentum
     return join_conserved(dim,
             mass=mom,
-            energy=mom * scalar((cv.energy + p) / cv.mass),
-            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p))
+            energy=mom * (cv.energy + p) / cv.mass,
+            momentum=np.outer(mom, mom)/cv.mass + np.eye(dim)*p)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
     """Return the maximum wavespeed in for flow solution *q*."""
     actx = cv.mass.array_context
 
-    v = cv.momentum / scalar(cv.mass)
+    v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
@@ -231,7 +225,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
-        - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
+        - 0.5 * lam * (q_tpair.ext - q_tpair.int))
 
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)

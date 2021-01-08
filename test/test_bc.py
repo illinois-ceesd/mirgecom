@@ -29,8 +29,6 @@ import numpy.linalg as la  # noqa
 import logging
 import pytest
 
-from pytools.obj_array import make_obj_array
-
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import split_conserved
@@ -105,7 +103,7 @@ def test_slipwall_identity(actx_factory, dim):
 
             # check that exterior momentum term is mom_interior - 2 * mom_normal
             mom_norm_comp = np.dot(bnd_cv_int.momentum, nhat)
-            mom_norm = nhat * make_obj_array([mom_norm_comp])
+            mom_norm = nhat * mom_norm_comp
             expected_mom_ext = bnd_cv_int.momentum - 2.0 * mom_norm
             mom_resid = bnd_cv_ext.momentum - expected_mom_ext
             mom_err = bnd_norm(mom_resid)

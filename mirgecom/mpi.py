@@ -50,6 +50,17 @@ def mpi_entry_point(func):
             raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
                         "point. Check for prior imports.")
 
+        # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
+        # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
+        # for details.
+        import pyopencl as cl
+        cl.get_platforms()
+
+        # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
+        # some MPI runtimes.
+        import mpi4py
+        mpi4py.rc.recv_mprobe = False
+
         # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
         # exit
         from mpi4py import MPI

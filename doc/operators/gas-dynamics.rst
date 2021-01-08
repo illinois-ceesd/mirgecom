@@ -1,10 +1,3 @@
-.. module:: mirgecom
-
-Linear Acoustic Wave Equation
-=============================
-
-.. automodule:: mirgecom.wave
-
 Gas Dynamics
 ============
 

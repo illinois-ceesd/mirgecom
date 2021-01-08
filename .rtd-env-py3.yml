@@ -6,6 +6,8 @@ dependencies:
 - python=3.8
 - mpi4py
 - islpy
+- pip
+- pyopencl
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"
@@ -14,3 +16,7 @@ dependencies:
   - "git+https://github.com/inducer/modepy.git#egg=modepy"
   - "git+https://github.com/inducer/meshmode.git#egg=meshmode"
   - "git+https://github.com/inducer/grudge.git#egg=grudge"
+  - "sphinx-math-dollar"
+  - "sphinx-copybutton"
+  - "furo"
+

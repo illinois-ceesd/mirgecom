@@ -58,13 +58,13 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     x_vec: np.ndarray
         Nodal positions
     mass: float
-        Value to set `:math:\rho`
+        Value to set $\rho$
     energy: float
-        Optional value to set `:math:\rho{E}`
+        Optional value to set $\rho{E}$
     pressure: float
-        Value to use for calculating `:math:\rho{E}`
+        Value to use for calculating $\rho{E}$
     velocity: np.ndarray
-        Optional constant velocity to set `:math:\rho\vec{V}`
+        Optional constant velocity to set $\rho\vec{V}$
 
     Returns
     -------
@@ -80,7 +80,7 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     _velocity = velocity
     _gamma = eos.gamma()
 
-    mom0 = _velocity * make_obj_array([_rho])
+    mom0 = _velocity * _rho
     e0 = _p / (_gamma - 1.0)
     ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
 
@@ -89,7 +89,7 @@ def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
     ones = zeros + 1.0
 
     mass = zeros + _rho
-    mom = mom0 * make_obj_array([ones])
+    mom = mom0 * ones
     energy = e0 + ke0 + zeros
 
     return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
@@ -104,18 +104,18 @@ def _make_pulse(amp, r0, w, r):
 
         G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
 
-    Where :math:`\vec{r}` is the position, and the parameters are
-    the pulse amplitude :math:`a_0`, the pulse location :math:`\vec{r_0}`, and the
-    RMS width of the pulse, :math:`w`.
+    Where $\vec{r}$ is the position, and the parameters are
+    the pulse amplitude $a_0$, the pulse location $\vec{r_0}$, and the
+    RMS width of the pulse, $w$.
 
     Parameters
     ----------
     amp: float
-        specifies the value of :math:`\a_0`, the pulse amplitude
+        specifies the value of $\a_0$, the pulse amplitude
     r0: float array
-        specifies the value of :math:`\r_0`, the pulse location
+        specifies the value of $\r_0$, the pulse location
     w: float
-        specifies the value of :math:`w`, the rms pulse width
+        specifies the value of $w$, the rms pulse width
     r: Object array of DOFArrays
         specifies the nodal coordinates
 
@@ -316,8 +316,8 @@ class Lump:
          {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
          {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
-    Where :math:`V_0` is the fixed velocity specified
-    by the user at init time, and :math:`\gamma` is taken
+    Where $V_0$ is the fixed velocity specified
+    by the user at init time, and $\gamma$ is taken
     from the equation-of-state object (eos).
 
     A call to this object after creation/init creates
@@ -349,11 +349,11 @@ class Lump:
         numdim: int
             specify the number of dimensions for the lump
         rho0: float
-            specifies the value of :math:`\rho_0`
+            specifies the value of $\rho_0$
         rhoamp: float
-            specifies the value of :math:`\rho_a`
+            specifies the value of $\rho_a$
         p0: float
-            specifies the value of :math:`p_0`
+            specifies the value of $p_0$
         center: numpy.ndarray
             center of lump, shape ``(2,)``
         velocity: numpy.ndarray
@@ -416,7 +416,7 @@ class Lump:
         gamma = eos.gamma()
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
-        mom = self._velocity * make_obj_array([mass])
+        mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         return flat_obj_array(mass, energy, mom)
@@ -452,12 +452,12 @@ class Lump:
         expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
 
-        v = self._velocity * make_obj_array([1.0 / mass])
+        v = self._velocity / mass
         v2 = np.dot(v, v)
         rdotv = np.dot(rel_center, v)
         massrhs = -2 * rdotv * mass
         energyrhs = -v2 * rdotv * mass
-        momrhs = v * make_obj_array([-2 * mass * rdotv])
+        momrhs = v * (-2 * mass * rdotv)
 
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
@@ -472,8 +472,8 @@ class AcousticPulse:
         {\rho}E(\vec{r}) = {\rho}E + a_0 * G(\vec{r})\\
         G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
 
-    where :math:`\vec{r}` are the nodal coordinates, and :math:`\vec{r_0}`,
-    :math:`amplitude`, and :math:`w`, are the the user-specified pulse location,
+    where $\vec{r}$ are the nodal coordinates, and $\vec{r_0}$,
+    $amplitude$, and $w$, are the the user-specified pulse location,
     amplitude, and width, respectively.
 
     .. automethod:: __init__
@@ -490,7 +490,7 @@ class AcousticPulse:
         numdim: int
             specify the number of dimensions for the pulse
         amplitude: float
-            specifies the value of :math:`amplitude`
+            specifies the value of $amplitude$
         width: float
             specifies the rms width of the pulse
         center: numpy.ndarray
@@ -543,7 +543,7 @@ class Uniform:
     """
 
     def __init__(
-            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=[0],
+            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=np.zeros((1,)),
     ):
         r"""Initialize uniform flow parameters.
 
