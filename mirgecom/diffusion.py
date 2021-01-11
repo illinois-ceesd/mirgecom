@@ -258,6 +258,8 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     u_quad = discr.project("vol", dd_quad, u)
 
     q = discr.inverse_mass(
+        # Decompose phi_i*grad(sqrt(alpha)*phi_j) term via the product rule in
+        # order to avoid having to define a new operator
         discr.mass(dd_quad, -0.5/sqrt_alpha_quad * grad_alpha_quad * u_quad)
         +  # noqa: W504
         discr.weak_grad(dd_quad, -sqrt_alpha_quad * u_quad)
