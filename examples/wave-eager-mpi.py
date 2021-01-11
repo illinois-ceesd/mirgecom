@@ -87,6 +87,17 @@ def main(use_profiling=True):
     dim = 2
     nel_1d = 72 # 10082
     nel_1d = 101 # 20000
+    nel_1d = 143 # 40328
+    nel_1d = 202 # 80000
+    nel_1d = 286 # 160178
+    nel_1d = 401
+    nel_1d = 567
+    nel_1d = 802
+    nel_1d = 1134
+    nel_1d = 1604
+    nel_1d = 2268
+    nel_1d = 3208
+    nel_1d = 4537
 
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
