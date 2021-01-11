@@ -215,7 +215,7 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     boundaries:
         dictionary (or list of dictionaries) mapping boundary tags to
         :class:`DiffusionBoundary` instances
-    u: meshmode.dof_array.DOFArray or numpy.ndarray
+    u: Union[meshmode.dof_array.DOFArray, numpy.ndarray]
         the DOF array (or object array of DOF arrays) to which the operator should be
         applied
     var_diff_quad_tag:
