@@ -36,16 +36,16 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw, DOFArray
-from grudge.symbolic.primitives import DOFDesc, QTAG_NONE
+from grudge.symbolic.primitives import DOFDesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.symbolic.primitives import TracePair, as_dofdesc
 
 
-def _q_flux(discr, var_diff_quad_tag, alpha, u_tpair):
+def _q_flux(discr, quad_tag, alpha, u_tpair):
     actx = u_tpair.int.array_context
 
     dd = u_tpair.dd
-    dd_quad = dd.with_qtag(var_diff_quad_tag)
+    dd_quad = dd.with_qtag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
     normal_quad = thaw(actx, discr.normal(dd_quad))
@@ -59,11 +59,11 @@ def _q_flux(discr, var_diff_quad_tag, alpha, u_tpair):
         -sqrt_alpha_quad * u_avg_quad * normal_quad)
 
 
-def _u_flux(discr, var_diff_quad_tag, alpha, q_tpair):
+def _u_flux(discr, quad_tag, alpha, q_tpair):
     actx = q_tpair.int[0].array_context
 
     dd = q_tpair.dd
-    dd_quad = dd.with_qtag(var_diff_quad_tag)
+    dd_quad = dd.with_qtag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
     normal_quad = thaw(actx, discr.normal(dd_quad))
@@ -86,12 +86,12 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractmethod
-    def get_q_flux(self, discr, var_diff_quad_tag, alpha, dd, u):
+    def get_q_flux(self, discr, quad_tag, alpha, dd, u):
         """Compute the flux for *q* on the boundary corresponding to *dd*."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_u_flux(self, discr, var_diff_quad_tag, alpha, dd, q):
+    def get_u_flux(self, discr, quad_tag, alpha, dd, q):
         """Compute the flux for *u* on the boundary corresponding to *dd*."""
         raise NotImplementedError
 
@@ -125,15 +125,15 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     # Observe: Dirichlet BC enforced on q, not u
-    def get_q_flux(self, discr, var_diff_quad_tag, alpha, dd, u):  # noqa: D102
+    def get_q_flux(self, discr, quad_tag, alpha, dd, u):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2.*self.value-u_int)
-        return _q_flux(discr, var_diff_quad_tag, alpha, u_tpair)
+        return _q_flux(discr, quad_tag, alpha, u_tpair)
 
-    def get_u_flux(self, discr, var_diff_quad_tag, alpha, dd, q):  # noqa: D102
+    def get_u_flux(self, discr, quad_tag, alpha, dd, q):  # noqa: D102
         q_int = discr.project("vol", dd, q)
         q_tpair = TracePair(dd, interior=q_int, exterior=q_int)
-        return _u_flux(discr, var_diff_quad_tag, alpha, q_tpair)
+        return _u_flux(discr, quad_tag, alpha, q_tpair)
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
@@ -173,13 +173,13 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         """
         self.value = value
 
-    def get_q_flux(self, discr, var_diff_quad_tag, alpha, dd, u):  # noqa: D102
+    def get_q_flux(self, discr, quad_tag, alpha, dd, u):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
-        return _q_flux(discr, var_diff_quad_tag, alpha, u_tpair)
+        return _q_flux(discr, quad_tag, alpha, u_tpair)
 
-    def get_u_flux(self, discr, var_diff_quad_tag, alpha, dd, q):  # noqa: D102
-        dd_quad = dd.with_qtag(var_diff_quad_tag)
+    def get_u_flux(self, discr, quad_tag, alpha, dd, q):  # noqa: D102
+        dd_quad = dd.with_qtag(quad_tag)
         dd_allfaces_quad = dd_quad.with_dtag("all_faces")
         # Compute the flux directly instead of constructing an external q value
         # (and the associated TracePair); this approach is simpler in the
@@ -196,7 +196,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
 
 
-def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE):
+def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
     r"""
     Compute the diffusion operator.
 
@@ -210,6 +210,9 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
+    quad_tag:
+        quadrature tag indicating which discretization in *discr* to use for
+        overintegration
     alpha: Union[numbers.Number, meshmode.dof_array.DOFArray]
         the diffusivity value(s)
     boundaries:
@@ -218,9 +221,6 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     u: Union[meshmode.dof_array.DOFArray, numpy.ndarray]
         the DOF array (or object array of DOF arrays) to which the operator should be
         applied
-    var_diff_quad_tag:
-        quadrature tag indicating which discretization in *discr* to use for
-        overintegration when *alpha* is spatially varying
 
     Returns
     -------
@@ -233,8 +233,7 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
         return obj_array_vectorize_n_args(lambda boundaries_i, u_i:
-            diffusion_operator(discr, alpha, boundaries_i, u_i,
-                var_diff_quad_tag=var_diff_quad_tag),
+            diffusion_operator(discr, quad_tag, alpha, boundaries_i, u_i),
             make_obj_array(boundaries), u)
 
     for btag, bdry in boundaries.items():
@@ -244,8 +243,8 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
 
     actx = u.array_context
 
-    dd_quad = DOFDesc("vol", var_diff_quad_tag)
-    dd_allfaces_quad = DOFDesc("all_faces", var_diff_quad_tag)
+    dd_quad = DOFDesc("vol", quad_tag)
+    dd_allfaces_quad = DOFDesc("all_faces", quad_tag)
 
     if isinstance(alpha, DOFArray):
         alpha_array = alpha
@@ -267,15 +266,14 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
-            _q_flux(discr, var_diff_quad_tag, alpha_array,
-                interior_trace_pair(discr, u))
+            _q_flux(discr, quad_tag, alpha_array, interior_trace_pair(discr, u))
             + sum(
-                bdry.get_q_flux(discr, var_diff_quad_tag, alpha_array,
-                    as_dofdesc(btag), u)
+                bdry.get_q_flux(discr, quad_tag, alpha_array, as_dofdesc(btag),
+                    u)
                 for btag, bdry in boundaries.items()
             )
             + sum(
-                _q_flux(discr, var_diff_quad_tag, alpha_array, tpair)
+                _q_flux(discr, quad_tag, alpha_array, tpair)
                 for tpair in cross_rank_trace_pairs(discr, u)
             )
         ))
@@ -288,15 +286,14 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
             -  # noqa: W504
             discr.face_mass(
                 dd_allfaces_quad,
-                _u_flux(discr, var_diff_quad_tag, alpha_array,
-                    interior_trace_pair(discr, q))
+                _u_flux(discr, quad_tag, alpha_array, interior_trace_pair(discr, q))
                 + sum(
-                    bdry.get_u_flux(discr, var_diff_quad_tag, alpha_array,
-                        as_dofdesc(btag), q)
+                    bdry.get_u_flux(discr, quad_tag, alpha_array, as_dofdesc(btag),
+                        q)
                     for btag, bdry in boundaries.items()
                 )
                 + sum(
-                    _u_flux(discr, var_diff_quad_tag, alpha_array, tpair)
+                    _u_flux(discr, quad_tag, alpha_array, tpair)
                     for tpair in cross_rank_trace_pairs(discr, q))
                 )
             )

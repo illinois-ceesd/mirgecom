@@ -33,6 +33,7 @@ from mirgecom.diffusion import (
     NeumannDiffusionBoundary)
 from meshmode.dof_array import thaw, DOFArray
 from grudge.symbolic import DTAG_BOUNDARY
+from grudge.symbolic.primitives import QTAG_NONE
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -261,14 +262,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         mesh = p.get_mesh(n)
 
         from grudge.eager import EagerDGDiscretization
-        from grudge.symbolic.primitives import QTAG_NONE
         from meshmode.discretization.poly_element import \
                 QuadratureSimplexGroupFactory, \
                 PolynomialWarpAndBlendGroupFactory
         discr = EagerDGDiscretization(actx, mesh,
                 quad_tag_to_group_factory={
                     QTAG_NONE: PolynomialWarpAndBlendGroupFactory(order),
-                    "var_diff": QuadratureSimplexGroupFactory(3*order),
+                    "quad": QuadratureSimplexGroupFactory(3*order),
                     })
 
         nodes = thaw(actx, discr.nodes())
@@ -279,13 +279,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         alpha = sym_eval(p.sym_alpha, 0.)
 
         if isinstance(alpha, DOFArray):
-            var_diff_quad_tag = "var_diff"
+            quad_tag = "quad"
         else:
-            var_diff_quad_tag = QTAG_NONE
+            quad_tag = QTAG_NONE
 
         def get_rhs(t, u):
-            result = (diffusion_operator(discr, var_diff_quad_tag=var_diff_quad_tag,
-                    alpha=alpha, boundaries=p.get_boundaries(discr, actx, t), u=u)
+            result = (diffusion_operator(discr, quad_tag=quad_tag, alpha=alpha,
+                    boundaries=p.get_boundaries(discr, actx, t), u=u)
                 + sym_eval(sym_f, t))
             return result
 
@@ -364,8 +364,8 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             u_mirgecom = sym_eval_mirgecom(p.sym_u)
 
             diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
-                alpha=discr_mirgecom.zeros(actx)+1., boundaries=p.get_boundaries(
-                    discr_mirgecom, actx, t), u=u_mirgecom)
+                quad_tag=QTAG_NONE, alpha=discr_mirgecom.zeros(actx)+1.,
+                boundaries=p.get_boundaries(discr_mirgecom, actx, t), u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
@@ -433,8 +433,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     boundaries = p.get_boundaries(discr, actx, t)
 
-    diffusion_u1 = diffusion_operator(discr, alpha=alpha, boundaries=boundaries,
-        u=u1)
+    diffusion_u1 = diffusion_operator(discr, quad_tag=QTAG_NONE, alpha=alpha,
+        boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
@@ -447,7 +447,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
-    diffusion_u_vector = diffusion_operator(discr, alpha=alpha,
+    diffusion_u_vector = diffusion_operator(discr, quad_tag=QTAG_NONE, alpha=alpha,
         boundaries=boundaries_vector, u=u_vector)
 
     assert isinstance(diffusion_u_vector, np.ndarray)
