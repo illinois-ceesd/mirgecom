@@ -210,8 +210,8 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    alpha: meshmode.dof_array.DOFArray
-        the diffusivities
+    alpha: Union[numbers.Number, meshmode.dof_array.DOFArray]
+        the diffusivity value(s)
     boundaries:
         dictionary (or list of dictionaries) mapping boundary tags to
         :class:`DiffusionBoundary` instances
@@ -246,9 +246,15 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     dd_quad = DOFDesc("vol", var_diff_quad_tag)
     dd_allfaces_quad = DOFDesc("all_faces", var_diff_quad_tag)
 
-    alpha_quad = discr.project("vol", dd_quad, alpha)
+    if isinstance(alpha, DOFArray):
+        alpha_array = alpha
+    else:
+        alpha_array = discr.zeros(actx) + alpha
+
+    alpha_quad = discr.project("vol", dd_quad, alpha_array)
     sqrt_alpha_quad = actx.np.sqrt(alpha_quad)
-    grad_alpha_quad = discr.project("vol", dd_quad, discr.grad(alpha))
+    grad_alpha_quad = discr.project("vol", dd_quad, discr.grad(alpha_array))
+
     u_quad = discr.project("vol", dd_quad, u)
 
     q = discr.inverse_mass(
@@ -258,14 +264,15 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
-            _q_flux(discr, var_diff_quad_tag, alpha,
+            _q_flux(discr, var_diff_quad_tag, alpha_array,
                 interior_trace_pair(discr, u))
             + sum(
-                bdry.get_q_flux(discr, var_diff_quad_tag, alpha, as_dofdesc(btag), u)
+                bdry.get_q_flux(discr, var_diff_quad_tag, alpha_array,
+                    as_dofdesc(btag), u)
                 for btag, bdry in boundaries.items()
             )
             + sum(
-                _q_flux(discr, var_diff_quad_tag, alpha, tpair)
+                _q_flux(discr, var_diff_quad_tag, alpha_array, tpair)
                 for tpair in cross_rank_trace_pairs(discr, u)
             )
         ))
@@ -278,15 +285,15 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
             -  # noqa: W504
             discr.face_mass(
                 dd_allfaces_quad,
-                _u_flux(discr, var_diff_quad_tag, alpha,
+                _u_flux(discr, var_diff_quad_tag, alpha_array,
                     interior_trace_pair(discr, q))
                 + sum(
-                    bdry.get_u_flux(discr, var_diff_quad_tag, alpha,
+                    bdry.get_u_flux(discr, var_diff_quad_tag, alpha_array,
                         as_dofdesc(btag), q)
                     for btag, bdry in boundaries.items()
                 )
                 + sum(
-                    _u_flux(discr, var_diff_quad_tag, alpha, tpair)
+                    _u_flux(discr, var_diff_quad_tag, alpha_array, tpair)
                     for tpair in cross_rank_trace_pairs(discr, q))
                 )
             )

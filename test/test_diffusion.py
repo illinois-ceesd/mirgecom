@@ -277,10 +277,10 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
         alpha = sym_eval(p.sym_alpha, 0.)
+
         if isinstance(alpha, DOFArray):
             var_diff_quad_tag = "var_diff"
         else:
-            alpha = discr.zeros(actx) + alpha
             var_diff_quad_tag = QTAG_NONE
 
         def get_rhs(t, u):
@@ -406,6 +406,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     p = get_decaying_trig(1, 2.)
 
+    assert isinstance(p.sym_alpha, Number)
+
     sym_u1 = p.sym_u
     sym_u2 = 2*p.sym_u
 
@@ -427,8 +429,6 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
     alpha = sym_eval(p.sym_alpha)
-    if not isinstance(alpha, DOFArray):
-        alpha = discr.zeros(actx) + alpha
 
     u1 = sym_eval(sym_u1)
     u2 = sym_eval(sym_u2)
