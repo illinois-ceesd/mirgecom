@@ -361,13 +361,11 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             def sym_eval_mirgecom(expr):
                 return sym.EvaluationMapper({"x": nodes_mirgecom, "t": t})(expr)
 
-            alpha_mirgecom = discr_mirgecom.zeros(actx) + 1.
-
             u_mirgecom = sym_eval_mirgecom(p.sym_u)
 
             diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
-                alpha=alpha_mirgecom, boundaries=p.get_boundaries(discr_mirgecom,
-                actx, t), u=u_mirgecom)
+                alpha=discr_mirgecom.zeros(actx)+1., boundaries=p.get_boundaries(
+                    discr_mirgecom, actx, t), u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
