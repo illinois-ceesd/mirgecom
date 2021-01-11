@@ -204,6 +204,8 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
     $\nabla\cdot(\alpha\nabla u)$, where $\alpha$ is the diffusivity and
     $u$ is a scalar field.
 
+    Uses unstabilized central numerical fluxes.
+
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
