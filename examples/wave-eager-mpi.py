@@ -41,6 +41,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
 
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 
 def bump(actx, discr, t=0):
     """Create a bump."""
@@ -62,12 +64,18 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main():
+def main(use_profiling=True):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -77,7 +85,8 @@ def main():
     mesh_dist = MPIMeshDistributor(comm)
 
     dim = 2
-    nel_1d = 16
+    nel_1d = 72 # 10082
+    nel_1d = 101 # 20000
 
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -102,14 +111,15 @@ def main():
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                     mpi_communicator=comm)
 
-    if dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.75/(nel_1d*order**2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.45/(nel_1d*order**2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    dt = 0.01
+    # if dim == 2:
+    #     # no deep meaning here, just a fudge factor
+    #     dt = 0.75/(nel_1d*order**2)
+    # elif dim == 3:
+    #     # no deep meaning here, just a fudge factor
+    #     dt = 0.45/(nel_1d*order**2)
+    # else:
+    #     raise ValueError("don't have a stable time step guesstimate")
 
     fields = flat_obj_array(
         bump(actx, discr),
@@ -124,18 +134,31 @@ def main():
     rank = comm.Get_rank()
 
     t = 0
-    t_final = 3
+    t_final = 0.21
     istep = 0
     while t < t_final:
+        if istep == 10:
+            from pyinstrument import Profiler
+            profiler = Profiler()
+            profiler.start()
+            if use_profiling:
+                ignore = actx.tabulate_profiling_data()
+
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
-            vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
+            print(istep, t)
+            # vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+            #         [
+            #             ("u", fields[0]),
+            #             ("v", fields[1:]),
+            #             ])
+
+        if istep == 19:
+            profiler.stop()
+            print(profiler.output_text(unicode=True, color=True, show_all=True))
+            if use_profiling:
+                print(actx.tabulate_profiling_data())
 
         t += dt
         istep += 1

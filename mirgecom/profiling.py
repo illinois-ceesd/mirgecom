@@ -180,7 +180,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_results.clear()
         self.kernel_stats.clear()
 
-        del_pyopencl_array_monkey_patch()
+        # del_pyopencl_array_monkey_patch()
 
     def _finish_profile_events(self) -> None:
         # First, wait for completion of all events
@@ -262,6 +262,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         g = ".4g"
 
         from statistics import mean
+        global nonloopy_profile_results
 
         all_res = {**self.profile_results, **nonloopy_profile_results}
 
@@ -319,6 +320,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
                 fprint_min, f"{fprint_mean:{g}}", fprint_max,
                 bytes_per_flop_mean])
+
+        # self.profile_results = {}
+        # nonloopy_profile_results = {}
 
         return tbl
 
