@@ -63,7 +63,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw, DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
     interior_trace_pair,
@@ -105,10 +105,10 @@ class ConservedVars:  # FIXME: Name?
     .. automethod:: replace
     """
 
-    mass: np.ndarray
-    energy: np.ndarray
-    momentum: np.ndarray
-    mass_fractions: np.ndarray = None
+    mass: DOFArray
+    energy: DOFArray
+    momentum: DOFArray
+    mass_fractions: DOFArray = None
 
     @property
     def dim(self):
