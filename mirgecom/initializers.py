@@ -465,6 +465,9 @@ class MulticomponentLump:
     where $V_0$ is the fixed velocity specified by the user at init time,
     and $\gamma$ is taken from the equation-of-state object (eos).
 
+    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
+    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
+
     A call to this object after creation/init creates the lump solution at a given
     time (*t*) relative to the configured origin (*center*) and background flow
     velocity (*velocity*).
