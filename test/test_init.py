@@ -83,7 +83,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     mass_fracs = (np.array([(ispec+1) for ispec in range(nspecies)])
                   if nspecies > 0 else None)
 
-    initializer = Uniform(numdim=dim, mass_fracs=mass_fracs, velocity=velocity)
+    initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
     init_soln = initializer(0, nodes)
     cv = split_conserved(dim, init_soln)
 
@@ -135,7 +135,7 @@ def test_lump_init(ctx_factory):
     velocity = np.zeros(shape=(dim,))
     center[0] = 5
     velocity[0] = 1
-    lump = Lump(numdim=dim, center=center, velocity=velocity)
+    lump = Lump(dim=dim, center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
     cv = split_conserved(dim, lump_soln)
@@ -252,7 +252,7 @@ def test_uniform(ctx_factory, dim):
     print(f"Nodes={nodes}")
 
     from mirgecom.initializers import Uniform
-    initr = Uniform(numdim=dim)
+    initr = Uniform(dim=dim)
     initsoln = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
     ssoln = split_conserved(dim, initsoln)
@@ -365,7 +365,7 @@ def test_multilump(ctx_factory, dim):
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 1
 
-    lump = MulticomponentLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
+    lump = MulticomponentLump(dim=dim, nspecies=nspecies, spec_centers=centers,
                               velocity=velocity, spec_y0s=spec_y0s,
                               spec_amplitudes=spec_amplitudes)
 

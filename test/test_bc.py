@@ -81,7 +81,7 @@ def test_slipwall_identity(actx_factory, dim):
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity  # Check incoming normal
-            initializer = Lump(numdim=dim, center=orig, velocity=vel, rhoamp=0.0)
+            initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(0, nodes)
@@ -151,7 +151,7 @@ def test_slipwall_flux(actx_factory, dim, order):
             for parity in [1.0, -1.0]:
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
-                initializer = Uniform(numdim=dim, velocity=vel)
+                initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(0, nodes)
                 bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
                                               btag=BTAG_ALL, eos=eos)

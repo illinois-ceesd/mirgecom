@@ -95,7 +95,7 @@ def main(ctx_factory=cl.create_some_context):
 
     velocity = np.ones(shape=(dim,))
 
-    initializer = MulticomponentLump(numdim=dim, nspecies=nspecies,
+    initializer = MulticomponentLump(dim=dim, nspecies=nspecies,
                                      spec_centers=centers, velocity=velocity,
                                      spec_y0s=spec_y0s,
                                      spec_amplitudes=spec_amplitudes)

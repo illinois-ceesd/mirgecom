@@ -84,7 +84,7 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .01
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(numdim=dim, center=orig, velocity=vel, rhoamp=0.0)
+    initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
     casename = "pulse"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
@@ -122,7 +122,7 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
     uniform_state = initializer(0, nodes)
-    acoustic_pulse = AcousticPulse(numdim=dim, amplitude=1.0, width=.1,
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
     current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
 
