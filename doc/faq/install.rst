@@ -114,3 +114,10 @@ exact versions of the packages at a later time::
    To restore package versions in your entire environment, you should combine this with :ref:`record pip packages`::
 
       $ ./install.sh --conda-env=myenv.yml --pip-pkgs=myreq.txt
+
+.. warning::
+
+   The environment file can **not** be used to install conda packages on a different architecture or OS. For example,
+   an environment file created on MacOS won't be installable on Linux. The reasons are that conda package versions are
+   unique to each OS/architecture, and that different systems require different packages (for example, the `pocl-cuda`
+   package only exists on Linux, but not on MacOS).
