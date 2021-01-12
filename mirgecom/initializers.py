@@ -454,20 +454,13 @@ class MulticomponentLump:
 
     The Gaussian lump is defined by:
 
-    where $V_0$ is the fixed velocity specified by the user at init time,
-    and $\gamma$ is taken from the equation-of-state object (eos).
+    .. math::
 
-    ${Y_\alpha}_0$ is the user-specified vector of initial values
-    for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
-    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
-    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
-
-    A call to this object after creation/init creates the lump solution at a given
-    time (*t*) relative to the configured origin (*center*) and background flow
-    velocity (*velocity*).
-
-    This object also supplies the exact expected RHS terms from the analytic
-    expression in the :func:`~MulticomponentLump.exact_rhs` method.
+         \rho = 1.0\\
+         {\rho}\vec{V} = {\rho}\vec{V_0}\\
+         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}
+         {\rho~Y_\alpha} = {\rho~Y_\alpha}_{0}
+         + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})},
 
     .. automethod:: __init__
     .. automethod:: __call__
