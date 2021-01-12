@@ -462,6 +462,9 @@ class MulticomponentLump:
          {\rho~Y_\alpha} = {\rho~Y_\alpha}_{0}
          + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})},
 
+    where $V_0$ is the fixed velocity specified by the user at init time,
+    and $\gamma$ is taken from the equation-of-state object (eos).
+
     A call to this object after creation/init creates the lump solution at a given
     time (*t*) relative to the configured origin (*center*) and background flow
     velocity (*velocity*).
