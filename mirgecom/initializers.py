@@ -105,8 +105,8 @@ def _make_pulse(amp, r0, w, r):
 
         G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
 
-    Where $\vec{r}$ is the position, and the parameters are the pulse amplitude
-    $a_0$, the pulse location $\vec{r_0}$, and the RMS width of the pulse, $w$.
+    where $\vec{r}$ is the position, and the parameters are the pulse amplitude
+    $a_0$, the pulse location $\vec{r_0}$, and the rms width of the pulse, $w$.
 
     Parameters
     ----------
@@ -315,19 +315,15 @@ class Lump:
          {\rho}\vec{V} = {\rho}\vec{V_0}\\
          {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
-    Where $V_0$ is the fixed velocity specified by the user at init
+    where $\vec{V_0}$ is the fixed velocity specified by the user at init
     time, and $\gamma$ is taken from the equation-of-state object (eos).
 
     A call to this object after creation/init creates the lump solution
     at a given time (t) relative to the configured origin (center) and
     background flow velocity (velocity).
 
-    This object also functions as a boundary condition by providing the
-    "get_boundary_flux" method to prescribe exact field values on the
-    given boundary.
-
     This object also supplies the exact expected RHS terms from the
-    analytic expression in the "expected_rhs" method.
+    analytic expression in the :func:`~Lump.exact_rhs` method.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -478,11 +474,8 @@ class MulticomponentLump:
     time (*t*) relative to the configured origin (*center*) and background flow
     velocity (*velocity*).
 
-    This object also functions as a boundary condition by providing the
-    "get_boundary_flux" method to prescribe exact field values on the given boundary.
-
     This object also supplies the exact expected RHS terms from the analytic
-    expression in the "expected_rhs" method.
+    expression in the :func:`~MulticomponentLump.exact_rhs` method.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -496,7 +489,7 @@ class MulticomponentLump:
             spec_y0s=None, spec_amplitudes=None,
             spec_centers=None
     ):
-        r"""Initialize Lump parameters.
+        r"""Initialize MulticomponentLump parameters.
 
         Parameters
         ----------
@@ -761,7 +754,7 @@ class Uniform:
         Parameters
         ----------
         numdim: int
-            specify the number of dimensions for the lump
+            specify the number of dimensions for the flow
         nspecies: int
             specify the number of species in the flow
         rho: float
