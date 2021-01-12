@@ -233,7 +233,8 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
         return obj_array_vectorize_n_args(lambda boundaries_i, u_i:
-            diffusion_operator(discr, alpha, boundaries_i, u_i),
+            diffusion_operator(discr, alpha, boundaries_i, u_i,
+                var_diff_quad_tag=var_diff_quad_tag),
             make_obj_array(boundaries), u)
 
     for btag, bdry in boundaries.items():
