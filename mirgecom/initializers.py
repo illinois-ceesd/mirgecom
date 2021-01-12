@@ -465,7 +465,7 @@ class MulticomponentLump:
     where $V_0$ is the fixed velocity specified by the user at init time,
     and $\gamma$ is taken from the equation-of-state object (eos).
 
-    ${Y_\alpha}_0$ is the user-specified vector of initial values
+    The user-specified vector of initial values (${{Y}_\alpha}_0$)
     for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
     user-specified vector of amplitudes for each species, *spec_amplitudes*, and
     $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
