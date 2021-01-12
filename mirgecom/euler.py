@@ -164,7 +164,7 @@ def split_conserved(dim, q):
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*. For single component gases, i.e. for those state
     vectors *q* that do not contain mass fraction components, the returned
-    dataclass :attr:`ConservedVars.mass_factions` will be set to *None*..
+    dataclass :attr:`ConservedVars.mass_fractions` will be set to *None*..
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
