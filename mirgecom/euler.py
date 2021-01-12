@@ -76,7 +76,7 @@ class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
-    mass_fraction) per unit volume = $(\rho,\rho{E},\rho\vec{V},
+    and mass fractions) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
     .. attribute:: dim
@@ -89,17 +89,17 @@ class ConservedVars:  # FIXME: Name?
 
     .. attribute:: energy
 
-        DOFArray for total energy per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for total energy per unit volume
 
     .. attribute:: momentum
 
-        Object array of DOFArrays for momentum density
+        Object array of :class:`~meshmode.dof_array.DOFArray` for momentum density
         of shape ``(ndim,)``
 
     .. attribute:: mass_fractions
 
-        Object array of DOFArrays for species mass densities,
-        $\rho~Y_\alpha$ shape=(nspecies,).
+        Object array of :class:`~meshmode.dof_array.DOFArray` for species mass
+        fractions, $\rho~Y_\alpha$ shape=(nspecies,).
 
     .. automethod:: join
     .. automethod:: replace
@@ -162,7 +162,9 @@ def split_conserved(dim, q):
 
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
     mass, energy, and momentum from the agglomerated object array extracted
-    from the state vector *q*. If present, species mass fractions are included.
+    from the state vector *q*. For single component gases, i.e. for those state
+    vectors *q* that do not contain mass fraction components, the returned
+    dataclass :attr:`ConservedVars.mass_factions` will be set to *None*..
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
