@@ -621,7 +621,7 @@ def test_lump_rhs(actx_factory, dim, order):
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
-        lump = Lump(numdim=dim, center=center, velocity=velocity)
+        lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(0, nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = inviscid_operator(
@@ -684,7 +684,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         velocity = np.zeros(shape=(dim,))
         velocity[0] = v0
 
-        lump = MulticomponentLump(numdim=dim, nspecies=nspecies,
+        lump = MulticomponentLump(dim=dim, nspecies=nspecies,
                                   spec_centers=centers, velocity=velocity,
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
