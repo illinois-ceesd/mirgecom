@@ -409,7 +409,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     center = np.zeros(shape=(dim,))
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 1
-    lump = Lump(numdim=dim, center=center, velocity=velocity)
+    lump = Lump(dim=dim, center=center, velocity=velocity)
     eos = IdealSingleGas()
     lump_soln = lump(0, nodes)
 

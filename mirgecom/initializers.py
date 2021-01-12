@@ -6,9 +6,9 @@ Solution Initializers
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
+.. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. autoclass:: MultiLump
 .. autoclass:: MixtureInitializer
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
@@ -104,10 +104,10 @@ def _make_pulse(amp, r0, w, r):
 
     .. math::
 
-        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
+        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
 
-    Where $\vec{r}$ is the position, and the parameters are the pulse amplitude
-    $a_0$, the pulse location $\vec{r_0}$, and the RMS width of the pulse, $w$.
+    where $\vec{r}$ is the position, and the parameters are the pulse amplitude
+    $a_0$, the pulse location $\vec{r_0}$, and the rms width of the pulse, $w$.
 
     Parameters
     ----------
@@ -312,23 +312,19 @@ class Lump:
 
     .. math::
 
-         {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-         {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+         {\rho} = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+         {\rho}\vec{V} = {\rho}\vec{V_0}\\
+         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
 
-    Where $V_0$ is the fixed velocity specified by the user at init
+    where $\vec{V_0}$ is the fixed velocity specified by the user at init
     time, and $\gamma$ is taken from the equation-of-state object (eos).
 
     A call to this object after creation/init creates the lump solution
     at a given time (t) relative to the configured origin (center) and
     background flow velocity (velocity).
 
-    This object also functions as a boundary condition by providing the
-    "get_boundary_flux" method to prescribe exact field values on the
-    given boundary.
-
     This object also supplies the exact expected RHS terms from the
-    analytic expression in the "expected_rhs" method.
+    analytic expression in the :func:`~Lump.exact_rhs` method.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -336,7 +332,7 @@ class Lump:
     """
 
     def __init__(
-            self, numdim, nspecies=0,
+            self, dim, nspecies=0,
             rho0=1.0, rhoamp=1.0, p0=1.0,
             center=None, velocity=None,
     ):
@@ -344,7 +340,7 @@ class Lump:
 
         Parameters
         ----------
-        numdim: int
+        dim: int
             specify the number of dimensions for the lump
         rho0: float
             specifies the value of $\rho_0$
@@ -359,16 +355,16 @@ class Lump:
             shape ``(2,)``
         """
         if center is None:
-            center = np.zeros(shape=(numdim,))
+            center = np.zeros(shape=(dim,))
         if velocity is None:
-            velocity = np.zeros(shape=(numdim,))
-        dimmsg = f"is expected to be {numdim}-dimensional"
-        if len(center) != numdim:
+            velocity = np.zeros(shape=(dim,))
+        dimmsg = f"is expected to be {dim}-dimensional"
+        if len(center) != dim:
             raise ValueError(f"Lump center {dimmsg}.")
-        if len(velocity) != numdim:
+        if len(velocity) != dim:
             raise ValueError(f"Lump velocity {dimmsg}.")
 
-        self._dim = numdim
+        self._dim = dim
         self._velocity = velocity
         self._center = center
         self._p0 = p0
@@ -392,7 +388,7 @@ class Lump:
             Equation of state class to be used in construction of soln (if needed)
         """
         if len(x_vec) != self._dim:
-            raise ValueError(f"Position vector has unexpected dimenionality,"
+            raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
         amplitude = self._rhoamp
@@ -417,8 +413,8 @@ class Lump:
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
-        Note that this routine is only useful for testing under the condition of
-        uniform, and constant velocity field.
+        Note that *t* is used to advect the mass lumps under the assumption of
+        constant, and uniform velocity.
 
         Parameters
         ----------
@@ -454,36 +450,33 @@ class Lump:
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
-class MultiLump:
-    r"""Solution initializer for multi-species N-dimensional Gaussian lump of mass.
+class MulticomponentLump:
+    r"""Solution initializer for multi-component N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
     .. math::
 
          \rho = 1.0\\
-         {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^
-         {\rho~Y_\alpha}(r) = {\rho~Y_\alpha}_{0}
-         + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})}\\
+         {\rho}\vec{V} = {\rho}\vec{V_0}\\
+         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}
+         {\rho~Y_\alpha} = {\rho~Y_\alpha}_{0}
+         + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})},
 
-    Where :math:`V_0` is the fixed velocity specified by the user at init time,
-    and :math:`\gamma` is taken from the equation-of-state object (eos).
+    where $V_0$ is the fixed velocity specified by the user at init time,
+    and $\gamma$ is taken from the equation-of-state object (eos).
 
-    :math:`{Y_\alpha}_0` is the user-specified vector of initial values
-    for the mass fraction of each species, *spec_y0s*, and :math:`a_\alpha` is the
+    The user-specified vector of initial values (${{Y}_\alpha}_0$)
+    for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
     user-specified vector of amplitudes for each species, *spec_amplitudes*, and
-    :math:`c_\alpha` is the user-specified origin for each species, *spec_centers*.
+    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
 
     A call to this object after creation/init creates the lump solution at a given
     time (*t*) relative to the configured origin (*center*) and background flow
     velocity (*velocity*).
 
-    This object also functions as a boundary condition by providing the
-    "get_boundary_flux" method to prescribe exact field values on the given boundary.
-
     This object also supplies the exact expected RHS terms from the analytic
-    expression in the "expected_rhs" method.
+    expression in the :func:`~MulticomponentLump.exact_rhs` method.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -491,42 +484,40 @@ class MultiLump:
     """
 
     def __init__(
-            self, numdim, nspecies=0,
-            rho0=1.0, rhoamp=0.0, p0=1.0,
+            self, dim, nspecies=0,
+            rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
             spec_centers=None
     ):
-        r"""Initialize Lump parameters.
+        r"""Initialize MulticomponentLump parameters.
 
         Parameters
         ----------
-        numdim: int
+        dim: int
             specify the number of dimensions for the lump
         rho0: float
-            specifies the value of :math:`\rho_0`
-        rhoamp: float
-            specifies the value of :math:`\rho_a`
+            specifies the value of $\rho_0$
         p0: float
-            specifies the value of :math:`p_0`
+            specifies the value of $p_0$
         center: numpy.ndarray
-            center of lump, shape ``(2,)``
+            center of lump, shape ``(dim,)``
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
-            shape ``(2,)``
+            shape ``(dim,)``
         """
         if center is None:
-            center = np.zeros(shape=(numdim,))
+            center = np.zeros(shape=(dim,))
         if velocity is None:
-            velocity = np.zeros(shape=(numdim,))
-        if len(center) != numdim or len(velocity) != numdim:
-            raise ValueError(f"Expected {numdim}-dimensional inputs.")
+            velocity = np.zeros(shape=(dim,))
+        if len(center) != dim or len(velocity) != dim:
+            raise ValueError(f"Expected {dim}-dimensional vector inputs.")
 
         if nspecies > 0:
             if spec_y0s is None:
                 spec_y0s = np.ones(shape=(nspecies,))
             if spec_centers is None:
-                spec_centers = make_obj_array([np.zeros(shape=numdim,)
+                spec_centers = make_obj_array([np.zeros(shape=dim,)
                                                for i in range(nspecies)])
             if spec_amplitudes is None:
                 spec_amplitudes = np.ones(shape=(nspecies,))
@@ -535,26 +526,25 @@ class MultiLump:
                    len(spec_centers) != nspecies:
                 raise ValueError(f"Expected nspecies={nspecies} inputs.")
             for i in range(nspecies):
-                if len(spec_centers[i]) != numdim:
-                    raise ValueError(f"Expected {numdim}-dimensional "
+                if len(spec_centers[i]) != dim:
+                    raise ValueError(f"Expected {dim}-dimensional "
                                      f"inputs for spec_centers.")
 
         self._nspecies = nspecies
-        self._dim = numdim
+        self._dim = dim
         self._velocity = velocity
         self._center = center
         self._p0 = p0
         self._rho0 = rho0
-        self._rhoamp = rhoamp
         self._spec_y0s = spec_y0s
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         """
-        Create the lump-of-mass solution at time *t* and locations *x_vec*.
+        Create a multi-component lump solution at time *t* and locations *x_vec*.
 
-        Note that *t* is used to advect the mass lump under the assumption of
+        Note that *t* is used to advect the component lumps under the assumption of
         constant, and uniform velocity.
 
         Parameters
@@ -569,10 +559,10 @@ class MultiLump:
         if len(x_vec) != self._dim:
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        amplitude = self._rhoamp
         actx = x_vec[0].array_context
 
         # mass0 = self._rho0
+        amplitude = 0.0
         loc_update = t * self._velocity
         lump_loc = self._center + loc_update
         # coordinates relative to lump center
@@ -608,7 +598,7 @@ class MultiLump:
 
     def exact_rhs(self, discr, q, t=0.0):
         """
-        Create the RHS for multlump-of-mass solution at time *t*, locations *x_vec*.
+        Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
         Note that this routine is only useful for testing under the condition of
         uniform, and constant velocity field.
@@ -630,6 +620,7 @@ class MultiLump:
             [nodes[i] - lump_loc[i] for i in range(self._dim)]
         )
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
+        amplitude = 0.0
 
         # The expected rhs for multilump is:
         # recall for multilump, rho = 1.
@@ -637,7 +628,7 @@ class MultiLump:
         # rhoerhs = 0
         # rhovrhs = 0
         # rhoYrhs = -2*rho*Yamp*e^(-r*r)*(r.dot.v)
-        expterm = self._rhoamp * actx.np.exp(- r ** 2)
+        expterm = amplitude * actx.np.exp(- r ** 2)
         mass = expterm + self._rho0
 
         mom = self._velocity * mass
@@ -760,35 +751,35 @@ class AcousticPulse:
     .. automethod:: __call__
     """
 
-    def __init__(self, numdim=1, amplitude=1,
+    def __init__(self, dim=1, amplitude=1,
                  center=None, width=1):
         r"""
         Initialize acoustic pulse parameters.
 
         Parameters
         ----------
-        numdim: int
+        dim: int
             specify the number of dimensions for the pulse
         amplitude: float
             specifies the value of $amplitude$
         width: float
             specifies the rms width of the pulse
         center: numpy.ndarray
-            pulse location, shape ``(numdim,)``
+            pulse location, shape ``(dim,)``
         """
-        if len(center) == numdim:
+        if len(center) == dim:
             self._center = center
-        elif len(center) > numdim:
-            numdim = len(center)
+        elif len(center) > dim:
+            dim = len(center)
             self._center = center
         else:
-            self._center = np.zeros(shape=(numdim,))
-        if len(self._center) != numdim:
-            raise ValueError(f"Expected {numdim}-dimensional inputs.")
+            self._center = np.zeros(shape=(dim,))
+        if len(self._center) != dim:
+            raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._amp = amplitude
         self._width = width
-        self._dim = numdim
+        self._dim = dim
 
     def __call__(self, x_vec, q, eos=IdealSingleGas()):
         """
@@ -825,15 +816,15 @@ class Uniform:
     """
 
     def __init__(
-            self, numdim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
+            self, dim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
             velocity=None, mass_fracs=None
     ):
         r"""Initialize uniform flow parameters.
 
         Parameters
         ----------
-        numdim: int
-            specify the number of dimensions for the lump
+        dim: int
+            specify the number of dimensions for the flow
         nspecies: int
             specify the number of species in the flow
         rho: float
@@ -848,15 +839,15 @@ class Uniform:
         if velocity is not None:
             numvel = len(velocity)
             myvel = velocity
-            if numvel > numdim:
-                numdim = numvel
-            elif numvel < numdim:
-                myvel = np.zeros(shape=(numdim,))
+            if numvel > dim:
+                dim = numvel
+            elif numvel < dim:
+                myvel = np.zeros(shape=(dim,))
                 for i in range(numvel):
                     myvel[i] = velocity[i]
             self._velocity = myvel
         else:
-            self._velocity = np.zeros(shape=(numdim,))
+            self._velocity = np.zeros(shape=(dim,))
 
         if mass_fracs is not None:
             self._nspecies = len(mass_fracs)
@@ -868,13 +859,13 @@ class Uniform:
             self._mass_frac = None
             self._nspecies = 0
 
-        if len(self._velocity) != numdim:
-            raise ValueError(f"Expected {numdim}-dimensional inputs.")
+        if len(self._velocity) != dim:
+            raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._p = p
         self._rho = rho
         self._e = e
-        self._dim = numdim
+        self._dim = dim
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         """

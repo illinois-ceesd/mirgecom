@@ -37,7 +37,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from mirgecom.initializers import MultiLump
+from mirgecom.initializers import MulticomponentLump
 
 from mirgecom.euler import split_conserved
 from mirgecom.euler import get_num_species
@@ -83,7 +83,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     mass_fracs = (np.array([(ispec+1) for ispec in range(nspecies)])
                   if nspecies > 0 else None)
 
-    initializer = Uniform(numdim=dim, mass_fracs=mass_fracs, velocity=velocity)
+    initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
     init_soln = initializer(0, nodes)
     cv = split_conserved(dim, init_soln)
 
@@ -135,7 +135,7 @@ def test_lump_init(ctx_factory):
     velocity = np.zeros(shape=(dim,))
     center[0] = 5
     velocity[0] = 1
-    lump = Lump(numdim=dim, center=center, velocity=velocity)
+    lump = Lump(dim=dim, center=center, velocity=velocity)
     lump_soln = lump(0, nodes)
 
     cv = split_conserved(dim, lump_soln)
@@ -252,7 +252,7 @@ def test_uniform(ctx_factory, dim):
     print(f"Nodes={nodes}")
 
     from mirgecom.initializers import Uniform
-    initr = Uniform(numdim=dim)
+    initr = Uniform(dim=dim)
     initsoln = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
     ssoln = split_conserved(dim, initsoln)
@@ -333,7 +333,7 @@ def test_pulse(ctx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_multilump(ctx_factory, dim):
-    """Test the multispecies lump initializer."""
+    """Test the multi-component lump initializer."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
@@ -365,14 +365,14 @@ def test_multilump(ctx_factory, dim):
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 1
 
-    lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
-                     velocity=velocity, spec_y0s=spec_y0s,
-                     spec_amplitudes=spec_amplitudes)
+    lump = MulticomponentLump(dim=dim, nspecies=nspecies, spec_centers=centers,
+                              velocity=velocity, spec_y0s=spec_y0s,
+                              spec_amplitudes=spec_amplitudes)
 
     lump_soln = lump(t=0, x_vec=nodes)
     numcvspec = get_num_species(dim, lump_soln)
     print(f"get_num_species = {numcvspec}")
-    exp_mass = 1.0  # we expect \rho = 1.0 for multispecies lump init
+    exp_mass = 1.0  # we expect \rho = 1.0 for multi-component lump init
 
     assert get_num_species(dim, lump_soln) == nspecies
 

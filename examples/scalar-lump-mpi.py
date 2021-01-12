@@ -50,7 +50,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import MultiLump
+from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
 
 
@@ -95,9 +95,10 @@ def main(ctx_factory=cl.create_some_context):
 
     velocity = np.ones(shape=(dim,))
 
-    initializer = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
-                            velocity=velocity, spec_y0s=spec_y0s,
-                            spec_amplitudes=spec_amplitudes)
+    initializer = MulticomponentLump(dim=dim, nspecies=nspecies,
+                                     spec_centers=centers, velocity=velocity,
+                                     spec_y0s=spec_y0s,
+                                     spec_amplitudes=spec_amplitudes)
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
 
     casename = "mixture-lump"

@@ -31,9 +31,13 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
+from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
 from mirgecom.integrators import rk4_step
-from mirgecom.diffusion import diffusion_operator
+from mirgecom.diffusion import (
+    diffusion_operator,
+    DirichletDiffusionBoundary,
+    NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
@@ -60,7 +64,12 @@ def main():
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*dim,
             b=(0.5,)*dim,
-            n=(nel_1d,)*dim)
+            n=(nel_1d,)*dim,
+            boundary_tag_to_face={
+                "dirichlet": ["+x", "-x"],
+                "neumann": ["+y", "-y"]
+                }
+            )
 
         print("%d elements" % mesh.nelements)
 
@@ -92,8 +101,13 @@ def main():
 
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
+    boundaries = {
+        grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
+        grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
+    }
+
     def rhs(t, u):
-        return (diffusion_operator(discr, alpha=1, u=u)
+        return (diffusion_operator(discr, alpha=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()
