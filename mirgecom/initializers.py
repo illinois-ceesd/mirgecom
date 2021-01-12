@@ -6,9 +6,9 @@ Solution Initializers
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
 .. autoclass:: Lump
+.. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. autoclass:: MultiLump
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
 """
@@ -311,8 +311,8 @@ class Lump:
 
     .. math::
 
-         {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-         {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
+         {\rho} = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+         {\rho}\vec{V} = {\rho}\vec{V_0}\\
          {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
 
     Where $V_0$ is the fixed velocity specified by the user at init
@@ -453,8 +453,8 @@ class Lump:
         return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
-class MultiLump:
-    r"""Solution initializer for multi-species N-dimensional Gaussian lump of mass.
+class MulticomponentLump:
+    r"""Solution initializer for multi-component N-dimensional Gaussian lump of mass.
 
     The Gaussian lump is defined by:
 
