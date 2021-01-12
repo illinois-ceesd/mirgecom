@@ -39,7 +39,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import inviscid_operator, split_conserved, join_conserved
-from mirgecom.initializers import Vortex2D, Lump, MultiLump
+from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
@@ -684,9 +684,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         velocity = np.zeros(shape=(dim,))
         velocity[0] = v0
 
-        lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
-                         velocity=velocity, spec_y0s=spec_y0s,
-                         spec_amplitudes=spec_amplitudes)
+        lump = MulticomponentLump(numdim=dim, nspecies=nspecies,
+                                  spec_centers=centers, velocity=velocity,
+                                  spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(t=0, x_vec=nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}

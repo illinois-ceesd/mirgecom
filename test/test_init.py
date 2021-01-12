@@ -37,7 +37,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from mirgecom.initializers import MultiLump
+from mirgecom.initializers import MulticomponentLump
 
 from mirgecom.euler import split_conserved
 from mirgecom.euler import get_num_species
@@ -333,7 +333,7 @@ def test_pulse(ctx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_multilump(ctx_factory, dim):
-    """Test the multispecies lump initializer."""
+    """Test the multi-component lump initializer."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
@@ -365,14 +365,14 @@ def test_multilump(ctx_factory, dim):
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 1
 
-    lump = MultiLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
-                     velocity=velocity, spec_y0s=spec_y0s,
-                     spec_amplitudes=spec_amplitudes)
+    lump = MulticomponentLump(numdim=dim, nspecies=nspecies, spec_centers=centers,
+                              velocity=velocity, spec_y0s=spec_y0s,
+                              spec_amplitudes=spec_amplitudes)
 
     lump_soln = lump(t=0, x_vec=nodes)
     numcvspec = get_num_species(dim, lump_soln)
     print(f"get_num_species = {numcvspec}")
-    exp_mass = 1.0  # we expect \rho = 1.0 for multispecies lump init
+    exp_mass = 1.0  # we expect \rho = 1.0 for multi-component lump init
 
     assert get_num_species(dim, lump_soln) == nspecies
 
