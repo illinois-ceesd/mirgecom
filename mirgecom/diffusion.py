@@ -219,8 +219,8 @@ def diffusion_operator(discr, alpha, boundaries, u, var_diff_quad_tag=QTAG_NONE)
         the DOF array (or object array of DOF arrays) to which the operator should be
         applied
     var_diff_quad_tag:
-        tag indicating which quadrature discretization in *discr* to use for
-        overintegration when *alpha* varies over space
+        quadrature tag indicating which discretization in *discr* to use for
+        overintegration when *alpha* is spatially varying
 
     Returns
     -------
