@@ -574,7 +574,7 @@ class MulticomponentLump:
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
         expterm = amplitude * actx.np.exp(- r ** 2)
         mass = expterm + self._rho0
-        mom = self._velocity * make_obj_array([mass])
+        mom = self._velocity * mass
         gamma = eos.gamma()
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
