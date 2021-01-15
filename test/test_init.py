@@ -369,7 +369,7 @@ def test_multilump(ctx_factory, dim):
                               velocity=velocity, spec_y0s=spec_y0s,
                               spec_amplitudes=spec_amplitudes)
 
-    lump_soln = lump(t=0, x_vec=nodes)
+    lump_soln = lump(nodes)
     numcvspec = get_num_species(dim, lump_soln)
     print(f"get_num_species = {numcvspec}")
     exp_mass = 1.0  # we expect \rho = 1.0 for multi-component lump init
