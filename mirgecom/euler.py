@@ -107,7 +107,7 @@ class ConservedVars:  # FIXME: Name?
 
     mass: DOFArray
     energy: DOFArray
-    momentum: DOFArray
+    momentum: np.ndarray
     mass_fractions: DOFArray = None
 
     @property
