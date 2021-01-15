@@ -45,7 +45,6 @@ def bump(actx, discr, t=0):
     source_omega = 3
 
     nodes = thaw(actx, discr.nodes())
-
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -73,7 +72,6 @@ def main(use_profiling=False):
 
     dim = 2
     nel_1d = 16
-
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
