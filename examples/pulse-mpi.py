@@ -121,7 +121,7 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    uniform_state = initializer(0, nodes)
+    uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
     current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)

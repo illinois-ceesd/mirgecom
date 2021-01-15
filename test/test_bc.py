@@ -84,7 +84,7 @@ def test_slipwall_identity(actx_factory, dim):
             initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
             wall = AdiabaticSlipBoundary()
 
-            uniform_state = initializer(0, nodes)
+            uniform_state = initializer(nodes)
             from functools import partial
             bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
@@ -152,7 +152,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
-                uniform_state = initializer(0, nodes)
+                uniform_state = initializer(nodes)
                 bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
                                               btag=BTAG_ALL, eos=eos)
 
