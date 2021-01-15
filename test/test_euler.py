@@ -567,7 +567,7 @@ def test_vortex_rhs(actx_factory, order):
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
-        vortex_soln = vortex(0, nodes)
+        vortex_soln = vortex(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
 
         inviscid_rhs = inviscid_operator(
@@ -622,7 +622,7 @@ def test_lump_rhs(actx_factory, dim, order):
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
-        lump_soln = lump(0, nodes)
+        lump_soln = lump(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
@@ -688,7 +688,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_centers=centers, velocity=velocity,
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
-        lump_soln = lump(t=0, x_vec=nodes)
+        lump_soln = lump(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
 
         inviscid_rhs = inviscid_operator(
@@ -743,7 +743,7 @@ def _euler_flow_stepper(actx, parameters):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-    fields = initializer(0, nodes)
+    fields = initializer(nodes)
     sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
 
     initname = initializer.__class__.__name__
@@ -762,7 +762,7 @@ def _euler_flow_stepper(actx, parameters):
     def write_soln(write_status=True):
         cv = split_conserved(dim, fields)
         dv = eos.dependent_vars(cv)
-        expected_result = initializer(t, nodes)
+        expected_result = initializer(nodes, t=t)
         result_resid = fields - expected_result
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
@@ -812,7 +812,7 @@ def _euler_flow_stepper(actx, parameters):
         logger.info("Writing final dump.")
         maxerr = max(write_soln(False))
     else:
-        expected_result = initializer(t, nodes)
+        expected_result = initializer(nodes, t=t)
         maxerr = discr.norm(fields - expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")

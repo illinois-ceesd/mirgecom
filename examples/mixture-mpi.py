@@ -121,7 +121,7 @@ def main(ctx_factory=cl.create_some_context):
 
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(eos=eos, x_vec=nodes, t=0)
+    current_state = initializer(x_vec=nodes, eos=eos)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)

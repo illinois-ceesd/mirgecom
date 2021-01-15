@@ -84,7 +84,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
                   if nspecies > 0 else None)
 
     initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
-    init_soln = initializer(0, nodes)
+    init_soln = initializer(nodes)
     cv = split_conserved(dim, init_soln)
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
@@ -136,7 +136,7 @@ def test_lump_init(ctx_factory):
     center[0] = 5
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
-    lump_soln = lump(0, nodes)
+    lump_soln = lump(nodes)
 
     cv = split_conserved(dim, lump_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
@@ -174,7 +174,7 @@ def test_vortex_init(ctx_factory):
 
     # Init soln with Vortex
     vortex = Vortex2D()
-    vortex_soln = vortex(0, nodes)
+    vortex_soln = vortex(nodes)
     gamma = 1.4
     cv = split_conserved(dim, vortex_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)

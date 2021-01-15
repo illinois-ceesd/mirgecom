@@ -48,7 +48,7 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 
 
-def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
+def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
                        velocity=None, eos=IdealSingleGas()):
     r"""Construct uniform, constant flow.
 
@@ -165,7 +165,7 @@ class Vortex2D:
     """
 
     def __init__(
-        self, beta=5, center=[0, 0], velocity=[0, 0],
+            self, *, beta=5, center=[0, 0], velocity=[0, 0],
     ):
         """Initialize vortex parameters.
 
@@ -182,7 +182,7 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
@@ -238,7 +238,8 @@ class SodShock1D:
     """
 
     def __init__(
-            self, dim=2, xdir=0, x0=0.5, rhol=1.0, rhor=0.125, pleft=1.0, pright=0.1,
+            self, *, dim=2, xdir=0, x0=0.5, rhol=1.0,
+            rhor=0.125, pleft=1.0, pright=0.1,
     ):
         """Initialize shock parameters.
 
@@ -267,7 +268,7 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -332,7 +333,7 @@ class Lump:
     """
 
     def __init__(
-            self, dim, nspecies=0,
+            self, *, dim=1, nspecies=0,
             rho0=1.0, rhoamp=1.0, p0=1.0,
             center=None, velocity=None,
     ):
@@ -371,7 +372,7 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
@@ -484,7 +485,7 @@ class MulticomponentLump:
     """
 
     def __init__(
-            self, dim, nspecies=0,
+            self, *, dim=1, nspecies=0,
             rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
@@ -540,7 +541,7 @@ class MulticomponentLump:
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
@@ -557,6 +558,8 @@ class MulticomponentLump:
             Equation of state class to be used in construction of soln (if needed)
         """
         if len(x_vec) != self._dim:
+            print(f"len(x_vec) = {len(x_vec)}")
+            print(f"self._dim = {self._dim}")
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
         actx = x_vec[0].array_context
@@ -668,7 +671,7 @@ class MixtureInitializer:
     .. automethod:: __call__
     """
     def __init__(
-            self, numdim=3, nspecies=0,
+            self, *, numdim=3, nspecies=0,
             pressure=101500.0, temperature=300.0,
             massfractions=None, velocity=None,
     ):
@@ -701,16 +704,16 @@ class MixtureInitializer:
         self._temperature = temperature
         self._massfracs = massfractions
 
-    def __call__(self, eos, x_vec, t=0.0):
+    def __call__(self, x_vec, eos, *, t=0.0):
         """
         Create the mixture state at locations *x_vec* (t is ignored).
 
         Parameters
         ----------
-        t: float
-            Time is ignored by this solution intitializer
         x_vec: numpy.ndarray
             Coordinates at which solution is desired
+        t: float
+            Time is ignored by this solution intitializer
         """
         assert len(x_vec) == self._dim
 
@@ -751,7 +754,7 @@ class AcousticPulse:
     .. automethod:: __call__
     """
 
-    def __init__(self, dim=1, amplitude=1,
+    def __init__(self, *, dim=1, amplitude=1,
                  center=None, width=1):
         r"""
         Initialize acoustic pulse parameters.
@@ -816,7 +819,7 @@ class Uniform:
     """
 
     def __init__(
-            self, dim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
+            self, *, dim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
             velocity=None, mass_fracs=None
     ):
         r"""Initialize uniform flow parameters.
@@ -867,7 +870,7 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create a uniform flow solution at locations *x_vec*.
 
