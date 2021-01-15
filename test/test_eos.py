@@ -80,7 +80,7 @@ def test_idealsingle_lump(ctx_factory):
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
     eos = IdealSingleGas()
-    lump_soln = lump(0, nodes)
+    lump_soln = lump(nodes)
 
     cv = split_conserved(dim, lump_soln)
     p = eos.pressure(cv)
@@ -130,7 +130,7 @@ def test_idealsingle_vortex(ctx_factory):
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()
-    vortex_soln = vortex(0, nodes)
+    vortex_soln = vortex(nodes)
     cv = split_conserved(dim, vortex_soln)
     gamma = eos.gamma()
     p = eos.pressure(cv)
