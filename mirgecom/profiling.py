@@ -280,7 +280,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min, f"{fprint_mean:{g}}", fprint_max,
                 bytes_per_flop_mean])
 
-        tbl.add_row(["Total", f"{tot_calls:{g}}", f"{tot_time:{g}}", "---", "---", "---", "---", "---", "---", "---", "---", "---", "---", "---", "---", "---"])
+        tbl.add_row(["Total", f"{tot_calls:{g}}", f"{tot_time:{g}}"] + ["--"] * 13)
 
         self.profile_results = {}
 
