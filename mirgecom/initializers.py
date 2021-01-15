@@ -314,7 +314,7 @@ class Lump:
 
          {\rho} = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
          {\rho}\vec{V} = {\rho}\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
+         {\rho}E = \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
 
     where $\vec{V_0}$ is the fixed velocity specified by the user at init
     time, and $\gamma$ is taken from the equation-of-state object (eos).
