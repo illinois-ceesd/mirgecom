@@ -459,7 +459,7 @@ class MulticomponentLump:
 
          \rho = 1.0\\
          {\rho}\vec{V} = {\rho}\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}
+         {\rho}E = \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
          {\rho~Y_\alpha} = {\rho~Y_\alpha}_{0}
          + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})},
 
