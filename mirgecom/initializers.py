@@ -814,7 +814,7 @@ class Uniform:
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
-        if self._mass_frac is not None:
+        if self._mass_fracs is not None:
             yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
         return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)
