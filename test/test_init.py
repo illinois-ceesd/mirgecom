@@ -99,7 +99,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     if nspecies > 1:
         exp_mass_fracs = mass_fracs
-        mferrmax = discr.norm(cv.mass_fractions - exp_mass_fracs, np.inf)
+        mferrmax = discr.norm(cv.scalar - exp_mass_fracs, np.inf)
         assert mferrmax < 1e-15
 
     assert perrmax < 1e-15
@@ -382,8 +382,8 @@ def test_multilump(ctx_factory, dim):
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
-    assert cv.mass_fractions is not None
-    mass_fractions = cv.mass_fractions
+    assert cv.scalar is not None
+    mass_fractions = cv.scalar
 
     spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
     r2 = make_obj_array([np.dot(spec_r[i], spec_r[i]) for i in range(nspecies)])

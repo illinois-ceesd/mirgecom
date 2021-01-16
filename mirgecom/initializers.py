@@ -571,7 +571,7 @@ class MulticomponentLump:
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         # process the species components independently
-        mass_fracs = None
+        scalars = None
         if self._nspecies > 0:
             lump_locs = make_obj_array([self._spec_centers[i] + loc_update
                                        for i in range(self._nspecies)])
@@ -583,10 +583,10 @@ class MulticomponentLump:
                 [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
                  for i in range(self._nspecies)]
             )
-            mass_fracs = make_obj_array([self._spec_y0s[i] + expterms[i]
+            scalars = make_obj_array([self._spec_y0s[i] + expterms[i]
                                         for i in range(self._nspecies)])
 
-        return flat_obj_array(mass, energy, mom, mass_fracs)
+        return flat_obj_array(mass, energy, mom, scalars)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -754,12 +754,12 @@ class Uniform:
 
         if mass_fracs is not None:
             self._nspecies = len(mass_fracs)
-            self._mass_frac = mass_fracs
+            self._mass_fracs = mass_fracs
         elif nspecies > 0:
             self._nspecies = nspecies
-            self._mass_frac = np.zeros(shape=(nspecies,))
+            self._mass_fracs = np.zeros(shape=(nspecies,))
         else:
-            self._mass_frac = None
+            self._mass_fracs = None
             self._nspecies = 0
 
         if len(self._velocity) != dim:
@@ -787,13 +787,13 @@ class Uniform:
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        mass_frac = None
-        if self._mass_frac is not None:
-            mass_frac = self._mass_frac * mass
+        scalars = None
+        if self._mass_fracs is not None:
+            scalars = self._mass_fracs * mass
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, mass_fractions=mass_frac)
+                              momentum=mom, scalar=scalars)
 
     def exact_rhs(self, discr, q, t=0.0):
         """

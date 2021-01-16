@@ -95,7 +95,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     mass_fracs = make_obj_array([rand() for _ in range(nspecies)])
 
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       mass_fractions=mass_fracs)
+                       scalar=mass_fracs)
     cv = split_conserved(dim, q)
 
     # {{{ create the expected result
@@ -338,7 +338,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            mass_fractions=mass_frac_input)
+            scalar=mass_frac_input)
 
         from mirgecom.euler import _facial_flux
 
@@ -356,7 +356,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         iff_split = split_conserved(dim, interior_face_flux)
         assert fnorm(iff_split.mass) < tolerance
         assert fnorm(iff_split.energy) < tolerance
-        assert mynorm(iff_split.mass_fractions) < tolerance
+        assert mynorm(iff_split.scalar) < tolerance
 
         # The expected pressure 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
@@ -383,9 +383,9 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dir_mf = discr.interp("vol", BTAG_ALL, mass_frac_input)
 
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                  mass_fractions=dir_mf)
+                                  scalar=dir_mf)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                mass_fractions=dir_mf)
+                                scalar=dir_mf)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
@@ -395,7 +395,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         bf_split = split_conserved(dim, boundary_flux)
         assert fnorm(bf_split.mass) < tolerance
         assert fnorm(bf_split.energy) < tolerance
-        assert mynorm(bf_split.mass_fractions) < tolerance
+        assert mynorm(bf_split.scalar) < tolerance
 
         momerr = fnorm(bf_split.momentum) - p0
         assert momerr < tolerance
@@ -459,7 +459,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            mass_fractions=mass_frac_input)
+            scalar=mass_frac_input)
 
         expected_rhs = make_obj_array(
             [discr.zeros(actx) for i in range(len(fields))]

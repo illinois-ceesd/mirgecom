@@ -96,11 +96,11 @@ class ConservedVars:  # FIXME: Name?
         Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
         of :class:`~meshmode.dof_array.DOFArray`  for momentum density.
 
-    .. attribute:: mass_fractions
+    .. attribute:: scalar
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
-        of :class:`~meshmode.dof_array.DOFArray`  for species mass
-        fractions, $\rho~Y_\alpha$.
+        Object array (:class:`~numpy.ndarray`) with shape ``(nscalars,)``
+        of :class:`~meshmode.dof_array.DOFArray`  for scalar
+        components, $\rho~Y_\alpha$.
 
     .. automethod:: join
     .. automethod:: replace
@@ -109,7 +109,7 @@ class ConservedVars:  # FIXME: Name?
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    mass_fractions: np.ndarray = None
+    scalar: np.ndarray = None
 
     @property
     def dim(self):
@@ -123,7 +123,7 @@ class ConservedVars:  # FIXME: Name?
             mass=self.mass,
             energy=self.energy,
             momentum=self.momentum,
-            mass_fractions=self.mass_fractions)
+            scalar=self.scalar)
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
@@ -164,28 +164,28 @@ def split_conserved(dim, q):
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*. For single component gases, i.e. for those state
-    vectors *q* that do not contain mass fraction components, the returned
-    dataclass :attr:`ConservedVars.mass_fractions` will be set to *None*..
+    vectors *q* that do not contain scalar components, the returned
+    dataclass :attr:`ConservedVars.scalar` will be set to *None*..
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
     if nspec > 0:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                             mass_fractions=q[2+dim:2+dim+nspec])
+                             scalar=q[2+dim:2+dim+nspec])
     else:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def join_conserved(dim, mass, energy, momentum, mass_fractions=None):
+def join_conserved(dim, mass, energy, momentum, scalar=None):
     """Create an agglomerated solution array from the conserved quantities."""
     aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
         _aux_shape(momentum, (dim,))]
 
-    if mass_fractions is not None:
-        nspec = len(mass_fractions)
-        aux_shapes.append(_aux_shape(mass_fractions, (nspec,)))
+    if scalar is not None:
+        nspec = len(scalar)
+        aux_shapes.append(_aux_shape(scalar, (nspec,)))
     else:
         nspec = 0
 
@@ -197,8 +197,8 @@ def join_conserved(dim, mass, energy, momentum, mass_fractions=None):
     result[1] = energy
     result[2:dim+2] = momentum
 
-    if mass_fractions is not None:
-        result[dim+2:] = mass_fractions
+    if scalar is not None:
+        result[dim+2:] = scalar
 
     return result
 
@@ -216,17 +216,17 @@ def inviscid_flux(discr, eos, q):
 
     mom = cv.momentum
 
-    mass_frac = None
-    if cv.mass_fractions is not None:
-        # mass fractions require a reshape here to get the right numpy
+    scalars = None
+    if cv.scalar is not None:
+        # scalar components require a reshape here to get the right numpy
         # broadcast behavior. Reshaped to [numspecies x 1] object.
-        mass_frac = mom * cv.mass_fractions.reshape(-1, 1) / cv.mass
+        scalars = mom * cv.scalar.reshape(-1, 1) / cv.mass
 
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            mass_fractions=mass_frac)
+                scalar=scalars)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
