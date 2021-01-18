@@ -78,7 +78,7 @@ elwise_knl = NonLoopyProfilekernel("pyopencl_array")
 
 
 def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
-    """Initialize the :mod:`pyopencl` monkey patching."""
+    """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
     nonloopy_profile_events.append(evt)
 
