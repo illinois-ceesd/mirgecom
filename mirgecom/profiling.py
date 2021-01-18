@@ -209,24 +209,27 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_max = "--"
 
             bytes_per_flop = [f / b if b is not None and f is not None and b > 0
-                               else None
-                               for f, b in zip(flops, bytes_accessed)]
+                              else None for f, b in zip(flops, bytes_accessed)]
             bytes_per_flop_mean = f"{mean(bytes_per_flop):{g}}" \
                                     if None not in bytes_per_flop else "--"
 
-            flops_per_sec_min = f"{min(flops_per_sec):{g}}" \
-                                  if None not in flops_per_sec else "--"
-            flops_per_sec_mean = f"{mean(flops_per_sec):{g}}" \
-                                   if None not in flops_per_sec else "--"
-            flops_per_sec_max = f"{max(flops_per_sec):{g}}" \
-                                  if None not in flops_per_sec else "--"
+            if None not in flops_per_sec:
+                flops_per_sec_min = f"{min(flops_per_sec):{g}}"
+                flops_per_sec_mean = f"{mean(flops_per_sec):{g}}"
+                flops_per_sec_max = f"{max(flops_per_sec):{g}}"
+            else:
+                flops_per_sec_min = "--"
+                flops_per_sec_mean = "--"
+                flops_per_sec_max = "--"
 
-            bandwidth_access_min = f"{min(bandwidth_access):{g}}" \
-                                     if None not in bandwidth_access else "--"
-            bandwidth_access_mean = f"{mean(bandwidth_access):{g}}" \
-                                      if None not in bandwidth_access else "--"
-            bandwidth_access_max = f"{max(bandwidth_access):{g}}" \
-                                     if None not in bandwidth_access else "--"
+            if None not in bandwidth_access:
+                bandwidth_access_min = f"{min(bandwidth_access):{g}}"
+                bandwidth_access_mean = f"{mean(bandwidth_access):{g}}"
+                bandwidth_access_max = f"{max(bandwidth_access):{g}}"
+            else:
+                bandwidth_access_min = "--"
+                bandwidth_access_mean = "--"
+                bandwidth_access_max = "--"
 
             tbl.add_row([key.name, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
@@ -315,7 +318,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             return args_tuple
 
     def call_loopy(self, program, **kwargs) -> dict:
-        """Execute the loopy kernel."""
+        """Execute the loopy kernel and profile it."""
         program = self.transform_loopy_program(program)
         assert program.options.return_dict
         assert program.options.no_numpy
