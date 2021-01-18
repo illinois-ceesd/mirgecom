@@ -56,8 +56,7 @@ def del_pyopencl_array_monkey_patch():
 class NonLoopyProfilekernel:
     """Class to hold the name for a non-loopy profile result.
 
-    This is necessary so that :meth:`tabulate_profiling_data` and
-    :meth:`get_profiling_data_for_kernel` can
+    This is necessary so that :meth:`tabulate_profiling_data` can
     access the 'name' field of the non-Loopy kernel.
     """
 
