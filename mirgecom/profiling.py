@@ -42,71 +42,17 @@ __doc__ = """
 
 # {{{ Support for non-Loopy results (e.g., pyopencl kernels)
 
-nonloopy_profile_results = {}
-
-orig_finish = cl.array.Array.finish
-orig_add_event = cl.array.Array.add_event
-
-
-def add_nonloopy_pyopencl_results(queue, events: list) -> None:
-    """Gather and store pyopencl.array results."""
-    if queue and \
-      queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
-
-        times = []
-        for evt in events:
-            time = evt.profile.end - evt.profile.start
-            times.append(time)
-
-        add_nonloopy_profiling_result("pyopencl_array", mean(times))
-
-
-def pyopencl_monkey_del(self):
-    """Monkey patches ``pyopencl.array.Array.__del__``  to grab profile data."""
-    if self.events:
-        cl.wait_for_events(self.events)
-
-        add_nonloopy_pyopencl_results(self.queue, self.events)
-
-        del self.events[:]
-
-
-def pyopencl_monkey_add_event(self, evt):
-    """Monkey patches :meth:`pyopencl.array.Array.add_event` to grab profile data."""
-    n_wait = 4
-
-    if len(self.events) > 3*n_wait:
-        wait_events = self.events[:n_wait]
-        cl.wait_for_events(wait_events)
-
-        add_nonloopy_pyopencl_results(self.queue, self.events[:n_wait])
-
-        del self.events[:n_wait]
-
-    orig_add_event(self, evt)
-
-
-def pyopencl_monkey_finish(self):
-    """Monkey patches :meth:`pyopencl.array.Array.finish` to grab profile data."""
-    if self.events:
-        cl.wait_for_events(self.events)
-        add_nonloopy_pyopencl_results(self.queue, self.events)
-
-    orig_finish(self)
-
-
-def init_pyopencl_array_monkey_patch():
-    """Initialize the :mod:`pyopencl` monkey patching."""
-    cl.array.Array.__del__ = pyopencl_monkey_del
-    cl.array.Array.finish = pyopencl_monkey_finish
-    cl.array.Array.add_event = pyopencl_monkey_add_event
+nonloopy_profile_events = []
 
 
 def del_pyopencl_array_monkey_patch():
     """Remove the :mod:`pyopencl` monkey patching."""
-    cl.array.Array.__del__ = None
-    cl.array.Array.finish = orig_finish
-    cl.array.Array.add_event = orig_add_event
+    cl.array.ARRAY_KERNEL_EXEC_HOOK = None
+
+
+def init_pyopencl_array_monkey_patch():
+    """Remove the :mod:`pyopencl` monkey patching."""
+    cl.array.ARRAY_KERNEL_EXEC_HOOK = array_kernel_exec_hook
 
 
 @dataclass(eq=True, frozen=True)
@@ -121,13 +67,15 @@ class NonLoopyProfilekernel:
     name: str
 
 
-def add_nonloopy_profiling_result(name: str, time: float, flops: float = None,
-                bytes_accessed: float = None, footprint_bytes: float = None) -> None:
-    """Add a non-loopy profile result to the profiling framework."""
-    knl = NonLoopyProfilekernel(name)
-    new = ProfileResult(time, flops, bytes_accessed, footprint_bytes)
-    global nonloopy_profile_results
-    nonloopy_profile_results.setdefault(knl, []).append(new)
+elwise_knl = NonLoopyProfilekernel("pyopencl_array")
+
+
+def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
+    """Initialize the :mod:`pyopencl` monkey patching."""
+    evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
+    nonloopy_profile_events.append(evt)
+
+    return evt
 
 # }}}
 
@@ -187,6 +135,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         if self.profile_events:
             cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
 
+        global nonloopy_profile_events
+        if nonloopy_profile_events:
+            cl.wait_for_events(nonloopy_profile_events)
+
         # Then, collect all events and store them
         for t in self.profile_events:
             program = t.program
@@ -197,7 +149,14 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             self.profile_results.setdefault(program, []).append(new)
 
+        for t in nonloopy_profile_events:
+            program = elwise_knl
+            time = t.profile.end - t.profile.start
+            new = ProfileResult(time, None, None, None)
+            self.profile_results.setdefault(program, []).append(new)
+
         self.profile_events = []
+        nonloopy_profile_events = []
 
     def get_profiling_data_for_kernel(self, kernel_name: str,
                                       wait_for_events=True) -> float:
@@ -235,10 +194,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             _gather_data(self.profile_results)
 
         if num_calls == 0:
-            num_calls, times, flops, bytes_accessed, fprint_bytes = \
-                _gather_data(nonloopy_profile_results)
-
-        if num_calls == 0:
             return [0, 0, 0, 0, 0]
 
         return [mean(times), mean(flops), num_calls, mean(bytes_accessed),
@@ -252,7 +207,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         tbl = pytools.Table()
 
         tbl.add_row(["Function", "Calls",
-            "Time_min [s]", "Time_avg [s]", "Time_max [s]",
+            "Time_sum [s]", "Time_min [s]", "Time_avg [s]", "Time_max [s]",
             "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
             "BWAcc_min [GByte/s]", "BWAcc_mean [GByte/s]", "BWAcc_max [GByte/s]",
             "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]",
@@ -264,12 +219,17 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         from statistics import mean
         global nonloopy_profile_results
 
-        all_res = {**self.profile_results, **nonloopy_profile_results}
+        tot_calls = 0
+        tot_time = 0
 
-        for key, value in all_res.items():
+        for key, value in self.profile_results.items():
             num_values = len(value)
 
+            tot_calls += num_values
+
             times = [v.time / 1e9 for v in value]
+
+            tot_time += sum(times)
 
             flops = [v.flops / 1e9 if v.flops is not None and v.flops > 0 else None
                      for v in value]
@@ -314,15 +274,16 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             bandwidth_access_max = f"{max(bandwidth_access):{g}}" \
                                     if None not in bandwidth_access else "--"
 
-            tbl.add_row([key.name, num_values,
+            tbl.add_row([key.name, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
                 fprint_min, f"{fprint_mean:{g}}", fprint_max,
                 bytes_per_flop_mean])
 
-        # self.profile_results = {}
-        # nonloopy_profile_results = {}
+        self.profile_results = {}
+        nonloopy_profile_results = {}
+        tbl.add_row(["Total", f"{tot_calls:{g}}", f"{tot_time:{g}}"] + ["--"] * 13)
 
         return tbl
 
