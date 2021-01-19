@@ -93,13 +93,14 @@ class ConservedVars:  # FIXME: Name?
 
     .. attribute:: momentum
 
-        Object array of :class:`~meshmode.dof_array.DOFArray` for momentum density
-        of shape ``(ndim,)``
+        Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
+        of :class:`~meshmode.dof_array.DOFArray`  for momentum density.
 
     .. attribute:: mass_fractions
 
-        Object array of :class:`~meshmode.dof_array.DOFArray` for species mass
-        fractions, $\rho~Y_\alpha$ shape=(nspecies,).
+        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        of :class:`~meshmode.dof_array.DOFArray`  for species mass
+        fractions, $\rho~Y_\alpha$.
 
     .. automethod:: join
     .. automethod:: replace
@@ -107,8 +108,8 @@ class ConservedVars:  # FIXME: Name?
 
     mass: DOFArray
     energy: DOFArray
-    momentum: DOFArray
-    mass_fractions: DOFArray = None
+    momentum: np.ndarray
+    mass_fractions: np.ndarray = None
 
     @property
     def dim(self):

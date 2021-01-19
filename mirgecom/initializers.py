@@ -149,12 +149,12 @@ class Vortex2D:
 
     .. math::
 
-         u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
-         v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
-         \rho =
+         u &= u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
+         v &= v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
+         \rho &=
          ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
          \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
-         p = \rho^{\gamma}
+         p &= \rho^{\gamma}
 
     A call to this object after creation/init creates the isentropic
     vortex solution at a given time (t) relative to the configured
@@ -223,11 +223,11 @@ class SodShock1D:
 
     .. math::
 
-         {\rho}(x < x_0, 0) = \rho_l\\
-         {\rho}(x > x_0, 0) = \rho_r\\
-         {\rho}{V_x}(x, 0) = 0\\
-         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}\\
-         {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
+         {\rho}(x < x_0, 0) &= \rho_l\\
+         {\rho}(x > x_0, 0) &= \rho_r\\
+         {\rho}{V_x}(x, 0) &= 0\\
+         {\rho}E(x < x_0, 0) &= \frac{1}{\gamma - 1}\\
+         {\rho}E(x > x_0, 0) &= \frac{.1}{\gamma - 1}
 
     A call to this object after creation/init creates Sod's shock solution at a
     given time (t) relative to the configured origin (center) and background
@@ -313,9 +313,9 @@ class Lump:
 
     .. math::
 
-         {\rho} = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-         {\rho}\vec{V} = {\rho}\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
+         {\rho} &= {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+         {\rho}\vec{V} &= {\rho}\vec{V_0}\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
 
     where $\vec{V_0}$ is the fixed velocity specified by the user at init
     time, and $\gamma$ is taken from the equation-of-state object (eos).
@@ -458,11 +458,11 @@ class MulticomponentLump:
 
     .. math::
 
-         \rho = 1.0\\
-         {\rho}\vec{V} = {\rho}\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}
-         {\rho~Y_\alpha} = {\rho~Y_\alpha}_{0}
-         + {\rho~Y_\alpha}_{a_\alpha}{e}^{(1-{r_\alpha}^{2})},
+         \rho &= 1.0\\
+         {\rho}\vec{V} &= {\rho}\vec{V_0}\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
+         {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
+         + {a_\alpha}{e}^{({c_\alpha}-{r_\alpha})^2},
 
     where $V_0$ is the fixed velocity specified by the user at init time,
     and $\gamma$ is taken from the equation-of-state object (eos).
@@ -564,19 +564,11 @@ class MulticomponentLump:
 
         actx = x_vec[0].array_context
 
-        # mass0 = self._rho0
-        amplitude = 0.0
         loc_update = t * self._velocity
-        lump_loc = self._center + loc_update
-        # coordinates relative to lump center
-        rel_center = make_obj_array(
-            [x_vec[i] - lump_loc[i] for i in range(self._dim)]
-        )
-        r = actx.np.sqrt(np.dot(rel_center, rel_center))
-        expterm = amplitude * actx.np.exp(- r ** 2)
-        mass = expterm + self._rho0
-        mom = self._velocity * mass
+
         gamma = eos.gamma()
+        mass = 0 * x_vec[0] + self._rho0
+        mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         # process the species components independently
@@ -617,31 +609,13 @@ class MulticomponentLump:
         actx = q[0].array_context
         nodes = thaw(actx, discr.nodes())
         loc_update = t * self._velocity
-        lump_loc = self._center + loc_update
-        # coordinates relative to lump center
-        rel_center = make_obj_array(
-            [nodes[i] - lump_loc[i] for i in range(self._dim)]
-        )
-        r = actx.np.sqrt(np.dot(rel_center, rel_center))
-        amplitude = 0.0
 
-        # The expected rhs for multilump is:
-        # recall for multilump, rho = 1.
-        # rhorhs  = 0
-        # rhoerhs = 0
-        # rhovrhs = 0
-        # rhoYrhs = -2*rho*Yamp*e^(-r*r)*(r.dot.v)
-        expterm = amplitude * actx.np.exp(- r ** 2)
-        mass = expterm + self._rho0
-
+        mass = 0 * nodes[0] + self._rho0
         mom = self._velocity * mass
         v = mom / mass
-
-        rdotv = np.dot(rel_center, v)
-
         massrhs = 0 * mass
         energyrhs = 0 * mass
-        momrhs = v * 0 * mass * rdotv
+        momrhs = 0 * mom
 
         # process the species components independently
         specrhs = None
