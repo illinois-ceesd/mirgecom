@@ -114,9 +114,8 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
         for j in range(dim):
             expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
 
-            #    if nspecies > 1:
     for i in range(nspecies):
-        expected_flux[dim+2+i] = mom * make_obj_array([mass_fractions[i] / mass])
+        expected_flux[dim+2+i] = mom * mass_fractions[i] / mass
 
     # }}}
 
@@ -347,18 +346,16 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         interior_face_flux = _facial_flux(
             discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
 
-        from functools import partial
-        fnorm = partial(discr.norm, p=np.inf, dd="all_faces")
-
-        def mynorm(data):
-            if data is None:
+        def inf_norm(data):
+            if len(data) > 0:
+                return discr.norm(data, np.inf, dd="all_faces")
+            else:
                 return 0.0
-            return fnorm(data)
 
         iff_split = split_conserved(dim, interior_face_flux)
-        assert fnorm(iff_split.mass) < tolerance
-        assert fnorm(iff_split.energy) < tolerance
-        assert mynorm(iff_split.species_mass) < tolerance
+        assert inf_norm(iff_split.mass) < tolerance
+        assert inf_norm(iff_split.energy) < tolerance
+        assert inf_norm(iff_split.species_mass) < tolerance
 
         # The expected pressure 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
@@ -371,7 +368,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        momerr = fnorm(iff_split.momentum) - p0
+        momerr = inf_norm(iff_split.momentum) - p0
         assert momerr < tolerance
 
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
@@ -380,9 +377,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_mass = discr.interp("vol", BTAG_ALL, mass_input)
         dir_e = discr.interp("vol", BTAG_ALL, energy_input)
         dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
-        dir_mf = None
-        if species_mass_input is not None:
-            dir_mf = discr.interp("vol", BTAG_ALL, species_mass_input)
+        dir_mf = discr.interp("vol", BTAG_ALL, species_mass_input)
 
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                   species_mass=dir_mf)
@@ -395,11 +390,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         )
 
         bf_split = split_conserved(dim, boundary_flux)
-        assert fnorm(bf_split.mass) < tolerance
-        assert fnorm(bf_split.energy) < tolerance
-        assert mynorm(bf_split.species_mass) < tolerance
+        assert inf_norm(bf_split.mass) < tolerance
+        assert inf_norm(bf_split.energy) < tolerance
+        assert inf_norm(bf_split.species_mass) < tolerance
 
-        momerr = fnorm(bf_split.momentum) - p0
+        momerr = inf_norm(bf_split.momentum) - p0
         assert momerr < tolerance
 
         eoc_rec1.add_data_point(1.0 / nel_1d, momerr)

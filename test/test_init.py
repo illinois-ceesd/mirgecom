@@ -80,31 +80,35 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
-    mass_fracs = (np.array([(ispec+1) for ispec in range(nspecies)])
-                  if nspecies > 0 else None)
+    mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)])
 
     initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
     init_soln = initializer(nodes)
     cv = split_conserved(dim, init_soln)
 
+    def inf_norm(data):
+        if len(data) > 0:
+            return discr.norm(data, np.inf)
+        else:
+            return 0.0
+
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    perrmax = discr.norm(p - exp_p, np.inf)
+    perrmax = inf_norm(p - exp_p)
 
     exp_mass = 1.0
-    merrmax = discr.norm(cv.mass - exp_mass, np.inf)
+    merrmax = inf_norm(cv.mass - exp_mass)
 
     exp_energy = 2.5 + .5 * dim
-    eerrmax = discr.norm(cv.energy - exp_energy, np.inf)
+    eerrmax = inf_norm(cv.energy - exp_energy)
 
-    if nspecies > 0:
-        exp_species_mass = exp_mass * mass_fracs
-        mferrmax = discr.norm(cv.species_mass - exp_species_mass, np.inf)
-        assert mferrmax < 1e-15
+    exp_species_mass = exp_mass * mass_fracs
+    mferrmax = inf_norm(cv.species_mass - exp_species_mass)
 
     assert perrmax < 1e-15
     assert merrmax < 1e-15
     assert eerrmax < 1e-15
+    assert mferrmax < 1e-15
 
 
 def test_lump_init(ctx_factory):
@@ -382,7 +386,7 @@ def test_multilump(ctx_factory, dim):
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
-    assert cv.species_mass is not None
+    assert len(cv.species_mass) == nspecies
     species_mass = cv.species_mass
 
     spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
