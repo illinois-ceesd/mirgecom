@@ -5,7 +5,7 @@ Common error messages
 How can I fix the ``clGetPlatformIDs failed: PLATFORM_NOT_FOUND_KHR`` error?
 --------------------------------------------------------------------------
 
-This error appears at the mirgecom startup when the OpenCL loader (ocl-icd) can not
+This error appears at mirgecom startup when the OpenCL loader (ocl-icd) can not
 find any valid OpenCL platform::
 
    $ python examples/wave-eager.py
@@ -22,7 +22,7 @@ find any valid OpenCL platform::
 This can be caused by multiple issues:
 
 - The ``pocl`` package is not installed. You can install it with ``$ conda install pocl``.
-  Consider installing ``pocl-cuda`` as well on Linux systems.
+  Consider installing ``pocl-cuda`` as well on Linux systems with Nvidia GPUs.
 - The OpenCL loader can not find the system OpenCL drivers. You can add
   support for the system CL platforms by installing the ``ocl-icd-system`` (on Linux) or ``khronos-opencl-icd-loader`` (on MacOS) package with ``conda``.
 - The loader is unable to load the platform for other reasons. You can further
@@ -51,5 +51,6 @@ This can be caused by multiple issues:
          platforms = get_platforms()
      pyopencl._cl.LogicError: clGetPlatformIDs failed: PLATFORM_NOT_FOUND_KHR
 
-  This error occurs because pyopencl was built by source with an incompatible gcc. Load
-  a newer gcc module (``$ ml load gcc/8.3.1`` should work), and recompile pyopencl.
+  This error occurs because pyopencl was built by source with an incompatible
+  gcc version. Load a newer gcc module (``$ ml load gcc/8.3.1`` should work),
+  and recompile pyopencl.
