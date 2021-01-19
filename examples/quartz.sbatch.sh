@@ -14,6 +14,8 @@
 nnodes=$SLURM_JOB_NUM_NODES
 nproc=$nnodes # 1 rank per node
 
+echo nnodes=$nnodes nproc=$nproc
+
 # See
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
