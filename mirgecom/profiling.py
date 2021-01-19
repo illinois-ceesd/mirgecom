@@ -86,7 +86,7 @@ class ProfileResult:
 elwise_knl = NonLoopyProfilekernel("pyopencl_array")
 
 
-def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for, dtype,
+def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for,
                            nops=None, nbytes=None):
     """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
