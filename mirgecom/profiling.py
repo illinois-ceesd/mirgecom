@@ -40,45 +40,6 @@ __doc__ = """
 .. autofunction:: add_nonloopy_profiling_result
 """
 
-# {{{ Support for non-Loopy results (e.g., pyopencl kernels)
-
-nonloopy_profile_events = []
-
-
-def del_pyopencl_array_monkey_patch():
-    """Remove the :mod:`pyopencl` monkey patching."""
-    cl.array.ARRAY_KERNEL_EXEC_HOOK = None
-
-
-def init_pyopencl_array_monkey_patch():
-    """Remove the :mod:`pyopencl` monkey patching."""
-    cl.array.ARRAY_KERNEL_EXEC_HOOK = array_kernel_exec_hook
-
-
-@dataclass(eq=True, frozen=True)
-class NonLoopyProfilekernel:
-    """Class to hold the name for a non-loopy profile result.
-
-    This is necessary so that :meth:`tabulate_profiling_data` and
-    :meth:`get_profiling_data_for_kernel` can
-    access the 'name' field of the non-Loopy kernel.
-    """
-
-    name: str
-
-
-elwise_knl = NonLoopyProfilekernel("pyopencl_array")
-
-
-def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
-    """Initialize the :mod:`pyopencl` monkey patching."""
-    evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
-    nonloopy_profile_events.append(evt)
-
-    return evt
-
-# }}}
-
 
 # {{{ Support for non-Loopy results (e.g., pyopencl kernels)
 
