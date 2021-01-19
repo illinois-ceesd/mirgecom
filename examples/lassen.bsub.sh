@@ -33,4 +33,6 @@ $jsrun_cmd js_task_info
 
 echo "----------------------------"
 
-$jsrun_cmd python -m mpi4py ./vortex-mpi.py
+# Run application
+# -O: switch on optimizations
+$jsrun_cmd python -O -m mpi4py examples/vortex-mpi.py

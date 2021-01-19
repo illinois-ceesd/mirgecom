@@ -21,4 +21,6 @@ echo nnodes=$nnodes nproc=$nproc
 # on why this is important
 export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
 
-srun -n $nproc python -m mpi4py ./vortex-mpi.py
+# Run application
+# -O: switch on optimizations
+srun -n $nproc python -O -m mpi4py ./vortex-mpi.py
