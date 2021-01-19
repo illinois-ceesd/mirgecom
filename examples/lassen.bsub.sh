@@ -35,4 +35,4 @@ echo "----------------------------"
 
 # Run application
 # -O: switch on optimizations
-$jsrun_cmd python -O -m mpi4py examples/vortex-mpi.py
+$jsrun_cmd python -O -m mpi4py ./vortex-mpi.py
