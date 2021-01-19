@@ -357,6 +357,7 @@ def test_multilump(ctx_factory, dim):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
+    rho0 = 1.5
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
     spec_y0s = np.ones(shape=(nspecies,))
     spec_amplitudes = np.ones(shape=(nspecies,))
@@ -369,19 +370,18 @@ def test_multilump(ctx_factory, dim):
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 1
 
-    lump = MulticomponentLump(dim=dim, nspecies=nspecies, spec_centers=centers,
-                              velocity=velocity, spec_y0s=spec_y0s,
-                              spec_amplitudes=spec_amplitudes)
+    lump = MulticomponentLump(dim=dim, nspecies=nspecies, rho0=rho0,
+                              spec_centers=centers, velocity=velocity,
+                              spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
     lump_soln = lump(t=0, x_vec=nodes)
     numcvspec = get_num_species(dim, lump_soln)
     print(f"get_num_species = {numcvspec}")
-    exp_mass = 1.0  # we expect \rho = 1.0 for multi-component lump init
 
     assert get_num_species(dim, lump_soln) == nspecies
 
     cv = split_conserved(dim, lump_soln)
-    assert discr.norm(cv.mass - exp_mass) == 0.0
+    assert discr.norm(cv.mass - rho0) == 0.0
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
@@ -393,7 +393,8 @@ def test_multilump(ctx_factory, dim):
     r2 = make_obj_array([np.dot(spec_r[i], spec_r[i]) for i in range(nspecies)])
     expfactor = make_obj_array([spec_amplitudes[i] * actx.np.exp(- r2[i])
                                 for i in range(nspecies)])
-    exp_mass = make_obj_array([spec_y0s[i] + expfactor[i] for i in range(nspecies)])
+    exp_mass = make_obj_array([rho0 * (spec_y0s[i] + expfactor[i])
+                               for i in range(nspecies)])
     mass_resid = species_mass - exp_mass
 
     print(f"exp_mass = {exp_mass}")

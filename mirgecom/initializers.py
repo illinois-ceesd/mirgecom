@@ -577,7 +577,7 @@ class MulticomponentLump:
             rel_pos = x_vec - lump_loc
             r2 = np.dot(rel_pos, rel_pos)
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            species_mass[i] = self._spec_y0s[i] + expterm
+            species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
         return flat_obj_array(mass, energy, mom, species_mass)
 
@@ -615,7 +615,7 @@ class MulticomponentLump:
             rel_pos = nodes - lump_loc
             r2 = np.dot(rel_pos, rel_pos)
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            specrhs[i] = 2 * expterm * np.dot(rel_pos, v)
+            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
         return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
 
