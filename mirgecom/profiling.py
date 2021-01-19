@@ -133,14 +133,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.kernel_stats = {}
         self.logmgr = logmgr
 
-    def __del__(self):
-        """Release resources and undo monkey patching."""
-        del self.profile_events[:]
-        self.profile_results.clear()
-        self.kernel_stats.clear()
-
-        # del_pyopencl_array_monkey_patch()
-
         init_pyopencl_array_monkey_patch()
 
     def __del__(self):
