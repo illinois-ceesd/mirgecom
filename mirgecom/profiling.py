@@ -122,14 +122,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.kernel_stats = {}
         self.logmgr = logmgr
 
-    def __del__(self):
-        """Release resources and undo monkey patching."""
-        del self.profile_events[:]
-        self.profile_results.clear()
-        self.kernel_stats.clear()
-
-        del_pyopencl_array_monkey_patch()
-
         init_pyopencl_array_monkey_patch()
 
     def __del__(self):
@@ -370,8 +362,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 footprint_bytes=footprint_bytes)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
-
-            init_pyopencl_array_monkey_patch()
 
             if self.logmgr:
                 if "pyopencl_array_time" not in self.logmgr.quantity_data:
