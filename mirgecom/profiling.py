@@ -81,7 +81,7 @@ elwise_knl = NonLoopyProfilekernel("pyopencl_array")
 
 
 def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
-    """Initialize the :mod:`pyopencl` monkey patching."""
+    """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
     nonloopy_profile_events.append(evt)
 
@@ -121,6 +121,16 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_results = {}
         self.kernel_stats = {}
         self.logmgr = logmgr
+
+    def __del__(self):
+        """Release resources and undo monkey patching."""
+        del self.profile_events[:]
+        self.profile_results.clear()
+        self.kernel_stats.clear()
+
+        del_pyopencl_array_monkey_patch()
+
+        init_pyopencl_array_monkey_patch()
 
     def __del__(self):
         """Release resources and undo monkey patching."""
@@ -284,7 +294,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bytes_per_flop_mean])
 
         tbl.add_row(["Total", total_calls, f"{total_time:{g}}"] + ["--"] * 13)
-        self.profile_results = {}
 
         return tbl
 
