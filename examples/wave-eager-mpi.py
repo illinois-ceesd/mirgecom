@@ -150,10 +150,10 @@ def main(use_profiling=True):
     while t < t_final:
         if istep == 10:
             from pyinstrument import Profiler
-            profiler = Profiler()
-            profiler.start()
             if use_profiling:
                 ignore = actx.tabulate_profiling_data() # noqa
+            profiler = Profiler()
+            profiler.start()
 
         fields = rk4_step(fields, t, dt, rhs)
 
@@ -166,10 +166,10 @@ def main(use_profiling=True):
             #             ])
 
         if istep == 19:
-            profiler.stop()
-            print(profiler.output_text(unicode=True, color=True, show_all=True))
             if use_profiling:
                 print(actx.tabulate_profiling_data())
+            profiler.stop()
+            print(profiler.output_text(unicode=True, color=True, show_all=True))
 
         t += dt
         istep += 1
