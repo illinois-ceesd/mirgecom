@@ -35,7 +35,7 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
-from grudge.shortcuts import make_visualizer
+from grudge.shortcuts import make_visualizer  # noqa
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
@@ -85,16 +85,16 @@ def main(use_profiling=True):
     mesh_dist = MPIMeshDistributor(comm)
 
     dim = 2
-    nel_1d = 72  # 10082
-    nel_1d = 101 # 20000
-    nel_1d = 143 # 40328
-    nel_1d = 202 # 80000
-    nel_1d = 286 # 160178
+    nel_1d = 72   # 10082
+    nel_1d = 101  # 20000
+    nel_1d = 143  # 40328
+    nel_1d = 202  # 80000
+    nel_1d = 286  # 160178
     nel_1d = 401
     nel_1d = 567
     nel_1d = 802
-    nel_1d = 1134 # 2567378 elements
-    # nel_1d = 1604 # 5139218 elements, does not run on GPU
+    nel_1d = 1134  # 2567378 elements
+    # nel_1d = 1604  # 5139218 elements, does not run on GPU
     # nel_1d = 2268
     # nel_1d = 3208
     # nel_1d = 4537
@@ -137,12 +137,12 @@ def main(use_profiling=True):
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+    # vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
 
-    rank = comm.Get_rank()
+    # rank = comm.Get_rank()
 
     t = 0
     t_final = 0.21
@@ -153,7 +153,7 @@ def main(use_profiling=True):
             profiler = Profiler()
             profiler.start()
             if use_profiling:
-                ignore = actx.tabulate_profiling_data()
+                ignore = actx.tabulate_profiling_data() # noqa
 
         fields = rk4_step(fields, t, dt, rhs)
 

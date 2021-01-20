@@ -37,7 +37,6 @@ from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
-.. autofunction:: add_nonloopy_profiling_result
 """
 
 
@@ -90,11 +89,10 @@ class ProfileResult:
 elwise_knl = NonLoopyProfilekernel("pyopencl_array")
 
 
-def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for,
-                           nops=None, nbytes=None):
+def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
     """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
-    nonloopy_profile_events.append(NonLoopyProfileEvent(evt, nops, nbytes))
+    nonloopy_profile_events.append(NonLoopyProfileEvent(evt, None, None))
 
     return evt
 
@@ -231,9 +229,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         from statistics import mean
         global nonloopy_profile_results
-
-        tot_calls = 0
-        tot_time = 0
 
         total_calls = 0
         total_time = 0
@@ -379,8 +374,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 footprint_bytes=footprint_bytes)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
-
-            init_pyopencl_array_monkey_patch()
 
             if self.logmgr:
                 if "pyopencl_array_time" not in self.logmgr.quantity_data:
