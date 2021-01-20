@@ -3,7 +3,7 @@ Common error messages
 
 
 How can I fix the ``clGetPlatformIDs failed: PLATFORM_NOT_FOUND_KHR`` error?
---------------------------------------------------------------------------
+----------------------------------------------------------------------------
 
 This error appears at mirgecom startup when the OpenCL loader (ocl-icd) can not
 find any valid OpenCL platform::
