@@ -23,7 +23,7 @@ This can be caused by multiple issues:
 
 - The ``pocl`` package is not installed. You can install it with ``$ conda install pocl``.
   Consider installing ``pocl-cuda`` as well on Linux systems with Nvidia GPUs.
-- The OpenCL loader can not find the system OpenCL drivers. You can add
+- The OpenCL loader cannot find the system OpenCL drivers. You can add
   support for the system CL platforms by installing the ``ocl-icd-system`` (on Linux) or ``khronos-opencl-icd-loader`` (on MacOS) package with ``conda``.
 - The loader is unable to load the platform for other reasons. You can further
   debug such an issue by running ``$ export OCL_ICD_DEBUG=7`` before starting
