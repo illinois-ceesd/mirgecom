@@ -83,6 +83,11 @@ class PrescribedBoundary:
         ext_soln = self._userfunc(t, nodes)
         return ext_soln
 
+    def av(
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        return discr.project("vol",btag,q)
+
 
 class DummyBoundary:
     """Use the boundary-adjacent solution as the boundary solution.
@@ -107,6 +112,11 @@ class DummyBoundary:
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
+
+    def av(
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        return discr.project("vol",btag,q)
 
 class AdiabaticSlipBoundary:
     """Adiabatic slip boundary for inviscid flows.
@@ -223,3 +233,44 @@ class AdiabaticSlipBoundary:
                                     momentum=bndry_cv.momentum)
 
         return bndry_soln
+
+    def av(
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        # Grab some boundary-relevant data
+        dim = discr.dim
+        cv = split_conserved(dim, q)
+        actx = cv.mass[0].array_context
+
+        # Grab a unit normal to the boundary
+        normal = thaw(actx, discr.normal(btag))
+
+        # Get the interior soln
+        int_soln = discr.project("vol", btag, q)
+        bndry_cv = split_conserved(dim, int_soln)
+
+        #flip signs on mass and energy
+        bndry_cv.mass = -1*bndry_cv.mass
+        bndry_cv.energy = -1*bndry_cv.energy
+        
+        #things are in the wrong order here...flip?
+        for i in range(dim):
+            tmp = np.zeros(dim, dtype=object)
+            for j in range(dim):
+                tmp[j] = bndry_cv.momentum[j][i]
+            flip = np.dot(tmp,normal)
+            norm_flip = normal*make_obj_array([flip])
+            tmp = tmp - 2.0*norm_flip
+            for j in range(dim):
+                bndry_cv.momentum[j][i] = tmp[j]
+
+        #also need to flip momentum sign
+        bndry_cv.momentum = -1*bndry_cv.momentum
+
+        #replace it here without single valued check
+        #No reason these arrays should be messed up...
+        result = np.zeros(2+dim, dtype=object)
+        result[0] = bndry_cv.mass
+        result[1] = bndry_cv.energy
+        result[2:] = bndry_cv.momentum
+        return(result)

@@ -108,21 +108,6 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
     
     pbf_r = obj_array_vectorize(my_facialflux_r_partition,r)
     
-    #pbf_r = sum(
-    #    _facial_flux_r(discr, q_tpair=part_pair)
-    #    for part_pair in cross_rank_trace_pairs(discr, r)
-    #)
-
-    #domain boundary flux basic boundary implementation
-    #def my_facialflux2(r):
-    #    dir_r = discr.project("vol", BTAG_ALL,make_obj_array([r]))
-    #    dbf_r = _facial_flux(
-    #         discr, 
-    #         q_tpair=TracePair(BTAG_ALL,interior=dir_r,exterior=dir_r)
-    #     )
-    #    return (dbf_r)
-    #dbf_r = obj_array_vectorize(my_facialflux2,r)
-
 
     #True boundary implementation
     #Okay, not sure about this...
@@ -146,6 +131,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
             
         
     #Compute q, half way done!
+    #q = discr.inverse_mass( -alpha * (dflux_r - discr.face_mass(iff_r + pbf_r + dbf_r)))
     q = discr.inverse_mass( -alpha * epsilon * (dflux_r - discr.face_mass(iff_r + pbf_r + dbf_r)))
 
     #flux of q
@@ -169,21 +155,16 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
         return  sum(_facial_flux_q(discr,q_tpair=part_pair) for part_pair in qin)
     
     pbf_q = obj_array_vectorize(my_facialflux_q_partition,q)
-    #pbf_q = sum(
-    #    _facial_flux_q(discr, q_tpair=part_pair)
-    #    for part_pair in cross_rank_trace_pairs(discr, q)
-    #)
 
-    def my_facialflux_q_boundary(q):
-        #dombain boundary flux
-        dir_q = discr.project("vol",BTAG_ALL, q);
-        dbf_q = _facial_flux_q(
-             discr,
-             q_tpair=TracePair(BTAG_ALL,interior=dir_q,exterior=dir_q)
-            )
-        return(dbf_q)
-
-    dbf_q = obj_array_vectorize(my_facialflux_q_boundary,q)
+    dbf_q = 0.0*iff_q
+    for btag in boundaries:
+            def my_facialflux_q_boundary(sol_ext,sol_int):
+                q_tpair = TracePair(btag,interior=sol_int,exterior=sol_ext)
+                return _facial_flux_q(discr,q_tpair=q_tpair)
+            q_ext=boundaries[btag].av(discr,eos=eos,btag=btag,t=t,q=q)
+            q_int=discr.project("vol",btag,q)
+            dbf_q = dbf_q + obj_array_vectorize_n_args(my_facialflux_q_boundary,q_ext,q_int)
+            
 
     #Return the rhs contribution
     return ( discr.inverse_mass( -dflux_q + discr.face_mass(iff_q + pbf_q + dbf_q) ) )
