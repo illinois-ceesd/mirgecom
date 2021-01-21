@@ -12,3 +12,4 @@ Frequently Asked Questions
 
    code
    install
+   errors
