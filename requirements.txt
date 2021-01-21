@@ -25,4 +25,4 @@ git+https://github.com/inducer/pytato.git#egg=pytato
 # f2py) decided to restart from scratch, starting with a Fortran parser. That's as far as he got,
 # and a forked version of this is in this repo.
 
-git+https://github.com/inducer/f2py.git#egg=f2py
+#git+https://github.com/inducer/f2py.git#egg=f2py
