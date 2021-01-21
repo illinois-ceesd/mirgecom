@@ -4,4 +4,4 @@
 memory-profiler
 pudb
 pyinstrument
-vmprof; platform_machine == "x86_64"
+vmprof; platform_machine == "x86_64" # Might fail on some machines, you might have to install the package from the repo.
