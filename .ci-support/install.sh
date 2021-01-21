@@ -25,5 +25,5 @@ MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 conda info --envs
 
-pip install -r requirements.txt
+# pip install -r requirements.txt
 python setup.py install
