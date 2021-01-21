@@ -1,0 +1,7 @@
+# Useful development packages.
+# Install them with 'pip install -r requirements_dev.txt'.
+
+memory-profiler
+pudb
+pyinstrument
+vmprof; platform_machine == "x86_64"
