@@ -19,9 +19,11 @@ PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update conda --yes
 PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes
 PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file .test-conda-env-py3.yml --name testing
 
-. "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+# . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+conda info --envs
+
 pip install -r requirements.txt
 python setup.py install
