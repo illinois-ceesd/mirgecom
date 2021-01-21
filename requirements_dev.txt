@@ -2,6 +2,9 @@
 # Install them with 'pip install -r requirements_dev.txt'.
 
 memory-profiler
+jedi
 pudb
 pyinstrument
-vmprof; platform_machine == "x86_64" # Might fail on some machines, you might have to install the package from the repo.
+# Might fail on some machines, you might have to install from git, with the commented line below:
+vmprof; platform_machine == "x86_64" 
+# git+https://github.com/vmprof/vmprof-python.git
