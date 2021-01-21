@@ -38,7 +38,7 @@ jobs:
         - name: Install
           shell: bash -l {0}
           run: |
-            . .ci-support/install.sh
+            .ci-support/install.sh
 
         - name: Pylint
           run: |

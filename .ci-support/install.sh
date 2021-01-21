@@ -1,3 +1,5 @@
+#!/bin/bash -x
+
 if [ "$(uname)" = "Darwin" ]; then
 PLATFORM=MacOSX
 brew install open-mpi
