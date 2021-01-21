@@ -38,6 +38,7 @@ jobs:
         - name: Install
           shell: bash -l {0}
           run: |
+            sudo apt-get -y install openmpi-bin libopenmpi-dev
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
