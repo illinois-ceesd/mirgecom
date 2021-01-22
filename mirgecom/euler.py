@@ -97,11 +97,11 @@ class ConservedVars:  # FIXME: Name?
         Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
         of :class:`~meshmode.dof_array.DOFArray` for momentum per unit volume.
 
-    .. attribute:: scalar_mass
+    .. attribute:: species_mass
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(nscalars,)``
-        of :class:`~meshmode.dof_array.DOFArray`  for scalar mass per unit volume
-        with components, $\rho~Y_\alpha$, where $Y_\alpha$ is the vector of scalar
+        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        of :class:`~meshmode.dof_array.DOFArray`  for species mass per unit volume
+        with components, $\rho~Y_\alpha$, where $Y_\alpha$ is the vector of species
         mass fractions, and $1\le\alpha\le\mathtt{nspecies}$.
 
     .. automethod:: join
@@ -111,7 +111,7 @@ class ConservedVars:  # FIXME: Name?
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    scalar_mass: np.ndarray = None
+    species_mass: np.ndarray = None
 
     @property
     def dim(self):
@@ -125,7 +125,7 @@ class ConservedVars:  # FIXME: Name?
             mass=self.mass,
             energy=self.energy,
             momentum=self.momentum,
-            scalar_mass=self.scalar_mass)
+            species_mass=self.species_mass)
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
@@ -166,28 +166,28 @@ def split_conserved(dim, q):
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*. For single component gases, i.e. for those state
-    vectors *q* that do not contain scalar components, the returned
-    dataclass :attr:`ConservedVars.scalar_mass` will be set to *None*..
+    vectors *q* that do not contain multispecies mixtures, the returned
+    dataclass :attr:`ConservedVars.species_mass` will be set to *None*..
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
     if nspec > 0:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                             scalar_mass=q[2+dim:2+dim+nspec])
+                             species_mass=q[2+dim:2+dim+nspec])
     else:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def join_conserved(dim, mass, energy, momentum, scalar_mass=None):
+def join_conserved(dim, mass, energy, momentum, species_mass=None):
     """Create an agglomerated solution array from the conserved quantities."""
     aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
         _aux_shape(momentum, (dim,))]
 
-    if scalar_mass is not None:
-        nspec = len(scalar_mass)
-        aux_shapes.append(_aux_shape(scalar_mass, (nspec,)))
+    if species_mass is not None:
+        nspec = len(species_mass)
+        aux_shapes.append(_aux_shape(species_mass, (nspec,)))
     else:
         nspec = 0
 
@@ -199,8 +199,8 @@ def join_conserved(dim, mass, energy, momentum, scalar_mass=None):
     result[1] = energy
     result[2:dim+2] = momentum
 
-    if scalar_mass is not None:
-        result[dim+2:] = scalar_mass
+    if species_mass is not None:
+        result[dim+2:] = species_mass
 
     return result
 
@@ -218,17 +218,17 @@ def inviscid_flux(discr, eos, q):
 
     mom = cv.momentum
 
-    scalar_mass = None
-    if cv.scalar_mass is not None:
-        # scalar components require a reshape here to get the right numpy
+    species_mass = None
+    if cv.species_mass is not None:
+        # mixture species require a reshape here to get the right numpy
         # broadcast behavior. Reshaped to [numspecies x 1] object.
-        scalar_mass = mom * cv.scalar_mass.reshape(-1, 1) / cv.mass
+        species_mass = mom * cv.species_mass.reshape(-1, 1) / cv.mass
 
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-                          scalar_mass=scalar_mass)
+                          species_mass=species_mass)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):

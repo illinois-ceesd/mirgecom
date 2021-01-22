@@ -571,7 +571,7 @@ class MulticomponentLump:
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         # process the species components independently
-        scalar_mass = None
+        species_mass = None
         if self._nspecies > 0:
             lump_locs = make_obj_array([self._spec_centers[i] + loc_update
                                        for i in range(self._nspecies)])
@@ -583,10 +583,10 @@ class MulticomponentLump:
                 [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
                  for i in range(self._nspecies)]
             )
-            scalar_mass = make_obj_array([self._spec_y0s[i] + expterms[i]
+            species_mass = make_obj_array([self._spec_y0s[i] + expterms[i]
                                         for i in range(self._nspecies)])
 
-        return flat_obj_array(mass, energy, mom, scalar_mass)
+        return flat_obj_array(mass, energy, mom, species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -787,13 +787,13 @@ class Uniform:
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        scalar_mass = None
+        species_mass = None
         if self._mass_fracs is not None:
-            scalar_mass = self._mass_fracs * mass
+            species_mass = self._mass_fracs * mass
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, scalar_mass=scalar_mass)
+                              momentum=mom, species_mass=species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
