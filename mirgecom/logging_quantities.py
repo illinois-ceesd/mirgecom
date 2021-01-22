@@ -63,7 +63,8 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
         logmgr.add_quantity(PythonMemoryUsage())
     except ImportError:
         from warnings import warn
-        warn("memory_profile module not found, not tracking memory consumption.")
+        warn("memory_profile module not found, not tracking memory consumption."
+             "Install it with 'pip install memory-profiler'")
 
     return logmgr
 
@@ -283,7 +284,7 @@ class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
             if quantity == "temperature":
                 unit = "K"
             elif quantity == "pressure":
-                unit = "P"
+                unit = "Pa"
             else:
                 unit = ""
             warn(f"Logging had to guess units for '{quantity}': '{unit}'."
