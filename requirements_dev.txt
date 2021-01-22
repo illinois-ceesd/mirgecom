@@ -7,6 +7,5 @@ pudb
 pytest-pudb
 pyprof2calltree
 pyinstrument
-# Might fail on some machines, you might have to install from git, with the commented line below:
-vmprof; platform_machine == "x86_64" 
-# git+https://github.com/vmprof/vmprof-python.git
+
+git+https://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64" 
