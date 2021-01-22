@@ -140,6 +140,6 @@ class AdiabaticSlipBoundary:
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
                                     energy=int_cv.energy,
                                     momentum=ext_mom,
-                                    mass_fractions=int_cv.mass_fractions)
+                                    species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
