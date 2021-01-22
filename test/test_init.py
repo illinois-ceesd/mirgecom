@@ -97,9 +97,9 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     exp_energy = 2.5 + .5 * dim
     eerrmax = discr.norm(cv.energy - exp_energy, np.inf)
 
-    if nspecies > 1:
-        exp_mass_fracs = mass_fracs
-        mferrmax = discr.norm(cv.scalar - exp_mass_fracs, np.inf)
+    if nspecies > 0:
+        exp_scalar_mass = exp_mass * mass_fracs
+        mferrmax = discr.norm(cv.scalar_mass - exp_scalar_mass, np.inf)
         assert mferrmax < 1e-15
 
     assert perrmax < 1e-15
@@ -382,15 +382,15 @@ def test_multilump(ctx_factory, dim):
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
-    assert cv.scalar is not None
-    mass_fractions = cv.scalar
+    assert cv.scalar_mass is not None
+    scalar_mass = cv.scalar_mass
 
     spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
     r2 = make_obj_array([np.dot(spec_r[i], spec_r[i]) for i in range(nspecies)])
     expfactor = make_obj_array([spec_amplitudes[i] * actx.np.exp(- r2[i])
                                 for i in range(nspecies)])
     exp_mass = make_obj_array([spec_y0s[i] + expfactor[i] for i in range(nspecies)])
-    mass_resid = mass_fractions - exp_mass
+    mass_resid = scalar_mass - exp_mass
 
     print(f"exp_mass = {exp_mass}")
     print(f"mass_resid = {mass_resid}")

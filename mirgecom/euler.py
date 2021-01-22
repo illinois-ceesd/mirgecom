@@ -14,7 +14,8 @@ where:
    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
 -  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
 -  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_\alpha]$
--  vector of species mass fractions ${Y}_\alpha$.
+-  vector of species mass fractions ${Y}_\alpha$,
+   with $1\le\alpha\le\mathtt{nspecies}$.
 
 State Vector Handling
 ^^^^^^^^^^^^^^^^^^^^^
@@ -85,7 +86,7 @@ class ConservedVars:  # FIXME: Name?
 
     .. attribute:: mass
 
-        :class:`~meshmode.dof_array.DOFArray` for the scalar mass per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for the fluid mass per unit volume
 
     .. attribute:: energy
 
@@ -94,13 +95,14 @@ class ConservedVars:  # FIXME: Name?
     .. attribute:: momentum
 
         Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
-        of :class:`~meshmode.dof_array.DOFArray`  for momentum density.
+        of :class:`~meshmode.dof_array.DOFArray` for momentum per unit volume.
 
-    .. attribute:: scalar
+    .. attribute:: scalar_mass
 
         Object array (:class:`~numpy.ndarray`) with shape ``(nscalars,)``
-        of :class:`~meshmode.dof_array.DOFArray`  for scalar
-        components, $\rho~Y_\alpha$.
+        of :class:`~meshmode.dof_array.DOFArray`  for scalar mass per unit volume
+        with components, $\rho~Y_\alpha$, where $Y_\alpha$ is the vector of scalar
+        mass fractions, and $1\le\alpha\le\mathtt{nspecies}$.
 
     .. automethod:: join
     .. automethod:: replace
@@ -109,7 +111,7 @@ class ConservedVars:  # FIXME: Name?
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    scalar: np.ndarray = None
+    scalar_mass: np.ndarray = None
 
     @property
     def dim(self):
@@ -123,7 +125,7 @@ class ConservedVars:  # FIXME: Name?
             mass=self.mass,
             energy=self.energy,
             momentum=self.momentum,
-            scalar=self.scalar)
+            scalar_mass=self.scalar_mass)
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
@@ -165,27 +167,27 @@ def split_conserved(dim, q):
     mass, energy, and momentum from the agglomerated object array extracted
     from the state vector *q*. For single component gases, i.e. for those state
     vectors *q* that do not contain scalar components, the returned
-    dataclass :attr:`ConservedVars.scalar` will be set to *None*..
+    dataclass :attr:`ConservedVars.scalar_mass` will be set to *None*..
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
     if nspec > 0:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                             scalar=q[2+dim:2+dim+nspec])
+                             scalar_mass=q[2+dim:2+dim+nspec])
     else:
         return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
-def join_conserved(dim, mass, energy, momentum, scalar=None):
+def join_conserved(dim, mass, energy, momentum, scalar_mass=None):
     """Create an agglomerated solution array from the conserved quantities."""
     aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
         _aux_shape(momentum, (dim,))]
 
-    if scalar is not None:
-        nspec = len(scalar)
-        aux_shapes.append(_aux_shape(scalar, (nspec,)))
+    if scalar_mass is not None:
+        nspec = len(scalar_mass)
+        aux_shapes.append(_aux_shape(scalar_mass, (nspec,)))
     else:
         nspec = 0
 
@@ -197,8 +199,8 @@ def join_conserved(dim, mass, energy, momentum, scalar=None):
     result[1] = energy
     result[2:dim+2] = momentum
 
-    if scalar is not None:
-        result[dim+2:] = scalar
+    if scalar_mass is not None:
+        result[dim+2:] = scalar_mass
 
     return result
 
@@ -216,17 +218,17 @@ def inviscid_flux(discr, eos, q):
 
     mom = cv.momentum
 
-    scalars = None
-    if cv.scalar is not None:
+    scalar_mass = None
+    if cv.scalar_mass is not None:
         # scalar components require a reshape here to get the right numpy
         # broadcast behavior. Reshaped to [numspecies x 1] object.
-        scalars = mom * cv.scalar.reshape(-1, 1) / cv.mass
+        scalar_mass = mom * cv.scalar_mass.reshape(-1, 1) / cv.mass
 
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-                scalar=scalars)
+                          scalar_mass=scalar_mass)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
@@ -297,7 +299,10 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     ----------
     q
         State array which expects at least the canonical conserved quantities
-        (mass, energy, momentum) for the fluid at each point.
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
 
     boundaries
         Dictionary of boundary functions, one for each valid btag
