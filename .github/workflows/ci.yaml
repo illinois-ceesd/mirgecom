@@ -38,15 +38,12 @@ jobs:
         - name: Install
           shell: bash -l {0}
           run: |
-            sudo apt-get -y install openmpi-bin libopenmpi-dev
-            cd ..
-            git clone https://github.com/illinois-ceesd/emirge
-            cd emirge
-            ./install.sh
+            . .ci-support/install.sh
 
         - name: Pylint
           run: |
-            source ../emirge/config/activate_env.sh
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             python -m pip install wheel
             python -m pip install pylint pyyaml
             curl -L -O https://raw.githubusercontent.com/inducer/ci-support/master/run-pylint.py
