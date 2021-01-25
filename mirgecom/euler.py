@@ -13,7 +13,7 @@ where:
 -  flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
 -  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
--  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_\alpha]$
+-  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_s]$
 -  vector of species mass fractions ${Y}_\alpha$,
    with $1\le\alpha\le\mathtt{nspecies}$.
 
@@ -100,9 +100,9 @@ class ConservedVars:  # FIXME: Name?
     .. attribute:: species_mass
 
         Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
-        of :class:`~meshmode.dof_array.DOFArray`  for species mass per unit volume
-        with components, $\rho~Y_\alpha$, where $Y_\alpha$ is the vector of species
-        mass fractions, and $1\le\alpha\le\mathtt{nspecies}$.
+        of :class:`~meshmode.dof_array.DOFArray` for species mass per unit volume.
+        The species mass vector has components, $\rho~Y_\alpha$, where $Y_\alpha$
+        is the vector of species mass fractions.
 
     .. automethod:: join
     .. automethod:: replace
