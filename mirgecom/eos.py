@@ -325,7 +325,7 @@ class PrometheusMixture(GasEOS):
     def species_fractions(self, cv: ConservedVars):
         r"""Get species fractions :math:`\Y_\alpha` from fractional mass density."""
 
-        return cv.mass_fractions / cv.mass
+        return cv.species_mass / cv.mass
 
     def pressure(self, cv: ConservedVars):
         r"""Get thermodynamic pressure of the gas.

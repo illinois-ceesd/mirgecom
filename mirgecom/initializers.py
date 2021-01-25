@@ -707,7 +707,7 @@ class MixtureInitializer:
         y = make_obj_array([self._massfracs[i] * ones
                             for i in range(self._nspecies)])
         mass = eos.get_density(pressure, temperature, y)
-        massfracs = mass * y
+        specmass = mass * y
         mom = mass * velocity
         internal_energy = eos.get_internal_energy(temperature, y)
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
@@ -715,7 +715,7 @@ class MixtureInitializer:
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, mass_fractions=massfracs)
+                              momentum=mom, species_mass=specmass)
 
 
 class AcousticPulse:
