@@ -66,7 +66,7 @@ class PrescribedBoundary:
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(eos=eos, t=t, x_vec=nodes)
+        ext_soln = self._userfunc(x_vec=nodes, eos=eos, t=t)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
@@ -140,6 +140,6 @@ class AdiabaticSlipBoundary:
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
                                     energy=int_cv.energy,
                                     momentum=ext_mom,
-                                    mass_fractions=int_cv.mass_fractions)
+                                    species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)

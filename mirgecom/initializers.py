@@ -303,7 +303,9 @@ class SodShock1D:
             ]
         )
 
-        return flat_obj_array(mass, energy, mom)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
 
 class Lump:
@@ -408,7 +410,9 @@ class Lump:
         gamma = eos.gamma()
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return flat_obj_array(mass, energy, mom)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -448,7 +452,9 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs)
 
 
 class MulticomponentLump:
@@ -572,7 +578,7 @@ class MulticomponentLump:
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         # process the species components independently
-        mass_fracs = None
+        species_mass = None
         if self._nspecies > 0:
             lump_locs = make_obj_array([self._spec_centers[i] + loc_update
                                        for i in range(self._nspecies)])
@@ -584,12 +590,12 @@ class MulticomponentLump:
                 [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
                  for i in range(self._nspecies)]
             )
-            mass_fracs = make_obj_array([self._spec_y0s[i] + expterms[i]
+            species_mass = make_obj_array([self._spec_y0s[i] + expterms[i]
                                         for i in range(self._nspecies)])
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, mass_fractions=mass_fracs)
+                              momentum=mom, species_mass=species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -635,7 +641,9 @@ class MulticomponentLump:
             specrhs = make_obj_array([2 * expterms[i] * rdotvs[i]
                                       for i in range(self._nspecies)])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=specrhs)
 
 
 class MixtureInitializer:
@@ -828,12 +836,12 @@ class Uniform:
 
         if mass_fracs is not None:
             self._nspecies = len(mass_fracs)
-            self._mass_frac = mass_fracs
+            self._mass_fracs = mass_fracs
         elif nspecies > 0:
             self._nspecies = nspecies
-            self._mass_frac = np.zeros(shape=(nspecies,))
+            self._mass_fracs = np.zeros(shape=(nspecies,))
         else:
-            self._mass_frac = None
+            self._mass_fracs = None
             self._nspecies = 0
 
         if len(self._velocity) != dim:
@@ -861,13 +869,13 @@ class Uniform:
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        mass_frac = None
-        if self._mass_frac is not None:
-            mass_frac = self._mass_frac * mass
+        species_mass = None
+        if self._mass_fracs is not None:
+            species_mass = self._mass_fracs * mass
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, mass_fractions=mass_frac)
+                              momentum=mom, species_mass=species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -888,7 +896,9 @@ class Uniform:
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
-        if self._mass_frac is not None:
+        if self._mass_fracs is not None:
             yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=yrhs)
