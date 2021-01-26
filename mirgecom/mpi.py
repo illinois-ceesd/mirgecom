@@ -82,6 +82,7 @@ def mpi_entry_point(func):
         # Only works with pocl-cuda devices currently.
         if size > 1:
             node_comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
+            node_rank = node_comm.Get_rank()
             cl_ctx = cl.create_some_context()
             dev = cl_ctx.get_info(cl.context_info.DEVICES)[0]
             platform = dev.get_info(cl.device_info.PLATFORM)
@@ -102,7 +103,7 @@ def mpi_entry_point(func):
 
                     dev_ids = node_comm.gather(dev_id, root=0)
 
-                    if rank == 0:
+                    if node_rank == 0:
                         if len(dev_ids) != len(set(dev_ids)):
                             print(dev_ids)
                             raise RuntimeError(
