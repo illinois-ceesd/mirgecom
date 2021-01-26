@@ -115,7 +115,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
             expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
 
     for i in range(nspecies):
-        expected_flux[dim+2+i] = mom * mass_fractions[i] / mass
+        expected_flux[dim+2+i] = mom * mass_fractions[i]
 
     # }}}
 
@@ -681,8 +681,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         velocity = np.zeros(shape=(dim,))
         velocity[0] = v0
+        rho0 = 2.0
 
-        lump = MulticomponentLump(dim=dim, nspecies=nspecies,
+        lump = MulticomponentLump(dim=dim, nspecies=nspecies, rho0=rho0,
                                   spec_centers=centers, velocity=velocity,
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
