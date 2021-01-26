@@ -124,7 +124,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     flux = inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
-    for i in range(dim + 2, dim):
+    for i in range(numeq, dim):
         for j in range(dim):
             assert (la.norm(flux_resid[i, j].get())) == 0.0
 
