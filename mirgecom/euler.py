@@ -111,7 +111,7 @@ class ConservedVars:  # FIXME: Name?
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    species_mass: np.ndarray = None
+    species_mass: np.ndarray = np.empty((0,), dtype=object)
 
     @property
     def dim(self):
@@ -164,43 +164,36 @@ def split_conserved(dim, q):
     """Get the canonical conserved quantities.
 
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
-    mass, energy, and momentum from the agglomerated object array extracted
-    from the state vector *q*. For single component gases, i.e. for those state
-    vectors *q* that do not contain multispecies mixtures, the returned
-    dataclass :attr:`ConservedVars.species_mass` will be set to *None*..
+    mass, energy, momentum, and any species' masses, from the agglomerated
+    object array extracted from the state vector *q*. For single component gases,
+    i.e. for those state vectors *q* that do not contain multi-species mixtures, the
+    returned dataclass :attr:`ConservedVars.species_mass` will be set to an empty
+    array.
     """
     #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
-    if nspec > 0:
-        return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                             species_mass=q[2+dim:2+dim+nspec])
-    else:
-        return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
+    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
+                         species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum, species_mass=None):
+def join_conserved(dim, mass, energy, momentum, species_mass=np.empty((0,),
+        dtype=object)):
     """Create an agglomerated solution array from the conserved quantities."""
+    nspec = len(species_mass)
     aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,))]
-
-    if species_mass is not None:
-        nspec = len(species_mass)
-        aux_shapes.append(_aux_shape(species_mass, (nspec,)))
-    else:
-        nspec = 0
+        _aux_shape(momentum, (dim,)),
+        _aux_shape(species_mass, (nspec,))]
 
     from pytools import single_valued
     aux_shape = single_valued(aux_shapes)
 
-    result = np.zeros((2+dim+nspec,) + aux_shape, dtype=object)
+    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
     result[1] = energy
     result[2:dim+2] = momentum
-
-    if species_mass is not None:
-        result[dim+2:] = species_mass
+    result[dim+2:] = species_mass
 
     return result
 
@@ -218,17 +211,13 @@ def inviscid_flux(discr, eos, q):
 
     mom = cv.momentum
 
-    species_mass = None
-    if cv.species_mass is not None:
-        # mixture species require a reshape here to get the right numpy
-        # broadcast behavior. Reshaped to [numspecies x 1] object.
-        species_mass = mom * cv.species_mass.reshape(-1, 1) / cv.mass
-
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim) * p,
-                          species_mass=species_mass)
+            # mixture species require a reshape here to get the right numpy
+            # broadcast behavior. Reshaped to [numspecies x 1] object.
+            species_mass=mom * cv.species_mass.reshape(-1, 1) / cv.mass)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):

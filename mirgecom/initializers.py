@@ -578,20 +578,13 @@ class MulticomponentLump:
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
         # process the species components independently
-        species_mass = None
-        if self._nspecies > 0:
-            lump_locs = make_obj_array([self._spec_centers[i] + loc_update
-                                       for i in range(self._nspecies)])
-            rel_poss = make_obj_array([x_vec - lump_locs[i]
-                                       for i in range(self._nspecies)])
-            r2s = make_obj_array([np.dot(rel_poss[i], rel_poss[i])
-                                  for i in range(self._nspecies)])
-            expterms = make_obj_array(
-                [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
-                 for i in range(self._nspecies)]
-            )
-            species_mass = make_obj_array([self._spec_y0s[i] + expterms[i]
-                                        for i in range(self._nspecies)])
+        species_mass = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            lump_loc = self._spec_centers[i] + loc_update
+            rel_pos = x_vec - lump_loc
+            r2 = np.dot(rel_pos, rel_pos)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -624,22 +617,13 @@ class MulticomponentLump:
         momrhs = 0 * mom
 
         # process the species components independently
-        specrhs = None
-        if self._nspecies > 0:
-            lump_locs = make_obj_array([self._spec_centers[i] + loc_update
-                                       for i in range(self._nspecies)])
-            rel_poss = make_obj_array([nodes - lump_locs[i]
-                                       for i in range(self._nspecies)])
-            rdotvs = make_obj_array([np.dot(rel_poss[i], v)
-                                     for i in range(self._nspecies)])
-            r2s = make_obj_array([np.dot(rel_poss[i], rel_poss[i])
-                                  for i in range(self._nspecies)])
-            expterms = make_obj_array(
-                [self._spec_amplitudes[i] * actx.np.exp(- r2s[i])
-                 for i in range(self._nspecies)]
-            )
-            specrhs = make_obj_array([2 * expterms[i] * rdotvs[i]
-                                      for i in range(self._nspecies)])
+        specrhs = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            lump_loc = self._spec_centers[i] + loc_update
+            rel_pos = nodes - lump_loc
+            r2 = np.dot(rel_pos, rel_pos)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
@@ -837,12 +821,9 @@ class Uniform:
         if mass_fracs is not None:
             self._nspecies = len(mass_fracs)
             self._mass_fracs = mass_fracs
-        elif nspecies > 0:
+        else:
             self._nspecies = nspecies
             self._mass_fracs = np.zeros(shape=(nspecies,))
-        else:
-            self._mass_fracs = None
-            self._nspecies = 0
 
         if len(self._velocity) != dim:
             raise ValueError(f"Expected {dim}-dimensional inputs.")
@@ -869,9 +850,7 @@ class Uniform:
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        species_mass = None
-        if self._mass_fracs is not None:
-            species_mass = self._mass_fracs * mass
+        species_mass = self._mass_fracs * mass
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -896,8 +875,7 @@ class Uniform:
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
-        if self._mass_fracs is not None:
-            yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
+        yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
         from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
