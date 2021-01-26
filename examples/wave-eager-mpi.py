@@ -99,6 +99,9 @@ def main(use_profiling=True):
     # nel_1d = 3208
     # nel_1d = 4537
 
+    import math
+    nel_1d = int(nel_1d * math.sqrt(num_parts))
+
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
