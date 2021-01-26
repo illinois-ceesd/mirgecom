@@ -77,7 +77,7 @@ class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
-    and mass fractions) per unit volume = $(\rho,\rho{E},\rho\vec{V},
+    and species masses) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
     .. attribute:: dim
@@ -153,11 +153,6 @@ def _aux_shape(ary, leading_shape):
 def get_num_species(dim, q):
     """Return number of mixture species."""
     return len(q) - (dim + 2)
-
-
-def get_num_conserved(dim, q):
-    """Return number of conserved quantities."""
-    return dim + 2 + get_num_species(dim, q)
 
 
 def split_conserved(dim, q):

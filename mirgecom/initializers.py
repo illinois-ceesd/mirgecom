@@ -164,7 +164,7 @@ class Vortex2D:
     """
 
     def __init__(
-            self, *, beta=5, center=[0, 0], velocity=[0, 0],
+        self, *, beta=5, center=[0, 0], velocity=[0, 0],
     ):
         """Initialize vortex parameters.
 
