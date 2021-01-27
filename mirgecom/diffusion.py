@@ -31,6 +31,7 @@ THE SOFTWARE.
 """
 
 import abc
+import math
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
@@ -39,6 +40,20 @@ from meshmode.dof_array import thaw, DOFArray
 from grudge.symbolic.primitives import DOFDesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.symbolic.primitives import TracePair, as_dofdesc
+
+
+def _sqrt(actx, x):
+    if isinstance(x, DOFArray):
+        return actx.np.sqrt(x)
+    else:
+        return math.sqrt(x)
+
+
+def _grad(discr, x):
+    if isinstance(x, DOFArray):
+        return discr.grad(x)
+    else:
+        return 0.
 
 
 def _q_flux(discr, quad_tag, alpha, u_tpair):
@@ -51,7 +66,7 @@ def _q_flux(discr, quad_tag, alpha, u_tpair):
     normal_quad = thaw(actx, discr.normal(dd_quad))
 
     alpha_quad = discr.project("vol", dd_quad, alpha)
-    sqrt_alpha_quad = actx.np.sqrt(alpha_quad)
+    sqrt_alpha_quad = _sqrt(actx, alpha_quad)
 
     u_avg_quad = discr.project(dd, dd_quad, u_tpair.avg)
 
@@ -69,7 +84,7 @@ def _u_flux(discr, quad_tag, alpha, q_tpair):
     normal_quad = thaw(actx, discr.normal(dd_quad))
 
     alpha_quad = discr.project("vol", dd_quad, alpha)
-    sqrt_alpha_quad = actx.np.sqrt(alpha_quad)
+    sqrt_alpha_quad = _sqrt(actx, alpha_quad)
 
     q_avg_quad = discr.project(dd, dd_quad, q_tpair.avg)
 
@@ -246,14 +261,9 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
     dd_quad = DOFDesc("vol", quad_tag)
     dd_allfaces_quad = DOFDesc("all_faces", quad_tag)
 
-    if isinstance(alpha, DOFArray):
-        alpha_array = alpha
-    else:
-        alpha_array = discr.zeros(actx) + alpha
-
-    alpha_quad = discr.project("vol", dd_quad, alpha_array)
-    sqrt_alpha_quad = actx.np.sqrt(alpha_quad)
-    grad_alpha_quad = discr.project("vol", dd_quad, discr.grad(alpha_array))
+    alpha_quad = discr.project("vol", dd_quad, alpha)
+    sqrt_alpha_quad = _sqrt(actx, alpha_quad)
+    grad_alpha_quad = discr.project("vol", dd_quad, _grad(discr, alpha))
 
     u_quad = discr.project("vol", dd_quad, u)
 
@@ -266,14 +276,14 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
-            _q_flux(discr, quad_tag, alpha_array, interior_trace_pair(discr, u))
+            _q_flux(discr, quad_tag, alpha, interior_trace_pair(discr, u))
             + sum(
-                bdry.get_q_flux(discr, quad_tag, alpha_array, as_dofdesc(btag),
+                bdry.get_q_flux(discr, quad_tag, alpha, as_dofdesc(btag),
                     u)
                 for btag, bdry in boundaries.items()
             )
             + sum(
-                _q_flux(discr, quad_tag, alpha_array, tpair)
+                _q_flux(discr, quad_tag, alpha, tpair)
                 for tpair in cross_rank_trace_pairs(discr, u)
             )
         ))
@@ -286,14 +296,14 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
             -  # noqa: W504
             discr.face_mass(
                 dd_allfaces_quad,
-                _u_flux(discr, quad_tag, alpha_array, interior_trace_pair(discr, q))
+                _u_flux(discr, quad_tag, alpha, interior_trace_pair(discr, q))
                 + sum(
-                    bdry.get_u_flux(discr, quad_tag, alpha_array, as_dofdesc(btag),
+                    bdry.get_u_flux(discr, quad_tag, alpha, as_dofdesc(btag),
                         q)
                     for btag, bdry in boundaries.items()
                 )
                 + sum(
-                    _u_flux(discr, quad_tag, alpha_array, tpair)
+                    _u_flux(discr, quad_tag, alpha, tpair)
                     for tpair in cross_rank_trace_pairs(discr, q))
                 )
             )
