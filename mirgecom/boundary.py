@@ -53,8 +53,10 @@ class PrescribedBoundary:
         Parameters
         ----------
         userfunc
-            User function must take two parameters: time and nodal
-            coordinates, and produce the solution at each node.
+            User function that prescribes the solution values on the exterior
+            of the boundary. The given user function (*userfunc*) must take at
+            least one parameter that specifies the coordinates at which to prescribe
+            the solution.
         """
         self._userfunc = userfunc
 
