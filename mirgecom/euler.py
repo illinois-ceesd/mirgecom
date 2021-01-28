@@ -165,7 +165,6 @@ def split_conserved(dim, q):
     returned dataclass :attr:`ConservedVars.species_mass` will be set to an empty
     array.
     """
-    #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
                          species_mass=q[2+dim:2+dim+nspec])
