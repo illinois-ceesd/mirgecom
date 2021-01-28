@@ -90,8 +90,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             set_dt(logmgr, dt)
-            cv, dv = extract_vars(dim, state, eos)
-            set_sim_state(logmgr, cv, dv)
+            set_sim_state(logmgr, extract_vars(dim, state, eos))
             logmgr.tick_after()
 
     return istep, t, state

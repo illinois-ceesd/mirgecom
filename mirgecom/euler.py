@@ -303,7 +303,11 @@ def extract_vars(dim, state, eos):
     """Extract state vars."""
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
-    return (cv, dv)
+
+    from dataclasses import asdict
+    result = asdict(cv)
+    result.update(asdict(dv)
+    return result
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):
