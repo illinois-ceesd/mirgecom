@@ -111,7 +111,7 @@ class ConservedVars:  # FIXME: Name?
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    species_mass: np.ndarray = np.empty((0,), dtype=object)
+    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
 
     @property
     def dim(self):
