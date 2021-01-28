@@ -66,7 +66,7 @@ def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
     pressure: float
         Value to use for calculating $\rho{E}$
     velocity: np.ndarray
-        Optional constant velocity to set $\rho\vec{V}$
+        Optional constant velocity to set $\rho\mathbf{V}$
 
     Returns
     -------
@@ -104,17 +104,18 @@ def _make_pulse(amp, r0, w, r):
 
     .. math::
 
-        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
+        G(\mathbf{r}) =
+        a_0*\exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
-    where $\vec{r}$ is the position, and the parameters are the pulse amplitude
-    $a_0$, the pulse location $\vec{r_0}$, and the rms width of the pulse, $w$.
+    where $\mathbf{r}$ is the position, and the parameters are the pulse amplitude
+    $a_0$, the pulse location $\mathbf{r}_0$, and the rms width of the pulse, $w$.
 
     Parameters
     ----------
     amp: float
-        specifies the value of $\a_0$, the pulse amplitude
+        specifies the value of $a_0$, the pulse amplitude
     r0: float array
-        specifies the value of $\r_0$, the pulse location
+        specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
     r: Object array of DOFArrays
@@ -165,7 +166,7 @@ class Vortex2D:
     """
 
     def __init__(
-            self, *, beta=5, center=[0, 0], velocity=[0, 0],
+        self, *, beta=5, center=[0, 0], velocity=[0, 0],
     ):
         """Initialize vortex parameters.
 
@@ -186,14 +187,18 @@ class Vortex2D:
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
+        The solution at time *t* is created by advecting the vortex under the
+        assumption of user-supplied constant, uniform velocity
+        (``Vortex2D._velocity``).
+
         Parameters
         ----------
         t: float
             Current time at which the solution is desired.
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: mirgecom.eos.IdealSingleGas
+            Equation of state class to supply method for gas *gamma*.
         """
         vortex_loc = self._center + t * self._velocity
 
@@ -278,8 +283,8 @@ class SodShock1D:
             Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
@@ -316,10 +321,10 @@ class Lump:
     .. math::
 
          {\rho} &= {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-         {\rho}\vec{V} &= {\rho}\vec{V_0}\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
          {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
 
-    where $\vec{V_0}$ is the fixed velocity specified by the user at init
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init
     time, and $\gamma$ is taken from the equation-of-state object (eos).
 
     A call to this object after creation/init creates the lump solution
@@ -327,7 +332,7 @@ class Lump:
     background flow velocity (velocity).
 
     This object also supplies the exact expected RHS terms from the
-    analytic expression in the :func:`~Lump.exact_rhs` method.
+    analytic expression through :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -362,9 +367,9 @@ class Lump:
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
         dimmsg = f"is expected to be {dim}-dimensional"
-        if len(center) != dim:
+        if center.shape != (dim,):
             raise ValueError(f"Lump center {dimmsg}.")
-        if len(velocity) != dim:
+        if velocity.shape != (dim,):
             raise ValueError(f"Lump velocity {dimmsg}.")
 
         self._dim = dim
@@ -378,8 +383,8 @@ class Lump:
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
-        Note that *t* is used to advect the mass lump under the assumption of
-        constant, and uniform velocity.
+        The solution at time *t* is created by advecting the mass lump under the
+        assumption of constant, uniform velocity (``Lump._velocity``).
 
         Parameters
         ----------
@@ -387,10 +392,10 @@ class Lump:
             Current time at which the solution is desired
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
-        if len(x_vec) != self._dim:
+        if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
@@ -418,8 +423,8 @@ class Lump:
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
-        Note that *t* is used to advect the mass lumps under the assumption of
-        constant, and uniform velocity.
+        The RHS at time *t* is created by advecting the mass lump under the
+        assumption of constant, uniform velocity (``Lump._velocity``).
 
         Parameters
         ----------
@@ -465,12 +470,12 @@ class MulticomponentLump:
     .. math::
 
          \rho &= 1.0\\
-         {\rho}\vec{V} &= {\rho}\vec{V_0}\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
          {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
          {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
          + {a_\alpha}{e}^{({c_\alpha}-{r_\alpha})^2},
 
-    where $V_0$ is the fixed velocity specified by the user at init time,
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
     and $\gamma$ is taken from the equation-of-state object (eos).
 
     The user-specified vector of initial values (${{Y}_\alpha}_0$)
@@ -483,7 +488,7 @@ class MulticomponentLump:
     velocity (*velocity*).
 
     This object also supplies the exact expected RHS terms from the analytic
-    expression in the :func:`~MulticomponentLump.exact_rhs` method.
+    expression via :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -517,7 +522,7 @@ class MulticomponentLump:
             center = np.zeros(shape=(dim,))
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
-        if len(center) != dim or len(velocity) != dim:
+        if center.shape != (dim,) or velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional vector inputs.")
 
         if nspecies > 0:
@@ -551,8 +556,9 @@ class MulticomponentLump:
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
-        Note that *t* is used to advect the component lumps under the assumption of
-        constant, and uniform velocity.
+        The solution at time *t* is created by advecting the component mass lump
+        at the user-specified constant, uniform velocity
+        (``MulticomponentLump._velocity``).
 
         Parameters
         ----------
@@ -560,10 +566,10 @@ class MulticomponentLump:
             Current time at which the solution is desired
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
-        if len(x_vec) != self._dim:
+        if x_vec.shape != (self._dim,):
             print(f"len(x_vec) = {len(x_vec)}")
             print(f"self._dim = {self._dim}")
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
@@ -594,8 +600,8 @@ class MulticomponentLump:
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
-        Note that this routine is only useful for testing under the condition of
-        uniform, and constant velocity field.
+        The RHS at time *t* is created by advecting the species mass lump at the
+        user-specified constant, uniform velocity (``MulticomponentLump._velocity``).
 
         Parameters
         ----------
@@ -709,10 +715,10 @@ class AcousticPulse:
 
     .. math::
 
-        {\rho}E(\vec{r}) = {\rho}E + a_0 * G(\vec{r})\\
-        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
+        {\rho}E(\mathbf{r}) = {\rho}E + a_0 * G(\mathbf{r})\\
+        G(\mathbf{r}) = \exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
-    where $\vec{r}$ are the nodal coordinates, and $\vec{r_0}$,
+    where $\mathbf{r}$ are the nodal coordinates, and $\mathbf{r}_0$,
     $amplitude$, and $w$, are the the user-specified pulse location,
     amplitude, and width, respectively.
 
@@ -743,7 +749,7 @@ class AcousticPulse:
             self._center = center
         else:
             self._center = np.zeros(shape=(dim,))
-        if len(self._center) != dim:
+        if self._center.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._amp = amplitude
@@ -763,7 +769,7 @@ class AcousticPulse:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
-        if len(x_vec) != self._dim:
+        if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
         cv = split_conserved(self._dim, q)
@@ -825,7 +831,7 @@ class Uniform:
             self._nspecies = nspecies
             self._mass_fracs = np.zeros(shape=(nspecies,))
 
-        if len(self._velocity) != dim:
+        if self._velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._p = p
@@ -843,8 +849,8 @@ class Uniform:
             Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (unused)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
         gamma = eos.gamma()
         mass = 0.0 * x_vec[0] + self._rho

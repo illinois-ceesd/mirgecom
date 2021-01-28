@@ -115,7 +115,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
             expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
 
     for i in range(nspecies):
-        expected_flux[dim+2+i] = mom * mass_fractions[i] / mass
+        expected_flux[dim+2+i] = mom * mass_fractions[i]
 
     # }}}
 
@@ -124,7 +124,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     flux = inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
-    for i in range(dim + 2, dim):
+    for i in range(numeq, dim):
         for j in range(dim):
             assert (la.norm(flux_resid[i, j].get())) == 0.0
 
@@ -423,7 +423,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     actx = actx_factory()
 
     tolerance = 1e-9
-    maxxerr = 0.0
 
     from pytools.convergence import EOCRecorder
     eoc_rec0 = EOCRecorder()
@@ -472,32 +471,38 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         rho_resid = resid_split.mass
         rhoe_resid = resid_split.energy
         mom_resid = resid_split.momentum
+        rhoy_resid = resid_split.species_mass
 
         rhs_split = split_conserved(dim, inviscid_rhs)
         rho_rhs = rhs_split.mass
         rhoe_rhs = rhs_split.energy
         rhov_rhs = rhs_split.momentum
+        rhoy_rhs = rhs_split.species_mass
 
         logger.info(
             f"rho_rhs  = {rho_rhs}\n"
             f"rhoe_rhs = {rhoe_rhs}\n"
-            f"rhov_rhs = {rhov_rhs}"
+            f"rhov_rhs = {rhov_rhs}\n"
+            f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
         assert discr.norm(rho_resid, np.inf) < tolerance
         assert discr.norm(rhoe_resid, np.inf) < tolerance
         for i in range(dim):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
+        for i in range(nspecies):
+            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
 
-            err_max = discr.norm(rhs_resid[i], np.inf)
-            eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
-            assert(err_max < tolerance)
-            if err_max > maxxerr:
-                maxxerr = err_max
+        err_max = discr.norm(rho_resid, np.inf)
+        eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
+
         # set a non-zero, but uniform velocity component
-
         for i in range(len(mom_input)):
             mom_input[i] = discr.zeros(actx) + (-1.0) ** i
+
+        fields = join_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+            species_mass=species_mass_input)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
@@ -508,17 +513,18 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         rho_resid = resid_split.mass
         rhoe_resid = resid_split.energy
         mom_resid = resid_split.momentum
+        rhoy_resid = resid_split.species_mass
 
         assert discr.norm(rho_resid, np.inf) < tolerance
         assert discr.norm(rhoe_resid, np.inf) < tolerance
 
         for i in range(dim):
             assert discr.norm(mom_resid[i], np.inf) < tolerance
-            err_max = discr.norm(rhs_resid[i], np.inf)
-            eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
-            assert(err_max < tolerance)
-            if err_max > maxxerr:
-                maxxerr = err_max
+        for i in range(nspecies):
+            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+
+        err_max = discr.norm(rho_resid, np.inf)
+        eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
         f"V == 0 Errors:\n{eoc_rec0}"
@@ -681,8 +687,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         velocity = np.zeros(shape=(dim,))
         velocity[0] = v0
+        rho0 = 2.0
 
-        lump = MulticomponentLump(dim=dim, nspecies=nspecies,
+        lump = MulticomponentLump(dim=dim, nspecies=nspecies, rho0=rho0,
                                   spec_centers=centers, velocity=velocity,
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
