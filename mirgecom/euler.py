@@ -210,9 +210,8 @@ def inviscid_flux(discr, eos, q):
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            # mixture species require a reshape here to get the right numpy
-            # broadcast behavior. Reshaped to [numspecies x 1] object.
-            species_mass=mom * cv.species_mass.reshape(-1, 1) / cv.mass)
+            species_mass=(  # reshaped: (nspecies, dim)
+                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
