@@ -186,6 +186,10 @@ class Vortex2D:
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
+        The solution at time *t* is created by advecting the vortex under the
+        assumption of user-supplied constant, uniform velocity
+        (``Vortex2D._velocity``).
+
         Parameters
         ----------
         t: float
@@ -193,7 +197,7 @@ class Vortex2D:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+            Equation of state class to supply :meth:eos.gamma().
         """
         vortex_loc = self._center + t * self._velocity
 
@@ -279,7 +283,7 @@ class SodShock1D:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+            Equation of state class with eos.gamma()
         """
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
@@ -377,7 +381,7 @@ class Lump:
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
         The solution at time *t* is created by advecting the mass lump under the
-        assumption of constant, uniform velocity (Lump._velocity).
+        assumption of constant, uniform velocity (``Lump._velocity``).
 
         Parameters
         ----------
@@ -386,7 +390,7 @@ class Lump:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+            Equation of state class to supply :meth:eos.gamma().
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
@@ -415,7 +419,7 @@ class Lump:
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
         The RHS at time *t* is created by advecting the mass lump under the
-        assumption of constant, uniform velocity (Lump._velocity).
+        assumption of constant, uniform velocity (``Lump._velocity``).
 
         Parameters
         ----------
@@ -547,7 +551,7 @@ class MulticomponentLump:
 
         The solution at time *t* is created by advecting the species mass lump
         at the user-specified constant, uniform velocity
-        (MulticomponentLump._velocity).
+        (``MulticomponentLump._velocity``).
 
         Parameters
         ----------
@@ -556,7 +560,7 @@ class MulticomponentLump:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+            Equation of state class to supply :meth:eos.gamma().
         """
         if x_vec.shape != (self._dim,):
             print(f"len(x_vec) = {len(x_vec)}")
@@ -588,7 +592,7 @@ class MulticomponentLump:
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
         The RHS at time *t* is created by advecting the species mass lump at the
-        user-specified constant, uniform velocity (MulticomponentLump._velocity).
+        user-specified constant, uniform velocity (``MulticomponentLump._velocity``).
 
         Parameters
         ----------
