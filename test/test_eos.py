@@ -110,7 +110,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
         y0s[i] = y0 / (10.0 ** (i + 1))
-        spec_sum = sum([y0s[i] for i in range(nspecies-1)])
+    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
     y0s[nspecies-1] = 1.0 - spec_sum
 
     for fac in range(1, 11):
