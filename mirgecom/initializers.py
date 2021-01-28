@@ -65,7 +65,7 @@ def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
     pressure: float
         Value to use for calculating $\rho{E}$
     velocity: np.ndarray
-        Optional constant velocity to set $\rho\vec{V}$
+        Optional constant velocity to set $\rho\mathbf{V}$
 
     Returns
     -------
@@ -103,17 +103,18 @@ def _make_pulse(amp, r0, w, r):
 
     .. math::
 
-        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
+        G(\mathbf{r}) =
+        a_0*\exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
-    where $\vec{r}$ is the position, and the parameters are the pulse amplitude
-    $a_0$, the pulse location $\vec{r_0}$, and the rms width of the pulse, $w$.
+    where $\mathbf{r}$ is the position, and the parameters are the pulse amplitude
+    $a_0$, the pulse location $\mathbf{r}_0$, and the rms width of the pulse, $w$.
 
     Parameters
     ----------
     amp: float
-        specifies the value of $\a_0$, the pulse amplitude
+        specifies the value of $a_0$, the pulse amplitude
     r0: float array
-        specifies the value of $\r_0$, the pulse location
+        specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
     r: Object array of DOFArrays
@@ -313,10 +314,10 @@ class Lump:
     .. math::
 
          {\rho} &= {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-         {\rho}\vec{V} &= {\rho}\vec{V_0}\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
          {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
 
-    where $\vec{V_0}$ is the fixed velocity specified by the user at init
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init
     time, and $\gamma$ is taken from the equation-of-state object (eos).
 
     A call to this object after creation/init creates the lump solution
@@ -458,12 +459,12 @@ class MulticomponentLump:
     .. math::
 
          \rho &= 1.0\\
-         {\rho}\vec{V} &= {\rho}\vec{V_0}\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
          {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
          {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
          + {a_\alpha}{e}^{({c_\alpha}-{r_\alpha})^2},
 
-    where $V_0$ is the fixed velocity specified by the user at init time,
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
     and $\gamma$ is taken from the equation-of-state object (eos).
 
     The user-specified vector of initial values (${{Y}_\alpha}_0$)
@@ -628,10 +629,10 @@ class AcousticPulse:
 
     .. math::
 
-        {\rho}E(\vec{r}) = {\rho}E + a_0 * G(\vec{r})\\
-        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
+        {\rho}E(\mathbf{r}) = {\rho}E + a_0 * G(\mathbf{r})\\
+        G(\mathbf{r}) = \exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
-    where $\vec{r}$ are the nodal coordinates, and $\vec{r_0}$,
+    where $\mathbf{r}$ are the nodal coordinates, and $\mathbf{r}_0$,
     $amplitude$, and $w$, are the the user-specified pulse location,
     amplitude, and width, respectively.
 
