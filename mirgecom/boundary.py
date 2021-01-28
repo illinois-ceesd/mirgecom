@@ -53,20 +53,20 @@ class PrescribedBoundary:
         Parameters
         ----------
         userfunc
-            User function must take two parameters: time and nodal
-            coordinates, and produce the solution at each node.
+            User function that prescribes the solution values on the exterior
+            of the boundary. The given user function (*userfunc*) must take at
+            least one parameter that specifies the coordinates at which to prescribe
+            the solution.
         """
         self._userfunc = userfunc
 
-    def boundary_pair(
-            self, discr, q, btag, eos, t=0.0
-    ):
+    def boundary_pair(self, discr, q, btag, *args, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(nodes, t=t, eos=eos)
+        ext_soln = self._userfunc(nodes, **kwargs)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
@@ -77,9 +77,7 @@ class DummyBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(
-            self, discr, q, btag, eos, t=0.0
-    ):
+    def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
@@ -103,9 +101,7 @@ class AdiabaticSlipBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(
-            self, discr, q, btag, eos, t=0.0
-    ):
+    def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
