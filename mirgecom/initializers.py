@@ -375,8 +375,8 @@ class Lump:
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
-        Note that *t* is used to advect the mass lump under the assumption of
-        constant, and uniform velocity.
+        The solution at time *t* is created by advecting the mass lump under the
+        assumption of constant, uniform velocity (Lump._velocity).
 
         Parameters
         ----------
@@ -413,8 +413,8 @@ class Lump:
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
-        Note that *t* is used to advect the mass lumps under the assumption of
-        constant, and uniform velocity.
+        The RHS at time *t* is created by advecting the mass lump under the
+        assumption of constant, uniform velocity (Lump._velocity).
 
         Parameters
         ----------
@@ -544,8 +544,9 @@ class MulticomponentLump:
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
-        Note that *t* is used to advect the component lumps under the assumption of
-        constant, and uniform velocity.
+        The solution at time *t* is created by advecting the species mass lump
+        at the user-specified constant, uniform velocity
+        (MulticomponentLump._velocity).
 
         Parameters
         ----------
@@ -585,8 +586,8 @@ class MulticomponentLump:
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
-        Note that this routine is only useful for testing under the condition of
-        uniform, and constant velocity field.
+        The RHS at time *t* is created by advecting the species mass lump at the
+        user-specified constant, uniform velocity (MulticomponentLump._velocity).
 
         Parameters
         ----------
