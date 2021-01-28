@@ -361,7 +361,7 @@ class Lump:
         dimmsg = f"is expected to be {dim}-dimensional"
         if center.shape != (dim,):
             raise ValueError(f"Lump center {dimmsg}.")
-        if len(velocity) != dim:
+        if velocity.shape != (dim,):
             raise ValueError(f"Lump velocity {dimmsg}.")
 
         self._dim = dim
@@ -387,7 +387,7 @@ class Lump:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        if len(x_vec) != self._dim:
+        if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
@@ -510,7 +510,7 @@ class MulticomponentLump:
             center = np.zeros(shape=(dim,))
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
-        if len(center) != dim or len(velocity) != dim:
+        if center.shape != (dim,) or velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional vector inputs.")
 
         if nspecies > 0:
@@ -557,7 +557,7 @@ class MulticomponentLump:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        if len(x_vec) != self._dim:
+        if x_vec.shape != (self._dim,):
             print(f"len(x_vec) = {len(x_vec)}")
             print(f"self._dim = {self._dim}")
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
@@ -662,7 +662,7 @@ class AcousticPulse:
             self._center = center
         else:
             self._center = np.zeros(shape=(dim,))
-        if len(self._center) != dim:
+        if self._center.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._amp = amplitude
@@ -682,7 +682,7 @@ class AcousticPulse:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
-        if len(x_vec) != self._dim:
+        if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
         cv = split_conserved(self._dim, q)
@@ -744,7 +744,7 @@ class Uniform:
             self._nspecies = nspecies
             self._mass_fracs = np.zeros(shape=(nspecies,))
 
-        if len(self._velocity) != dim:
+        if self._velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._p = p
