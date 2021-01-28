@@ -202,8 +202,12 @@ def inviscid_flux(discr, eos, q):
     The fluxes are returned as 2D object array with shape:
     np.ndarray.shape = (num_equations, ndim).  Each entry in the
     flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-    form and shape for the flux data is required by
-    :mod:`mirgecom.euler`.
+    form and shape for the flux data is required by the built-in
+    state data handling mechanism in :mod:`mirgecom.euler`. That
+    mechanism includes the dataclass
+    :class:`mirgecom.euler.ConservedVars`, and module methods
+    :meth:`mirgecom.euler.join_conserved`, and
+    :meth:`mirgecom.euler.split_conserved`.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
