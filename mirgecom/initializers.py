@@ -324,7 +324,7 @@ class Lump:
     background flow velocity (velocity).
 
     This object also supplies the exact expected RHS terms from the
-    analytic expression in the :func:`~Lump.exact_rhs` method.
+    analytic expression through :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -359,7 +359,7 @@ class Lump:
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
         dimmsg = f"is expected to be {dim}-dimensional"
-        if len(center) != dim:
+        if center.shape != (dim,):
             raise ValueError(f"Lump center {dimmsg}.")
         if len(velocity) != dim:
             raise ValueError(f"Lump velocity {dimmsg}.")
@@ -476,7 +476,7 @@ class MulticomponentLump:
     velocity (*velocity*).
 
     This object also supplies the exact expected RHS terms from the analytic
-    expression in the :func:`~MulticomponentLump.exact_rhs` method.
+    expression via :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
