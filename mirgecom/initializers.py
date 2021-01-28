@@ -324,7 +324,7 @@ class Lump:
     background flow velocity (velocity).
 
     This object also supplies the exact expected RHS terms from the
-    analytic expression in the :func:`~Lump.exact_rhs` method.
+    analytic expression through :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
