@@ -25,6 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
@@ -54,8 +55,17 @@ from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+if sys.version_info < (3, 9):
+    # importlib.resources either doesn't exist or lacks the files()
+    # function, so use the PyPI version:
+    import importlib_resources
+else:
+    # importlib.resources has files(), so use that:
+    import importlib.resources as importlib_resources
+
 
 logger = logging.getLogger(__name__)
+mechdata = importlib_resources.files("mechanisms")
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
@@ -89,8 +99,8 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     nodes = thaw(actx, discr.nodes())
 
     # Hand-port chemistry works OK
-    # prometheus_mechanism = UIUCMechanism(actx.np)
-    sol = cantera.Solution(f"{mechname}.cti", "gas")
+    mech_path = str(mechdata / f"{mechname}.cti")
+    sol = cantera.Solution(mech_path, "gas")
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
@@ -100,7 +110,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
         y0s[i] = y0 / (10.0 ** (i + 1))
-    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
+        spec_sum = sum([y0s[i] for i in range(nspecies-1)])
     y0s[nspecies-1] = 1.0 - spec_sum
 
     for fac in range(1, 11):
@@ -108,7 +118,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution(f"{mechname}.cti", "gas")
+        cantera_soln = cantera.Solution(mech_path, "gas")
         cantera_soln.TPY = tempin, pressin, y0s
         cantera_soln.equilibrate("UV")
         can_t, can_rho, can_y = cantera_soln.TDY
@@ -207,7 +217,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
     # Hand-port works OK
     #  prometheus_mechanism = UIUCMemchanism(actx.np)
-    sol = cantera.Solution(f"{mechname}.cti", "gas")
+    mech_path = str(mechdata / f"{mechname}.cti")
+    sol = cantera.Solution(mech_path, "gas")
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
@@ -300,7 +311,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     nodes = thaw(actx, discr.nodes())
     ones = (1.0 + nodes[0]) - nodes[0]
 
-    cantera_soln = cantera.Solution(f"{mechname}.cti", "gas")
+    mech_path = str(mechdata / f"{mechname}.cti")
+    cantera_soln = cantera.Solution(mech_path, "gas")
     pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
     #    pyro_obj = Thermochemistry(actx.np)
     nspecies = pyro_obj.num_species

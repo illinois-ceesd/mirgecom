@@ -52,17 +52,20 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 from mirgecom.euler import split_conserved, join_conserved
-# from mirgecom.prometheus import (
-#    UIUCMechanism,
-#    UIUCMechanism2,
-#     UIUCMechanism3,
-#     UIUCMechanism4,
-# )
-
+import sys
 import cantera
 import pyrometheus as pyro
+if sys.version_info < (3, 9):
+    # importlib.resources either doesn't exist or lacks the files()
+    # function, so use the PyPI version:
+    import importlib_resources
+else:
+    # importlib.resources has files(), so use that:
+    import importlib.resources as importlib_resources
+
 
 logger = logging.getLogger(__name__)
+mechdata = importlib_resources.files("mechanisms")
 
 
 @mpi_entry_point
@@ -110,7 +113,8 @@ def main(ctx_factory=cl.create_some_context):
     nodes = thaw(actx, discr.nodes())
 
     # Use Cantera for initialization (and soon for pyro code gen)
-    cantera_soln = cantera.Solution("uiuc.cti", "gas")
+    mech_path = str(mechdata / "uiuc.cti")
+    cantera_soln = cantera.Solution(mech_path, "gas")
     nspecies = cantera_soln.n_species
     init_temperature = 1500.0
     equiv_ratio = 1.0

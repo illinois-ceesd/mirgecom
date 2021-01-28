@@ -4,6 +4,7 @@ numpy
 pytest
 pyvisfile
 pymetis
+importlib-resources
 
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #git+https://github.com/inducer/pyopencl.git#egg=pyopencl

@@ -58,7 +58,8 @@ def main():
               "dagrt>=2019.1",
               "grudge>=2015.1",
               "six>=1.8",
-              ])
+              ],
+          include_package_data=True)
 
 
 if __name__ == "__main__":
