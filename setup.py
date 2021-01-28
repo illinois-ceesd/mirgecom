@@ -58,6 +58,7 @@ def main():
               "dagrt>=2019.1",
               "grudge>=2015.1",
               "six>=1.8",
+              "importlib-resources>=1.1.0; python_version < '3.9'",
               ],
 
           include_package_data=True)
