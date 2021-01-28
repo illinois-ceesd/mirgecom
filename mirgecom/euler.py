@@ -198,6 +198,12 @@ def inviscid_flux(discr, eos, q):
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
     +p\mathbf{I}, \rho{Y_s}\vec{V})$
+
+    The fluxes are returned as 2D object array with shape:
+    np.ndarray.shape = (num_equations, ndim).  Each entry in the
+    flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
+    form and shape for the flux data is required by
+    :mod:`mirgecom.euler`.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
