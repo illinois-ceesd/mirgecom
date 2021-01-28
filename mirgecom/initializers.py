@@ -359,7 +359,7 @@ class Lump:
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
         dimmsg = f"is expected to be {dim}-dimensional"
-        if len(center) != dim:
+        if center.shape != (dim,):
             raise ValueError(f"Lump center {dimmsg}.")
         if len(velocity) != dim:
             raise ValueError(f"Lump velocity {dimmsg}.")
