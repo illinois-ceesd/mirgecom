@@ -476,7 +476,7 @@ class MulticomponentLump:
     velocity (*velocity*).
 
     This object also supplies the exact expected RHS terms from the analytic
-    expression in the :func:`~MulticomponentLump.exact_rhs` method.
+    expression via :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
