@@ -299,15 +299,22 @@ def get_inviscid_cfl(discr, eos, dt, q):
     return dt / wanted_dt
 
 
-def extract_vars(dim, state, eos):
+NAME_TO_UNITS = {
+    "mass": "kg/m^3",
+    }
+
+
+def extract_vars_for_loggings(dim, state, eos):
     """Extract state vars."""
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
 
     from dataclasses import asdict
-    result = asdict(cv)
-    result.update(asdict(dv)
-    return result
+    name_to_field = asdict(cv)
+    name_to_field.update(asdict(dv))
+
+    return {name: (field, NAME_TO_UNITS[name], field)
+            for name, field in name_to_field.items()}
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):
