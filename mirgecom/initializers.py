@@ -196,8 +196,8 @@ class Vortex2D:
             Current time at which the solution is desired.
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to supply :meth:eos.gamma().
+        eos: mirgecom.eos.IdealSingleGas
+            Equation of state class to supply method for gas *gamma*.
         """
         vortex_loc = self._center + t * self._velocity
 
@@ -282,8 +282,8 @@ class SodShock1D:
             Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class with eos.gamma()
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
@@ -389,8 +389,8 @@ class Lump:
             Current time at which the solution is desired
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to supply :meth:eos.gamma().
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
@@ -549,7 +549,7 @@ class MulticomponentLump:
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
-        The solution at time *t* is created by advecting the species mass lump
+        The solution at time *t* is created by advecting the component mass lump
         at the user-specified constant, uniform velocity
         (``MulticomponentLump._velocity``).
 
@@ -559,8 +559,8 @@ class MulticomponentLump:
             Current time at which the solution is desired
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to supply :meth:eos.gamma().
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
         if x_vec.shape != (self._dim,):
             print(f"len(x_vec) = {len(x_vec)}")
@@ -767,8 +767,8 @@ class Uniform:
             Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (unused)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
         gamma = eos.gamma()
         mass = 0.0 * x_vec[0] + self._rho
