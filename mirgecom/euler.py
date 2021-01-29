@@ -204,10 +204,10 @@ def inviscid_flux(discr, eos, q):
     flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
     form and shape for the flux data is required by the built-in
     state data handling mechanism in :mod:`mirgecom.euler`. That
-    mechanism includes the dataclass
-    :class:`mirgecom.euler.ConservedVars`, and module methods
-    :meth:`mirgecom.euler.join_conserved`, and
-    :meth:`mirgecom.euler.split_conserved`.
+    mechanism includes at least
+    :class:`mirgecom.euler.ConservedVars`, and
+    :func:`mirgecom.euler.join_conserved`, and
+    :func:`mirgecom.euler.split_conserved`.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
