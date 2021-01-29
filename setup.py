@@ -61,7 +61,12 @@ def main():
               "importlib-resources>=1.1.0; python_version < '3.9'",
               ],
 
-          include_package_data=True)
+          include_package_data=True,
+          package_data={
+              "mirgecom": [
+                  "mechanisms/*.cti",
+              ]
+          })
 
 
 if __name__ == "__main__":
