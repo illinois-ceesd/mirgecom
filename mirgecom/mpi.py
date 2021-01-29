@@ -93,13 +93,13 @@ def mpi_entry_point(func):
                     domain_id = dev.get_info(0x4010)
                 except cl._cl.LogicError:
                     from warnings import warn
-                    warn("Can not detect whether multiple ranks are running on the"
+                    warn("Cannot detect whether multiple ranks are running on the"
                          " same GPU because you need at least pocl version 1.7.")
                 else:
                     bus_id = dev.get_info(cl.device_info.PCI_BUS_ID_NV)
                     slot_id = dev.get_info(cl.device_info.PCI_SLOT_ID_NV)
 
-                    dev_id = hash(tuple((domain_id, bus_id, slot_id)))
+                    dev_id = (domain_id, bus_id, slot_id)
 
                     dev_ids = node_comm.gather(dev_id, root=0)
 
@@ -111,7 +111,7 @@ def mpi_entry_point(func):
 
             else:
                 from warnings import warn
-                warn("Can not detect whether multiple ranks are running on the "
+                warn("Cannot detect whether multiple ranks are running on the "
                      f" same GPU on platform '{platform_name}'.")
 
         func(*args, **kwargs)
