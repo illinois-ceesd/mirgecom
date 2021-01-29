@@ -55,8 +55,18 @@ from mirgecom.eos import PrometheusMixture
 # from mirgecom.prometheus import UIUCMechanism
 import cantera
 import pyrometheus as pyro
+import sys
+if sys.version_info < (3, 9):
+    # importlib.resources either doesn't exist or lacks the files()
+    # function, so use the PyPI version:
+    import importlib_resources
+else:
+    # importlib.resources has files(), so use that:
+    import importlib.resources as importlib_resources
+
 
 logger = logging.getLogger(__name__)
+mechdata = importlib_resources.files("mechanisms")
 
 
 @mpi_entry_point
@@ -103,8 +113,11 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
     casename = "uiuc_mixture"
-    # prometheus_mechanism = UIUCMechanism(actx.np)
-    sol = cantera.Solution("uiuc.cti", "gas")
+    mech_file = mechdata / "uiuc.cti"
+    with mech_file.open() as fp:
+        mech_cti = fp.read()
+
+    sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
     eos = PrometheusMixture(prometheus_mechanism)
