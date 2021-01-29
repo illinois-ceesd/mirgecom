@@ -12,7 +12,7 @@ git+https://github.com/inducer/dagrt.git#egg=dagrt
 git+https://github.com/inducer/leap.git#egg=leap
 git+https://github.com/inducer/modepy.git#egg=modepy
 git+https://github.com/inducer/meshmode.git#egg=meshmode
-git+https://github.com/majosm/grudge.git@project-constants#egg=grudge
+git+https://github.com/inducer/grudge.git#egg=grudge
 git+https://github.com/inducer/pytato.git#egg=pytato
 
 # Toy Fortran parser for Loopy
