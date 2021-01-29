@@ -32,6 +32,59 @@ import os
 import sys
 
 
+def _check_gpu_oversubscription():
+    """
+    Check whether multiple ranks are running on the same GPU on each node.
+
+    Only works with pocl-cuda devices currently due to the use of the
+    PCI_DOMAIN_ID_NV extension.
+    """
+    from mpi4py import MPI
+    import pyopencl as cl
+
+    size = MPI.COMM_WORLD.Get_size()
+
+    if size <= 1:
+        return
+
+    node_comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
+    node_rank = node_comm.Get_rank()
+
+    cl_ctx = cl.create_some_context()
+    dev = cl_ctx.get_info(cl.context_info.DEVICES)[0]
+    platform = dev.get_info(cl.device_info.PLATFORM)
+    platform_name = platform.get_info(cl.platform_info.NAME)
+
+    if not (dev.type & cl.device_type.GPU):
+        return
+
+    if platform_name == "Portable Computing Language":
+        try:
+            domain_id = dev.get_info(cl.device_info.PCI_DOMAIN_ID_NV)
+        except cl._cl.LogicError:
+            from warnings import warn
+            warn("Cannot detect whether multiple ranks are running on the"
+                 " same GPU because you need a pocl version with"
+                 " https://github.com/pocl/pocl/pull/910.")
+        else:
+            bus_id = dev.get_info(cl.device_info.PCI_BUS_ID_NV)
+            slot_id = dev.get_info(cl.device_info.PCI_SLOT_ID_NV)
+
+            dev_id = (domain_id, bus_id, slot_id)
+
+            dev_ids = node_comm.gather(dev_id, root=0)
+
+            if node_rank == 0:
+                if len(dev_ids) != len(set(dev_ids)):
+                    raise RuntimeError(
+                          "Multiple ranks are running on the same GPU.")
+
+    else:
+        from warnings import warn
+        warn("Cannot detect whether multiple ranks are running on the "
+             f" same GPU on platform '{platform_name}'.")
+
+
 def mpi_entry_point(func):
     """
     Return a decorator that designates a function as the "main" function for MPI.
@@ -78,41 +131,7 @@ def mpi_entry_point(func):
                  "ranks. See https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes"  # noqa: E501
                  " for more information.")
 
-        # Check whether multiple ranks are running on the same GPU on each node.
-        # Only works with pocl-cuda devices currently.
-        if size > 1:
-            node_comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
-            node_rank = node_comm.Get_rank()
-            cl_ctx = cl.create_some_context()
-            dev = cl_ctx.get_info(cl.context_info.DEVICES)[0]
-            platform = dev.get_info(cl.device_info.PLATFORM)
-            platform_name = platform.get_info(cl.platform_info.NAME)
-
-            if platform_name == "Portable Computing Language":
-                try:
-                    domain_id = dev.get_info(0x4010)
-                except cl._cl.LogicError:
-                    from warnings import warn
-                    warn("Cannot detect whether multiple ranks are running on the"
-                         " same GPU because you need at least pocl version 1.7.")
-                else:
-                    bus_id = dev.get_info(cl.device_info.PCI_BUS_ID_NV)
-                    slot_id = dev.get_info(cl.device_info.PCI_SLOT_ID_NV)
-
-                    dev_id = (domain_id, bus_id, slot_id)
-
-                    dev_ids = node_comm.gather(dev_id, root=0)
-
-                    if node_rank == 0:
-                        if len(dev_ids) != len(set(dev_ids)):
-                            print(dev_ids)
-                            raise RuntimeError(
-                                  "Multiple ranks are running on the same GPU.")
-
-            else:
-                from warnings import warn
-                warn("Cannot detect whether multiple ranks are running on the "
-                     f" same GPU on platform '{platform_name}'.")
+        _check_gpu_oversubscription()
 
         func(*args, **kwargs)
 
