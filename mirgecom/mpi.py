@@ -58,6 +58,7 @@ def _check_gpu_oversubscription():
     if len(dev) > 1:
         raise RuntimeError(f"Multiple devices selected for rank {rank}.")
 
+    dev = dev[0]
     platform = dev.get_info(cl.device_info.PLATFORM)
     platform_name = platform.get_info(cl.platform_info.NAME)
 
