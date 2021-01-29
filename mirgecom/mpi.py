@@ -43,6 +43,7 @@ def _check_gpu_oversubscription():
     import pyopencl as cl
 
     size = MPI.COMM_WORLD.Get_size()
+    rank = MPI.COMM_WORLD.Get_rank()
 
     if size <= 1:
         return
@@ -51,7 +52,12 @@ def _check_gpu_oversubscription():
     node_rank = node_comm.Get_rank()
 
     cl_ctx = cl.create_some_context()
-    dev = cl_ctx.get_info(cl.context_info.DEVICES)[0]
+    dev = cl_ctx.get_info(cl.context_info.DEVICES)
+
+    # No support for multi-device contexts
+    if len(dev) > 1:
+        raise RuntimeError(f"Multiple devices selected for rank {rank}.")
+
     platform = dev.get_info(cl.device_info.PLATFORM)
     platform_name = platform.get_info(cl.platform_info.NAME)
 
