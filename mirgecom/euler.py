@@ -198,6 +198,16 @@ def inviscid_flux(discr, eos, q):
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
     +p\mathbf{I}, \rho{Y_s}\vec{V})$
+
+    The fluxes are returned as a 2D object array with shape:
+    ``(num_equations, ndim)``.  Each entry in the
+    flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
+    form and shape for the flux data is required by the built-in
+    state data handling mechanism in :mod:`mirgecom.euler`. That
+    mechanism is used by at least
+    :class:`mirgecom.euler.ConservedVars`, and
+    :func:`mirgecom.euler.join_conserved`, and
+    :func:`mirgecom.euler.split_conserved`.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
