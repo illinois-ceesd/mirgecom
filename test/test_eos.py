@@ -99,8 +99,11 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     nodes = thaw(actx, discr.nodes())
 
     # Hand-port chemistry works OK
-    mech_path = str(mechdata / f"{mechname}.cti")
-    sol = cantera.Solution(mech_path, "gas")
+    mech_file = mechdata / f"{mechname}.cti"
+    with mech_file.open() as fp:
+        mech_cti = fp.read()
+
+    sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
@@ -118,7 +121,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution(mech_path, "gas")
+        cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
         cantera_soln.TPY = tempin, pressin, y0s
         cantera_soln.equilibrate("UV")
         can_t, can_rho, can_y = cantera_soln.TDY
@@ -217,8 +220,11 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
     # Hand-port works OK
     #  prometheus_mechanism = UIUCMemchanism(actx.np)
-    mech_path = str(mechdata / f"{mechname}.cti")
-    sol = cantera.Solution(mech_path, "gas")
+    mech_file = mechdata / f"{mechname}.cti"
+    with mech_file.open() as fp:
+        mech_cti = fp.read()
+
+    sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
@@ -311,8 +317,11 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     nodes = thaw(actx, discr.nodes())
     ones = (1.0 + nodes[0]) - nodes[0]
 
-    mech_path = str(mechdata / f"{mechname}.cti")
-    cantera_soln = cantera.Solution(mech_path, "gas")
+    mech_file = mechdata / f"{mechname}.cti"
+    with mech_file.open() as fp:
+        mech_cti = fp.read()
+
+    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
     #    pyro_obj = Thermochemistry(actx.np)
     nspecies = pyro_obj.num_species

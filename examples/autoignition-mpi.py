@@ -113,8 +113,11 @@ def main(ctx_factory=cl.create_some_context):
     nodes = thaw(actx, discr.nodes())
 
     # Use Cantera for initialization (and soon for pyro code gen)
-    mech_path = str(mechdata / "uiuc.cti")
-    cantera_soln = cantera.Solution(mech_path, "gas")
+    mech_file = mechdata / "uiuc.cti"
+    with mech_file.open() as fp:
+        mech_cti = fp.read()
+
+    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     nspecies = cantera_soln.n_species
     init_temperature = 1500.0
     equiv_ratio = 1.0
