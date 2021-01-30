@@ -97,7 +97,8 @@ def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
 
     name = knl.get_info(cl.kernel_info.FUNCTION_NAME)
 
-    nonloopy_profile_events.append(NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
+    nonloopy_profile_events.append(
+        NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
 
     return evt
 
