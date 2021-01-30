@@ -68,6 +68,7 @@ class NonLoopyProfileEvent:
     """Hold a non-Loopy profile event that has not been seen by the profiler yet."""
 
     cl_event: cl._cl.Event
+    knl: NonLoopyProfilekernel
     nops: int    # Assumption: all operations are floating-point
     nbytes: int  # Assumption: nbytes covers both bytes accessed and memory footprint
 
@@ -82,15 +83,21 @@ class ProfileResult:
     footprint_bytes: int
 
 
-# For pyopencl.Array's elementwise kernels.
-elwise_knl = NonLoopyProfilekernel("pyopencl_array")
-
-
-def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for,
-                           nops=None, nbytes=None):
+def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
     """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
-    nonloopy_profile_events.append(NonLoopyProfileEvent(evt, nops, nbytes))
+
+    nbytes = 0
+    nops = 0
+
+    for arg in actual_args:
+        if isinstance(arg, cl.array.Array):
+            nbytes += arg.size * arg.dtype.itemsize
+            nops += arg.size
+
+    name = knl.get_info(cl.kernel_info.FUNCTION_NAME)
+
+    nonloopy_profile_events.append(NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
 
     return evt
 
@@ -157,7 +164,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.profile_results.setdefault(program, []).append(new)
 
         for t in nonloopy_profile_events:
-            program = elwise_knl
+            program = t.knl
             time = t.cl_event.profile.end - t.cl_event.profile.start
             new = ProfileResult(time, t.nops, t.nbytes, t.nbytes)
             self.profile_results.setdefault(program, []).append(new)
