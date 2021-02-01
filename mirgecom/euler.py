@@ -77,7 +77,7 @@ class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
-    and mass fractions) per unit volume = $(\rho,\rho{E},\rho\vec{V},
+    and species masses) per unit volume = $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.
 
     .. attribute:: dim
@@ -111,7 +111,7 @@ class ConservedVars:  # FIXME: Name?
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    species_mass: np.ndarray = np.empty((0,), dtype=object)
+    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
 
     @property
     def dim(self):
@@ -155,11 +155,6 @@ def get_num_species(dim, q):
     return len(q) - (dim + 2)
 
 
-def get_num_conserved(dim, q):
-    """Return number of conserved quantities."""
-    return dim + 2 + get_num_species(dim, q)
-
-
 def split_conserved(dim, q):
     """Get the canonical conserved quantities.
 
@@ -170,7 +165,6 @@ def split_conserved(dim, q):
     returned dataclass :attr:`ConservedVars.species_mass` will be set to an empty
     array.
     """
-    #    assert len(q) == dim + 2 + get_num_species(dim, q)
     nspec = get_num_species(dim, q)
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
                          species_mass=q[2+dim:2+dim+nspec])
@@ -204,6 +198,16 @@ def inviscid_flux(discr, eos, q):
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
     +p\mathbf{I}, \rho{Y_s}\vec{V})$
+
+    The fluxes are returned as a 2D object array with shape:
+    ``(num_equations, ndim)``.  Each entry in the
+    flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
+    form and shape for the flux data is required by the built-in
+    state data handling mechanism in :mod:`mirgecom.euler`. That
+    mechanism is used by at least
+    :class:`mirgecom.euler.ConservedVars`, and
+    :func:`mirgecom.euler.join_conserved`, and
+    :func:`mirgecom.euler.split_conserved`.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -215,9 +219,8 @@ def inviscid_flux(discr, eos, q):
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
             momentum=np.outer(mom, mom) / cv.mass + np.eye(dim) * p,
-            # mixture species require a reshape here to get the right numpy
-            # broadcast behavior. Reshaped to [numspecies x 1] object.
-            species_mass=mom * cv.species_mass.reshape(-1, 1) / cv.mass)
+            species_mass=(  # reshaped for proper broadcast: (nspecies, dim)
+                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
