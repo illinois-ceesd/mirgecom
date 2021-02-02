@@ -1,0 +1,11 @@
+# Useful development packages.
+# Install them with 'pip install -r requirements_dev.txt'.
+
+memory-profiler
+jedi
+pudb
+pytest-pudb
+pyprof2calltree
+pyinstrument
+
+git+https://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64" 
