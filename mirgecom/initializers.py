@@ -43,7 +43,6 @@ from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
-from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 
@@ -58,7 +57,7 @@ def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
     Parameters
     ----------
     x_vec: np.ndarray
-        Nodal positions
+        Numdim-dimensional positions at which solution is desired.
     mass: float
         Value to set $\rho$
     energy: float
@@ -196,7 +195,7 @@ class Vortex2D:
         t: float
             Current time at which the solution is desired.
         x_vec: numpy.ndarray
-            Nodal coordinates
+            Numdim-dimensional positions at which theh solution is desired.
         eos: mirgecom.eos.IdealSingleGas
             Equation of state class to supply method for gas *gamma*.
         """
@@ -282,7 +281,7 @@ class SodShock1D:
         t: float
             Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
-            Nodal coordinates
+            Numdim-dimensional positions at which the solution is desired.
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
@@ -391,7 +390,7 @@ class Lump:
         t: float
             Current time at which the solution is desired
         x_vec: numpy.ndarray
-            Nodal coordinates
+            Numdim-dimensional positions at which solution is desired.
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
@@ -419,7 +418,7 @@ class Lump:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, x_vec, q, t=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
@@ -428,6 +427,8 @@ class Lump:
 
         Parameters
         ----------
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which exact rhs is desired.
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
@@ -435,11 +436,10 @@ class Lump:
             Time at which RHS is desired
         """
         actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
-            [nodes[i] - lump_loc[i] for i in range(self._dim)]
+            [x_vec[i] - lump_loc[i] for i in range(self._dim)]
         )
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
 
@@ -562,10 +562,10 @@ class MulticomponentLump:
 
         Parameters
         ----------
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which the solution is desired.
         t: float
-            Current time at which the solution is desired
-        x_vec: numpy.ndarray
-            Nodal coordinates
+            Time at which the solution is desired.
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
@@ -596,7 +596,7 @@ class MulticomponentLump:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, x_vec, q, t=0.0):
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
@@ -605,6 +605,8 @@ class MulticomponentLump:
 
         Parameters
         ----------
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which the exact rhs is desired.
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
@@ -612,10 +614,9 @@ class MulticomponentLump:
             Time at which RHS is desired
         """
         actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
         loc_update = t * self._velocity
 
-        mass = 0 * nodes[0] + self._rho0
+        mass = 0 * x_vec[0] + self._rho0
         mom = self._velocity * mass
         v = mom / mass
         massrhs = 0 * mass
@@ -626,7 +627,7 @@ class MulticomponentLump:
         specrhs = np.empty((self._nspecies,), dtype=object)
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
-            rel_pos = nodes - lump_loc
+            rel_pos = x_vec - lump_loc
             r2 = np.dot(rel_pos, rel_pos)
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
@@ -682,8 +683,8 @@ class MixtureInitializer:
 
         Parameters
         ----------
-        x_vec: numpy.ndarray
-            Coordinates at which solution is desired
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which the solution is desired.
         t: float
             Time is ignored by this solution intitializer
         """
@@ -764,8 +765,8 @@ class AcousticPulse:
         ----------
         t: float
             Current time at which the solution is desired (unused)
-        x_vec: numpy.ndarray
-            Nodal coordinates
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which the solution is desired.
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
@@ -845,10 +846,10 @@ class Uniform:
 
         Parameters
         ----------
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which the solution is desired.
         t: float
             Current time at which the solution is desired (unused)
-        x_vec: numpy.ndarray
-            Nodal coordinates
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
@@ -862,21 +863,21 @@ class Uniform:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, x_vec, q, t=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
         Parameters
         ----------
+        x_vec: np.ndarray
+            Vector of ndim-dimensional positions at which the exact rhs is desired.
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point. (unused)
         t: float
             Time at which RHS is desired (unused)
         """
-        actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
-        mass = nodes[0].copy()
+        mass = x_vec[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass

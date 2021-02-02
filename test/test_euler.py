@@ -630,7 +630,7 @@ def test_lump_rhs(actx_factory, dim, order):
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+        expected_rhs = lump.exact_rhs(nodes, lump_soln, 0)
 
         err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
@@ -698,7 +698,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         inviscid_rhs = inviscid_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+        expected_rhs = lump.exact_rhs(nodes, lump_soln, 0)
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
         err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)

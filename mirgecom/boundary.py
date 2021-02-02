@@ -36,7 +36,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.eos import IdealSingleGas
-from grudge.symbolic.primitives import TracePair
+from grudge.symbolic.primitives import TracePair, QTAG_NONE, DOFDesc, as_dofdesc
 from mirgecom.euler import split_conserved, join_conserved
 
 
@@ -60,13 +60,39 @@ class PrescribedBoundary:
         """
         self._userfunc = userfunc
 
-    def boundary_pair(self, discr, q, btag, *args, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
+    def boundary_pair(self, discr, q, btag, quad_tag=QTAG_NONE, **kwargs):
+        """Get the interior and exterior solution on the boundary.
+
+        Parameters
+        ----------
+        discr: grudge.eager.EagerDGDiscretization
+            the discretization to use
+
+        q:
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point. For multi-component
+            fluids, the conserved quantities should include
+            (mass, energy, momentum, species_mass), where *species_mass* is a vector
+            of species masses.
+
+        b_tag:
+            Boundary tag indicating which sub-discretization in *discr* represents
+            the boundary.
+
+        quad_tag:
+            quadrature tag indicating which discretization in *discr* to use for
+            overintegration
+    """
         actx = q[0].array_context
 
-        boundary_discr = discr.discr_from_dd(btag)
+        dd_quad = DOFDesc("vol", quad_tag)
+        dd_boundary = as_dofdesc(btag)
+        dd_boundary_quad = dd_quad.with_dtag(btag)
+
+        boundary_discr = discr.discr_from_dd(dd_boundary_quad)
         nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(nodes, **kwargs)
+        ext_soln_quad = self._userfunc(nodes, **kwargs)
+        ext_soln = discr.project(dd_boundary_quad, dd_boundary, ext_soln_quad)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
@@ -77,8 +103,29 @@ class DummyBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
+    def boundary_pair(self, discr, q, btag, quad_tag=QTAG_NONE, **kwargs):
+        """Get the interior and exterior solution on the boundary.
+
+        Parameters
+        ----------
+        discr: grudge.eager.EagerDGDiscretization
+            the discretization to use
+
+        q:
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point. For multi-component
+            fluids, the conserved quantities should include
+            (mass, energy, momentum, species_mass), where *species_mass* is a vector
+            of species masses.
+
+        b_tag:
+            Boundary tag indicating which sub-discretization in *discr* represents
+            the boundary.
+
+        quad_tag:
+            quadrature tag indicating which discretization in *discr* to use for
+            overintegration
+        """
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
@@ -101,7 +148,7 @@ class AdiabaticSlipBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, discr, q, btag, quad_tag=QTAG_NONE, **kwargs):
         """Get the interior and exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -111,26 +158,52 @@ class AdiabaticSlipBoundary:
         v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
         mom_plus = rho_plus * v_plus
         E_plus = E_minus
+
+        Parameters
+        ----------
+        discr: grudge.eager.EagerDGDiscretization
+            the discretization to use
+
+        q:
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point. For multi-component
+            fluids, the conserved quantities should include
+            (mass, energy, momentum, species_mass), where *species_mass* is a vector
+            of species masses.
+
+        b_tag:
+            Boundary tag indicating which sub-discretization in *discr* represents
+            the boundary.
+
+        quad_tag:
+            quadrature tag indicating which discretization in *discr* to use for
+            overintegration
         """
         # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass.array_context
+        actx = q[0].array_context
+        dd_quad = DOFDesc("vol", quad_tag)
+        dd_boundary = as_dofdesc(btag)
+        dd_boundary_quad = dd_quad.with_dtag(btag)
+        q_quad = discr.project("vol", dd_quad, q)
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
+        nhat_quad = thaw(actx, discr.normal(dd_boundary_quad))
 
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
         int_cv = split_conserved(dim, int_soln)
+        int_soln_quad = discr.project(dd_quad, dd_boundary_quad, q_quad)
+        int_cv_quad = split_conserved(dim, int_soln_quad)
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to
         # induce an equal but opposite wall-normal (reflected) wave
         # preserving the tangential component
-        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
-        wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
-        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
+        mom_normcomp = np.dot(int_cv_quad.momentum, nhat_quad)  # wall-norm component
+        wnorm_mom = nhat_quad * mom_normcomp  # wall-normal mom vec
+        ext_mom_quad = int_cv_quad.momentum - 2.0 * wnorm_mom  # ext momentum
+        ext_mom = discr.project(dd_boundary_quad, dd_boundary, ext_mom_quad)
 
         # Form the external boundary solution with the new momentum
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,

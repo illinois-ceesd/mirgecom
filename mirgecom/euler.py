@@ -70,6 +70,7 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
+from grudge.symbolic.primitives import QTAG_NONE, DOFDesc
 
 
 @dataclass(frozen=True)
@@ -192,7 +193,7 @@ def join_conserved(dim, mass, energy, momentum, species_mass=np.empty((0,),
     return result
 
 
-def inviscid_flux(discr, eos, q):
+def inviscid_flux(discr, eos, q, quad_tag=QTAG_NONE):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
@@ -208,6 +209,26 @@ def inviscid_flux(discr, eos, q):
     :class:`mirgecom.euler.ConservedVars`, and
     :func:`mirgecom.euler.join_conserved`, and
     :func:`mirgecom.euler.split_conserved`.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    q:
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+
+    quad_tag:
+        quadrature tag indicating which discretization in *discr* to use for
+        overintegration
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -231,11 +252,14 @@ def _get_wavespeed(dim, eos, cv: ConservedVars):
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
-def _facial_flux(discr, eos, q_tpair, local=False):
+def _facial_flux(discr, eos, q_tpair, *, quad_tag=QTAG_NONE, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
     Parameters
     ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
@@ -248,34 +272,45 @@ def _facial_flux(discr, eos, q_tpair, local=False):
         set to *False* (the default), the returned fluxes are projected to
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
+
+    quad_tag:
+        quadrature tag indicating which discretization in *discr* to use for
+        overintegration
     """
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context
 
-    flux_int = inviscid_flux(discr, eos, q_tpair.int)
-    flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
+    dd = q_tpair.dd
+    dd_quad = dd.with_qtag(quad_tag)
+    faces_quad = dd_quad.with_dtag("all_faces")
+
+    q_int = discr.project(dd, dd_quad, q_tpair.int)
+    q_ext = discr.project(dd, dd_quad, q_tpair.ext)
+
+    flux_int = inviscid_flux(discr, eos, q_int)
+    flux_ext = inviscid_flux(discr, eos, q_ext)
 
     # Lax-Friedrichs/Rusanov after [Hesthaven_2008]_, Section 6.6
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_int)),
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_ext))
     )
 
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+    normal = thaw(actx, discr.normal(dd_quad))
     flux_weak = (
         flux_avg @ normal
-        - 0.5 * lam * (q_tpair.ext - q_tpair.int))
+        - 0.5 * lam * (q_ext - q_int))
 
     if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+        return discr.project(dd_quad, faces_quad, flux_weak)
     return flux_weak
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0,
-                      sources=None):
+                      sources=None, quad_tag=QTAG_NONE):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -290,25 +325,32 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0,
 
     Parameters
     ----------
-    q
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    boundaries:
+        Dictionary of boundary functions, one for each valid btag
+
+    q:
         State array which expects at least the canonical conserved quantities
         (mass, energy, momentum) for the fluid at each point. For multi-component
         fluids, the conserved quantities should include
         (mass, energy, momentum, species_mass), where *species_mass* is a vector
         of species masses.
 
-    boundaries
-        Dictionary of boundary functions, one for each valid btag
-
-    t
+    t:
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-
-    sources
+    sources:
         Dictionary of source functions, one for each source
+
+    quad_tag:
+        quadrature tag indicating which discretization in *discr* to use for
+        overintegration
 
     Returns
     -------
@@ -316,38 +358,44 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0,
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    vol_flux = inviscid_flux(discr, eos, q)
-    dflux = discr.weak_div(vol_flux)
+    dd_quad = DOFDesc("vol", quad_tag)
+    q_quad = discr.project("vol", dd_quad, q)
+
+    vol_flux = inviscid_flux(discr, eos, q_quad)
+    dflux = discr.weak_div(dd_quad, vol_flux)
 
     interior_face_flux = _facial_flux(
-        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
+        discr, eos=eos, q_tpair=interior_trace_pair(discr, q), quad_tag=quad_tag)
 
     # Domain boundaries
     domain_boundary_flux = sum(
         _facial_flux(
             discr,
+            eos=eos,
             q_tpair=boundaries[btag].boundary_pair(discr,
                                                    eos=eos,
                                                    btag=btag,
                                                    t=t,
-                                                   q=q),
-            eos=eos
+                                                   q=q,
+                                                   quad_tag=quad_tag),
+            quad_tag=quad_tag,
         )
         for btag in boundaries
     )
 
     # Flux across partition boundaries
     partition_boundary_flux = sum(
-        _facial_flux(discr, eos=eos, q_tpair=part_pair)
+        _facial_flux(discr, eos=eos, q_tpair=part_pair, quad_tag=quad_tag)
         for part_pair in cross_rank_trace_pairs(discr, q)
     )
 
     source_terms = 0
     if sources is not None:
-        source_terms = sum(source(discr, q=q, eos=eos) for source in sources)
+        source_terms = sum(source(discr, q=q_quad, eos=eos) for source in sources)
 
+    faces_quad = DOFDesc("all_faces", quad_tag)
     return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
+        dflux - discr.face_mass(faces_quad, interior_face_flux + domain_boundary_flux
                                 + partition_boundary_flux)) + source_terms
 
 
