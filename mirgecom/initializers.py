@@ -56,7 +56,7 @@ def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
 
     Parameters
     ----------
-    x_vec: np.ndarray
+    x_vec: numpy.ndarray
         Numdim-dimensional positions at which solution is desired.
     mass: float
         Value to set $\rho$
@@ -64,7 +64,7 @@ def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
         Optional value to set $\rho{E}$
     pressure: float
         Value to use for calculating $\rho{E}$
-    velocity: np.ndarray
+    velocity: numpy.ndarray
         Optional constant velocity to set $\rho\mathbf{V}$
 
     Returns
@@ -427,7 +427,7 @@ class Lump:
 
         Parameters
         ----------
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which exact rhs is desired.
         q
             State array which expects at least the canonical conserved quantities
@@ -562,7 +562,7 @@ class MulticomponentLump:
 
         Parameters
         ----------
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which the solution is desired.
         t: float
             Time at which the solution is desired.
@@ -605,7 +605,7 @@ class MulticomponentLump:
 
         Parameters
         ----------
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which the exact rhs is desired.
         q
             State array which expects at least the canonical conserved quantities
@@ -683,7 +683,7 @@ class MixtureInitializer:
 
         Parameters
         ----------
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which the solution is desired.
         t: float
             Time is ignored by this solution intitializer
@@ -765,7 +765,7 @@ class AcousticPulse:
         ----------
         t: float
             Current time at which the solution is desired (unused)
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which the solution is desired.
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
@@ -846,7 +846,7 @@ class Uniform:
 
         Parameters
         ----------
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which the solution is desired.
         t: float
             Current time at which the solution is desired (unused)
@@ -869,7 +869,7 @@ class Uniform:
 
         Parameters
         ----------
-        x_vec: np.ndarray
+        x_vec: numpy.ndarray
             Vector of ndim-dimensional positions at which the exact rhs is desired.
         q
             State array which expects at least the canonical conserved quantities
