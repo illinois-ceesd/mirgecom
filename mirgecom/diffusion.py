@@ -203,11 +203,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         # computing sqrt(alpha); _u_flux would need to be modified to accept such
         # values).
         alpha_int_quad = discr.project("vol", dd_quad, alpha)
-        if isinstance(self.value, DOFArray):
-            value_quad = discr.project(dd, dd_quad, self.value)
-            flux_quad = -alpha_int_quad*value_quad
-        else:
-            flux_quad = -alpha_int_quad*self.value
+        value_quad = discr.project(dd, dd_quad, self.value)
+        flux_quad = -alpha_int_quad*value_quad
         return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
 
 
