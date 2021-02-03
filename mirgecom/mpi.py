@@ -56,7 +56,6 @@ def _check_gpu_oversubscription():
         raise RuntimeError(f"Multiple devices selected for rank {rank}.")
 
     dev = dev[0]
-    platform_name = dev.platform.name
 
     if not (dev.type & cl.device_type.GPU):
         return
@@ -66,7 +65,7 @@ def _check_gpu_oversubscription():
 
     try:
         domain_id = hex(dev.pci_domain_id_nv)
-    except (cl._cl.LogicError, AttributeError) as e:
+    except (cl._cl.LogicError, AttributeError):
         from warnings import warn
         warn("Cannot detect whether multiple ranks are running on the"
              " same GPU because it requires Nvidia GPUs running with"
@@ -85,7 +84,7 @@ def _check_gpu_oversubscription():
                 dup = [item for item in dev_ids if dev_ids.count(item) > 1]
 
                 raise RuntimeError(
-                      f"Multiple ranks are running on node '{hostname}'."
+                      f"Multiple ranks are sharing GPUs on node '{hostname}'."
                       f" Duplicate PCIe IDs: {dup}.")
 
     node_comm.Free()
