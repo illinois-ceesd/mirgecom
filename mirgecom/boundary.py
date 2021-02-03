@@ -105,6 +105,18 @@ class DummyBoundary:
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
+    def exterior_sol(
+        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        """Get the interior and exterior solution on the boundary."""
+        dir_soln = discr.project("vol", btag, q)
+        return dir_soln
+
+    def av(
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        return discr.project("vol", btag, q)
+
 
 class AdiabaticSlipBoundary:
     r"""Boundary condition implementing inviscid slip boundary.
@@ -163,6 +175,53 @@ class AdiabaticSlipBoundary:
                                     momentum=ext_mom)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+
+    def exterior_sol(
+            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
+    ):
+        """Get the interior and exterior solution on the boundary.
+        The exterior solution is set such that there will be vanishing
+        flux through the boundary, preserving mass, momentum (magnitude) and
+        energy.
+        rho_plus = rho_minus
+        v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
+        mom_plus = rho_plus * v_plus
+        E_plus = E_minus
+        """
+        # Grab some boundary-relevant data
+        dim = discr.dim
+        cv = split_conserved(dim, q)
+        actx = cv.mass.array_context
+
+        # Grab a unit normal to the boundary
+        normal = thaw(actx, discr.normal(btag))
+        normal_mag = actx.np.sqrt(np.dot(normal, normal))
+        nhat_mult = 1.0 / normal_mag
+        nhat = normal * make_obj_array([nhat_mult])
+
+        # Get the interior/exterior solns
+        int_soln = discr.project("vol", btag, q)
+        bndry_cv = split_conserved(dim, int_soln)
+        # bpressure = eos.pressure(bndry_cv)
+
+        # Subtract out the 2*wall-normal component
+        # of velocity from the velocity at the wall to
+        # induce an equal but opposite wall-normal (reflected) wave
+        # preserving the tangential component
+        wall_velocity = bndry_cv.momentum / make_obj_array([bndry_cv.mass])
+        nvel_comp = np.dot(wall_velocity, nhat)  # part of velocity normal to wall
+        wnorm_vel = nhat * make_obj_array([nvel_comp])  # wall-normal velocity vec
+        wall_velocity = wall_velocity - 2.0 * wnorm_vel  # prescribed ext velocity
+
+        # Re-calculate the boundary solution with the new
+        # momentum
+        bndry_cv.momentum = wall_velocity * make_obj_array([bndry_cv.mass])
+        # bndry_cv.energy = eos.total_energy(bndry_cv, bpressure)
+        bndry_soln = join_conserved(dim=dim, mass=bndry_cv.mass,
+                                    energy=bndry_cv.energy,
+                                    momentum=bndry_cv.momentum)
+
+        return bndry_soln
 
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
