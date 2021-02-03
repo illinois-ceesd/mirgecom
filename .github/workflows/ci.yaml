@@ -90,7 +90,7 @@ jobs:
             fi
             # One test at a time to address ballooning memory.  See MIRGE-Com issue:
             # https://github.com/illinois-ceesd/mirgecom/issues/212
-            for filename in *.py ; do
+            for filename in test_*.py ; do
               python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename"
             done
 
