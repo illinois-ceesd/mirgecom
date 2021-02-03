@@ -5,16 +5,16 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial_{\Omega}} + \mathbf{S}
+    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{S}
 
 where:
 
--   state :math:`\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]`
--   flux :math:`\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]`,
--   domain boundary :math:`\partial_{\Omega}`,
--   sources :math:`\mathbf{S} = [{(\partial_t{\rho})}_s, {(\partial_t{\rho{E}})}_s,
-    {(\partial_t{\rho\vec{V}})}_s]`
+-   state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]$
+-   flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]$,
+-   domain boundary $\partial\Omega$,
+-   sources $\mathbf{S} = [{(\partial_t{\rho})}_s,
+    {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s]$
 
 
 State Vector Handling
@@ -22,6 +22,7 @@ State Vector Handling
 
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
+.. autofunction:: join_conserved
 
 RHS Evaluation
 ^^^^^^^^^^^^^^
@@ -63,7 +64,6 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
@@ -72,13 +72,15 @@ from grudge.eager import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum)
-    per unit volume = :math:`(\rho,\rho E,\rho\vec{V})` from an agglomerated
+    per unit volume = $(\rho,\rho{E},\rho\vec{V})$ from an agglomerated
     object array.
+
+    .. attribute:: dim
 
     .. attribute:: mass
 
@@ -91,11 +93,32 @@ class ConservedVars:  # FIXME: Name?
     .. attribute:: momentum
 
         Momentum vector per unit volume
+
+    .. automethod:: join
+    .. automethod:: replace
     """
 
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
+
+    @property
+    def dim(self):
+        """Return the number of physical dimensions."""
+        return len(self.momentum)
+
+    def join(self):
+        """Call :func:`join_conserved` on *self*."""
+        return join_conserved(
+            dim=self.dim,
+            mass=self.mass,
+            energy=self.energy,
+            momentum=self.momentum)
+
+    def replace(self, **kwargs):
+        """Return a copy of *self* with the attributes in *kwargs* replaced."""
+        from dataclasses import replace
+        return replace(self, **kwargs)
 
 
 def _aux_shape(ary, leading_shape):
@@ -141,16 +164,11 @@ def join_conserved(dim, mass, energy, momentum):
     return result
 
 
-def scalar(s):
-    """Create an object array for a scalar."""
-    return make_obj_array([s])
-
-
 def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    :math:`(\rho\vec{V},(\rhoE+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})`
+    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})$
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -159,20 +177,36 @@ def inviscid_flux(discr, eos, q):
     mom = cv.momentum
     return join_conserved(dim,
             mass=mom,
-            energy=mom * scalar((cv.energy + p) / cv.mass),
-            momentum=np.outer(mom, mom)/scalar(cv.mass) + np.eye(dim)*scalar(p))
+            energy=mom * (cv.energy + p) / cv.mass,
+            momentum=np.outer(mom, mom)/cv.mass + np.eye(dim)*p)
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
     """Return the maximum wavespeed in for flow solution *q*."""
     actx = cv.mass.array_context
 
-    v = cv.momentum / scalar(cv.mass)
+    v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
 
 
-def _facial_flux(discr, eos, q_tpair):
-    """Return the flux across a face given the solution on both sides *q_tpair*."""
+def _facial_flux(discr, eos, q_tpair, local=False):
+    """Return the flux across a face given the solution on both sides *q_tpair*.
+
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    q_tpair: :class:`grudge.symbolic.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+
+    local: bool
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
+    """
     dim = discr.dim
 
     actx = q_tpair[0].int.array_context
@@ -180,20 +214,22 @@ def _facial_flux(discr, eos, q_tpair):
     flux_int = inviscid_flux(discr, eos, q_tpair.int)
     flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
 
-    # Lax-Friedrichs/Rusanov after JSH/TW Nodal DG Methods, Section 6.6
-    # DOI: 10.1007/978-0-387-72067-8
+    # Lax-Friedrichs/Rusanov after [Hesthaven_2008]_, Section 6.6
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
         _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext)))
+        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+    )
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_weak = (
         flux_avg @ normal
-        - scalar(0.5 * lam) * (q_tpair.ext - q_tpair.int))
+        - 0.5 * lam * (q_tpair.ext - q_tpair.int))
 
-    return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    if local is False:
+        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    return flux_weak
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
@@ -201,10 +237,13 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
 
     Returns
     -------
-    The right-hand-side of the Euler flow equations:
+    numpy.ndarray
+        The right-hand-side of the Euler flow equations:
 
-    :math:`\dot\mathbf{q} = \mathbf{S} - \nabla\cdot\mathbf{F} +
-          (\mathbf{F}\cdot\hat{n})_\partial_{\Omega}`
+        .. math::
+
+            \dot{\mathbf{q}} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+                (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
     Parameters
     ----------
@@ -218,7 +257,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     t
         Time
 
-    eos : mirgecom.eos.GasEOS
+    eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     """

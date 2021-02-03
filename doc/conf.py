@@ -46,6 +46,8 @@ extensions = [
     "sphinx.ext.graphviz",
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
+    "sphinx_math_dollar",
+    "sphinx_copybutton",
     ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -62,14 +64,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "alabaster"
+html_theme = "furo"
 
-html_theme_options = {
-    "extra_nav_links": {
-        "🚀 Github": "https://github.com/illinois-ceesd/mirgecom",
-        "💾 Download Releases": "https://pypi.org/project/mirgecom",
-        }
-    }
+html_theme_options = {}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -94,3 +91,10 @@ autoclass_content = "class"
 todo_include_todos = True
 
 nitpicky = True
+
+mathjax_config = {
+    "tex2jax": {
+        "inlineMath": [["\\(", "\\)"]],
+        "displayMath": [["\\[", "\\]"]],
+    },
+}

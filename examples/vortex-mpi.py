@@ -1,3 +1,5 @@
+"""Demonstrate the isentropic vortex example."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -56,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
-
+    """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
@@ -91,6 +93,9 @@ def main(ctx_factory=cl.create_some_context):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
+    if dim != 2:
+        raise ValueError("This example must be run with dim = 2.")
+
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
@@ -103,8 +108,8 @@ def main(ctx_factory=cl.create_some_context):
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(0, nodes)
 
-    visualizer = make_visualizer(discr, discr.order + 3
-                                 if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -145,9 +150,9 @@ def main(ctx_factory=cl.create_some_context):
     #    if current_t != checkpoint_t:
     if rank == 0:
         logger.info("Checkpointing final state ...")
-        my_checkpoint(current_step, t=current_t,
-                      dt=(current_t - checkpoint_t),
-                      state=current_state)
+    my_checkpoint(current_step, t=current_t,
+                  dt=(current_t - checkpoint_t),
+                  state=current_state)
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
