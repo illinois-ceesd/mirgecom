@@ -307,7 +307,7 @@ class SodShock1D:
 
 
 class DoubleMachReflection:
-    r"""Implement the double shock reflection problem
+    r"""Implement the double shock reflection problem.
 
         - Woodward and Collela
 
@@ -326,7 +326,7 @@ class DoubleMachReflection:
     def __init__(
             self, dim=2, x0=1.0/6.0, us=4.0
     ):
-        """Initialize initial condition options
+        """Initialize initial condition options.
 
         Parameters
         ----------

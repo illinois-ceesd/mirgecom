@@ -85,6 +85,7 @@ class PrescribedBoundary:
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Do artificial viscosity function."""
         return discr.project("vol", btag, q)
 
 
@@ -115,6 +116,7 @@ class DummyBoundary:
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Do artificial viscosity function."""
         return discr.project("vol", btag, q)
 
 
@@ -219,6 +221,7 @@ class AdiabaticSlipBoundary:
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Do artificial viscosity function."""
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)

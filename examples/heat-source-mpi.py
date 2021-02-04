@@ -1,3 +1,5 @@
+"""Demonstrate heat source."""
+
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
@@ -45,6 +47,7 @@ import pyopencl.tools as cl_tools
 
 @mpi_entry_point
 def main():
+    """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
