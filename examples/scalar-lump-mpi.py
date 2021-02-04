@@ -1,4 +1,4 @@
-"""Demonstrate acoustic pulse, and adiabatic slip wall."""
+"""Demonstrate simple scalar lump advection."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -23,12 +23,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
-from mirgecom.mpi import mpi_entry_point
 import numpy as np
-from functools import partial
 import pyopencl as cl
+import pyopencl.tools as cl_tools
+from functools import partial
+from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -36,99 +36,88 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.euler import (
-    inviscid_operator,
-    #    split_conserved
-)
+
+from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    create_parallel_grid,
     sim_checkpoint,
-    ExactSolutionMismatch,
+    create_parallel_grid,
+    ExactSolutionMismatch
 )
-
 from mirgecom.io import make_init_message
+from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    PrescribedBoundary,
-    AdiabaticSlipBoundary
-)
-from mirgecom.initializers import (
-    Lump,
-    AcousticPulse
-)
+from mirgecom.boundary import PrescribedBoundary
+from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
+
+
+logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
-    """Drive the example."""
+    """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    logger = logging.getLogger(__name__)
-
-    dim = 2
+    dim = 3
     nel_1d = 16
-    order = 1
-    exittol = 2e-2
-    exittol = 100.0
-    t_final = 0.1
+    order = 3
+    exittol = .09
+    t_final = 0.01
     current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    #    vel[:dim] = 1.0
-    current_dt = .01
+    current_dt = .001
     current_t = 0
-    eos = IdealSingleGas()
-    initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    casename = "pulse"
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    wall = AdiabaticSlipBoundary()
-    boundaries = {BTAG_ALL: wall}
     constant_cfl = False
-    nstatus = 10
-    nviz = 10
+    nstatus = 1
+    nviz = 1
     rank = 0
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
-    box_ll = -0.5
-    box_ur = 0.5
+    box_ll = -5.0
+    box_ur = 5.0
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
-    nproc = comm.Get_size()
     rank = comm.Get_rank()
-    num_parts = nproc
+
+    nspecies = 4
+    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+    spec_y0s = np.ones(shape=(nspecies,))
+    spec_amplitudes = np.ones(shape=(nspecies,))
+    eos = IdealSingleGas()
+
+    velocity = np.ones(shape=(dim,))
+
+    initializer = MulticomponentLump(dim=dim, nspecies=nspecies,
+                                     spec_centers=centers, velocity=velocity,
+                                     spec_y0s=spec_y0s,
+                                     spec_amplitudes=spec_amplitudes)
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+
+    casename = "mixture-lump"
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    if num_parts > 1:
-        generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                                b=(box_ur,) * dim, n=(nel_1d,) * dim)
-        local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
-    else:
-        local_mesh = generate_regular_rect_mesh(
-            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
-        )
-        global_nelements = local_mesh.nelements
+    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    uniform_state = initializer(nodes)
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
-                                   center=orig)
-    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
+    current_state = initializer(nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
-    initname = "pulse"
+    initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
@@ -150,7 +139,7 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_checkpoint(step, t, dt, state):
         return sim_checkpoint(discr, visualizer, eos, q=state,
-                              vizname=casename, step=step,
+                              exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)
 
@@ -178,7 +167,6 @@ def main(ctx_factory=cl.create_some_context):
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-
     main()
 
 # vim: foldmethod=marker
