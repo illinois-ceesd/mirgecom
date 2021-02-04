@@ -238,7 +238,9 @@ class PrometheusMixture(GasEOS):
 
     The mixture gas constant, :math:`R_\mathtt{mix}`, is calculated
     as :math:`R_\mathtt{mix} = \sum{Y_\alpha R_\alpha}` by the _Prometheus_
-    mechanism provided by the user.
+    mechanism provided by the user.  Users should take care to match
+    solution initialization with the appropriate units that are used
+    in the user-provided Cantera mechanism input CTI files.
 
     Each interface call expects that the agglomerated
     object array representing the state vector (:math:`q`),
