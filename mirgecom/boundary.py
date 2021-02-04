@@ -60,7 +60,7 @@ class PrescribedBoundary:
         """
         self._userfunc = userfunc
 
-    def boundary_pair(self, discr, q, btag, *args, **kwargs):
+    def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
 
