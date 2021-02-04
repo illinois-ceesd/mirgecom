@@ -30,7 +30,7 @@ __doc__ = """
 .. autoclass:: KernelProfile
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
-.. autofunction:: logmgr_add_discretization_quantities
+.. autofunction:: logmgr_add_default_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 """
