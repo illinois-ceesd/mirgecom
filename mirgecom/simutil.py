@@ -116,7 +116,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if exact_soln is not None:
         actx = cv.mass.array_context
         nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
         exp_resid = q - expected_state
         err_norms = [discr.norm(v, np.inf) for v in exp_resid]
         maxerr = max(err_norms)
