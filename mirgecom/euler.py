@@ -170,8 +170,9 @@ def split_conserved(dim, q):
                          species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum, species_mass=np.empty((0,),
-        dtype=object)):
+def join_conserved(dim, mass, energy, momentum,
+        # empty: immutable
+        species_mass=np.empty((0,), dtype=object)):
     """Create an agglomerated solution array from the conserved quantities."""
     nspec = len(species_mass)
     aux_shapes = [
