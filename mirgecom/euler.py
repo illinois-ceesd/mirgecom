@@ -9,13 +9,13 @@ Euler's equations of gas dynamics:
 
 where:
 
--   state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V} ]$
--   flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
-    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I})]$,
--   domain boundary $\partial\Omega$,
--   sources $\mathbf{S} = [{(\partial_t{\rho})}_s,
-    {(\partial_t{\rho{E}})}_s, {(\partial_t{\rho\vec{V}})}_s]$
-
+-  state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y}_\alpha]$
+-  flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
+   (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
+-  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
+-  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_s]$
+-  vector of species mass fractions ${Y}_\alpha$,
+   with $1\le\alpha\le\mathtt{nspecies}$.
 
 State Vector Handling
 ^^^^^^^^^^^^^^^^^^^^^
@@ -64,7 +64,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 
 import numpy as np
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw, DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import (
     interior_trace_pair,
@@ -76,31 +76,42 @@ from grudge.eager import (
 class ConservedVars:  # FIXME: Name?
     r"""Resolve the canonical conserved quantities.
 
-    Get the canonical conserved quantities (mass, energy, momentum)
-    per unit volume = $(\rho,\rho{E},\rho\vec{V})$ from an agglomerated
-    object array.
+    Get the canonical conserved quantities (mass, energy, momentum,
+    and species masses) per unit volume = $(\rho,\rho{E},\rho\vec{V},
+    \rho{Y_s})$ from an agglomerated object array.
 
     .. attribute:: dim
 
+        Integer indicating spatial dimension of the state
+
     .. attribute:: mass
 
-        Mass per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for the fluid mass per unit volume
 
     .. attribute:: energy
 
-        Energy per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for total energy per unit volume
 
     .. attribute:: momentum
 
-        Momentum vector per unit volume
+        Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
+        of :class:`~meshmode.dof_array.DOFArray` for momentum per unit volume.
+
+    .. attribute:: species_mass
+
+        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        of :class:`~meshmode.dof_array.DOFArray` for species mass per unit volume.
+        The species mass vector has components, $\rho~Y_\alpha$, where $Y_\alpha$
+        is the vector of species mass fractions.
 
     .. automethod:: join
     .. automethod:: replace
     """
 
-    mass: np.ndarray
-    energy: np.ndarray
+    mass: DOFArray
+    energy: DOFArray
     momentum: np.ndarray
+    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
 
     @property
     def dim(self):
@@ -113,7 +124,8 @@ class ConservedVars:  # FIXME: Name?
             dim=self.dim,
             mass=self.mass,
             energy=self.energy,
-            momentum=self.momentum)
+            momentum=self.momentum,
+            species_mass=self.species_mass)
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
@@ -138,29 +150,46 @@ def _aux_shape(ary, leading_shape):
         return ()
 
 
+def get_num_species(dim, q):
+    """Return number of mixture species."""
+    return len(q) - (dim + 2)
+
+
 def split_conserved(dim, q):
     """Get the canonical conserved quantities.
 
     Return a :class:`ConservedVars` that is the canonical conserved quantities,
-    mass, energy, and momentum from the agglomerated object array extracted
-    from the state vector *q*.
+    mass, energy, momentum, and any species' masses, from the agglomerated
+    object array extracted from the state vector *q*. For single component gases,
+    i.e. for those state vectors *q* that do not contain multi-species mixtures, the
+    returned dataclass :attr:`ConservedVars.species_mass` will be set to an empty
+    array.
     """
-    assert len(q) == 2+dim
-    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
+    nspec = get_num_species(dim, q)
+    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
+                         species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum):
+def join_conserved(dim, mass, energy, momentum,
+        # empty: immutable
+        species_mass=np.empty((0,), dtype=object)):
     """Create an agglomerated solution array from the conserved quantities."""
-    from pytools import single_valued
-    aux_shape = single_valued([
+    nspec = len(species_mass)
+    aux_shapes = [
         _aux_shape(mass, ()),
         _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,))])
+        _aux_shape(momentum, (dim,)),
+        _aux_shape(species_mass, (nspec,))]
 
-    result = np.zeros((2+dim,) + aux_shape, dtype=object)
+    from pytools import single_valued
+    aux_shape = single_valued(aux_shapes)
+
+    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
     result[1] = energy
-    result[2:] = momentum
+    result[2:dim+2] = momentum
+    result[dim+2:] = species_mass
+
     return result
 
 
@@ -168,17 +197,21 @@ def inviscid_flux(discr, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
-    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})+p\mathbf{I})$
+    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
+    +p\mathbf{I}, \rho{Y_s}\vec{V})$
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
     p = eos.pressure(cv)
 
     mom = cv.momentum
+
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom)/cv.mass + np.eye(dim)*p)
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+            species_mass=(  # reshaped: (nspecies, dim)
+                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
 def _get_wavespeed(dim, eos, cv: ConservedVars):
@@ -249,7 +282,10 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     ----------
     q
         State array which expects at least the canonical conserved quantities
-        (mass, energy, momentum) for the fluid at each point.
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
 
     boundaries
         Dictionary of boundary functions, one for each valid btag
@@ -260,6 +296,12 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
+
+    Returns
+    -------
+    numpy.ndarray
+        Agglomerated object array of DOF arrays representing the RHS of the Euler
+        flow equations.
     """
     vol_flux = inviscid_flux(discr, eos, q)
     dflux = discr.weak_div(vol_flux)
