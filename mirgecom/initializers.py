@@ -305,8 +305,9 @@ class SodShock1D:
 
         return flat_obj_array(mass, energy, mom)
 
+
 class DoubleMachReflection:
-    r"""Implement the double shock reflection problem
+    r"""Implement the double shock reflection problem.
 
         - Woodward and Collela
 
@@ -314,7 +315,7 @@ class DoubleMachReflection:
 
     .. math::
 
-        (\rho,u,v,P) = 
+        (\rho,u,v,P) =
 
     This function only serves as an initial condition
 
@@ -323,9 +324,9 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self,dim=2, x0=1.0/6.0, us=4.0 
+            self, dim=2, x0=1.0/6.0, us=4.0
     ):
-        """Initialize initial condition options
+        """Initialize initial condition options.
 
         Parameters
         ----------
@@ -337,7 +338,7 @@ class DoubleMachReflection:
            shock speed
         """
         self._x0 = x0
-        self._dim = dim 
+        self._dim = dim
         self._us = us
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
@@ -366,34 +367,33 @@ class DoubleMachReflection:
         x0 = zeros + self._x0
         us = zeros + self._us
         t = zeros + t
-        
 
-        #Mach 10
-        #rhol = zeros + 8.0
-        #rhor = zeros + 1.4
-        
-        #ul = zeros + 8.25*np.cos(np.pi/6.0)
-        #ur = zeros + 0.0
-        #vl = zeros - 8.25*np.sin(np.pi/6.0)
-        #vr = zeros + 0.0
-        #rhoel = zeros + gmn1 * 116.5
-        #rhoer = zeros + gmn1 * 1.0
+        # Mach 10
+        # rhol = zeros + 8.0
+        # rhor = zeros + 1.4
 
-        #Mach 2.0
-        #rhol = zeros + 2.666666*1.4
-        #rhor = zeros + 1.4
-        
-        #ul = zeros + 1.25*np.cos(np.pi/6.0)
-        #ur = zeros + 0.0
-        #vl = zeros - 1.25*np.sin(np.pi/6.0)
-        #vr = zeros + 0.0
-        #rhoel = zeros + gmn1 * 4.5
-        #rhoer = zeros + gmn1 * 1.0
+        # ul = zeros + 8.25*np.cos(np.pi/6.0)
+        # ur = zeros + 0.0
+        # vl = zeros - 8.25*np.sin(np.pi/6.0)
+        # vr = zeros + 0.0
+        # rhoel = zeros + gmn1 * 116.5
+        # rhoer = zeros + gmn1 * 1.0
 
-        #Mach 4.0
+        # Mach 2.0
+        # rhol = zeros + 2.666666*1.4
+        # rhor = zeros + 1.4
+
+        # ul = zeros + 1.25*np.cos(np.pi/6.0)
+        # ur = zeros + 0.0
+        # vl = zeros - 1.25*np.sin(np.pi/6.0)
+        # vr = zeros + 0.0
+        # rhoel = zeros + gmn1 * 4.5
+        # rhoer = zeros + gmn1 * 1.0
+
+        # Mach 4.0
         rhol = zeros + 4.57142857*1.4
         rhor = zeros + 1.4
-        
+
         ul = zeros + 3.125*np.cos(np.pi/6.0)
         ur = zeros + 0.0
         vl = zeros - 3.125*np.sin(np.pi/6.0)
@@ -401,16 +401,17 @@ class DoubleMachReflection:
         rhoel = zeros + gmn1 * 18.5
         rhoer = zeros + gmn1 * 1.0
 
-        #yesno = x_rel > (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
-        #mass = actx.np.where(yesno, rhor, rhol)
-        #rhoe = actx.np.where(yesno, rhoer, rhoel)
-        #u = actx.np.where(yesno, ur, ul)
-        #v = actx.np.where(yesno, vr, vl)
+        # yesno = x_rel > (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
+        # mass = actx.np.where(yesno, rhor, rhol)
+        # rhoe = actx.np.where(yesno, rhoer, rhoel)
+        # u = actx.np.where(yesno, ur, ul)
+        # v = actx.np.where(yesno, vr, vl)
         xinter = (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
-        sigma=0.05
+        sigma = 0.05
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhoe = rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)+rhoer/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
+                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
         u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
         v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
         rhou = mass*u

@@ -85,6 +85,7 @@ class PrescribedBoundary:
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Do artificial viscosity function."""
         return discr.project("vol", btag, q)
 
 
@@ -115,6 +116,7 @@ class DummyBoundary:
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Do artificial viscosity function."""
         return discr.project("vol", btag, q)
 
 
@@ -219,6 +221,7 @@ class AdiabaticSlipBoundary:
     def av(
             self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
     ):
+        """Do artificial viscosity function."""
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)
@@ -231,7 +234,7 @@ class AdiabaticSlipBoundary:
         int_soln = discr.project("vol", btag, q)
         bndry_q = split_conserved(dim, int_soln)
 
-        #create result array to fill
+        # create result array to fill
         result = np.zeros(2+dim, dtype=object)
 
         # flip signs on mass and energy
@@ -251,6 +254,5 @@ class AdiabaticSlipBoundary:
             tmp = tmp - 2.0*norm_flip
             for j in range(dim):
                 result[2+j][i] = -1.0*tmp[j]
-
 
         return(result)
