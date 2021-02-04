@@ -35,7 +35,6 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 from grudge.symbolic.primitives import TracePair
 
@@ -121,7 +120,6 @@ class AdiabaticSlipBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-
         bndry_soln = self.exterior_soln(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
 
@@ -167,7 +165,6 @@ class AdiabaticSlipBoundary:
 
     def av(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
-
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)
