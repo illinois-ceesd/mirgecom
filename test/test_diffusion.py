@@ -238,7 +238,7 @@ def sym_diffusion(dim, sym_alpha, sym_u):
         (get_static_trig_var_diff(2), 50, 5.e-5, [8, 12, 16]),
         (get_static_trig_var_diff(3), 50, 5.e-5, [8, 10, 12]),
     ])
-def disable_test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
+def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             visualize=False):
     """
     Checks the accuracy of the diffusion operator by solving the heat equation for a
