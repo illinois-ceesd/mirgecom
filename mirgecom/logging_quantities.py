@@ -37,7 +37,6 @@ __doc__ = """
 
 from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
-# from numpy import ndarray
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl

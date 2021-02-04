@@ -71,6 +71,8 @@ from grudge.eager import (
     cross_rank_trace_pairs
 )
 
+from mirgecom.eos import GasEOS
+
 
 @dataclass(frozen=True)
 class ConservedVars:  # FIXME: Name?
@@ -301,6 +303,8 @@ def get_inviscid_cfl(discr, eos, dt, q):
 
 @dataclass
 class LogVector:
+    """Variables to log."""
+
     mass: np.ndarray
     energy: np.ndarray
     momentum: np.ndarray
@@ -322,7 +326,7 @@ def units_for_logging(quantity: str) -> str:
     return NAME_TO_UNITS[quantity]
 
 
-def extract_vars_for_logging(dim, state, eos):
+def extract_vars_for_logging(dim: int, state: np.ndarray, eos: GasEOS) -> LogVector:
     """Extract state vars."""
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
