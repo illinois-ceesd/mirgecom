@@ -106,6 +106,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """
 
     def __init__(self, queue, allocator=None) -> None:
+        """Initialize the object."""
         super().__init__(queue, allocator)
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:

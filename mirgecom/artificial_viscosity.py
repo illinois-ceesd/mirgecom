@@ -1,5 +1,4 @@
-r""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler.
-"""
+""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -71,7 +70,7 @@ def _facial_flux_q(discr, q_tpair):
 
 
 def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
-    r"""Compute artifical viscosity for the euler equations"""
+    r"""Compute artifical viscosity for the euler equations."""
     # Get smoothness indicator
     epsilon = np.zeros((2 + discr.dim,), dtype=object)
     indicator = make_obj_array([smoothness_indicator(r[0], discr)])

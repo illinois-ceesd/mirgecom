@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.tag_cells` Computes smoothness indicator
+r""":mod:`mirgecom.tag_cells` Compute smoothness indicator.
 
 Perssons smoothness indicator:
 
@@ -74,7 +74,7 @@ def compute_smoothness_indicator():
 
 
 def smoothness_indicator(u, discr):
-
+    """Calculate the smoothness indicator."""
     assert isinstance(u, DOFArray)
 
     # #@memoize_in(u.array_context, (smoothness_indicator, "get_kernel"))
