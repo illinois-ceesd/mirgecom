@@ -33,6 +33,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
+from grudge.symbolic.primitives import QTAG_NONE
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -97,17 +98,18 @@ def main():
 
     nodes = thaw(actx, discr.nodes())
 
-    u = discr.zeros(actx)
-
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
-
     boundaries = {
         grudge_sym.DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
         grudge_sym.DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
     }
 
+    u = discr.zeros(actx)
+
+    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+
     def rhs(t, u):
-        return (diffusion_operator(discr, alpha=1, boundaries=boundaries, u=u)
+        return (diffusion_operator(
+            discr, quad_tag=QTAG_NONE, alpha=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()
