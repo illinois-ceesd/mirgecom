@@ -411,6 +411,7 @@ class Lump:
         expterm = amplitude * actx.np.exp(1 - r ** 2)
 
         mass = expterm + self._rho0
+        gamma = eos.gamma()
         mom = self._velocity * mass
         gamma = eos.gamma()
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
