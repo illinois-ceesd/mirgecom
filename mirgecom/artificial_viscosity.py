@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools.obj_array import (
-    make_obj_array,
     obj_array_vectorize,
     obj_array_vectorize_n_args,
 )
@@ -42,7 +41,7 @@ from mirgecom.tag_cells import smoothness_indicator
 
 def _facial_flux_r(discr, q_tpair):
 
-    actx = q_tpair[0].int.array_context
+    actx = q_tpair.int.array_context
 
     flux_dis = q_tpair.avg
 
@@ -73,7 +72,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
     r"""Compute artifical viscosity for the euler equations."""
     # Get smoothness indicator
     epsilon = np.zeros((2 + discr.dim,), dtype=object)
-    indicator = make_obj_array([smoothness_indicator(r[0], discr)])
+    indicator = smoothness_indicator(r[0], discr)
     for i in range(2 + discr.dim):
         epsilon[i] = indicator
 
@@ -92,7 +91,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
 
     # Work around?
     def my_facialflux_r_interior(q):
-        qin = interior_trace_pair(discr, make_obj_array([q]))
+        qin = interior_trace_pair(discr, q)
         return _facial_flux_r(discr, q_tpair=qin)
 
     iff_r = obj_array_vectorize(my_facialflux_r_interior, r)
@@ -100,7 +99,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
     # partition boundaries flux
     # flux across partition boundaries
     def my_facialflux_r_partition(q):
-        qin = cross_rank_trace_pairs(discr, make_obj_array([q]))
+        qin = cross_rank_trace_pairs(discr, q)
         return sum(_facial_flux_r(discr, q_tpair=part_pair) for part_pair in qin)
 
     pbf_r = obj_array_vectorize(my_facialflux_r_partition, r)
@@ -122,8 +121,8 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha):
         def my_facialflux_r_boundary(sol_ext, sol_int):
             q_tpair = TracePair(
                 btag,
-                interior=make_obj_array([sol_int]),
-                exterior=make_obj_array([sol_ext]),
+                interior=sol_int,
+                exterior=sol_ext,
             )
             return _facial_flux_r(discr, q_tpair=q_tpair)
 
