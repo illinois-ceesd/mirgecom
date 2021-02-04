@@ -341,17 +341,6 @@ def get_inviscid_cfl(discr, eos, dt, q):
     return dt / wanted_dt
 
 
-@dataclass
-class LogVector:
-    """Variables to log."""
-
-    mass: np.ndarray
-    energy: np.ndarray
-    momentum: np.ndarray
-    temperature: np.ndarray
-    pressure: np.ndarray
-
-
 NAME_TO_UNITS = {
     "mass": "kg/m^3",
     "energy": "J/m^3",
@@ -366,7 +355,7 @@ def units_for_logging(quantity: str) -> str:
     return NAME_TO_UNITS[quantity]
 
 
-def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> LogVector:
+def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
     """Extract state vars."""
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
