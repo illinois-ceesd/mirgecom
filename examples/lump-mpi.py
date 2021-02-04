@@ -76,7 +76,7 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .001
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(numdim=dim, center=orig, velocity=vel)
+    initializer = Lump(dim=dim, center=orig, velocity=vel)
     casename = "lump"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
@@ -103,7 +103,7 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+    current_state = initializer(nodes)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
