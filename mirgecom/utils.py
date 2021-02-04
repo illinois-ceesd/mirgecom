@@ -27,13 +27,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 
-def asdict_shallow(dc_instance):
-    """What :func:`dataclasses.asdict` should have been: no
+
+def asdict_shallow(dc_instance: dataclass):
+    """Convert a :class:`~dataclasses.dataclass` into a dict.
+
+    What :func:`dataclasses.asdict` should have been: no
     recursion, no deep copy. Simply turn one layer of
     :class:`~dataclasses.dataclass` into a :class:`dict`.
     """
-
     from dataclasses import fields
     return {attr.name: getattr(dc_instance, attr.name)
             for attr in fields(dc_instance)}
