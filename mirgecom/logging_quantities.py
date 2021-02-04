@@ -42,7 +42,7 @@ from meshmode.discretization import Discretization
 import pyopencl as cl
 
 
-extract_vars = None
+extract_state_vars = None
 units_logging = None
 
 
@@ -56,8 +56,8 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 
-    global extract_vars, units_logging
-    extract_vars = extract_vars_for_logging
+    global extract_state_vars, units_logging
+    extract_state_vars = extract_vars_for_logging
     units_logging = units_for_logging
 
     add_run_info(logmgr)
@@ -168,11 +168,11 @@ class StateConsumer:
     """Base class for quantities that require a state for logging."""
 
     def __init__(self):
-        self.vars = None
+        self.state_vars = None
 
     def set_sim_state(self, dim, state, eos) -> None:
         """Update the state vector of the object."""
-        self.vars = extract_vars(dim, state, eos)
+        self.state_vars = extract_state_vars(dim, state, eos)
 
 # }}}
 
@@ -225,10 +225,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
     def __call__(self):
         """Return the requested quantity."""
-        if self.vars is None:
+        if self.state_vars is None:
             return None
 
-        quantity = getattr(self.vars, self.quantity)
+        quantity = getattr(self.state_vars, self.quantity)
 
         if self.dim is not None:  # momentum
             return self._discr_reduction(quantity[self.dim])
