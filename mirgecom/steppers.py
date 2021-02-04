@@ -29,7 +29,6 @@ THE SOFTWARE.
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
-from mirgecom.euler import extract_vars
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
@@ -90,7 +89,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, extract_vars(dim, state, eos))
+            set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
 
     return istep, t, state

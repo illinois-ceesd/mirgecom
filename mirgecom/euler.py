@@ -299,22 +299,43 @@ def get_inviscid_cfl(discr, eos, dt, q):
     return dt / wanted_dt
 
 
+@dataclass
+class LogVector:
+    mass: np.ndarray
+    energy: np.ndarray
+    momentum: np.ndarray
+    temperature: np.ndarray
+    pressure: np.ndarray
+
+
 NAME_TO_UNITS = {
     "mass": "kg/m^3",
-    }
+    "energy": "J/m^3",
+    "momentum": "kg*m/s/m^3",
+    "temperature": "K",
+    "pressure": "Pa"
+}
 
 
-def extract_vars_for_loggings(dim, state, eos):
+def units_for_logging(quantity: str) -> str:
+    """Return unit for quantity."""
+    return NAME_TO_UNITS[quantity]
+
+
+def extract_vars_for_logging(dim, state, eos):
     """Extract state vars."""
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
 
-    from dataclasses import asdict
-    name_to_field = asdict(cv)
-    name_to_field.update(asdict(dv))
+    # # asdict() doesn't work on cv/dv
+    # from dataclasses import asdict
+    # name_to_field = asdict(dv)
+    # name_to_field.update(asdict(dv))
+    # return {name: (field, NAME_TO_UNITS[name], field)
+    #         for name, field in name_to_field.items()}
 
-    return {name: (field, NAME_TO_UNITS[name], field)
-            for name, field in name_to_field.items()}
+    res = LogVector(cv.mass, cv.energy, cv.momentum, dv.temperature, dv.pressure)
+    return res
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):

@@ -27,8 +27,6 @@ THE SOFTWARE.
 __doc__ = """
 .. autoclass:: StateConsumer
 .. autoclass:: DiscretizationBasedQuantity
-.. autoclass:: ConservedDiscretizationBasedQuantity
-.. autoclass:: DependentDiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
@@ -42,17 +40,26 @@ from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
 # from numpy import ndarray
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
-from mirgecom.eos import GasEOS
 import pyopencl as cl
 
 
+extract_vars = None
+units_logging = None
+
+
 def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
-        filename: str = None, mode: str = "wu", mpi_comm=None) -> LogManager:
+                      extract_vars_for_logging, units_for_logging,
+                      filename: str = None, mode: str = "wu",
+                      mpi_comm=None) -> LogManager:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
+
+    global extract_vars, units_logging
+    extract_vars = extract_vars_for_logging
+    units_logging = units_for_logging
 
     add_run_info(logmgr)
     add_package_versions(logmgr)
@@ -75,20 +82,20 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
              str(queue.get_info(cl.command_queue_info.DEVICE)))
 
 
-def logmgr_add_discretization_quantities(logmgr: LogManager, discr, eos, dim):
+def logmgr_add_discretization_quantities(logmgr: LogManager, discr, dim):
     """Add all discretization quantities to the logmgr."""
     for quantity in ["pressure", "temperature"]:
         for op in ["min", "max", "norm"]:
-            logmgr.add_quantity(DependentDiscretizationBasedQuantity(
-                discr, eos, quantity, op))
+            logmgr.add_quantity(DiscretizationBasedQuantity(
+                discr, quantity, op))
     for quantity in ["mass", "energy"]:
         for op in ["min", "max", "norm"]:
-            logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
+            logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, quantity, op))
 
     for dim in range(dim):
         for op in ["min", "max", "norm"]:
-            logmgr.add_quantity(ConservedDiscretizationBasedQuantity(
+            logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, "momentum", op, dim=dim))
 
 
@@ -143,38 +150,30 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 # {{{ State handling
 
-def set_sim_state(mgr: LogManager, conserved_vars, dependent_vars) -> None:
+def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
     """Update the simulation state of all :class:`StateConsumer` of the log manager.
 
     Parameters
     ----------
     mgr
         The :class:`logpyle.LogManager` to set the state of.
-
-    conserved_vars
-        The conserved variables to the set the state to.
-
-    dependent_vars
-        The dependent variables to the set the state to.
     """
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
             if isinstance(gd.quantity, StateConsumer):
-                gd.quantity.set_sim_state(conserved_vars, dependent_vars)
+                gd.quantity.set_sim_state(dim, state, eos)
 
 
 class StateConsumer:
     """Base class for quantities that require a state for logging."""
 
     def __init__(self):
-        self.conserved_vars = None
-        self.dependent_vars = None
+        self.vars = None
 
-    def set_sim_state(self, conserved_vars, dependent_vars) -> None:
+    def set_sim_state(self, dim, state, eos) -> None:
         """Update the state vector of the object."""
-        self.conserved_vars = conserved_vars
-        self.dependent_vars = dependent_vars
+        self.vars = extract_vars(dim, state, eos)
 
 # }}}
 
@@ -187,8 +186,13 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     Possible rank aggregation operations (`op`) are: min, max, norm.
     """
 
-    def __init__(self, discr: Discretization, quantity: str, unit: str, op: str,
-                 name: str):
+    def __init__(self, discr: Discretization, quantity: str, op: str,
+                 unit: str = None, name: str = None, dim: int = None):
+        if unit is None:
+            unit = units_logging(quantity)
+
+        if name is None:
+            name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
 
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self)
@@ -196,6 +200,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         self.discr = discr
 
         self.quantity = quantity
+        self.dim = dim
 
         from functools import partial
 
@@ -221,91 +226,15 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
     def __call__(self):
         """Return the requested quantity."""
-        raise NotImplementedError
-
-
-class ConservedDiscretizationBasedQuantity(DiscretizationBasedQuantity):
-    """Logging support for conserved quantities.
-
-    See :meth:`~mirgecom.euler.split_conserved` for details.
-    """
-
-    def __init__(self, discr: Discretization, quantity: str, op: str,
-                 unit: str = None, dim: int = None, name: str = None):
-        if unit is None:
-            from warnings import warn
-            if quantity == "mass":
-                unit = "kg/m^3"
-            elif quantity == "energy":
-                unit = "J/m^3"
-            elif quantity == "momentum":
-                unit = "kg*m/s/m^3"
-            else:
-                unit = ""
-            warn(f"Logging had to guess units for '{quantity}': '{unit}'."
-                "It should not have to. Some other component should tell it.")
-
-        if dim is None and quantity == "momentum":
-            raise RuntimeError("Missing 'dim' parameter for dimensional "
-                              f"ConservedQuantity '{quantity}'.")
-
-        if dim is not None and quantity != "momentum":
-            raise RuntimeError("Cannot specify 'dim' parameter for non-dimensional "
-                              f"ConservedQuantity '{quantity}'.")
-
-        if name is None:
-            name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
-
-        super().__init__(discr, quantity, unit, op, name)
-
-        self.dim = dim
-
-    def __call__(self):
-        """Return the requested conserved quantity."""
-        if self.conserved_vars is None:
+        if self.vars is None:
             return None
 
-        cq = getattr(self.conserved_vars, self.quantity)
-        self.conserved_vars = None
+        quantity = getattr(self.vars, self.quantity)
 
         if self.dim is not None:  # momentum
-            return self._discr_reduction(cq[self.dim])
+            return self._discr_reduction(quantity[self.dim])
         else:  # mass, energy
-            return self._discr_reduction(cq)
-
-
-class DependentDiscretizationBasedQuantity(DiscretizationBasedQuantity):
-    """Logging support for dependent quantities (temperature, pressure)."""
-
-    def __init__(self, discr: Discretization, eos: GasEOS,
-                 quantity: str, op: str, unit: str = None, name: str = None):
-        if unit is None:
-            from warnings import warn
-            if quantity == "temperature":
-                unit = "K"
-            elif quantity == "pressure":
-                unit = "Pa"
-            else:
-                unit = ""
-            warn(f"Logging had to guess units for '{quantity}': '{unit}'."
-                "It should not have to. Some other component should tell it.")
-
-        if name is None:
-            name = f"{op}_{quantity}"
-
-        super().__init__(discr, quantity, unit, op, name)
-
-        self.eos = eos
-
-    def __call__(self):
-        """Return the requested dependent quantity."""
-        if self.dependent_vars is None:
-            return None
-
-        dv = self.dependent_vars
-        self.dependent_vars = None
-
-        return self._discr_reduction(getattr(dv, self.quantity))
+            return self._discr_reduction(quantity)
 
 # }}}
 

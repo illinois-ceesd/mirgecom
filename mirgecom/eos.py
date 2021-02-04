@@ -106,7 +106,7 @@ class GasEOS:
         raise NotImplementedError()
 
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
-        """Get an agglomerated array of the depedent variables."""
+        """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
             pressure=self.pressure(q),
             temperature=self.temperature(q),
