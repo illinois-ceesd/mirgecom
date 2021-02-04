@@ -329,15 +329,10 @@ def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> LogVector:
     cv = split_conserved(dim, state)
     dv = eos.dependent_vars(cv)
 
-    # # asdict() doesn't work on cv/dv
-    # from dataclasses import asdict
-    # name_to_field = asdict(dv)
-    # name_to_field.update(asdict(dv))
-    # return {name: (field, NAME_TO_UNITS[name], field)
-    #         for name, field in name_to_field.items()}
-
-    res = LogVector(cv.mass, cv.energy, cv.momentum, dv.temperature, dv.pressure)
-    return res
+    from mirgecom.utils import asdict_shallow
+    name_to_field = asdict_shallow(cv)
+    name_to_field.update(asdict_shallow(dv))
+    return name_to_field
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):

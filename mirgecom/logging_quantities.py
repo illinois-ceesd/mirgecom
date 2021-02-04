@@ -228,7 +228,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         if self.state_vars is None:
             return None
 
-        quantity = getattr(self.state_vars, self.quantity)
+        quantity = self.state_vars[self.quantity]
 
         if self.dim is not None:  # momentum
             return self._discr_reduction(quantity[self.dim])
