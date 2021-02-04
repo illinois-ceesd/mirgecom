@@ -1,3 +1,5 @@
+"""Demonstrate simple mass lump advection."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -56,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
+    """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
@@ -144,9 +147,9 @@ def main(ctx_factory=cl.create_some_context):
     #    if current_t != checkpoint_t:
     if rank == 0:
         logger.info("Checkpointing final state ...")
-        my_checkpoint(current_step, t=current_t,
-                      dt=(current_t - checkpoint_t),
-                      state=current_state)
+    my_checkpoint(current_step, t=current_t,
+                  dt=(current_t - checkpoint_t),
+                  state=current_state)
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")

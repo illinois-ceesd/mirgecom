@@ -29,8 +29,7 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import (
-    flat_obj_array, make_obj_array)
+from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.symbolic.primitives import TracePair
@@ -47,13 +46,13 @@ def _flux(discr, c, w_tpair):
 
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),
-        normal*make_obj_array([u.avg]),
+        normal*u.avg,
         )
 
     # upwind
     flux_weak += flat_obj_array(
         0.5*(u.ext-u.int),
-        0.5*normal*make_obj_array([np.dot(normal, v.ext-v.int)]),
+        0.5*normal*np.dot(normal, v.ext-v.int),
         )
 
     return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
@@ -67,7 +66,7 @@ def wave_operator(discr, c, w):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     c: float
-        the (constant) wave speed)
+        the (constant) wave speed
     w: numpy.ndarray
         an object array of DOF arrays, representing the state vector
 

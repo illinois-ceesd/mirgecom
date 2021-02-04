@@ -1,0 +1,4 @@
+MPI
+===
+
+.. automodule:: mirgecom.mpi
