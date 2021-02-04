@@ -81,8 +81,8 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
              str(queue.get_info(cl.command_queue_info.DEVICE)))
 
 
-def logmgr_add_discretization_quantities(logmgr: LogManager, discr, dim):
-    """Add all discretization quantities to the logmgr."""
+def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim):
+    """Add default discretization quantities to the logmgr."""
     for quantity in ["pressure", "temperature"]:
         for op in ["min", "max", "norm"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
