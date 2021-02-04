@@ -33,7 +33,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.eos import IdealSingleGas
@@ -243,7 +242,7 @@ class AdiabaticSlipBoundary:
             for j in range(dim):
                 tmp[j] = bndry_q.momentum[j][i]
             flip = np.dot(tmp, normal)
-            norm_flip = normal*make_obj_array([flip])
+            norm_flip = normal*flip
             tmp = tmp - 2.0*norm_flip
             for j in range(dim):
                 result[2+j][i] = -1.0*tmp[j]
