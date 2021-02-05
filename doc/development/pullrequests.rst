@@ -134,11 +134,17 @@ in progress and only a high-level review is requested.
 
 .. note::
 
-   Resources about reviewing pull requests can be found here:
+   Some thoughts and best practices regarding submitting your code for review can be found in this
+   article:
+
+   - `How to Make Your Code Reviewer Fall in Love with You <https://mtlynch.io/code-review-love/>`__
+   
+   A similar (but mirrored) set of concerns applies from the other direction. You will definitely
+   want to read these articles when you start reviewing other folks' code, but it may be
+   helpful to read them even before then to gain a better understanding of the process:
 
    - `How to Do Code Reviews Like a Human (Part One) <https://mtlynch.io/human-code-reviews-1/>`__
    - `How to Do Code Reviews Like a Human (Part Two) <https://mtlynch.io/human-code-reviews-2/>`__
-   - `How to Make Your Code Reviewer Fall in Love with You <https://mtlynch.io/code-review-love/>`__
 
 We use GitHub actions as the CI provider to test each pull request. The CI
 tests are triggered automatically when a pull request is created or updated.
