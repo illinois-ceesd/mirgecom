@@ -33,7 +33,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.wave import wave_operator
-# from mirgecom.integrators import rk4_step
+from mirgecom.integrators import rk4_step
 from meshmode.dof_array import thaw, freeze, DOFArray
 from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext, make_loopy_program
 import pyopencl.tools as cl_tools
@@ -382,12 +382,6 @@ def interior_trace_pair(discr, vec):
             i)
     return TracePair("int_faces", i, e)
 
-def rk4_step(y, t, h, f):
-    k1 = f(t, y)
-    k2 = f(t+h/2, y + h/2*k1)
-    k3 = f(t+h/2, y + h/2*k2)
-    k4 = f(t+h, y + h*k3)
-    return y + h/6*(k1 + 2*k2 + 2*k3 + k4)
 
 def wave_flux(actx, discr, c, w_tpair):
     u = w_tpair[0]
@@ -511,12 +505,12 @@ def main(use_profiling=False):
     A = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), fields)
 
     t = 0
-    t_final = 3
+    t_final = 1
     istep = 0
     while t < t_final:
         fields = A(fields)
 
-        print(istep, t)
+        print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
 
         t += dt
         istep += 1
