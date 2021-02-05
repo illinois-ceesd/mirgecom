@@ -29,6 +29,7 @@ from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 import pyopencl as cl
+import pyopencl.tools as cl_tools
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -67,7 +68,8 @@ def main(ctx_factory=cl.create_some_context):
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
 
