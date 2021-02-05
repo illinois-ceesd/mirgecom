@@ -93,7 +93,7 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, overwrite=False):
+                   s0=None, kappa=None, constant_cfl=False, comm=None, overwrite=False):
     """Check simulation health, status, viz dumps, and restart."""
     # TODO: Add restart
     do_viz = check_step(step=step, interval=nviz)
@@ -106,7 +106,8 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     dependent_vars = eos.dependent_vars(cv)
 
     from mirgecom.tag_cells import smoothness_indicator
-    tagedcells = smoothness_indicator(q[0], discr)
+    if s0 is not None and kappa is not None:
+        tagedcells = smoothness_indicator(q[0], discr, kappa=kappa, s0=s0)
 
     rank = 0
     if comm is not None:
@@ -125,13 +126,17 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         io_fields = [
             ("cv", cv),
             ("dv", dependent_vars),
-            ("tagged", tagedcells)
         ]
         if exact_soln is not None:
             exact_list = [
                 ("exact_soln", expected_state),
             ]
             io_fields.extend(exact_list)
+        if s0 is not None and kappa is not None:
+            tagged_list = [
+                ("tagged", tagedcells),
+            ]
+            io_fields.extend(tagged_list)
 
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)

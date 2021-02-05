@@ -73,7 +73,7 @@ def compute_smoothness_indicator():
     return knl
 
 
-def smoothness_indicator(u, discr):
+def smoothness_indicator(u, discr, kappa=1.0, s0=-6.0):
     """Calculate the smoothness indicator."""
     assert isinstance(u, DOFArray)
 
@@ -120,17 +120,12 @@ def smoothness_indicator(u, discr):
     # Take log10 of indicator
     indicator = actx.np.log10(indicator + 1.0e-12)
 
-    # No special meaning to these values
-    # Should be exposed as tuning parameters
-    kappa = 0.5
-    so = -7.0
-
     # Compute artificail viscosity percentage based on idicator and set parameters
-    yesnol = indicator > (so - kappa)
-    yesnou = indicator > (so + kappa)
+    yesnol = indicator > (s0 - kappa)
+    yesnou = indicator > (s0 + kappa)
     sin_indicator = actx.np.where(
         yesnol,
-        0.5 * (1.0 + actx.np.sin(np.pi * (indicator - so) / (2.0 * kappa))),
+        0.5 * (1.0 + actx.np.sin(np.pi * (indicator - s0) / (2.0 * kappa))),
         0.0 * indicator,
     )
     indicator = actx.np.where(yesnou, 1.0 + 0.0 * indicator, sin_indicator)
