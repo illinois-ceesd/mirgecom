@@ -125,7 +125,7 @@ the ``my_branch`` branch of meshmode.
 Reviewing/CI
 ------------
 
-Each pull requests for mirgecom needs one manual approval by a reviewer and
+Each pull request for mirgecom needs one manual approval by a reviewer and
 needs to pass the Continuous Integration (CI) tests before merging. For the
 manual reviews, please select at least one reviewer (someone that has
 knowledge about the code you are modifying) in the "Reviewers" box at the top
