@@ -4,6 +4,7 @@ numpy
 pytest
 pyvisfile
 pymetis
+cantera
 importlib-resources>=1.1.0; python_version < '3.9'
 
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
