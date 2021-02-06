@@ -62,4 +62,3 @@ def get_mechanism_cti(mechanism_name):
     with mech_file.open() as fp:
         mech_cti = fp.read()
     return(mech_cti)
-
