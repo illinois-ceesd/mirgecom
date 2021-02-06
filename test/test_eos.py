@@ -65,7 +65,7 @@ else:
 
 
 logger = logging.getLogger(__name__)
-mechdata = importlib_resources.files("mechanisms")
+mechdata = importlib_resources.files("mirgecom.mechanisms")
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
