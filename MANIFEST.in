@@ -1,2 +1,2 @@
-include mechanisms/*.cti
+graft mirgecom/mechanisms
 
