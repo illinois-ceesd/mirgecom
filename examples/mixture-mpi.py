@@ -55,18 +55,10 @@ from mirgecom.eos import PrometheusMixture
 # from mirgecom.prometheus import UIUCMechanism
 import cantera
 import pyrometheus as pyro
-import sys
-if sys.version_info < (3, 9):
-    # importlib.resources either doesn't exist or lacks the files()
-    # function, so use the PyPI version:
-    import importlib_resources
-else:
-    # importlib.resources has files(), so use that:
-    import importlib.resources as importlib_resources
-
+from mirgecom.mechutil import import_mechdata
 
 logger = logging.getLogger(__name__)
-mechdata = importlib_resources.files("mechanisms")
+mechdata = import_mechdata()
 
 
 @mpi_entry_point
