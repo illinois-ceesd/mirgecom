@@ -54,10 +54,8 @@ from mirgecom.eos import PrometheusMixture
 from mirgecom.euler import split_conserved, join_conserved
 import cantera
 import pyrometheus as pyro
-from mirgecom.mechutil import import_mechdata
 
 logger = logging.getLogger(__name__)
-mechdata = import_mechdata()
 
 
 @mpi_entry_point
@@ -104,10 +102,10 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
 
-    # Use Cantera for initialization (and soon for pyro code gen)
-    mech_file = mechdata / "uiuc.cti"
-    with mech_file.open() as fp:
-        mech_cti = fp.read()
+    # Use Cantera for initialization
+    # -- Pick up a CTI for the thermochemistry config
+    from mirgecom.mechutil import get_mechanism_cti
+    mech_cti = get_mechanism_cti("uiuc")
 
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     nspecies = cantera_soln.n_species

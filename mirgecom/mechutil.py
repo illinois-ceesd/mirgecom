@@ -53,3 +53,13 @@ def get_mechanism_path(mechanism_name):
 def import_mechdata():
     """Import the mechanism data as a module data resource."""
     return importlib_resources.files(get_mechanisms_path())
+
+
+def get_mechanism_cti(mechanism_name):
+    """Get the contents of a mechanism CTI file."""
+    mech_data = import_mechdata()
+    mech_file = mech_data / get_mechanism_file_name(mechanism_name)
+    with mech_file.open() as fp:
+        mech_cti = fp.read()
+    return(mech_cti)
+

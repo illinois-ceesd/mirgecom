@@ -53,10 +53,8 @@ from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from mirgecom.mechutil import import_mechdata
 
 logger = logging.getLogger(__name__)
-mechdata = import_mechdata()
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
@@ -89,15 +87,14 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
-    # Hand-port chemistry works OK
-    mech_file = mechdata / f"{mechname}.cti"
-    with mech_file.open() as fp:
-        mech_cti = fp.read()
-
+    # Pyrometheus initialization
+    from mirgecom.mechutil import get_mechanism_cti
+    mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+
     nspecies = prometheus_mechanism.num_species
-    print(f"PrometheusMixture::NumSpecies = {nspecies}")
+    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
 
     press0 = 101500.0
     temp0 = 300.0
@@ -209,14 +206,12 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
-    # Hand-port works OK
-    #  prometheus_mechanism = UIUCMemchanism(actx.np)
-    mech_file = mechdata / f"{mechname}.cti"
-    with mech_file.open() as fp:
-        mech_cti = fp.read()
-
+    # Pyrometheus initialization
+    from mirgecom.mechutil import get_mechanism_cti
+    mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
@@ -308,13 +303,12 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     nodes = thaw(actx, discr.nodes())
     ones = (1.0 + nodes[0]) - nodes[0]
 
-    mech_file = mechdata / f"{mechname}.cti"
-    with mech_file.open() as fp:
-        mech_cti = fp.read()
-
+    # Pyrometheus initialization
+    from mirgecom.mechutil import get_mechanism_cti
+    mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    #    pyro_obj = Thermochemistry(actx.np)
+
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
 

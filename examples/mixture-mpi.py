@@ -52,13 +52,10 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 
-# from mirgecom.prometheus import UIUCMechanism
 import cantera
 import pyrometheus as pyro
-from mirgecom.mechutil import import_mechdata
 
 logger = logging.getLogger(__name__)
-mechdata = import_mechdata()
 
 
 @mpi_entry_point
@@ -105,12 +102,12 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
     casename = "uiuc_mixture"
-    mech_file = mechdata / "uiuc.cti"
-    with mech_file.open() as fp:
-        mech_cti = fp.read()
 
+    from mirgecom.mechutil import get_mechanism_cti
+    mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+
     nspecies = prometheus_mechanism.num_species
     eos = PrometheusMixture(prometheus_mechanism)
 
