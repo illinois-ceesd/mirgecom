@@ -1,1 +1,2 @@
-graft mechanisms
+include mechanisms/*.cti
+
