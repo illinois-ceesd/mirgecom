@@ -52,20 +52,12 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PrometheusMixture
 from mirgecom.euler import split_conserved, join_conserved
-import sys
 import cantera
 import pyrometheus as pyro
-if sys.version_info < (3, 9):
-    # importlib.resources either doesn't exist or lacks the files()
-    # function, so use the PyPI version:
-    import importlib_resources
-else:
-    # importlib.resources has files(), so use that:
-    import importlib.resources as importlib_resources
-
+from mirgecom.mechutil import import_mechdata
 
 logger = logging.getLogger(__name__)
-mechdata = importlib_resources.files("mirgecom.mechanisms")
+mechdata = import_mechdata()
 
 
 @mpi_entry_point

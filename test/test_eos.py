@@ -24,8 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-import sys
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
@@ -55,17 +53,10 @@ from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-if sys.version_info < (3, 9):
-    # importlib.resources either doesn't exist or lacks the files()
-    # function, so use the PyPI version:
-    import importlib_resources
-else:
-    # importlib.resources has files(), so use that:
-    import importlib.resources as importlib_resources
-
+from mirgecom.mechutil import import_mechdata
 
 logger = logging.getLogger(__name__)
-mechdata = importlib_resources.files("mirgecom.mechanisms")
+mechdata = import_mechdata()
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
