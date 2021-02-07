@@ -53,8 +53,11 @@ def get_mechanism_file_name(mechanism_name: str) -> str:
 def import_mechdata():
     """Import the mechanism data as a mechanism data resource.
 
-    Returns: Traversable `importlib.resources` object
-        representing the mechanism data container (think directory).
+    Returns
+    -------
+    :class:`importlib.abc.Traversable`
+        Object of type :class:`importlib.abc.Traversable` representing the container
+        (think directory) of the thermochemistry mechanism data (think CTI files).
     """
     return importlib_resources.files(get_mechanisms_pkgname())
 
