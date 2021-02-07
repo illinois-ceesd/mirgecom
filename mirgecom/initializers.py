@@ -38,10 +38,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
@@ -210,13 +207,16 @@ class Vortex2D:
         expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
+        velocity = make_obj_array([u, v])
         mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
                 * expterm ** 2) ** (1 / (gamma - 1))
+        momentum = mass * velocity
         p = mass ** gamma
 
-        e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
+        energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return flat_obj_array(mass, e, mass * u, mass * v)
+        return join_conserved(dim=2, mass=mass, energy=energy,
+                              momentum=momentum)
 
 
 class SodShock1D:
@@ -307,7 +307,8 @@ class SodShock1D:
             ]
         )
 
-        return flat_obj_array(mass, energy, mom)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
 
 class Lump:
@@ -412,7 +413,7 @@ class Lump:
         mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return flat_obj_array(mass, energy, mom)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -452,7 +453,8 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs)
 
 
 class MulticomponentLump:
@@ -585,7 +587,8 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
-        return flat_obj_array(mass, energy, mom, species_mass)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -623,7 +626,8 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
-        return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=specrhs)
 
 
 class AcousticPulse:
@@ -801,4 +805,5 @@ class Uniform:
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
         yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=yrhs)
