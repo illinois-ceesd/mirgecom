@@ -1,4 +1,3 @@
-graft mirgecom/mechanisms
-global-exclude *.py[cod]
+include mirgecom/mechanisms/*.cti
 
 
