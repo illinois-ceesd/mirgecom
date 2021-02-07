@@ -1,4 +1,10 @@
-"""Utilities for managing thermochemistry mechanisms."""
+""":mod:`mirgecom.mechanisms`: Utilities for managing thermochemistry mechanisms.
+
+.. autofunction:: get_mechanisms_pkgname
+.. autofunction:: get_mechanism_file_name
+.. autofunction:: get_mechanism_cti
+.. autofunction:: import_mechdata
+"""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -34,8 +40,8 @@ else:
     import importlib.resources as importlib_resources
 
 
-def get_mechanisms_path():
-    """Get central location for thermochemistry mechanism data."""
+def get_mechanisms_pkgname():
+    """Get a qualified package name for the location of mechanism data."""
     return("mirgecom.mechanisms")
 
 
@@ -44,15 +50,13 @@ def get_mechanism_file_name(mechanism_name):
     return(f"{mechanism_name}.cti")
 
 
-def get_mechanism_path(mechanism_name):
-    """Get the full path to a mechanism file."""
-    mechfile_name = get_mechanism_file_name(mechanism_name)
-    return(f"{get_mechanisms_path()}/{mechfile_name}")
-
-
 def import_mechdata():
-    """Import the mechanism data as a module data resource."""
-    return importlib_resources.files(get_mechanisms_path())
+    """Import the mechanism data as a mechanism data resource.
+
+    Returns: Traversable `importlib.resources` object
+        representing the mechanism data container (think directory).
+    """
+    return importlib_resources.files(get_mechanisms_pkgname())
 
 
 def get_mechanism_cti(mechanism_name):
