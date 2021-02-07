@@ -103,7 +103,8 @@ def main(ctx_factory=cl.create_some_context):
     nodes = thaw(actx, discr.nodes())
     casename = "uiuc_mixture"
 
-    from mirgecom.mechutil import get_mechanism_cti
+    # Pyrometheus initialization
+    from mirgecom.mechanisms import get_mechanism_cti
     mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)

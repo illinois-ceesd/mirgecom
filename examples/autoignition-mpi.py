@@ -104,7 +104,7 @@ def main(ctx_factory=cl.create_some_context):
 
     # Use Cantera for initialization
     # -- Pick up a CTI for the thermochemistry config
-    from mirgecom.mechutil import get_mechanism_cti
+    from mirgecom.mechanisms import get_mechanism_cti
     mech_cti = get_mechanism_cti("uiuc")
 
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)

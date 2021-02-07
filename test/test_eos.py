@@ -42,7 +42,6 @@ from meshmode.array_context import (  # noqa
 
 import cantera
 import pyrometheus as pyro
-# from mirgecom.prometheus import UIUCMechanism
 from mirgecom.eos import IdealSingleGas, PrometheusMixture
 from mirgecom.initializers import (
     Vortex2D, Lump,
@@ -53,6 +52,7 @@ from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+from mirgecom.mechanisms import get_mechanism_cti
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     nodes = thaw(actx, discr.nodes())
 
     # Pyrometheus initialization
-    from mirgecom.mechutil import get_mechanism_cti
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
@@ -207,7 +206,6 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     nodes = thaw(actx, discr.nodes())
 
     # Pyrometheus initialization
-    from mirgecom.mechutil import get_mechanism_cti
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
@@ -304,7 +302,6 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
     ones = (1.0 + nodes[0]) - nodes[0]
 
     # Pyrometheus initialization
-    from mirgecom.mechutil import get_mechanism_cti
     mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)

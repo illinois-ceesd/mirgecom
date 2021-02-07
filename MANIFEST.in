@@ -1,3 +1,4 @@
 graft mirgecom/mechanisms
+global-exclude *.py[cod]
 
 
