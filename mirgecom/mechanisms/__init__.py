@@ -40,12 +40,12 @@ else:
     import importlib.resources as importlib_resources
 
 
-def get_mechanisms_pkgname():
+def get_mechanisms_pkgname() -> str:
     """Get a qualified package name for the location of mechanism data."""
     return("mirgecom.mechanisms")
 
 
-def get_mechanism_file_name(mechanism_name):
+def get_mechanism_file_name(mechanism_name: str) -> str:
     """Form the CTI file name for a mechanism."""
     return(f"{mechanism_name}.cti")
 
@@ -59,7 +59,7 @@ def import_mechdata():
     return importlib_resources.files(get_mechanisms_pkgname())
 
 
-def get_mechanism_cti(mechanism_name):
+def get_mechanism_cti(mechanism_name: str) -> str:
     """Get the contents of a mechanism CTI file."""
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)

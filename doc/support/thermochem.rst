@@ -1,4 +1,4 @@
-Thermochemical mechanism data
-=============================
+Thermochemistry mechanism management
+====================================
 
 .. automodule:: mirgecom.mechanisms
