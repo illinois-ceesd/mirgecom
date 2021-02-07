@@ -308,9 +308,7 @@ class SodShock1D:
             ]
         )
 
-        from mirgecom.euler import join_conserved
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+        return flat_obj_array(mass, energy, mom)
 
 
 class Lump:
@@ -413,12 +411,9 @@ class Lump:
         mass = expterm + self._rho0
         gamma = eos.gamma()
         mom = self._velocity * mass
-        gamma = eos.gamma()
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        from mirgecom.euler import join_conserved
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+        return flat_obj_array(mass, energy, mom)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -458,9 +453,7 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        from mirgecom.euler import join_conserved
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs)
+        return flat_obj_array(massrhs, energyrhs, momrhs)
 
 
 class MulticomponentLump:
@@ -593,9 +586,7 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
-        from mirgecom.euler import join_conserved
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, species_mass=species_mass)
+        return flat_obj_array(mass, energy, mom, species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -618,6 +609,7 @@ class MulticomponentLump:
 
         mass = 0 * nodes[0] + self._rho0
         mom = self._velocity * mass
+
         v = mom / mass
         massrhs = 0 * mass
         energyrhs = 0 * mass
@@ -632,9 +624,7 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
-        from mirgecom.euler import join_conserved
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs, species_mass=specrhs)
+        return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
 
 
 class MixtureInitializer:
@@ -704,7 +694,6 @@ class MixtureInitializer:
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 
-        from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
 
@@ -884,6 +873,4 @@ class Uniform:
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
         yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        from mirgecom.euler import join_conserved
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs, species_mass=yrhs)
+        return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)
