@@ -221,7 +221,7 @@ def inviscid_flux(discr, eos, q):
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim) * p,
             species_mass=(  # reshaped: (nspecies, dim)
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
@@ -277,7 +277,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     return flux_weak
 
 
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+def inviscid_operator(discr, eos, boundaries, q, t=0.0, sources=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -308,6 +308,9 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
+
+    sources
+        Dictionary of source functions, one for each source
 
     Returns
     -------
@@ -341,10 +344,13 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
         for part_pair in cross_rank_trace_pairs(discr, q)
     )
 
+    source_terms = 0
+    if sources is not None:
+        source_terms = sum(source(discr, q=q, eos=eos) for source in sources)
+
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux)
-    )
+                                + partition_boundary_flux)) + source_terms
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
