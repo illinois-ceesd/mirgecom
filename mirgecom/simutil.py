@@ -127,7 +127,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                 ("exact_soln", expected_state),
             ]
             io_fields.extend(exact_list)
-        if io_fields is not None:
+        if viz_fields is not None:
             io_fields.extend(viz_fields)
 
         from mirgecom.io import make_rank_fname, make_par_fname
