@@ -93,7 +93,8 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False):
+                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
+                   vis_timer=None):
     """Check simulation health, status, viz dumps, and restart."""
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
