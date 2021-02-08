@@ -28,9 +28,3 @@ classes to describe how quantities for logging are calculated. For mirgecom, the
 .. automodule:: mirgecom.logging_quantities
 
 An overview of how to use logpyle is given in the :any:`Logpyle documentation <logpyle>`.
-
-.. note::
-
-   Note that activating logging currently has an overhead of roughly 0.2
-   seconds per timestep at the time of this writing, in addition to any
-   overhead from the kernel profiling.
