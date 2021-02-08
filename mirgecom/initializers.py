@@ -9,8 +9,7 @@ Solution Initializers
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. automethod: _make_pulse
-.. automethod: _make_uniform_flow
+.. automethod: make_pulse
 """
 
 __copyright__ = """
@@ -44,56 +43,7 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 
 
-def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
-                       velocity=None, eos=IdealSingleGas()):
-    r"""Construct uniform, constant flow.
-
-    Construct a uniform, constant flow from mass, energy, pressure, and
-    an EOS object.
-
-    Parameters
-    ----------
-    x_vec: np.ndarray
-        Nodal positions
-    mass: float
-        Value to set $\rho$
-    energy: float
-        Optional value to set $\rho{E}$
-    pressure: float
-        Value to use for calculating $\rho{E}$
-    velocity: np.ndarray
-        Optional constant velocity to set $\rho\mathbf{V}$
-
-    Returns
-    -------
-    q: Object array of DOFArrays
-        Agglomerated object array with the uniform flow
-    """
-    dim = len(x_vec)
-    if velocity is None:
-        velocity = np.zeros(shape=(dim,))
-
-    _rho = mass
-    _p = pressure
-    _velocity = velocity
-    _gamma = eos.gamma()
-
-    mom0 = _velocity * _rho
-    e0 = _p / (_gamma - 1.0)
-    ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
-
-    x_rel = x_vec[0]
-    zeros = 0.0*x_rel
-    ones = zeros + 1.0
-
-    mass = zeros + _rho
-    mom = mom0 * ones
-    energy = e0 + ke0 + zeros
-
-    return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
-
-
-def _make_pulse(amp, r0, w, r):
+def make_pulse(amp, r0, w, r):
     r"""Create a Gaussian pulse.
 
     The Gaussian pulse is defined by:
