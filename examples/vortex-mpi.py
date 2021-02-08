@@ -54,7 +54,7 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer
-import mirgecom.euler
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (initialize_logmgr,
     logmgr_add_default_discretization_quantities, logmgr_add_device_name)
@@ -70,7 +70,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     comm = MPI.COMM_WORLD
 
     logmgr = initialize_logmgr(use_logmgr, use_profiling,
-        mirgecom.euler.extract_vars_for_logging, mirgecom.euler.units_for_logging,
+        extract_vars_for_logging, units_for_logging,
         filename="vortex.sqlite", mode="wu", mpi_comm=comm)
 
     cl_ctx = ctx_factory()
