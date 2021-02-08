@@ -42,12 +42,12 @@ else:
 
 def get_mechanisms_pkgname() -> str:
     """Get a qualified package name for the location of mechanism data."""
-    return("mirgecom.mechanisms")
+    return "mirgecom.mechanisms"
 
 
 def get_mechanism_file_name(mechanism_name: str) -> str:
     """Form the CTI file name for a mechanism."""
-    return(f"{mechanism_name}.cti")
+    return f"{mechanism_name}.cti"
 
 
 def import_mechdata():
@@ -68,4 +68,4 @@ def get_mechanism_cti(mechanism_name: str) -> str:
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
     with mech_file.open() as fp:
         mech_cti = fp.read()
-    return(mech_cti)
+    return mech_cti
