@@ -9,6 +9,7 @@ Solution Initializers
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
+.. autoclass:: MixtureInitializer
 .. automethod: _make_pulse
 .. automethod: _make_uniform_flow
 """
@@ -807,3 +808,71 @@ class Uniform:
 
         return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=yrhs)
+
+
+class MixtureInitializer:
+    r"""Solution initializer for multi-species mixture.
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+    def __init__(
+            self, *, numdim=3, nspecies=0,
+            pressure=101500.0, temperature=300.0,
+            massfractions=None, velocity=None,
+    ):
+        r"""Initialize mixture parameters.
+        Parameters
+        ----------
+        numdim: int
+            specifies the number of dimensions for the lump
+        nspeces: int
+            specifies the number of mixture species
+        pressure: float
+            specifies the value of :math:`p_0`
+        temperature: float
+            specifies the  value of :math:`T_0`
+        massfractions: numpy.ndarray
+            specifies the mass fraction for each species
+        velocity: numpy.ndarray
+            fixed uniform flow velocity used for kinetic energy
+        """
+        if velocity is None:
+            velocity = np.zeros(shape=(numdim,))
+        if massfractions is None:
+            if nspecies > 0:
+                massfractions = np.zeros(shape=(nspecies,))
+        self._nspecies = nspecies
+        self._dim = numdim
+        self._velocity = velocity
+        self._pressure = pressure
+        self._temperature = temperature
+        self._massfracs = massfractions
+
+    def __call__(self, x_vec, eos, *, t=0.0):
+        """
+        Create the mixture state at locations *x_vec* (t is ignored).
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Coordinates at which solution is desired
+        t: float
+            Time is ignored by this solution intitializer
+        """
+        assert len(x_vec) == self._dim
+
+        ones = (1.0 + x_vec[0]) - x_vec[0]
+        pressure = self._pressure * ones
+        temperature = self._temperature * ones
+        velocity = make_obj_array([self._velocity[i] * ones
+                                   for i in range(self._dim)])
+        y = make_obj_array([self._massfracs[i] * ones
+                            for i in range(self._nspecies)])
+        mass = eos.get_density(pressure, temperature, y)
+        specmass = mass * y
+        mom = mass * velocity
+        internal_energy = eos.get_internal_energy(temperature, y)
+        kinetic_energy = 0.5 * np.dot(velocity, velocity)
+        energy = mass * (internal_energy + kinetic_energy)
+
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=specmass)
