@@ -827,7 +827,7 @@ class MixtureInitializer:
         Parameters
         ----------
         dim: int
-            specifies the number of dimensions for the lump
+            specifies the number of dimensions for the solution
         nspeces: int
             specifies the number of mixture species
         pressure: float
