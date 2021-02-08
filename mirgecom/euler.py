@@ -5,7 +5,7 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{S}
+    (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
 where:
 
@@ -13,7 +13,6 @@ where:
 -  flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
 -  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
--  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_s]$
 -  vector of species mass fractions ${Y}_\alpha$,
    with $1\le\alpha\le\mathtt{nspecies}$.
 
@@ -287,7 +286,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
 
         .. math::
 
-            \dot{\mathbf{q}} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+            \dot{\mathbf{q}} = - \nabla\cdot\mathbf{F} +
                 (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
     Parameters
