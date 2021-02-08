@@ -42,7 +42,7 @@ from meshmode.array_context import (  # noqa
 
 import cantera
 import pyrometheus as pyro
-from mirgecom.eos import IdealSingleGas, PrometheusMixture
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
@@ -243,7 +243,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
               f"{pyro_p}, {pyro_t}, {pyro_e})")
 
-        eos = PrometheusMixture(prometheus_mechanism)
+        eos = PyrometheusMixture(prometheus_mechanism)
         initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
                                          pressure=pyro_p, temperature=pyro_t,
                                          massfractions=y0s, velocity=velocity)
