@@ -254,7 +254,6 @@ class PyrometheusMixture(GasEOS):
 
     .. automethod:: __init__
     .. automethod:: get_density
-    .. automethod:: get_internal_energy
     .. automethod:: get_species_molecular_weights
     .. automethod:: get_production_rates
     .. automethod:: get_species_source_terms
