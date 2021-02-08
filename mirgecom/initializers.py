@@ -816,6 +816,7 @@ class MixtureInitializer:
     .. automethod:: __init__
     .. automethod:: __call__
     """
+
     def __init__(
             self, *, numdim=3, nspecies=0,
             pressure=101500.0, temperature=300.0,
@@ -838,7 +839,6 @@ class MixtureInitializer:
         velocity: numpy.ndarray
             fixed uniform flow velocity used for kinetic energy
         """
-
         if velocity is None:
             velocity = np.zeros(shape=(numdim,))
         if massfractions is None:
