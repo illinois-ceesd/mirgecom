@@ -9,6 +9,7 @@ manage the relationships between and among state and thermodynamic variables.
 .. autoclass:: EOSDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: IdealSingleGas
+.. autoclass:: PyrometheusMixture
 """
 
 __copyright__ = """
@@ -229,3 +230,211 @@ class IdealSingleGas(GasEOS):
         """
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
+
+
+class PyrometheusMixture(GasEOS):
+    r"""Ideal gas mixture (:math:`p = \bar{\rho}{R}_\mathtt{mix}{T}`).
+
+    This is the *Pyrometheus*-based EOS. Please refer to the documentation of
+    *Pyrometheus* for :any:`implementation details <pyrometheus>`.
+    Users should take care to match solution initialization with the appropriate
+    units that are used in the user-provided Cantera mechanism input CTI files.
+
+    Each interface call expects that the agglomerated object array representing
+    the state vector ($q$), contains at least the canonical conserved
+    quantities mass ($\rho$), energy ($\rho{E}$), and momentum
+    ($\rho\vec{V}$) and the vector of mass fractions for each species
+    ($Y_\alpha$).
+
+    .. automethod:: __init__
+    .. automethod:: get_density
+    .. automethod:: get_species_molecular_weights
+    .. automethod:: get_production_rates
+    .. automethod:: get_species_source_terms
+    .. automethod:: get_internal_energy
+    .. automethod:: species_fractions
+    .. automethod:: total_energy
+    .. automethod:: mixture_gamma
+
+    Inherits from (and implements) :class:`GasEOS`.
+    """
+
+    def __init__(self, pyrometheus_mech, tguess=300.0):
+        """Initialize Pyrometheus-based EOS with mechanism class."""
+        self._pyrometheus_mech = pyrometheus_mech
+        self._gamma = 1.4
+        self._tguess = tguess
+
+    def gamma(self):   # NOTE: Need help with interface
+        """Get mixture-averaged specific heat ratio for mixture Cp/Cv.
+
+        .. note::
+            This routine will return the *mixture* averaged
+            gamma when it is implemented in _Pyrometheus_.
+        """
+        return self._gamma
+
+    def mixture_gamma(self, cv: ConservedVars):
+        r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_v}$.
+
+        .. note::
+            This routine will return the **mixture averaged**
+            gamma when it is implemented in _Pyrometheus_.
+        """
+        return self.gamma()
+
+    def gas_const(self):
+        r"""Get specific gas constant R.
+
+        The mixture gas constant, $R_\mathtt{mix}$, is calculated
+        as $R_\mathtt{mix} = \sum{Y_\alpha R_\alpha}$ by the *Pyrometheus*
+        mechanism provided by the user.
+
+        .. note::
+            This routine will return the **mixture averaged**
+            gas constant when it is implemented in *Pyrometheus*.
+        """
+        return self._pyrometheus_mech.gas_constant
+
+    def kinetic_energy(self, cv: ConservedVars):
+        r"""Get kinetic (i.e. not internal) energy of gas.
+
+        The kinetic energy is calculated as:
+
+        .. math::
+
+            k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        mom = cv.momentum
+        return (0.5 * np.dot(mom, mom) / cv.mass)
+
+    def internal_energy(self, cv: ConservedVars):
+        r"""Get internal thermal energy of gas.
+
+        The internal energy ($e$) is calculated as:
+
+        .. math::
+
+            e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        return (cv.energy - self.kinetic_energy(cv))
+
+    def get_density(self, pressure, temperature, species_fractions):
+        r"""Get the density from pressure, temperature, and species fractions (Y).
+
+        The gas density $\rho$ is calculated from pressure, temperature and $R$ as:
+
+        .. math::
+
+            \rho = \frac{p}{R T}
+        """
+        return self._pyrometheus_mech.get_density(pressure, temperature,
+                                                  species_fractions)
+
+    def get_internal_energy(self, temperature, species_fractions):
+        r"""Get the gas thermal energy from temperature, and species fractions (Y).
+
+        The gas internal energy $e$ is calculated from:
+
+        .. math::
+
+            e = R T \sum{Y_\alpha h_\alpha}
+        """
+        return self._pyrometheus_mech.get_mixture_internal_energy_mass(
+            temperature, species_fractions)
+
+    def get_species_molecular_weights(self):
+        """Get the species molecular weights."""
+        return self._pyrometheus_mech.wts
+
+    def get_production_rates(self, cv: ConservedVars):
+        """Get the production rate for each species."""
+        temperature = self.temperature(cv)
+        y = self.species_fractions(cv)
+        return self._pyrometheus_mech.get_net_production_rates(cv.mass,
+                                                              temperature,
+                                                              y)
+
+    def species_fractions(self, cv: ConservedVars):
+        r"""Get species fractions $Y_\alpha$ from species mass density."""
+        return cv.species_mass / cv.mass
+
+    def pressure(self, cv: ConservedVars):
+        r"""Get thermodynamic pressure of the gas.
+
+        Gas pressure ($p$) is calculated from the internal energy ($e$) as:
+
+        .. math::
+
+            p = (\gamma - 1)e
+        """
+        temperature = self.temperature(cv)
+        y = self.species_fractions(cv)
+        return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
+
+    def sound_speed(self, cv: ConservedVars):
+        r"""Get the speed of sound in the gas.
+
+        The speed of sound ($c$) is calculated as:
+
+        .. math::
+
+            c = \sqrt{\frac{\gamma{p}}{\rho}}
+        """
+        actx = cv.mass.array_context
+
+        p = self.pressure(cv)
+        c2 = self._gamma / cv.mass * p
+        return actx.np.sqrt(c2)
+
+    def temperature(self, cv: ConservedVars):
+        r"""Get the thermodynamic temperature of the gas.
+
+        The thermodynamic temperature ($T$) is calculated from
+        the internal energy ($e$) and specific gas constant ($R_s$)
+        as:
+
+        .. math::
+
+            T = \frac{(\gamma - 1)e}{R_s \rho}
+        """
+        y = self.species_fractions(cv)
+        e = self.internal_energy(cv) / cv.mass
+        return self._pyrometheus_mech.get_temperature(e, self._tguess, y, True)
+
+    def total_energy(self, cv, pressure):
+        r"""
+        Get gas total energy from mass, pressure, and momentum.
+
+        The total energy density ($\rho E$) is calculated from
+        the mass density ($\rho$) , pressure ($p$) , and
+        momentum ($\rho\vec{V}$) as:
+
+        .. math::
+
+            \rho E = \frac{p}{(\gamma - 1)} +
+            \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
+
+        .. note::
+
+            The total_energy function computes cv.energy from pressure,
+            mass, and momentum in this case. In general in the EOS we need
+            DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
+            inversion interfaces.
+        """
+        return (pressure / (self._gamma - 1.0)
+                + self.kinetic_energy(cv))
+
+    def get_species_source_terms(self, cv: ConservedVars):
+        """Get the species mass source terms to be used on the RHS."""
+        omega = self.get_production_rates(cv)
+        w = self.get_species_molecular_weights()
+        dim = len(cv.momentum)
+        species_sources = w * omega
+        rho_source = 0 * cv.mass
+        mom_source = 0 * cv.momentum
+        energy_source = 0 * cv.energy
+
+        from mirgecom.euler import join_conserved
+        return join_conserved(dim, rho_source, energy_source, mom_source,
+                              species_sources)
