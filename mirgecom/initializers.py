@@ -818,7 +818,7 @@ class MixtureInitializer:
     """
 
     def __init__(
-            self, *, numdim=3, nspecies=0,
+            self, *, dim=3, nspecies=0,
             pressure=101500.0, temperature=300.0,
             massfractions=None, velocity=None,
     ):
@@ -826,7 +826,7 @@ class MixtureInitializer:
 
         Parameters
         ----------
-        numdim: int
+        dim: int
             specifies the number of dimensions for the lump
         nspeces: int
             specifies the number of mixture species
@@ -840,12 +840,12 @@ class MixtureInitializer:
             fixed uniform flow velocity used for kinetic energy
         """
         if velocity is None:
-            velocity = np.zeros(shape=(numdim,))
+            velocity = np.zeros(shape=(dim,))
         if massfractions is None:
             if nspecies > 0:
                 massfractions = np.zeros(shape=(nspecies,))
         self._nspecies = nspecies
-        self._dim = numdim
+        self._dim = dim
         self._velocity = velocity
         self._pressure = pressure
         self._temperature = temperature
