@@ -813,6 +813,10 @@ class Uniform:
 class MixtureInitializer:
     r"""Solution initializer for multi-species mixture.
 
+    This initializer creates a physics-consistent mixture solution
+    given an initial thermal state (pressure, temperature) and a
+    mixture-compatible EOS.
+
     .. automethod:: __init__
     .. automethod:: __call__
     """
@@ -859,6 +863,11 @@ class MixtureInitializer:
         ----------
         x_vec: numpy.ndarray
             Coordinates at which solution is desired
+        eos:
+            Mixture-compatible equation-of-state object must provide
+            these functions:
+            `eos.get_density`
+            `eos.get_internal_energy`
         t: float
             Time is ignored by this solution intitializer
         """
