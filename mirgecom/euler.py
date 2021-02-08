@@ -219,8 +219,8 @@ def inviscid_flux(discr, eos, q):
     return join_conserved(dim,
             mass=mom,
             energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim) * p,
-            species_mass=(  # reshaped for proper broadcast: (nspecies, dim)
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+            species_mass=(  # reshaped: (nspecies, dim)
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
@@ -341,7 +341,8 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
 
     return discr.inverse_mass(
         dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux))
+                                + partition_boundary_flux)
+    )
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
