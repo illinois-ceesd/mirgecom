@@ -341,12 +341,13 @@ def get_inviscid_cfl(discr, eos, dt, q):
     return dt / wanted_dt
 
 
+# By default, run unitless
 NAME_TO_UNITS = {
-    "mass": "kg/m^3",
-    "energy": "J/m^3",
-    "momentum": "kg*m/s/m^3",
-    "temperature": "K",
-    "pressure": "Pa"
+    "mass": "",
+    "energy": "",
+    "momentum": "",
+    "temperature": "",
+    "pressure": ""
 }
 
 
