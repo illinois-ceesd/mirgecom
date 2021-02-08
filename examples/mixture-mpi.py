@@ -50,7 +50,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import MixtureInitializer
-from mirgecom.eos import PrometheusMixture
+from mirgecom.eos import PyrometheusMixture
 
 # from mirgecom.prometheus import UIUCMechanism
 import cantera
@@ -107,7 +107,7 @@ def main(ctx_factory=cl.create_some_context):
     sol = cantera.Solution("uiuc.cti", "gas")
     prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
     nspecies = prometheus_mechanism.num_species
-    eos = PrometheusMixture(prometheus_mechanism)
+    eos = PyrometheusMixture(prometheus_mechanism)
 
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):

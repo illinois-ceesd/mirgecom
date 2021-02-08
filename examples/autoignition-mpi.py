@@ -50,14 +50,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
-from mirgecom.eos import PrometheusMixture
-from mirgecom.euler import split_conserved, join_conserved
-# from mirgecom.prometheus import (
-#    UIUCMechanism,
-#    UIUCMechanism2,
-#     UIUCMechanism3,
-#     UIUCMechanism4,
-# )
+from mirgecom.eos import PyrometheusMixture
+from mirgecom.euler import split_conserved
 
 import cantera
 import pyrometheus as pyro
@@ -123,7 +117,6 @@ def main(ctx_factory=cl.create_some_context):
     x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
     x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
-    # one_atm = cantera.one_atm
     one_atm = 101325.0
 
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
@@ -132,9 +125,8 @@ def main(ctx_factory=cl.create_some_context):
     can_p = cantera_soln.P
 
     casename = "autoignition"
-    # prometheus_mechanism = UIUCMechanism4(actx.np)
     prometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PrometheusMixture(prometheus_mechanism, tguess=init_temperature)
+    eos = PyrometheusMixture(prometheus_mechanism, tguess=init_temperature)
 
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
@@ -154,18 +146,6 @@ def main(ctx_factory=cl.create_some_context):
     #    print(f"Initial Y: {cv.mass_fractions / cv.mass}")
     #    print(f"Initial DV pressure: {eos.pressure(cv)}")
     #    print(f"Initial DV temperature: {eos.temperature(cv)}")
-
-    def my_chem_sources(discr, q, eos):
-        cv = split_conserved(dim, q)
-        omega = eos.get_production_rates(cv)
-        w = eos.get_species_molecular_weights()
-        species_sources = w * omega
-        rho_source = 0 * cv.mass
-        mom_source = 0 * cv.momentum
-        energy_source = 0 * cv.energy
-        return join_conserved(dim, rho_source, energy_source, mom_source,
-                              species_sources)
-    sources = {my_chem_sources}
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -196,9 +176,10 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos,
-                                 sources=sources)
+        cv = split_conserved(dim, state)
+        return (inviscid_operator(discr, q=state, t=t,
+                                 boundaries=boundaries, eos=eos)
+                + eos.get_species_source_terms(cv))
 
     def my_checkpoint(step, t, dt, state):
         global checkpoint_t
