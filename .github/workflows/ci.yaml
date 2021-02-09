@@ -91,7 +91,7 @@ jobs:
             # One test at a time to address ballooning memory.
             # https://github.com/illinois-ceesd/mirgecom/issues/212
             for filename in test_*.py ; do
-              python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename" || exit 1
+              python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename" || exit $?
             done
 
     examples:
