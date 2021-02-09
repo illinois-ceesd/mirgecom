@@ -244,7 +244,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
               f"{pyro_p}, {pyro_t}, {pyro_e})")
 
         eos = PyrometheusMixture(prometheus_mechanism)
-        initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+        initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                          pressure=pyro_p, temperature=pyro_t,
                                          massfractions=y0s, velocity=velocity)
 
