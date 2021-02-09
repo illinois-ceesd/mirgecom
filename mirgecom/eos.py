@@ -237,7 +237,7 @@ class IdealSingleGas(GasEOS):
 
 
 class PyrometheusMixture(GasEOS):
-    r"""Ideal gas mixture (:math:`p = \bar{\rho}{R}_\mathtt{mix}{T}`).
+    r"""Ideal gas mixture ($p = \rho{R}_\mathtt{mix}{T}$).
 
     This is the *Pyrometheus*-based EOS. Please refer to the documentation of
     *Pyrometheus* for :any:`implementation details <pyrometheus>`.
@@ -247,8 +247,7 @@ class PyrometheusMixture(GasEOS):
     Each interface call expects that the agglomerated object array representing
     the state vector ($q$), contains at least the canonical conserved
     quantities mass ($\rho$), energy ($\rho{E}$), and momentum
-    ($\rho\vec{V}$) and the vector of mass fractions for each species
-    ($Y_\alpha$).
+    ($\rho\vec{V}$) and the vector of species masses ($\rho{Y_\alpha}$).
 
     .. automethod:: __init__
     .. automethod:: get_density
