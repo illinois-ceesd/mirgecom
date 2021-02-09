@@ -114,7 +114,7 @@ that depends on the ``my_branch`` branch in meshmode::
    git+https://github.com/MYUSERNAME/meshmode.git@featureX#egg=meshmode
 
 With this change, new emirge installations and continuous integration tests will
-automatically use the ``my_branch`` branch of meshmode.
+automatically use the ``featureX`` branch of meshmode.
 
 .. important::
 
