@@ -36,6 +36,7 @@ from contextlib import contextmanager
 
 @contextmanager
 def shared_split_comm_world():
+    """Create a context manager for a MPI.COMM_TYPE_SHARED comm."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
 
