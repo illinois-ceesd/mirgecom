@@ -31,6 +31,19 @@ from functools import wraps
 import os
 import sys
 
+from contextlib import contextmanager
+
+
+@contextmanager
+def shared_split_comm_world():
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
+
+    try:
+        yield comm
+    finally:
+        comm.Free()
+
 
 def _check_gpu_oversubscription():
     """
@@ -43,7 +56,6 @@ def _check_gpu_oversubscription():
     import pyopencl as cl
 
     size = MPI.COMM_WORLD.Get_size()
-    rank = MPI.COMM_WORLD.Get_rank()
 
     if size <= 1:
         return
@@ -57,20 +69,22 @@ def _check_gpu_oversubscription():
 
     dev = dev[0]
 
+    # Allow running multiple ranks on non-GPU devices
     if not (dev.type & cl.device_type.GPU):
         return
 
-    node_comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
-    node_rank = node_comm.Get_rank()
+    with shared_split_comm_world() as node_comm:
+        try:
+            domain_id = hex(dev.pci_domain_id_nv)
+        except (cl._cl.LogicError, AttributeError):
+            from warnings import warn
+            warn("Cannot detect whether multiple ranks are running on the"
+                 " same GPU because it requires Nvidia GPUs running with"
+                 " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
+            return
 
-    try:
-        domain_id = hex(dev.pci_domain_id_nv)
-    except (cl._cl.LogicError, AttributeError):
-        from warnings import warn
-        warn("Cannot detect whether multiple ranks are running on the"
-             " same GPU because it requires Nvidia GPUs running with"
-             " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
-    else:
+        node_rank = node_comm.Get_rank()
+
         bus_id = hex(dev.pci_bus_id_nv)
         slot_id = hex(dev.pci_slot_id_nv)
 
@@ -86,8 +100,6 @@ def _check_gpu_oversubscription():
                 raise RuntimeError(
                       f"Multiple ranks are sharing GPUs on node '{hostname}'."
                       f" Duplicate PCIe IDs: {dup}.")
-
-    node_comm.Free()
 
 
 def mpi_entry_point(func):
