@@ -67,7 +67,8 @@ class NonLoopyProfilekernel:
 class NonLoopyProfileEvent:
     r"""Hold a non-Loopy profile event that has not been seen by the profiler yet.
     
-    These events typically arise from operations performed on :class:`pyopencl.array.Array`\ s.
+    These events typically arise from operations performed on 
+    :class:`pyopencl.array.Array`\ s.
     """
 
     cl_event: cl._cl.Event
