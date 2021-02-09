@@ -246,8 +246,8 @@ class PyrometheusMixture(GasEOS):
 
     Each interface call expects that the agglomerated object array representing
     the state vector ($q$), contains at least the canonical conserved
-    quantities mass ($\rho$), energy ($\rho{E}$), and momentum
-    ($\rho\vec{V}$) and the vector of species masses ($\rho{Y_\alpha}$).
+    quantities mass ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$),
+    and the vector of species masses, ($\rho{Y}_\alpha$).
 
     .. automethod:: __init__
     .. automethod:: get_density
