@@ -31,4 +31,4 @@ logger = logging.getLogger(__name__)
 def test_cti_reader():
     """Quick test of CTI reader."""
     test_cti = get_mechanism_cti("testme")
-    assert test_cti == "This is just for testing. Do not remove."
+    assert test_cti == "This is just for testing. Do not remove.\n"
