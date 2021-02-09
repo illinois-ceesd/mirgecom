@@ -107,7 +107,7 @@ to express this dependency to make it easier to review and test both PRs jointly
 You can express this dependency by modifying the branch of a dependent package
 inside mirgecom's ``requirements.txt`` file in the main mirgecom folder. In
 the following example, assume that we want to create a feature in mirgecom
-that depends on the ``my_branch`` branch in meshmode::
+that depends on the ``featureX`` branch in meshmode::
 
    git+https://github.com/inducer/meshmode.git#egg=meshmode
    # change to:
