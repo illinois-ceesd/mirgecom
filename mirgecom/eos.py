@@ -75,6 +75,7 @@ class GasEOS:
     .. automethod:: dependent_vars
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
+    .. automethod:: gamma
     """
 
     def pressure(self, cv: ConservedVars):
@@ -105,6 +106,10 @@ class GasEOS:
         """Get the kinetic energy for the gas."""
         raise NotImplementedError()
 
+    def gamma(self):
+        """Get the ratio of gas specific heats Cp/Cv."""
+        raise NotImplementedError()
+
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
         """Get an agglomerated array of the depedent variables."""
         return EOSDependentVars(
@@ -126,7 +131,6 @@ class IdealSingleGas(GasEOS):
     momentum ($\rho\vec{V}$).
 
     .. automethod:: __init__
-    .. automethod:: gamma
 
     Inherits from (and implements) :class:`GasEOS`.
     """
