@@ -113,8 +113,8 @@ that depends on the ``my_branch`` branch in meshmode::
    # change to:
    git+https://github.com/MYUSERNAME/meshmode.git@featureX#egg=meshmode
 
-With this change, new emirge installations and CI tests will automatically use
-the ``my_branch`` branch of meshmode.
+With this change, new emirge installations and continuous integration tests will
+automatically use the ``my_branch`` branch of meshmode.
 
 .. important::
 
@@ -122,8 +122,8 @@ the ``my_branch`` branch of meshmode.
    example), then restore the original ``requirements.txt`` of mirgecom, and
    then merge the mirgecom PR.
 
-Reviewing/CI
-------------
+Reviewing & PRs
+---------------
 
 Each pull request for mirgecom needs one manual approval by a reviewer and
 needs to pass the Continuous Integration (CI) tests before merging. For the
@@ -145,6 +145,24 @@ in progress and only a high-level review is requested.
 
    - `How to Do Code Reviews Like a Human (Part One) <https://mtlynch.io/human-code-reviews-1/>`__
    - `How to Do Code Reviews Like a Human (Part Two) <https://mtlynch.io/human-code-reviews-2/>`__
+
+Arguably one of the most important considerations for creating, maintaining and
+reviewing PRs is the *size of the PR*. In general, developers should strive to
+keep them small. Try to break large feature developments into smaller, more
+manageable pieces.  Small PRs are far easier to understand, review, and identify
+potential defects.  Your feature(s) will merge must faster and cleaner if the
+PRs are kept small.
+
+We often use inter-developer peer review for PRs. Flag your peers as reviewers
+for your work.  More eyes on our developments result in higher quality, more robust
+software. As a part of the development team, it is important for you to keep up with
+your PRs, and the PRs of your peers who have requested your attention.  The Github
+web interface can let you know when someone has requested your review.
+
+.. image:: ../figures/my_outstanding_reviews.png
+
+Continuous Integration Testing (CI)
+-----------------------------------
 
 We use GitHub actions as the CI provider to test each pull request. The CI
 tests are triggered automatically when a pull request is created or updated.
