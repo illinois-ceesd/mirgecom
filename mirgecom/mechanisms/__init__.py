@@ -67,9 +67,5 @@ def get_mechanism_cti(mechanism_name: str) -> str:
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
     with mech_file.open() as fp:
-        file_bytes = fp.read()
-    try:
-        mech_cti = file_bytes.decode()
-    except (UnicodeDecodeError, AttributeError):
-        mech_cti = file_bytes
+        mech_cti = fp.read()
     return mech_cti
