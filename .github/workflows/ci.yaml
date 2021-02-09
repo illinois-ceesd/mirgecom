@@ -91,14 +91,7 @@ jobs:
             # One test at a time to address ballooning memory.
             # https://github.com/illinois-ceesd/mirgecom/issues/212
             for filename in test_*.py ; do
-              python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename"
-              if [ $? -eq 0 ]
-              then
-                echo "$filename tests succeeded."
-              else
-                echo "$filename tests failed."
-                exit 1
-              fi
+              python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename" || exit 1
             done
 
     examples:
