@@ -77,8 +77,8 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     """Add the OpenCL device name to the log."""
-    logmgr.set_constant("device_name",
-             str(queue.get_info(cl.command_queue_info.DEVICE)))
+    logmgr.set_constant("cl_device_name",
+             str(queue.device))
 
 
 def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim):
@@ -182,11 +182,11 @@ class StateConsumer:
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
-    Possible rank aggregation operations (`op`) are: min, max, norm.
+    Possible rank aggregation operations (``op``) are: min, max, norm.
     """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
-                 unit: str = None, name: str = None, dim: int = None):
+                 unit: str = None, name: str = None, dim: Optional[int] = None):
         if unit is None:
             unit = units_logging(quantity)
 
@@ -216,7 +216,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
             self._discr_reduction = partial(self.discr.norm)
             self.rank_aggr = max
         else:
-            raise RuntimeError(f"unknown operation {op}")
+            raise ValueError(f"unknown operation {op}")
 
     @property
     def default_aggregator(self):
