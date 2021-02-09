@@ -63,6 +63,20 @@ class NonLoopyProfilekernel:
     name: str
 
 
+@dataclass(eq=True, frozen=True)
+class NonLoopyProfileEvent:
+    r"""Hold a non-Loopy profile event that has not been seen by the profiler yet.
+
+    These events typically arise from operations performed on
+    :class:`pyopencl.array.Array`\ s.
+    """
+
+    cl_event: cl._cl.Event
+    knl: NonLoopyProfilekernel
+    nops: int    # Assumption: all operations are floating-point
+    nbytes: int  # Assumption: nbytes covers both bytes accessed and memory footprint
+
+
 @dataclass
 class ProfileResult:
     """Class to hold the results of a single kernel execution."""
@@ -73,14 +87,22 @@ class ProfileResult:
     footprint_bytes: int
 
 
-# For pyopencl.Array's elementwise kernels.
-elwise_knl = NonLoopyProfilekernel("pyopencl_array")
-
-
 def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
     """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
-    nonloopy_profile_events.append(evt)
+
+    nbytes = 0
+    nops = 0
+
+    for arg in actual_args:
+        if isinstance(arg, cl.array.Array):
+            nbytes += arg.size * arg.dtype.itemsize
+            nops += arg.size
+
+    name = knl.get_info(cl.kernel_info.FUNCTION_NAME)
+
+    nonloopy_profile_events.append(
+        NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
 
     return evt
 
@@ -134,7 +156,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         global nonloopy_profile_events
         if nonloopy_profile_events:
-            cl.wait_for_events(nonloopy_profile_events)
+            cl.wait_for_events([npe.cl_event for npe in nonloopy_profile_events])
 
         # Then, collect all events and store them
         for t in self.profile_events:
@@ -147,9 +169,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.profile_results.setdefault(program, []).append(new)
 
         for t in nonloopy_profile_events:
-            program = elwise_knl
-            time = t.profile.end - t.profile.start
-            new = ProfileResult(time, None, None, None)
+            program = t.knl
+            time = t.cl_event.profile.end - t.cl_event.profile.start
+            new = ProfileResult(time, t.nops, t.nbytes, t.nbytes)
             self.profile_results.setdefault(program, []).append(new)
 
         self.profile_events = []

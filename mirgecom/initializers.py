@@ -9,8 +9,8 @@ Solution Initializers
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. automethod: _make_pulse
-.. automethod: _make_uniform_flow
+.. automethod: make_pulse
+.. autoclass:: MixtureInitializer
 """
 
 __copyright__ = """
@@ -38,65 +38,13 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 
 
-def _make_uniform_flow(x_vec, *, mass=1.0, energy=2.5, pressure=1.0,
-                       velocity=None, eos=IdealSingleGas()):
-    r"""Construct uniform, constant flow.
-
-    Construct a uniform, constant flow from mass, energy, pressure, and
-    an EOS object.
-
-    Parameters
-    ----------
-    x_vec: np.ndarray
-        Nodal positions
-    mass: float
-        Value to set $\rho$
-    energy: float
-        Optional value to set $\rho{E}$
-    pressure: float
-        Value to use for calculating $\rho{E}$
-    velocity: np.ndarray
-        Optional constant velocity to set $\rho\mathbf{V}$
-
-    Returns
-    -------
-    q: Object array of DOFArrays
-        Agglomerated object array with the uniform flow
-    """
-    dim = len(x_vec)
-    if velocity is None:
-        velocity = np.zeros(shape=(dim,))
-
-    _rho = mass
-    _p = pressure
-    _velocity = velocity
-    _gamma = eos.gamma()
-
-    mom0 = _velocity * _rho
-    e0 = _p / (_gamma - 1.0)
-    ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
-
-    x_rel = x_vec[0]
-    zeros = 0.0*x_rel
-    ones = zeros + 1.0
-
-    mass = zeros + _rho
-    mom = mom0 * ones
-    energy = e0 + ke0 + zeros
-
-    return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
-
-
-def _make_pulse(amp, r0, w, r):
+def make_pulse(amp, r0, w, r):
     r"""Create a Gaussian pulse.
 
     The Gaussian pulse is defined by:
@@ -210,13 +158,16 @@ class Vortex2D:
         expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
+        velocity = make_obj_array([u, v])
         mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
                 * expterm ** 2) ** (1 / (gamma - 1))
+        momentum = mass * velocity
         p = mass ** gamma
 
-        e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
+        energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return flat_obj_array(mass, e, mass * u, mass * v)
+        return join_conserved(dim=2, mass=mass, energy=energy,
+                              momentum=momentum)
 
 
 class SodShock1D:
@@ -307,7 +258,8 @@ class SodShock1D:
             ]
         )
 
-        return flat_obj_array(mass, energy, mom)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
 
 class Lump:
@@ -412,7 +364,7 @@ class Lump:
         mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return flat_obj_array(mass, energy, mom)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -452,7 +404,8 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs)
 
 
 class MulticomponentLump:
@@ -585,7 +538,8 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
-        return flat_obj_array(mass, energy, mom, species_mass)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=species_mass)
 
     def exact_rhs(self, discr, q, t=0.0):
         """
@@ -623,7 +577,8 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
-        return flat_obj_array(massrhs, energyrhs, momrhs, specrhs)
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=specrhs)
 
 
 class AcousticPulse:
@@ -692,7 +647,7 @@ class AcousticPulse:
 
         cv = split_conserved(self._dim, q)
         return cv.replace(
-            energy=cv.energy + _make_pulse(
+            energy=cv.energy + make_pulse(
                 amp=self._amp, w=self._width, r0=self._center, r=x_vec)
             ).join()
 
@@ -801,4 +756,88 @@ class Uniform:
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
         yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs, yrhs)
+        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=yrhs)
+
+
+class MixtureInitializer:
+    r"""Solution initializer for multi-species mixture.
+
+    This initializer creates a physics-consistent mixture solution
+    given an initial thermal state (pressure, temperature) and a
+    mixture-compatible EOS.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, *, dim=3, nspecies=0,
+            pressure=101500.0, temperature=300.0,
+            massfractions=None, velocity=None,
+    ):
+        r"""Initialize mixture parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specifies the number of dimensions for the solution
+        nspeces: int
+            specifies the number of mixture species
+        pressure: float
+            specifies the value of :math:`p_0`
+        temperature: float
+            specifies the  value of :math:`T_0`
+        massfractions: numpy.ndarray
+            specifies the mass fraction for each species
+        velocity: numpy.ndarray
+            fixed uniform flow velocity used for kinetic energy
+        """
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        if massfractions is None:
+            if nspecies > 0:
+                massfractions = np.zeros(shape=(nspecies,))
+        self._nspecies = nspecies
+        self._dim = dim
+        self._velocity = velocity
+        self._pressure = pressure
+        self._temperature = temperature
+        self._massfracs = massfractions
+
+    def __call__(self, x_vec, eos, *, t=0.0):
+        """
+        Create the mixture state at locations *x_vec* (t is ignored).
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Coordinates at which solution is desired
+        eos:
+            Mixture-compatible equation-of-state object must provide
+            these functions:
+            `eos.get_density`
+            `eos.get_internal_energy`
+        t: float
+            Time is ignored by this solution intitializer
+        """
+        if x_vec.shape != (self._dim,):
+            raise ValueError(f"Position vector has unexpected dimensionality,"
+                             f" expected {self._dim}.")
+
+        ones = (1.0 + x_vec[0]) - x_vec[0]
+        pressure = self._pressure * ones
+        temperature = self._temperature * ones
+        velocity = make_obj_array([self._velocity[i] * ones
+                                   for i in range(self._dim)])
+        y = make_obj_array([self._massfracs[i] * ones
+                            for i in range(self._nspecies)])
+        mass = eos.get_density(pressure, temperature, y)
+        specmass = mass * y
+        mom = mass * velocity
+        internal_energy = eos.get_internal_energy(temperature, y)
+        kinetic_energy = 0.5 * np.dot(velocity, velocity)
+        energy = mass * (internal_energy + kinetic_energy)
+
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=specmass)
