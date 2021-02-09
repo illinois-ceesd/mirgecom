@@ -133,7 +133,7 @@ def main(ctx_factory=cl.create_some_context):
     eos = PyrometheusMixture(pyrometheus_mechanism, tguess=init_temperature)
 
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
-    initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+    initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
