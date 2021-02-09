@@ -53,7 +53,7 @@ def _check_gpu_oversubscription():
 
     # No support for multi-device contexts
     if len(dev) > 1:
-        raise RuntimeError(f"Multiple devices selected for rank {rank}.")
+        raise NotImplementedError("multi-device contexts not yet supported")
 
     dev = dev[0]
 
