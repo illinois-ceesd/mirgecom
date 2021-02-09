@@ -150,7 +150,7 @@ Arguably one of the most important considerations for creating, maintaining and
 reviewing PRs is the *size of the PR*. In general, developers should strive to
 keep them small. Try to break large feature developments into smaller, more
 manageable pieces.  Small PRs are far easier to understand, review, and identify
-potential defects.  Your feature(s) will merge must faster and cleaner if the
+potential defects.  Your feature(s) will merge much faster and cleaner if the
 PRs are kept small.
 
 We often use inter-developer peer review for PRs. Flag your peers as reviewers
