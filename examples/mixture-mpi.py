@@ -119,7 +119,7 @@ def main(ctx_factory=cl.create_some_context):
     y0s[nspecies-1] = 1.0 - spec_sum
 
     # Mixture defaults to STP (p, T) = (1atm, 300K)
-    initializer = MixtureInitializer(numdim=dim, nspecies=nspecies,
+    initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      massfractions=y0s, velocity=velocity)
 
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
