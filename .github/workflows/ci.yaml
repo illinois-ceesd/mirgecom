@@ -36,7 +36,6 @@ jobs:
           with:
             python-version: '3.x'
         - name: Install
-          shell: bash -e -l {0}
           run: |
             . .ci-support/install.sh
 
