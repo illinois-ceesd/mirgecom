@@ -36,7 +36,7 @@ jobs:
           with:
             python-version: '3.x'
         - name: Install
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             . .ci-support/install.sh
 
@@ -75,12 +75,12 @@ jobs:
         steps:
         - uses: actions/checkout@v2
         - name: Install
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             . .ci-support/install.sh
 
         - name: Run tests
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
@@ -91,7 +91,7 @@ jobs:
             # One test at a time to address ballooning memory.
             # https://github.com/illinois-ceesd/mirgecom/issues/212
             for filename in test_*.py ; do
-              python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename" || exit $?
+              python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw ./"$filename"
             done
 
     examples:
@@ -104,12 +104,12 @@ jobs:
         steps:
         - uses: actions/checkout@v2
         - name: Install
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             . .ci-support/install.sh
 
         - name: Run examples
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
@@ -122,12 +122,12 @@ jobs:
         steps:
         - uses: actions/checkout@v2
         - name: Install
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             . .ci-support/install.sh
 
         - name: Build docs
-          shell: bash -l {0}
+          shell: bash -e -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
