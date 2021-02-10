@@ -88,10 +88,9 @@ jobs:
             if [[ ${{ matrix.os }} == "macos-latest" ]]; then
               export PYOPENCL_TEST=port:pthread
             fi
-            
+
             # https://github.com/illinois-ceesd/mirgecom/issues/212
-            conda install jemalloc
-            # LD_PRELOAD is a no-op on macos. That's fine, we don't need it there.
+            # LD_PRELOAD is a no-op on macos. That's fine, we don't seem to need it there.
             LD_PRELOAD=$CONDA_PREFIX/lib/libjemalloc.so.2 python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
 
     examples:
@@ -113,7 +112,10 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            examples/run_examples.sh ./examples
+
+            # https://github.com/illinois-ceesd/mirgecom/issues/212
+            # LD_PRELOAD is a no-op on macos. That's fine, we don't seem to need it there.
+            LD_PRELOAD=$CONDA_PREFIX/lib/libjemalloc.so.2 examples/run_examples.sh ./examples
 
     doc:
         name: Documentation
