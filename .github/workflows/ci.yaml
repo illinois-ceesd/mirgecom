@@ -86,7 +86,7 @@ jobs:
               export PYOPENCL_TEST=port:pthread
             fi
             
-            export MALLOC_ARENA_MAX=2
+            export MALLOC_ARENA_MAX=1
             python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
 
     examples:
