@@ -30,5 +30,7 @@ logger = logging.getLogger(__name__)
 
 def test_cti_reader():
     """Quick test of CTI reader."""
-    test_cti = get_mechanism_cti("testme")
-    assert test_cti == "This is just for testing. Do not remove."
+    test_cti = get_mechanism_cti("uiuc")
+    first_line, _, _ = test_cti.partition("\n")
+
+    assert first_line == "# CH4_BFER mechanisme: CH4 + 1.5 O2  => CO +2H2O"
