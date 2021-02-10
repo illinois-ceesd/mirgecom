@@ -68,8 +68,8 @@ jobs:
         name: Pytest ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
@@ -95,8 +95,8 @@ jobs:
         name: Examples ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
@@ -134,9 +134,8 @@ jobs:
         name: Emirge installation
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-              os: [ubuntu-latest, macos-latest]
-            fail-fast: false
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
