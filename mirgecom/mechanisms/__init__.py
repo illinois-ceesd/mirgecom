@@ -68,8 +68,10 @@ def get_mechanism_cti(mechanism_name: str) -> str:
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
     with mech_file.open() as fp:
         read_data = fp.read()
-    try:
+    # This snippet addresses some apparent platform-specific
+    # behavior.  On some platforms, the above line returns
+    # a byte string, instead of text. Deal with that here.
+    mech_cti = read_data
+    if isinstance(read_data, bytes):
         mech_cti = read_data.decode()
-    except (UnicodeDecodeError, AttributeError):
-        return read_data
-    return mech_cti
+    return(mech_cti)
