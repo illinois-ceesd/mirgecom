@@ -129,3 +129,29 @@ jobs:
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
+
+    emirge:
+        name: Test Emirge installation
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [ubuntu-latest, macos-latest]
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install emirge
+          run: |
+            cd ..
+            git clone https://github.com/illinois-ceesd/emirge
+            cd emirge
+            sed -i "" 'fetch-mirgecom/d' install.sh
+            cp -a ../mirgecom .
+            ./install.sh
+
+        - name: Run simple mirgecom test
+          run: |
+            cd ..
+            source emirge/config/activate_env.sh
+            cd mirgecom/examples
+            python -m mpi4py ./wave-eager-mpi.py
+
