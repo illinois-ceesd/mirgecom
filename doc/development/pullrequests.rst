@@ -107,14 +107,14 @@ to express this dependency to make it easier to review and test both PRs jointly
 You can express this dependency by modifying the branch of a dependent package
 inside mirgecom's ``requirements.txt`` file in the main mirgecom folder. In
 the following example, assume that we want to create a feature in mirgecom
-that depends on the ``my_branch`` branch in meshmode::
+that depends on the ``featureX`` branch in meshmode::
 
    git+https://github.com/inducer/meshmode.git#egg=meshmode
    # change to:
    git+https://github.com/MYUSERNAME/meshmode.git@featureX#egg=meshmode
 
-With this change, new emirge installations and CI tests will automatically use
-the ``my_branch`` branch of meshmode.
+With this change, new emirge installations and continuous integration tests will
+automatically use the ``featureX`` branch of meshmode.
 
 .. important::
 
@@ -122,15 +122,47 @@ the ``my_branch`` branch of meshmode.
    example), then restore the original ``requirements.txt`` of mirgecom, and
    then merge the mirgecom PR.
 
-Reviewing/CI
-------------
+Reviewing & PRs
+---------------
 
-Each pull requests for mirgecom needs one manual approval by a reviewer and
+Each pull request for mirgecom needs one manual approval by a reviewer and
 needs to pass the Continuous Integration (CI) tests before merging. For the
 manual reviews, please select at least one reviewer (someone that has
 knowledge about the code you are modifying) in the "Reviewers" box at the top
 right of a PR. You can set the PR as a "draft" PR to indicate that it is still
 in progress and only a high-level review is requested.
+
+.. note::
+
+   Some thoughts and best practices regarding submitting your code for review can be found in this
+   article:
+
+   - `How to Make Your Code Reviewer Fall in Love with You <https://mtlynch.io/code-review-love/>`__
+   
+   A similar (but mirrored) set of concerns applies from the other direction. You will definitely
+   want to read these articles when you start reviewing other folks' code, but it may be
+   helpful to read them even before then to gain a better understanding of the process:
+
+   - `How to Do Code Reviews Like a Human (Part One) <https://mtlynch.io/human-code-reviews-1/>`__
+   - `How to Do Code Reviews Like a Human (Part Two) <https://mtlynch.io/human-code-reviews-2/>`__
+
+Arguably one of the most important considerations for creating, maintaining and
+reviewing PRs is the *size of the PR*. In general, developers should strive to
+keep them small. Try to break large feature developments into smaller, more
+manageable pieces.  Small PRs are far easier to understand, review, and identify
+potential defects.  Your feature(s) will merge much faster and cleaner if the
+PRs are kept small.
+
+We often use inter-developer peer review for PRs. Flag your peers as reviewers
+for your work.  More eyes on our developments result in higher quality, more robust
+software. As a part of the development team, it is important for you to keep up with
+your PRs, and the PRs of your peers who have requested your attention.  The Github
+web interface can let you know when someone has requested your review.
+
+.. image:: ../figures/my_outstanding_reviews.png
+
+Continuous Integration Testing (CI)
+-----------------------------------
 
 We use GitHub actions as the CI provider to test each pull request. The CI
 tests are triggered automatically when a pull request is created or updated.

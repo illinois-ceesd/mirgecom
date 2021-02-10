@@ -277,7 +277,7 @@ def test_uniform(ctx_factory, dim):
 def test_pulse(ctx_factory, dim):
     """
     Test of Gaussian pulse generator.
-    If it looks, walks, and quacks like a duck, then ...
+    If it looks, walks, and quacks like a Gaussian, then ...
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -300,13 +300,13 @@ def test_pulse(ctx_factory, dim):
     print(f"Nodes={nodes}")
 
     tol = 1e-15
-    from mirgecom.initializers import _make_pulse
+    from mirgecom.initializers import make_pulse
     amp = 1.0
     w = .1
     rms2 = w * w
     r0 = np.zeros(dim)
     r2 = np.dot(nodes, nodes) / rms2
-    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
+    pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     print(f"Pulse = {pulse}")
 
     # does it return the expected exponential?
@@ -319,19 +319,19 @@ def test_pulse(ctx_factory, dim):
     # proper scaling with amplitude?
     amp = 2.0
     pulse = 0
-    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
+    pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     pulse_resid = pulse - (pulse_check + pulse_check)
     assert(discr.norm(pulse_resid, np.inf) < tol)
 
     # proper scaling with r?
     amp = 1.0
     rcheck = np.sqrt(2.0) * nodes
-    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
+    pulse = make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
     assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
 
     # proper scaling with w?
     w = w / np.sqrt(2.0)
-    pulse = _make_pulse(amp=amp, r0=r0, w=w, r=nodes)
+    pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
 
 
@@ -374,7 +374,7 @@ def test_multilump(ctx_factory, dim):
                               spec_centers=centers, velocity=velocity,
                               spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
-    lump_soln = lump(t=0, x_vec=nodes)
+    lump_soln = lump(nodes)
     numcvspec = get_num_species(dim, lump_soln)
     print(f"get_num_species = {numcvspec}")
 
