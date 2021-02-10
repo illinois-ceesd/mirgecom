@@ -31,6 +31,77 @@ from functools import wraps
 import os
 import sys
 
+from contextlib import contextmanager
+
+
+@contextmanager
+def shared_split_comm_world():
+    """Create a context manager for a MPI.COMM_TYPE_SHARED comm."""
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
+
+    try:
+        yield comm
+    finally:
+        comm.Free()
+
+
+def _check_gpu_oversubscription():
+    """
+    Check whether multiple ranks are running on the same GPU on each node.
+
+    Only works with CUDA devices currently due to the use of the
+    PCI_DOMAIN_ID_NV extension.
+    """
+    from mpi4py import MPI
+    import pyopencl as cl
+
+    size = MPI.COMM_WORLD.Get_size()
+
+    if size <= 1:
+        return
+
+    cl_ctx = cl.create_some_context()
+    dev = cl_ctx.devices
+
+    # No support for multi-device contexts
+    if len(dev) > 1:
+        raise NotImplementedError("multi-device contexts not yet supported")
+
+    dev = dev[0]
+
+    # Allow running multiple ranks on non-GPU devices
+    if not (dev.type & cl.device_type.GPU):
+        return
+
+    with shared_split_comm_world() as node_comm:
+        try:
+            domain_id = hex(dev.pci_domain_id_nv)
+        except (cl._cl.LogicError, AttributeError):
+            from warnings import warn
+            warn("Cannot detect whether multiple ranks are running on the"
+                 " same GPU because it requires Nvidia GPUs running with"
+                 " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
+            return
+
+        node_rank = node_comm.Get_rank()
+
+        bus_id = hex(dev.pci_bus_id_nv)
+        slot_id = hex(dev.pci_slot_id_nv)
+
+        dev_id = (domain_id, bus_id, slot_id)
+
+        dev_ids = node_comm.gather(dev_id, root=0)
+
+        if node_rank == 0:
+            if len(dev_ids) != len(set(dev_ids)):
+                hostname = MPI.Get_processor_name()
+                dup = [item for item in dev_ids if dev_ids.count(item) > 1]
+
+                raise RuntimeError(
+                      f"Multiple ranks are sharing GPUs on node '{hostname}'."
+                      f" Duplicate PCIe IDs: {dup}.")
+
 
 def mpi_entry_point(func):
     """
@@ -77,6 +148,8 @@ def mpi_entry_point(func):
                  "avoid file system overheads when running on large numbers of "
                  "ranks. See https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes"  # noqa: E501
                  " for more information.")
+
+        _check_gpu_oversubscription()
 
         func(*args, **kwargs)
 
