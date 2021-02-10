@@ -63,10 +63,10 @@ class GasEOS:
     Equation of state (EOS) classes are responsible for
     computing relations between fluid or gas state variables.
 
-    Each interface call expects that the agglomerated
-    object array representing the state vector ($q$),
-    contains the relevant simulation state quantities. Each
-    EOS class should document its own state data requirements.
+    Each interface call takes an `~euler.ConservedVars` object
+    object array representing the simulation state quantities.
+    Each EOS class implementation should document its own state
+    data requirements.
 
     .. automethod:: pressure
     .. automethod:: temperature
@@ -125,10 +125,9 @@ class IdealSingleGas(GasEOS):
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
 
-    Each interface call expects that the agglomerated
-    object array representing the state vector ($q$),
-    contains at least the canonical conserved quantities
-    mass ($\rho$), energy ($\rho{E}$), and
+    Each interface call expects that the `euler.ConservedVars` object
+    representing the simulation conserved quantities contains at least the
+    canonical conserved quantities mass ($\rho$), energy ($\rho{E}$), and
     momentum ($\rho\vec{V}$).
 
     .. automethod:: __init__
@@ -244,10 +243,10 @@ class PyrometheusMixture(GasEOS):
     Users should take care to match solution initialization with the appropriate
     units that are used in the user-provided Cantera mechanism input CTI files.
 
-    Each interface call expects that the agglomerated object array representing
-    the state vector ($q$), contains at least the canonical conserved
-    quantities mass ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$),
-    and the vector of species masses, ($\rho{Y}_\alpha$).
+    Each interface call expects that the `euler.ConservedVars` object
+    representing the simulation conserved quantities contains at least the
+    canonical conserved quantities mass ($\rho$), energy ($\rho{E}$), and
+    momentum ($\rho\vec{V}$), and the vector of species masses, ($\rho{Y}_\alpha$).
 
     .. automethod:: __init__
     .. automethod:: get_density
@@ -429,7 +428,7 @@ class PyrometheusMixture(GasEOS):
                 + self.kinetic_energy(cv))
 
     def get_species_source_terms(self, cv: ConservedVars):
-        """Get the species mass source terms to be used on the RHS."""
+        """Get the species mass source terms to be used on the RHS for chemistry."""
         omega = self.get_production_rates(cv)
         w = self.get_species_molecular_weights()
         dim = len(cv.momentum)
