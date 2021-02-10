@@ -30,9 +30,4 @@ and then start your runs using (Linux)::
 
 or (macOS):
 
-    DYLD_INSERT_LIBRARIES=$CONDA_PREFIX/lib/libjemalloc.2.dylib python myscript.py  # untested
-
-.. note::
-
-    The macOS allocator appears to be less prone to fragmentation, so this may
-    be less necessary on Macs.
+    (TBD)
