@@ -144,7 +144,7 @@ jobs:
             [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew install mpich
             cd ..
-            git clone https://github.com/illinois-ceesd/emirge
+            git clone --branch add-cantera https://github.com/illinois-ceesd/emirge
             cd emirge
             sed -i.bak '/fetch-mirgecom/d' install.sh
             cp -a ../mirgecom .
