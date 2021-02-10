@@ -135,7 +135,8 @@ jobs:
         runs-on: ${{ matrix.os }}
         strategy:
             matrix:
-                os: [ubuntu-latest, macos-latest]
+              os: [ubuntu-latest, macos-latest]
+            fail-fast: false
 
         steps:
         - uses: actions/checkout@v2
@@ -144,7 +145,7 @@ jobs:
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
-            sed -i "" '/fetch-mirgecom/d' install.sh
+            sed -i.bak '/fetch-mirgecom/d' install.sh
             cp -a ../mirgecom .
             ./install.sh
 
