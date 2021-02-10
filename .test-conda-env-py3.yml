@@ -4,6 +4,10 @@ channels:
 - nodefaults
 dependencies:
 - git
+
+# https://github.com/illinois-ceesd/mirgecom/issues/212
+- jemalloc
+
 - conda-forge::numpy
 - pocl
 - clinfo
