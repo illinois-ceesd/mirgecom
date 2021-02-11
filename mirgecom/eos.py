@@ -90,8 +90,8 @@ class GasEOS:
         """Get the gas sound speed."""
         raise NotImplementedError()
 
-    def gas_const(self, cv: ConservedVars):
-        r"""Get the specific gas constant ($R$)."""
+    def gas_const(self, *, cv: ConservedVars):
+        r"""Get the specific gas constant ($R_s$)."""
         raise NotImplementedError()
 
     def internal_energy(self, cv: ConservedVars):
@@ -106,7 +106,7 @@ class GasEOS:
         """Get the kinetic energy for the gas."""
         raise NotImplementedError()
 
-    def gamma(self):
+    def gamma(self, *, cv: ConservedVars = None):
         """Get the ratio of gas specific heats Cp/Cv."""
         raise NotImplementedError()
 
@@ -139,11 +139,11 @@ class IdealSingleGas(GasEOS):
         self._gamma = gamma
         self._gas_const = gas_const
 
-    def gamma(self):
+    def gamma(self, *, cv: ConservedVars = None):
         """Get specific heat ratio Cp/Cv."""
         return self._gamma
 
-    def gas_const(self):
+    def gas_const(self, *, cv: ConservedVars = None):
         """Get specific gas constant R."""
         return self._gas_const
 
@@ -245,7 +245,7 @@ class PyrometheusMixture(GasEOS):
     canonical conserved quantities mass ($\rho$), energy ($\rho{E}$), and
     momentum ($\rho\vec{V}$), and the vector of species masses, ($\rho{Y}_\alpha$).
 
-    .. note::
+    .. important::
         When using this EOS, users should take care to match solution initialization
         with the appropriate units that are used in the user-provided `Cantera`
         mechanism input files.
@@ -258,14 +258,12 @@ class PyrometheusMixture(GasEOS):
     .. automethod:: get_internal_energy
     .. automethod:: species_fractions
     .. automethod:: total_energy
-    .. automethod:: mixture_gamma
-    .. automethod:: mixture_gas_const
+    .. automethod:: gamma
+    .. automethod:: gas_const
 
     Inherits from (and implements) :class:`GasEOS`.
     """
 
-    # NOTE: Need help with documentation of pyrometheus mechanism
-    #       - may need to generate an example mechanism file. :(
     def __init__(self, pyrometheus_mech, tguess=300.0):
         """Initialize Pyrometheus-based EOS with mechanism class.
 
@@ -292,25 +290,27 @@ class PyrometheusMixture(GasEOS):
         self._gamma = 1.4
         self._tguess = tguess
 
-    def gamma(self):   # NOTE: Need help with interface
-        """Get mixture-averaged specific heat ratio for mixture Cp/Cv.
-
-        .. note::
-            This routine will return the *mixture* averaged
-            gamma when it is implemented in _Pyrometheus_.
-        """
-        return self._gamma
-
-    def mixture_gamma(self, cv: ConservedVars):
+    def gamma(self, cv: ConservedVars = None):
         r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_v}$.
 
         .. note::
             This routine will return the **mixture averaged**
-            gamma ($\gamma_{\mathtt{mix}}$) when it is implemented in *Pyrometheus*.
-        """
-        return self.gamma()
+            gamma ($\gamma_{\mathtt{mix}}$) when it is implemented in *Pyrometheus*
+            For this and other mixture EOS, a :class:`mirgecom.euler.ConservedVars`
+            object is required to compute the mixture gamma.
 
-    def mixture_gas_const(self):
+        Parameters
+        ----------
+        cv: :class:`mirgecom.euler.ConservedVars`
+            :class:`mirgecom.euler.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
+            species masses, ($\rho{Y}_\alpha$).
+        """
+        if cv is None:
+            raise NotImplementedError()
+        return self._gamma
+
+    def gas_const(self, cv: ConservedVars = None):
         r"""Get specific gas constant $R_{\mathtt{mix}}$.
 
         The mixture gas constant, $R_\mathtt{mix}$, is calculated
@@ -318,9 +318,21 @@ class PyrometheusMixture(GasEOS):
         mechanism provided by the user.
 
         .. note::
-            This routine will return the **mixture averaged**
-            gas constant when it is implemented in *Pyrometheus*.
+            This routine will return the **mixture averaged** gas constant when it is
+            implemented in *Pyrometheus*. For this and other mixture EOS, a
+            :class:`mirgecom.euler.ConservedVars` object is required to compute
+            the mixture gas constant $R_{\mathtt{mix}}$.
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.euler.ConservedVars`
+            :class:`mirgecom.euler.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
         """
+        if cv is None:
+            raise NotImplementedError()
         return self._pyrometheus_mech.gas_constant
 
     def kinetic_energy(self, cv: ConservedVars):
