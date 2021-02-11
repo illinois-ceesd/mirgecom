@@ -310,7 +310,7 @@ class PythonMemoryUsage(LogQuantity):
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
-        import psutil
+        import psutil  # pylint: disable=import-error
         self.process = psutil.Process()
 
     def __call__(self) -> float:
