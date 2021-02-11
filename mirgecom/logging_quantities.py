@@ -41,6 +41,8 @@ from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
 
+from typing import Optional
+
 
 extract_state_vars = None
 units_logging = None
