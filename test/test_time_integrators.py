@@ -57,10 +57,7 @@ def test_rk4_order():
         rk4_eoc.add_data_point(dt, error)
 
     logger.info(f"RK4 EOC = {rk4_eoc}")
-    assert (
-        rk4_eoc.order_estimate() >= 3.99
-    )
-
+    assert rk4_eoc.order_estimate() >= 3.99
 
 def test_euler_order():
     """Test that Euler integrator is actually 1st order."""
@@ -89,6 +86,4 @@ def test_euler_order():
         euler_eoc.add_data_point(dt, error)
 
     logger.info(f"Euler EOC = {euler_eoc}")
-    assert (
-        euler_eoc.order_estimate() >= .99
-    )
+    assert euler_eoc.order_estimate() >= .99
