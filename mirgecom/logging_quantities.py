@@ -252,9 +252,25 @@ class KernelProfile(MultiLogQuantity):
         assert isinstance(actx, PyOpenCLProfilingArrayContext)
 
         units = ["s", "GFlops", "1", "GByte", "GByte"]
-        names = [f"{kernel_name}_time", f"{kernel_name}_flops",
-                 f"{kernel_name}_num_calls", f"{kernel_name}_bytes_accessed",
-                 f"{kernel_name}_footprint"]
+
+        from dataclasses import fields
+        from mirgecom.profiling import ProfileResultsForKernel
+
+        names = []
+        units = []
+
+        for f in fields(ProfileResultsForKernel):
+            names.append(f"{kernel_name}_{f.name}")
+            if f.name == "num_calls":
+                units.append("1")
+            elif f.name == "flops":
+                units.append("GFlops")
+            elif f.name == "time":
+                units.append("s")
+            elif f.name == "bytes_accessed" or f.name == "footprint_bytes":
+                units.append("GByte")
+            else:
+                raise RuntimeError(f"unknown unit for field {f.name}")
 
         super().__init__(names, units)
 
@@ -263,7 +279,9 @@ class KernelProfile(MultiLogQuantity):
 
     def __call__(self) -> list:
         """Return the requested kernel profile quantity."""
-        return self.actx.get_profiling_data_for_kernel(self.kernel_name)
+        from dataclasses import astuple
+        r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
+        return astuple(r)
 
 # }}}
 

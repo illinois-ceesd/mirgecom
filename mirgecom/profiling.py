@@ -90,6 +90,17 @@ class ProfileResult:
     footprint_bytes: int
 
 
+@dataclass
+class ProfileResultsForKernel:
+    """Class to hold the results of multiple kernel executions."""
+
+    num_calls: int
+    time: float
+    flops: float
+    bytes_accessed: float
+    footprint_bytes: float
+
+
 def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
     """Extract data from the elementwise array kernel."""
     evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
@@ -183,7 +194,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         nonloopy_profile_events = []
 
     def get_profiling_data_for_kernel(self, kernel_name: str,
-                                      wait_for_events=True) -> float:
+                                 wait_for_events=True) -> ProfileResultsForKernel:
         """Return value of profiling result for kernel `kernel_name`."""
         if wait_for_events:
             self._finish_profile_events()
@@ -218,10 +229,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             _gather_data(self.profile_results)
 
         if num_calls == 0:
-            return [0, 0, 0, 0, 0]
+            return ProfileResultsForKernel(0, 0, 0, 0, 0)
 
-        return [mean(times), mean(flops), num_calls, mean(bytes_accessed),
-                mean(fprint_bytes)]
+        return ProfileResultsForKernel(num_calls, mean(times), mean(flops),
+                                       mean(bytes_accessed), mean(fprint_bytes))
 
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
