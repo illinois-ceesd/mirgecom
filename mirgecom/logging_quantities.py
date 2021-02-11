@@ -70,8 +70,7 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     """Add the OpenCL device name to the log."""
-    logmgr.set_constant("cl_device_name",
-             str(queue.device))
+    logmgr.set_constant("cl_device_name", str(queue.device))
 
 
 def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
@@ -90,7 +89,7 @@ def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
         for op in ["min", "max", "norm"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                dim=dim))
+                axis=dim))
 
 
 # {{{ Package versions
@@ -183,11 +182,11 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
                  extract_vars_for_logging, units_logging, name: str = None,
-                 dim: Optional[int] = None):
+                 axis: Optional[int] = None):
         unit = units_logging(quantity)
 
         if name is None:
-            name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
+            name = f"{op}_{quantity}" + (str(axis) if axis is not None else "")
 
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self, extract_vars_for_logging)
@@ -195,7 +194,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         self.discr = discr
 
         self.quantity = quantity
-        self.dim = dim
+        self.axis = axis
 
         from functools import partial
 
@@ -226,8 +225,8 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
-        if self.dim is not None:  # momentum
-            return self._discr_reduction(quantity[self.dim])
+        if self.axis is not None:  # momentum
+            return self._discr_reduction(quantity[self.axis])
         else:  # mass, energy
             return self._discr_reduction(quantity)
 
