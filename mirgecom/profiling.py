@@ -37,6 +37,7 @@ from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
+.. autoclass:: ProfileResultsForKernel
 """
 
 
