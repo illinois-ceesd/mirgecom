@@ -386,8 +386,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
 
             if self.logmgr:
-                if "pyopencl_array_time" not in self.logmgr.quantity_data:
-                    self.logmgr.add_quantity(KernelProfile(self, "pyopencl_array"))
+                if "multiply_time" not in self.logmgr.quantity_data:
+                    self.logmgr.add_quantity(KernelProfile(self, "multiply"))
 
                 if f"{program.name}_time" not in self.logmgr.quantity_data:
                     self.logmgr.add_quantity(KernelProfile(self, program.name))

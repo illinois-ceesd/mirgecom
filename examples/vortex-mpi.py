@@ -142,7 +142,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
             pass
 
         if use_profiling:
-            logmgr.add_watches(["pyopencl_array_time.max"])
+            logmgr.add_watches(["multiply_time.max"])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
