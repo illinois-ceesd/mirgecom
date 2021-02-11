@@ -42,19 +42,6 @@ __doc__ = """
 
 # {{{ Support for non-Loopy results (e.g., pyopencl kernels)
 
-nonloopy_profile_events = []
-
-
-def init_pyopencl_array_monkey_patch():
-    """Add the :mod:`pyopencl` monkey patching."""
-    cl.array.ARRAY_KERNEL_EXEC_HOOK = array_kernel_exec_hook
-
-
-def del_pyopencl_array_monkey_patch():
-    """Remove the :mod:`pyopencl` monkey patching."""
-    cl.array.ARRAY_KERNEL_EXEC_HOOK = None
-
-
 @dataclass(eq=True, frozen=True)
 class NonLoopyProfilekernel:
     """Class to hold the name for a non-loopy profile result.
@@ -101,25 +88,6 @@ class ProfileResultsForKernel:
     footprint_bytes: float
 
 
-def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
-    """Extract data from the elementwise array kernel."""
-    evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
-
-    nbytes = 0
-    nops = 0
-
-    for arg in actual_args:
-        if isinstance(arg, cl.array.Array):
-            nbytes += arg.size * arg.dtype.itemsize
-            nops += arg.size
-
-    name = knl.get_info(cl.kernel_info.FUNCTION_NAME)
-
-    nonloopy_profile_events.append(
-        NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
-
-    return evt
-
 # }}}
 
 
@@ -151,11 +119,13 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                  "cl.command_queue_properties.PROFILING_ENABLE.")
 
         self.profile_events = []
+        self.nonloopy_profile_events = []
         self.profile_results = {}
         self.kernel_stats = {}
         self.logmgr = logmgr
 
-        init_pyopencl_array_monkey_patch()
+        if self.logmgr:
+            cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
 
     def __del__(self):
         """Release resources and undo monkey patching."""
@@ -163,16 +133,37 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_results.clear()
         self.kernel_stats.clear()
 
-        del_pyopencl_array_monkey_patch()
+        cl.array.ARRAY_KERNEL_EXEC_HOOK = None
+
+    def array_kernel_exec_hook(self, knl, queue, gs, ls, *actual_args, wait_for):
+        """Extract data from the elementwise array kernel."""
+        evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
+
+        nbytes = 0
+        nops = 0
+
+        for arg in actual_args:
+            if isinstance(arg, cl.array.Array):
+                nbytes += arg.size * arg.dtype.itemsize
+                nops += arg.size
+
+        name = knl.function_name
+
+        if f"{name}_time" not in self.logmgr.quantity_data:
+            self.logmgr.add_quantity(KernelProfile(self, name))
+
+        self.nonloopy_profile_events.append(
+            NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
+
+        return evt
 
     def _finish_profile_events(self) -> None:
         # First, wait for completion of all events
         if self.profile_events:
             cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
 
-        global nonloopy_profile_events
-        if nonloopy_profile_events:
-            cl.wait_for_events([npe.cl_event for npe in nonloopy_profile_events])
+        if self.nonloopy_profile_events:
+            cl.wait_for_events([e.cl_event for e in self.nonloopy_profile_events])
 
         # Then, collect all events and store them
         for t in self.profile_events:
@@ -184,14 +175,14 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             self.profile_results.setdefault(program, []).append(new)
 
-        for t in nonloopy_profile_events:
+        for t in self.nonloopy_profile_events:
             program = t.knl
             time = t.cl_event.profile.end - t.cl_event.profile.start
             new = ProfileResult(time, t.nops, t.nbytes, t.nbytes)
             self.profile_results.setdefault(program, []).append(new)
 
         self.profile_events = []
-        nonloopy_profile_events = []
+        self.nonloopy_profile_events = []
 
     def get_profiling_data_for_kernel(self, kernel_name: str,
                                  wait_for_events=True) -> ProfileResultsForKernel:
@@ -397,9 +388,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
 
             if self.logmgr:
-                if "multiply_time" not in self.logmgr.quantity_data:
-                    self.logmgr.add_quantity(KernelProfile(self, "multiply"))
-
                 if f"{program.name}_time" not in self.logmgr.quantity_data:
                     self.logmgr.add_quantity(KernelProfile(self, program.name))
 
