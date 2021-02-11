@@ -40,7 +40,6 @@ def test_rk4_order():
     def exact_soln(t):
         return np.exp(t)
 
-    state = 1.0
     from pytools.convergence import EOCRecorder
     rk4_eoc = EOCRecorder()
 
@@ -73,7 +72,6 @@ def test_euler_order():
     def exact_soln(t):
         return np.exp(t)
 
-    state = 1.0
     from pytools.convergence import EOCRecorder
     euler_eoc = EOCRecorder()
 
