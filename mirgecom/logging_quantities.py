@@ -317,7 +317,7 @@ class PythonMemoryUsage(LogQuantity):
             raise ImportError("psutil module not found. "
                 "Install it with 'pip install psutil'.")
 
-        import psutil
+        import psutil # noqa
         self.process = psutil.Process()
 
     def __call__(self) -> float:
