@@ -3,6 +3,7 @@
 Time integrators
 ^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
+.. autofunction:: euler_step
 """
 
 __copyright__ = """
@@ -42,3 +43,8 @@ def rk4_step(state, t, dt, rhs):
     k3 = rhs(t+dt/2, state + dt/2*k2)
     k4 = rhs(t+dt, state + dt*k3)
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+
+
+def euler_step(state, t, dt, rhs):
+    """Implement a euler explicit time step state/rhs pair."""
+    return state + dt*rhs(t, state)
