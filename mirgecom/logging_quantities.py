@@ -151,11 +151,15 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
     mgr
         The :class:`logpyle.LogManager` to set the state of.
     """
+    state_vars = None
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
             if isinstance(gd.quantity, StateConsumer):
-                gd.quantity.set_sim_state(dim, state, eos)
+                if state_vars:
+                    gd.quantity.set_state_vars(state_vars)
+                else:
+                    state_vars = gd.quantity.set_sim_state(dim, state, eos)
 
 
 class StateConsumer:
@@ -165,9 +169,14 @@ class StateConsumer:
         self.extract_state_vars = extract_vars_for_logging
         self.state_vars = None
 
-    def set_sim_state(self, dim, state, eos) -> None:
-        """Update the state vector of the object."""
+    def set_sim_state(self, dim, state, eos):
+        """Calculate and update the state vector of the object."""
         self.state_vars = self.extract_state_vars(dim, state, eos)
+        return self.state_vars
+
+    def set_state_vars(self, state_vars) -> None:
+        """Update the state vector of the object."""
+        self.state_vars = state_vars
 
 # }}}
 
