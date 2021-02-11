@@ -46,5 +46,5 @@ def rk4_step(state, t, dt, rhs):
 
 
 def euler_step(state, t, dt, rhs):
-    """Implement a euler explicit time step state/rhs pair."""
+    """Implement an Euler explicit time step state/rhs pair."""
     return state + dt*rhs(t, state)
