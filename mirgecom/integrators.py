@@ -37,7 +37,7 @@ THE SOFTWARE.
 
 
 def rk4_step(state, t, dt, rhs):
-    """Implement a generic RK4 time step state/rhs pair."""
+    """Take one step using 4th order Runge-Kutta."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)
     k3 = rhs(t+dt/2, state + dt/2*k2)
@@ -46,7 +46,5 @@ def rk4_step(state, t, dt, rhs):
 
 
 def euler_step(state, t, dt, rhs):
-    """Integrate the ODE given by *rhs* in time by one time step
-    using forward Euler.
-    """
+    """Take one step using forward Euler time integration."""
     return state + dt*rhs(t, state)

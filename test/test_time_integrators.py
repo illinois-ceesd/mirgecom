@@ -26,22 +26,27 @@ THE SOFTWARE.
 
 import numpy as np
 import logging
+import pytest
+
+from mirgecom.integrators import rk4_step, euler_step
 
 logger = logging.getLogger(__name__)
 
 
-def test_rk4_order():
-    """Test that RK4 is actually 4th order."""
-    from mirgecom.integrators import rk4_step
-
-    def rhs(t, state):
-        return np.exp(t)
+@pytest.mark.parametrize(("integrator", "method_order"),
+                         [(rk4_step, 4),
+                          (euler_step, 1)])
+def test_integration_order(integrator, method_order):
+    """Test that time integrators have correct order."""
 
     def exact_soln(t):
-        return np.exp(t)
+        return np.exp(-t)
+
+    def rhs(t, state):
+        return -np.exp(-t)
 
     from pytools.convergence import EOCRecorder
-    rk4_eoc = EOCRecorder()
+    integrator_eoc = EOCRecorder()
 
     dt = 1.0
     for refine in [1, 2, 4, 8]:
@@ -50,40 +55,11 @@ def test_rk4_order():
         state = exact_soln(t)
 
         while t < 4:
-            state = rk4_step(state, t, dt, rhs)
+            state = integrator(state, t, dt, rhs)
             t = t + dt
 
         error = np.abs(state - exact_soln(t)) / exact_soln(t)
-        rk4_eoc.add_data_point(dt, error)
+        integrator_eoc.add_data_point(dt, error)
 
-    logger.info(f"RK4 EOC = {rk4_eoc}")
-    assert rk4_eoc.order_estimate() >= 3.99
-
-def test_euler_order():
-    """Test that Euler integrator is actually 1st order."""
-    from mirgecom.integrators import euler_step
-
-    def rhs(t, state):
-        return np.exp(t)
-
-    def exact_soln(t):
-        return np.exp(t)
-
-    from pytools.convergence import EOCRecorder
-    euler_eoc = EOCRecorder()
-
-    dt = .1  # go easy on ye olde Euler
-    for refine in [1, 2, 4, 8]:
-        dt = dt / refine
-        t = 0.0
-        state = exact_soln(t)
-
-        while t < 4:
-            state = euler_step(state, t, dt, rhs)
-            t = t + dt
-
-        error = np.abs(state - exact_soln(t)) / exact_soln(t)
-        euler_eoc.add_data_point(dt, error)
-
-    logger.info(f"Euler EOC = {euler_eoc}")
-    assert euler_eoc.order_estimate() >= .99
+    logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+    assert integrator_eoc.order_estimate() >= method_order - .01
