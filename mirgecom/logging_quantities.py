@@ -310,14 +310,7 @@ class PythonMemoryUsage(LogQuantity):
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
-        # Make sure the psutil module is available
-        import importlib
-        found = importlib.util.find_spec("psutil")
-        if found is None:
-            raise ImportError("psutil module not found. "
-                "Install it with 'pip install psutil'.")
-
-        import psutil # noqa
+        import psutil
         self.process = psutil.Process()
 
     def __call__(self) -> float:
