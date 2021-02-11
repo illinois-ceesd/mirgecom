@@ -44,12 +44,7 @@ import pyopencl as cl
 from typing import Optional
 
 
-extract_state_vars = None
-units_logging = None
-
-
 def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
-                      extract_vars_for_logging, units_for_logging,
                       filename: str = None, mode: str = "wu",
                       mpi_comm=None) -> LogManager:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
@@ -57,10 +52,6 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
         return None
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
-
-    global extract_state_vars, units_logging
-    extract_state_vars = extract_vars_for_logging
-    units_logging = units_for_logging
 
     add_run_info(logmgr)
     add_package_versions(logmgr)
@@ -83,21 +74,23 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
              str(queue.device))
 
 
-def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim):
+def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
+      extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
     for quantity in ["pressure", "temperature"]:
         for op in ["min", "max", "norm"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op))
+                discr, quantity, op, extract_vars_for_logging, units_for_logging))
     for quantity in ["mass", "energy"]:
         for op in ["min", "max", "norm"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op))
+                discr, quantity, op, extract_vars_for_logging, units_for_logging))
 
     for dim in range(dim):
         for op in ["min", "max", "norm"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, dim=dim))
+                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
+                dim=dim))
 
 
 # {{{ Package versions
@@ -169,12 +162,13 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
 class StateConsumer:
     """Base class for quantities that require a state for logging."""
 
-    def __init__(self):
+    def __init__(self, extract_vars_for_logging):
+        self.extract_state_vars = extract_vars_for_logging
         self.state_vars = None
 
     def set_sim_state(self, dim, state, eos) -> None:
         """Update the state vector of the object."""
-        self.state_vars = extract_state_vars(dim, state, eos)
+        self.state_vars = self.extract_state_vars(dim, state, eos)
 
 # }}}
 
@@ -188,15 +182,15 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
-                 unit: str = None, name: str = None, dim: Optional[int] = None):
-        if unit is None:
-            unit = units_logging(quantity)
+                 extract_vars_for_logging, units_logging, name: str = None,
+                 dim: Optional[int] = None):
+        unit = units_logging(quantity)
 
         if name is None:
             name = f"{op}_{quantity}" + (str(dim) if dim is not None else "")
 
         LogQuantity.__init__(self, name, unit)
-        StateConsumer.__init__(self)
+        StateConsumer.__init__(self, extract_vars_for_logging)
 
         self.discr = discr
 
