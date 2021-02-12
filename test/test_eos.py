@@ -256,9 +256,11 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
 
 
-@pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
+@pytest.mark.parametrize(("mechname", "rate_tol"),
+                         [("uiuc", 1e-12),
+                          ("sanDiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
-def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
+def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus reaction mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
@@ -350,16 +352,13 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, y0):
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
         abs_diff = discr.norm(pyro_r - can_r, np.inf)
-        tol = 1e-12
-        if mechname == "sanDiego":
-            tol = 1e-8
         if abs_diff > 1e-14:
             for i, rate in enumerate(can_r):
                 min_r = (np.abs(can_r)).min()
                 if min_r > 0:
-                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < tol
+                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
                 else:
-                    assert discr.norm(pyro_r, np.inf) < tol
+                    assert discr.norm(pyro_r, np.inf) < rate_tol
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
