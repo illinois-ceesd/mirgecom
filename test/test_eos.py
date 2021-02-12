@@ -57,9 +57,11 @@ from mirgecom.mechanisms import get_mechanism_cti
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
+@pytest.mark.parametrize(("mechname", "rate_tol"),
+                         [("uiuc", 1e-12),
+                          ("sanDiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
-def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
+def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
@@ -132,7 +134,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
         prom_k = prometheus_mechanism.get_fwd_rate_coefficients(prom_t, prom_c)
 
-        # Pyro chemistry functions (uncomment to break test)
+        # Pyro chemistry functions
         prom_r = prometheus_mechanism.get_net_rates_of_progress(prom_t,
                                                                 prom_c)
         prom_omega = prometheus_mechanism.get_net_production_rates(prom_rho,
@@ -157,22 +159,10 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
         assert discr.norm((prom_k - can_k) / can_k, np.inf) < 1e-10
 
         # Pyro chem test comparisons
-        rate_tol = 1e-12
-        if mechname == "sanDiego":
-            rate_tol = 1e-8
-
         for i, rate in enumerate(can_r):
-            rmax = np.abs(rate).max()
-            if rmax > 1e-18:
-                assert discr.norm((prom_r[i] - rate), np.inf) < rate_tol
-            else:  # don't compare them when they're dinky
-                assert discr.norm(prom_r[i], np.inf) < rate_tol
+            assert discr.norm((prom_r[i] - rate), np.inf) < rate_tol
         for i, rate in enumerate(can_omega):
-            rmax = np.abs(rate).max()
-            if rmax > 1e-18:
-                assert discr.norm((prom_omega[i] - rate), np.inf) < rate_tol
-            else:  # don't compare them when they're dinky
-                assert discr.norm(prom_omega[i], np.inf) < rate_tol
+            assert discr.norm((prom_omega[i] - rate), np.inf) < rate_tol
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
