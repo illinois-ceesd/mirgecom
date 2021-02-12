@@ -219,7 +219,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         ones = discr.zeros(actx) + 1.0
         tin = tempin * ones
         pin = pressin * ones
-        yin = make_obj_array([y0s[i] * ones for i in range(nspecies)])
+        yin = y0s * ones
         tguess = 300.0
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
@@ -337,7 +337,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
         tin = can_t * ones
         rhoin = can_rho * ones
-        yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
+        yin = can_y * ones
 
         # Prometheus kinetics
         pyro_c = pyro_obj.get_concentrations(rhoin, yin)
