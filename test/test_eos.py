@@ -87,7 +87,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
@@ -122,7 +121,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         can_r = cantera_soln.net_rates_of_progress
         can_omega = cantera_soln.net_production_rates
 
-        ones = (1.0 + nodes[0]) - nodes[0]
+        ones = discr.zeros(actx) + 1.0
         tin = can_t * ones
         pin = can_p * ones
         yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
@@ -217,7 +216,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         print(f"Testing {mechname}(t,P) = ({tempin}, {pressin})")
 
-        ones = (1.0 + nodes[0]) - nodes[0]
+        ones = discr.zeros(actx) + 1.0
         tin = tempin * ones
         pin = pressin * ones
         yin = make_obj_array([y0s[i] * ones for i in range(nspecies)])
@@ -288,8 +287,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    ones = (1.0 + nodes[0]) - nodes[0]
+    ones = discr.zeros(actx) + 1.0
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
