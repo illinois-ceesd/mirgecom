@@ -295,7 +295,8 @@ class PyrometheusMixture(GasEOS):
 
         .. note::
             This routine will return the **mixture averaged**
-            gamma ($\gamma_{\mathtt{mix}}$) when it is implemented in *Pyrometheus*
+            gamma ($\gamma_{\mathtt{mix}}$) when it is implemented in *Pyrometheus*,
+            per `pyro issue <https://github.com/ecisneros8/pyrometheus/issues/16>`_.
             For this and other mixture EOS, a :class:`mirgecom.euler.ConservedVars`
             object is required to compute the mixture gamma.
 
@@ -319,9 +320,10 @@ class PyrometheusMixture(GasEOS):
 
         .. note::
             This routine will return the **mixture averaged** gas constant when it is
-            implemented in *Pyrometheus*. For this and other mixture EOS, a
-            :class:`mirgecom.euler.ConservedVars` object is required to compute
-            the mixture gas constant $R_{\mathtt{mix}}$.
+            implemented in *Pyrometheus* per this
+            `pyro issue <https://github.com/ecisneros8/pyrometheus/issues/16>`_.
+            For this and other mixture EOS, a :class:`mirgecom.euler.ConservedVars`
+            object is required to compute the mixture gas constant $R_\mathtt{mix}$.
 
         Parameters
         ----------
@@ -329,7 +331,6 @@ class PyrometheusMixture(GasEOS):
             :class:`mirgecom.euler.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
-
         """
         if cv is None:
             raise NotImplementedError()
