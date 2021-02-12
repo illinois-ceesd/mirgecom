@@ -100,8 +100,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, y0):
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
         y0s[i] = y0 / (10.0 ** (i + 1))
-    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
-    y0s[nspecies-1] = 1.0 - spec_sum
+    y0s[-1] = 1.0 - np.sum(y0s[:-1])
 
     for fac in range(1, 11):
         pressin = fac * press0
@@ -219,8 +218,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     y0s = np.zeros(shape=(nspecies,))
     for i in range(1, nspecies):
         y0s[i] = y0 / (10.0 ** i)
-    spec_sum = sum([y0s[i] for i in range(1, nspecies)])
-    y0s[0] = 1.0 - spec_sum
+    y0s[0] = 1.0 - np.sum(y0s[1:])
     velocity = vel * np.ones(shape=(dim,))
 
     for fac in range(1, 11):
