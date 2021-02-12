@@ -1,18 +1,7 @@
-"""Functions for time integration.
-
-Time integrators
-^^^^^^^^^^^^^^^^
-.. autofunction:: rk4_step
-.. autofunction:: euler_step
-"""
+"""Test time integrators."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
-"""
-
-__author__ = """
-Center for Exascale-Enabled Scramjet Design
-University of Illinois, Urbana, IL 61801
 """
 
 __license__ = """
@@ -35,16 +24,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
+import logging
+import pytest
 
-def rk4_step(state, t, dt, rhs):
-    """Take one step using 4th order Runge-Kutta."""
-    k1 = rhs(t, state)
-    k2 = rhs(t+dt/2, state + dt/2*k1)
-    k3 = rhs(t+dt/2, state + dt/2*k2)
-    k4 = rhs(t+dt, state + dt*k3)
-    return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+from mirgecom.integrators import rk4_step, euler_step
+
+logger = logging.getLogger(__name__)
 
 
-def euler_step(state, t, dt, rhs):
-    """Take one step using forward Euler time integration."""
-    return state + dt*rhs(t, state)
+@pytest.mark.parametrize(("integrator", "method_order"),
+                         [(rk4_step, 4),
+                          (euler_step, 1)])
+def test_integration_order(integrator, method_order):
+    """Test that time integrators have correct order."""
+
+    def exact_soln(t):
+        return np.exp(-t)
+
+    def rhs(t, state):
+        return -np.exp(-t)
+
+    from pytools.convergence import EOCRecorder
+    integrator_eoc = EOCRecorder()
+
+    dt = 1.0
+    for refine in [1, 2, 4, 8]:
+        dt = dt / refine
+        t = 0
+        state = exact_soln(t)
+
+        while t < 4:
+            state = integrator(state, t, dt, rhs)
+            t = t + dt
+
+        error = np.abs(state - exact_soln(t)) / exact_soln(t)
+        integrator_eoc.add_data_point(dt, error)
+
+    logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+    assert integrator_eoc.order_estimate() >= method_order - .01
