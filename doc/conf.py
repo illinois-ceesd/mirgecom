@@ -85,6 +85,7 @@ intersphinx_mapping = {
     "https://documen.tician.de/pymbolic/": None,
     "https://documen.tician.de/pytools/": None,
     "https://logpyle.readthedocs.io/en/latest/": None,
+    "https://psutil.readthedocs.io/en/latest/": None,
     }
 
 autoclass_content = "class"

@@ -28,6 +28,7 @@ __doc__ = """
 .. autoclass:: StateConsumer
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: KernelProfile
+.. autoclass:: PythonMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
 .. autofunction:: logmgr_add_default_discretization_quantities
