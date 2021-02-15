@@ -42,7 +42,7 @@ __doc__ = """
 
 
 @dataclass
-class ProfileResult:
+class SingleCallKernelProfile:
     """Class to hold the results of a single kernel execution."""
 
     time: int
@@ -52,7 +52,7 @@ class ProfileResult:
 
 
 @dataclass
-class ProfileResultsForKernel:
+class MultiCallKernelProfile:
     """Class to hold the results of multiple kernel executions."""
 
     num_calls: int
@@ -151,9 +151,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events = []
 
-    def get_profiling_data_for_kernel(self, kernel_name: str,
+    def get_and_reset_profiling_data_for_kernel(self, kernel_name: str,
                                  wait_for_events=True) -> ProfileResultsForKernel:
-        """Return value of profiling result for kernel `kernel_name`."""
+        """Return value of profiling result for kernel `kernel_name` and reset
+        the internal profiling data for this kernel."""
         if wait_for_events:
             self._finish_profile_events()
 

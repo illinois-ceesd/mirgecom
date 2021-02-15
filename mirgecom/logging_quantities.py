@@ -166,7 +166,10 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
 
 
 class StateConsumer:
-    """Base class for quantities that require a state for logging."""
+    """Base class for quantities that require a state for logging.
+    
+    .. automethod:: __init__
+    """
 
     def __init__(self, extract_vars_for_logging):
         self.extract_state_vars = extract_vars_for_logging
@@ -257,8 +260,6 @@ class KernelProfile(MultiLogQuantity):
                  kernel_name: str) -> None:
         from mirgecom.profiling import PyOpenCLProfilingArrayContext
         assert isinstance(actx, PyOpenCLProfilingArrayContext)
-
-        units = ["s", "GFlops", "1", "GByte", "GByte"]
 
         from dataclasses import fields
         from mirgecom.profiling import ProfileResultsForKernel
