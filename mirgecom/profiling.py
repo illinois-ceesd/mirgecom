@@ -159,11 +159,11 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         if wait_for_events:
             self._finish_profile_events()
 
-        def _gather_data(results_list: list):
-            results = [key for key in results_list if hasattr(key, "name")
+        def _gather_data(results_dict: dict):
+            results = [key for key in results_dict if hasattr(key, "name")
                        and key.name == kernel_name]
             results.extend(
-                [key for key in results_list if hasattr(key, "function_name")
+                [key for key in results_dict if hasattr(key, "function_name")
                  and key.function_name == kernel_name])
             num_calls = 0
             times = []
@@ -172,7 +172,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             fprint_bytes = []
 
             for key in results:
-                value = results_list[key]
+                value = results_dict[key]
 
                 num_calls += len(value)
 
@@ -185,7 +185,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_bytes += [v.footprint_bytes / 1e9 if v.footprint_bytes
                                  is not None else 0 for v in value]
 
-                del results_list[key]
+                del results_dict[key]
 
             return num_calls, times, flops, bytes_accessed, fprint_bytes
 
