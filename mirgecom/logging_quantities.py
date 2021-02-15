@@ -41,7 +41,8 @@ from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
 
-from typing import Optional
+from typing import Optional, Callable
+import numpy as np
 
 
 def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
@@ -169,13 +170,21 @@ class StateConsumer:
     """Base class for quantities that require a state for logging.
 
     .. automethod:: __init__
+    .. automethod:: set_state_vars
     """
 
-    def __init__(self, extract_vars_for_logging):
+    def __init__(self, extract_vars_for_logging: Callable):
+        """Store the function to extract state variables.
+
+        Parameters
+        ----------
+        extract_vars_for_logging
+            Returns a dict of the state vars for a particular state.
+        """
         self.extract_state_vars = extract_vars_for_logging
         self.state_vars = None
 
-    def set_state_vars(self, state_vars) -> None:
+    def set_state_vars(self, state_vars: np.ndarray) -> None:
         """Update the state vector of the object."""
         self.state_vars = state_vars
 
