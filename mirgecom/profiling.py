@@ -37,7 +37,8 @@ from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
-.. autoclass:: ProfileResultsForKernel
+.. autoclass:: SingleCallKernelProfile
+.. autoclass:: MultiCallKernelProfile
 """
 
 
@@ -76,7 +77,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
-    .. automethod:: get_profiling_data_for_kernel
+    .. automethod:: get_and_reset_profiling_data_for_kernel
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
     """
@@ -123,7 +124,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 if isinstance(arg, cl.array.Array):
                     nbytes += arg.size * arg.dtype.itemsize
                     nops += arg.size
-            res = ProfileResult(time=0, flops=nops, bytes_accessed=nbytes,
+            res = SingleCallKernelProfile(time=0, flops=nops, bytes_accessed=nbytes,
                                 footprint_bytes=nbytes)
             self.kernel_stats.setdefault(knl, {})[args_tuple] = res
 
@@ -145,16 +146,16 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             r = self._get_kernel_stats(program, t.args_tuple)
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
-            new = ProfileResult(time, r.flops, r.bytes_accessed, r.footprint_bytes)
+            new = SingleCallKernelProfile(time, r.flops, r.bytes_accessed,
+                                          r.footprint_bytes)
 
             self.profile_results.setdefault(program, []).append(new)
 
         self.profile_events = []
 
     def get_and_reset_profiling_data_for_kernel(self, kernel_name: str,
-                                 wait_for_events=True) -> ProfileResultsForKernel:
-        """Return value of profiling result for kernel `kernel_name` and reset
-        the internal profiling data for this kernel."""
+                                 wait_for_events=True) -> MultiCallKernelProfile:
+        """Return and reset profiling data for kernel `kernel_name`."""
         if wait_for_events:
             self._finish_profile_events()
 
@@ -192,9 +193,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             _gather_data(self.profile_results)
 
         if num_calls == 0:
-            return ProfileResultsForKernel(0, 0, 0, 0, 0)
+            return MultiCallKernelProfile(0, 0, 0, 0, 0)
 
-        return ProfileResultsForKernel(num_calls, mean(times), mean(flops),
+        return MultiCallKernelProfile(num_calls, mean(times), mean(flops),
                                        mean(bytes_accessed), mean(fprint_bytes))
 
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
@@ -288,7 +289,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         return tbl
 
     def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) \
-      -> ProfileResult:
+      -> SingleCallKernelProfile:
         return self.kernel_stats[program][args_tuple]
 
     def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) \
@@ -355,7 +356,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             except lp.symbolic.UnableToDetermineAccessRange:
                 footprint_bytes = None
 
-            res = ProfileResult(
+            res = SingleCallKernelProfile(
                 time=0, flops=flops, bytes_accessed=bytes_accessed,
                 footprint_bytes=footprint_bytes)
 

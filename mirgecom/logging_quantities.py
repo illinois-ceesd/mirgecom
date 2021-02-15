@@ -167,7 +167,7 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
 
 class StateConsumer:
     """Base class for quantities that require a state for logging.
-    
+
     .. automethod:: __init__
     """
 
@@ -262,12 +262,12 @@ class KernelProfile(MultiLogQuantity):
         assert isinstance(actx, PyOpenCLProfilingArrayContext)
 
         from dataclasses import fields
-        from mirgecom.profiling import ProfileResultsForKernel
+        from mirgecom.profiling import MultiCallKernelProfile
 
         names = []
         units = []
 
-        for f in fields(ProfileResultsForKernel):
+        for f in fields(MultiCallKernelProfile):
             names.append(f"{kernel_name}_{f.name}")
             if f.name == "num_calls":
                 units.append("1")
@@ -288,7 +288,7 @@ class KernelProfile(MultiLogQuantity):
     def __call__(self) -> list:
         """Return the requested kernel profile quantity."""
         from dataclasses import astuple
-        r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
+        r = self.actx.get_and_reset_profiling_data_for_kernel(self.kernel_name)
         return astuple(r)
 
 # }}}
