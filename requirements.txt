@@ -1,9 +1,3 @@
-# /!\ Careful! Not all aspects of the pip requirement specifier format [1] are supported here.
-# See emirge's parsing code [2] for additional restrictions.
-#
-# [1] https://pip.pypa.io/en/stable/reference/pip_install/#requirement-specifiers
-# [2] https://github.com/illinois-ceesd/emirge/blob/master/parse_requirements.sh
-
 islpy
 mpi4py
 numpy
