@@ -274,21 +274,11 @@ class KernelProfile(MultiLogQuantity):
         from dataclasses import fields
         from mirgecom.profiling import MultiCallKernelProfile
 
-        names = []
-        units = []
+        units_default = {"num_calls": "1", "flops": "GFlops", "time": "s",
+                         "bytes_accessed": "GByte", "footprint_bytes": "GByte"}
 
-        for f in fields(MultiCallKernelProfile):
-            names.append(f"{kernel_name}_{f.name}")
-            if f.name == "num_calls":
-                units.append("1")
-            elif f.name == "flops":
-                units.append("GFlops")
-            elif f.name == "time":
-                units.append("s")
-            elif f.name == "bytes_accessed" or f.name == "footprint_bytes":
-                units.append("GByte")
-            else:
-                raise RuntimeError(f"unknown unit for field {f.name}")
+        names = [f"{kernel_name}_{f.name}" for f in fields(MultiCallKernelProfile)]
+        units = [units_default[f.name] for f in fields(MultiCallKernelProfile)]
 
         super().__init__(names, units)
 
