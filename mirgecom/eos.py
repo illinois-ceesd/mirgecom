@@ -308,11 +308,11 @@ class PyrometheusMixture(GasEOS):
         return cp / (cp - rspec)
 
     def gas_const(self, cv: ConservedVars = None):
-        r"""Get specific gas constant $R_{\mathtt{mix}}$.
+        r"""Get specific gas constant $R_s$.
 
-        The mixture gas constant, $R_\mathtt{mix}$, is calculated
-        as $R_{\mathtt{mix}} = \sum{Y_{\alpha} R_{\alpha}}$ by the *Pyrometheus*
-        mechanism provided by the user.
+        The mixture specific gas constant is calculated
+        as $R_s = \frac{R}{\sum{\frac{{Y}_\alpha}{{M}_\alpha}}}$ by the *Pyrometheus*
+        mechanism provided by the user. ${M}_\alpha$ are the species molar masses.
 
         Parameters
         ----------
@@ -356,7 +356,7 @@ class PyrometheusMixture(GasEOS):
 
         .. math::
 
-            \rho = \frac{p}{R_{\mathtt{mix}} T}
+            \rho = \frac{p}{R_s T}
         """
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_fractions)
@@ -368,7 +368,7 @@ class PyrometheusMixture(GasEOS):
 
         .. math::
 
-            e = R_{\mathtt{mix}} T \sum{Y_\alpha h_\alpha}
+            e = R_s T \sum{Y_\alpha h_\alpha}
         """
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
             temperature, species_fractions)
@@ -423,7 +423,7 @@ class PyrometheusMixture(GasEOS):
 
         .. math::
 
-            T = \frac{(\gamma_{\mathtt{mix}} - 1)e}{R_{\mathtt{mix}} \rho}
+            T = \frac{(\gamma_{\mathtt{mix}} - 1)e}{R_s \rho}
         """
         y = self.species_fractions(cv)
         e = self.internal_energy(cv) / cv.mass
