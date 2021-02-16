@@ -287,18 +287,10 @@ class PyrometheusMixture(GasEOS):
             that is TBD.
         """
         self._pyrometheus_mech = pyrometheus_mech
-        self._gamma = 1.4
         self._tguess = tguess
 
     def gamma(self, cv: ConservedVars = None):
-        r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_v}$.
-
-        .. note::
-            This routine will return the **mixture averaged**
-            gamma ($\gamma_{\mathtt{mix}}$) when it is implemented in *Pyrometheus*,
-            per `pyro issue <https://github.com/ecisneros8/pyrometheus/issues/16>`_.
-            For this and other mixture EOS, a :class:`mirgecom.euler.ConservedVars`
-            object is required to compute the mixture gamma.
+        r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_p - R_s}$.
 
         Parameters
         ----------
@@ -309,7 +301,11 @@ class PyrometheusMixture(GasEOS):
         """
         if cv is None:
             raise NotImplementedError()
-        return self._gamma
+        temperature = self.temperature(cv)
+        y = self.species_fractions(cv)
+        cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
+        rspec = self.gas_const(cv)
+        return cp / (cp - rspec)
 
     def gas_const(self, cv: ConservedVars = None):
         r"""Get specific gas constant $R_{\mathtt{mix}}$.
@@ -317,13 +313,6 @@ class PyrometheusMixture(GasEOS):
         The mixture gas constant, $R_\mathtt{mix}$, is calculated
         as $R_{\mathtt{mix}} = \sum{Y_{\alpha} R_{\alpha}}$ by the *Pyrometheus*
         mechanism provided by the user.
-
-        .. note::
-            This routine will return the **mixture averaged** gas constant when it is
-            implemented in *Pyrometheus* per this
-            `pyro issue <https://github.com/ecisneros8/pyrometheus/issues/16>`_.
-            For this and other mixture EOS, a :class:`mirgecom.euler.ConservedVars`
-            object is required to compute the mixture gas constant $R_\mathtt{mix}$.
 
         Parameters
         ----------
@@ -334,7 +323,8 @@ class PyrometheusMixture(GasEOS):
         """
         if cv is None:
             raise NotImplementedError()
-        return self._pyrometheus_mech.gas_constant
+        y = self.species_fractions(cv)
+        return self._pyrometheus_mech.get_specific_gas_constant(y)
 
     def kinetic_energy(self, cv: ConservedVars):
         r"""Get kinetic (i.e. not internal) energy of gas.
@@ -421,9 +411,7 @@ class PyrometheusMixture(GasEOS):
             c = \sqrt{\frac{\gamma_{\mathtt{mix}}{p}}{\rho}}
         """
         actx = cv.mass.array_context
-
-        p = self.pressure(cv)
-        c2 = self._gamma / cv.mass * p
+        c2 = (self.gamma(cv) * self.pressure(cv)) / cv.mass
         return actx.np.sqrt(c2)
 
     def temperature(self, cv: ConservedVars):
@@ -461,7 +449,7 @@ class PyrometheusMixture(GasEOS):
             DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
             inversion interfaces.
         """
-        return (pressure / (self._gamma - 1.0)
+        return (pressure / (self.gamma(cv) - 1.0)
                 + self.kinetic_energy(cv))
 
     def get_species_source_terms(self, cv: ConservedVars):
