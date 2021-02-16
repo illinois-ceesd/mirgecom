@@ -3,6 +3,7 @@
 Time integrators
 ^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
+.. autofunction:: euler_step
 """
 
 __copyright__ = """
@@ -36,9 +37,14 @@ THE SOFTWARE.
 
 
 def rk4_step(state, t, dt, rhs):
-    """Implement a generic RK4 time step state/rhs pair."""
+    """Take one step using 4th order Runge-Kutta."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)
     k3 = rhs(t+dt/2, state + dt/2*k2)
     k4 = rhs(t+dt, state + dt*k3)
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+
+
+def euler_step(state, t, dt, rhs):
+    """Take one step using forward Euler time integration."""
+    return state + dt*rhs(t, state)

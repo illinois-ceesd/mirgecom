@@ -1,3 +1,5 @@
+"""Test time integrators."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -22,15 +24,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 import logging
-from mirgecom.mechanisms import get_mechanism_cti
+import pytest
+
+from mirgecom.integrators import rk4_step, euler_step
 
 logger = logging.getLogger(__name__)
 
 
-def test_cti_reader():
-    """Quick test of CTI reader."""
-    test_cti = get_mechanism_cti("uiuc")
-    first_line = test_cti.partition("\n")[0].strip()
+@pytest.mark.parametrize(("integrator", "method_order"),
+                         [(rk4_step, 4),
+                          (euler_step, 1)])
+def test_integration_order(integrator, method_order):
+    """Test that time integrators have correct order."""
 
-    assert first_line == "# CH4_BFER mechanisme: CH4 + 1.5 O2  => CO +2H2O"
+    def exact_soln(t):
+        return np.exp(-t)
+
+    def rhs(t, state):
+        return -np.exp(-t)
+
+    from pytools.convergence import EOCRecorder
+    integrator_eoc = EOCRecorder()
+
+    dt = 1.0
+    for refine in [1, 2, 4, 8]:
+        dt = dt / refine
+        t = 0
+        state = exact_soln(t)
+
+        while t < 4:
+            state = integrator(state, t, dt, rhs)
+            t = t + dt
+
+        error = np.abs(state - exact_soln(t)) / exact_soln(t)
+        integrator_eoc.add_data_point(dt, error)
+
+    logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+    assert integrator_eoc.order_estimate() >= method_order - .01
