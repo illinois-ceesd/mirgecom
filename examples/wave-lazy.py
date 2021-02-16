@@ -383,11 +383,11 @@ def interior_trace_pair(discr, vec):
     return TracePair("int_faces", i, e)
 
 
-def wave_flux(actx, discr, c, w_tpair):
+def wave_flux(discr, c, w_tpair):
     u = w_tpair[0]
     v = w_tpair[1:]
 
-    normal = thaw(actx, discr.normal(w_tpair.where))
+    normal = thaw(u.int.array_context, discr.normal(w_tpair.where))
 
     flux_weak = flat_obj_array(
             np.dot(v.avg, normal),
@@ -410,7 +410,7 @@ def wave_flux(actx, discr, c, w_tpair):
 
     return discr.interp(w_tpair.where, "all_faces", c*flux_strong)
 
-def wave_operator(actx, discr, c, w):
+def wave_operator(discr, c, w):
     u = w[0]
     v = w[1:]
 
@@ -427,9 +427,9 @@ def wave_operator(actx, discr, c, w):
             +  # noqa: W504
             discr.inverse_mass(
                 discr.face_mass(
-                    wave_flux(actx, discr, c=c,
+                    wave_flux(discr, c=c,
                         w_tpair=interior_trace_pair(discr, w))
-                    + wave_flux(actx, discr, c=c,
+                    + wave_flux(discr, c=c,
                         w_tpair=TracePair(BTAG_ALL, dir_bval, dir_bc))
                     ))
                 )
@@ -500,7 +500,7 @@ def main(use_profiling=False):
 
 
     def rhs(t, w):
-        return wave_operator(actx, discr, c=1, w=w)
+        return wave_operator(discr, c=1, w=w)
 
     A = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), fields)
 
@@ -518,7 +518,7 @@ def main(use_profiling=False):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
+    parser = argparse.ArgumentParser(description="Wave-lazy (non-MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
     args = parser.parse_args()
