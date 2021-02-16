@@ -36,7 +36,6 @@ jobs:
           with:
             python-version: '3.x'
         - name: Install
-          shell: bash -l {0}
           run: |
             . .ci-support/install.sh
 
@@ -69,18 +68,16 @@ jobs:
         name: Pytest ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
         - name: Install
-          shell: bash -l {0}
           run: |
             . .ci-support/install.sh
 
         - name: Run tests
-          shell: bash -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
@@ -98,18 +95,16 @@ jobs:
         name: Examples ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
         - name: Install
-          shell: bash -l {0}
           run: |
             . .ci-support/install.sh
 
         - name: Run examples
-          shell: bash -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
@@ -122,12 +117,10 @@ jobs:
         steps:
         - uses: actions/checkout@v2
         - name: Install
-          shell: bash -l {0}
           run: |
             . .ci-support/install.sh
 
         - name: Build docs
-          shell: bash -l {0}
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
@@ -136,3 +129,31 @@ jobs:
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
+
+    emirge:
+        name: Emirge installation
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, macos-latest]
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install emirge
+          run: |
+            [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Darwin ]] && brew install mpich
+            cd ..
+            git clone https://github.com/illinois-ceesd/emirge
+            cd emirge
+            sed -i.bak '/fetch-mirgecom/d' install.sh
+            cp -a ../mirgecom .
+            ./install.sh
+
+        - name: Run simple mirgecom test
+          run: |
+            cd ..
+            source emirge/config/activate_env.sh
+            cd mirgecom/examples
+            python -m mpi4py ./wave-eager-mpi.py
+
