@@ -68,8 +68,8 @@ jobs:
         name: Pytest ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
@@ -93,8 +93,8 @@ jobs:
         name: Examples ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
         strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]
+          matrix:
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v2
@@ -127,3 +127,31 @@ jobs:
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
+
+    emirge:
+        name: Emirge installation
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, macos-latest]
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install emirge
+          run: |
+            [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Darwin ]] && brew install mpich
+            cd ..
+            git clone https://github.com/illinois-ceesd/emirge
+            cd emirge
+            sed -i.bak '/fetch-mirgecom/d' install.sh
+            cp -a ../mirgecom .
+            ./install.sh
+
+        - name: Run simple mirgecom test
+          run: |
+            cd ..
+            source emirge/config/activate_env.sh
+            cd mirgecom/examples
+            python -m mpi4py ./wave-eager-mpi.py
+
