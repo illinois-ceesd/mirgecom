@@ -16,7 +16,7 @@ importlib-resources
 --editable git+https://github.com/inducer/meshmode.git#egg=meshmode
 --editable git+https://github.com/inducer/grudge.git#egg=grudge
 --editable git+https://github.com/inducer/pytato.git#egg=pytato
---editable git+https://github.com/inducer/pyrometheus@kinetics-mirge-generator#egg=pyrometheus
+--editable git+https://github.com/ecisneros8/pyrometheus@kinetics-mirge-generator#egg=pyrometheus
 
 
 # Toy Fortran parser for Loopy
