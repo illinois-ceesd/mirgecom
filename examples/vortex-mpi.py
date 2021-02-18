@@ -137,7 +137,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                             "min_temperature", "norm_momentum1"])
 
         try:
-            logmgr.add_watches(["memory_usage.max"])
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
         except KeyError:
             pass
 

@@ -29,6 +29,7 @@ __doc__ = """
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
+.. autoclass:: DeviceMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
 .. autofunction:: logmgr_add_default_discretization_quantities
@@ -66,6 +67,8 @@ def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
         from warnings import warn
         warn("psutil module not found, not tracking memory consumption."
              "Install it with 'pip install psutil'")
+
+    logmgr.add_quantity(DeviceMemoryUsage())
 
     return logmgr
 
@@ -305,7 +308,7 @@ class PythonMemoryUsage(LogQuantity):
     def __init__(self, name: str = None):
 
         if name is None:
-            name = "memory_usage"
+            name = "memory_usage_python"
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
@@ -315,5 +318,41 @@ class PythonMemoryUsage(LogQuantity):
     def __call__(self) -> float:
         """Return the memory usage in MByte."""
         return self.process.memory_info()[0] / 1024 / 1024
+
+
+class DeviceMemoryUsage(LogQuantity):
+    """Logging support for GPU memory usage (Nvidia only currently)."""
+
+    def __init__(self, name: str = None):
+
+        if name is None:
+            name = "memory_usage_gpu"
+
+        super().__init__(name, "MByte", description="Memory usage (GPU)")
+
+        import ctypes
+        self.free = ctypes.c_size_t()
+        self.total = ctypes.c_size_t()
+
+        try:
+            # Use libcudart, not libcuda, since the latter requires a CUDA
+            # device context which interferes with pyopencl.
+            libcudart = ctypes.cdll.LoadLibrary("libcudart.so")
+            self.mem_func = libcudart.cudaMemGetInfo
+        except OSError:
+            self.mem_func = None
+
+    def __call__(self) -> float:
+        """Return the memory usage in MByte."""
+        if self.mem_func is None:
+            return None
+
+        import ctypes
+        ret = self.mem_func(ctypes.byref(self.free), ctypes.byref(self.total))
+
+        if ret != 0:
+            return None
+        else:
+            return (self.total.value - self.free.value) / 1024 / 1024
 
 # }}}
