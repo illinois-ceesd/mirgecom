@@ -151,7 +151,7 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
     Parameters
     ----------
     mgr
-        The :class:`logpyle.LogManager` to set the state of.
+        The :class:`logpyle.LogManager` whose :class:`StateConsumer` quantities will receive *state*.
     """
     state_vars = {}
 
@@ -225,7 +225,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
             self._discr_reduction = partial(self.discr.nodal_max, "vol")
             self.rank_aggr = max
         elif op == "norm":
-            self._discr_reduction = partial(self.discr.norm)
+            self._discr_reduction = partial(self.discr.norm, p=2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
@@ -242,10 +242,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
-        if self.axis is not None:  # momentum
-            return self._discr_reduction(quantity[self.axis])
-        else:  # mass, energy
-            return self._discr_reduction(quantity)
+        if self.axis is not None:  # e.g. momentum
+            quantity = quantity[self.axis]
+
+        return self._discr_reduction(quantity)
 
 # }}}
 
