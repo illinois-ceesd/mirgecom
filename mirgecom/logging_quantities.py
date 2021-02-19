@@ -78,20 +78,19 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
-    for quantity in ["pressure", "temperature"]:
-        for op in ["min", "max", "norm"]:
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
-    for quantity in ["mass", "energy"]:
-        for op in ["min", "max", "norm"]:
+    for op in ["min", "max", "L2_norm"]:
+        for quantity in ["pressure", "temperature"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, quantity, op, extract_vars_for_logging, units_for_logging))
 
-    for dim in range(dim):
-        for op in ["min", "max", "norm"]:
+        for quantity in ["mass", "energy"]:
+            logmgr.add_quantity(DiscretizationBasedQuantity(
+                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+
+        for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=dim))
+                axis=d))
 
 
 # {{{ Package versions
@@ -197,7 +196,7 @@ class StateConsumer:
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
-    Possible rank aggregation operations (``op``) are: min, max, norm.
+    Possible rank aggregation operations (``op``) are: min, max, L2_norm.
     """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
@@ -224,7 +223,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         elif op == "max":
             self._discr_reduction = partial(self.discr.nodal_max, "vol")
             self.rank_aggr = max
-        elif op == "norm":
+        elif op == "L2_norm":
             self._discr_reduction = partial(self.discr.norm, p=2)
             self.rank_aggr = max
         else:
