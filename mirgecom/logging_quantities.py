@@ -179,8 +179,9 @@ class StateConsumer:
 
         Parameters
         ----------
-        extract_vars_for_logging(dim, state, eos) -> dict(quantity_name: values)
-            Returns a dict of the state vars for a particular state.
+        extract_vars_for_logging(dim, state, eos)
+            Returns a dict(quantity_name: values) of the state vars for a particular
+            state.
         """
         self.extract_state_vars = extract_vars_for_logging
         self.state_vars = None
