@@ -50,7 +50,6 @@ def rk4_step(state, t, dt, rhs):
 
 def lsrk4_step(state, t, dt, rhs):
     """Take one step using low storage 4th order Runge-Kutta."""
-
     # LSERK coefficients from [Hesthaven_2008]_, Section 3.4
     a = np.array([
         0.,
@@ -75,7 +74,7 @@ def lsrk4_step(state, t, dt, rhs):
 
     p = state
     k = p * 0.
-                  
+
     for i in range(5):
         print(i)
         k = a[i]*k + dt*rhs(t + c[i]*dt, p)
