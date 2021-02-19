@@ -46,7 +46,7 @@ from typing import Optional, Callable
 import numpy as np
 
 
-def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
+def initialize_logmgr(enable_logmgr: bool,
                       filename: str = None, mode: str = "wu",
                       mpi_comm=None) -> LogManager:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""

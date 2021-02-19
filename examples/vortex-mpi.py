@@ -69,7 +69,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
 
-    logmgr = initialize_logmgr(use_logmgr, use_profiling,
+    logmgr = initialize_logmgr(use_logmgr,
         filename="vortex.sqlite", mode="wu", mpi_comm=comm)
 
     cl_ctx = ctx_factory()
