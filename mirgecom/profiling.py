@@ -33,7 +33,6 @@ from dataclasses import dataclass
 import pytools
 from logpyle import LogManager
 from mirgecom.logging_quantities import KernelProfile
-from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -110,6 +109,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
 
         name = knl.function_name
+        knl.name = knl.function_name  # "name" is used by the LoopKernels
 
         args_tuple = tuple(
             (arg.size)
@@ -159,44 +159,41 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         if wait_for_events:
             self._finish_profile_events()
 
-        def _gather_data(results_dict: dict):
-            results = [key for key in results_dict if hasattr(key, "name")
-                       and key.name == kernel_name]
-            results.extend(
-                [key for key in results_dict if hasattr(key, "function_name")
-                 and key.function_name == kernel_name])
-            num_calls = 0
-            times = []
-            flops = []
-            bytes_accessed = []
-            fprint_bytes = []
+        num_calls = 0
+        time = 0
+        flops = 0
+        bytes_accessed = 0
+        fprint_bytes = 0
 
-            for key in results:
-                value = results_dict[key]
+        keys = [k for k in self.profile_results.keys() if k.name == kernel_name]
 
-                num_calls += len(value)
+        for key in keys:
+            value = self.profile_results[key]
 
-                times += [v.time / 1e9 for v in value]
-                flops += [v.flops / 1e9 if v.flops is not None else 0
-                         for v in value]
+            num_calls += len(value)
 
-                bytes_accessed += [v.bytes_accessed / 1e9
-                              if v.bytes_accessed is not None else 0 for v in value]
-                fprint_bytes += [v.footprint_bytes / 1e9 if v.footprint_bytes
-                                 is not None else 0 for v in value]
+            time += sum([v.time for v in value])
 
-                del results_dict[key]
+            if value[0].flops is not None:
+                flops += sum([v.flops for v in value])
 
-            return num_calls, times, flops, bytes_accessed, fprint_bytes
+            if value[0].bytes_accessed is not None:
+                bytes_accessed += sum([v.bytes_accessed for v in value])
 
-        num_calls, times, flops, bytes_accessed, fprint_bytes = \
-            _gather_data(self.profile_results)
+            if value[0].footprint_bytes is not None:
+                fprint_bytes += sum([v.footprint_bytes for v in value])
+
+            del self.profile_results[key]
 
         if num_calls == 0:
             return MultiCallKernelProfile(0, 0, 0, 0, 0)
-
-        return MultiCallKernelProfile(num_calls, mean(times), mean(flops),
-                                       mean(bytes_accessed), mean(fprint_bytes))
+        else:
+            time_avg = time / num_calls / 1e9
+            flops_avg = flops / num_calls / 1e9
+            bytes_accessed_avg = bytes_accessed / num_calls / 1e9
+            fprint_bytes_avg = fprint_bytes / num_calls / 1e9
+            return MultiCallKernelProfile(num_calls, time_avg, flops_avg,
+                                          bytes_accessed_avg, fprint_bytes_avg)
 
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
@@ -275,9 +272,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_mean = "--"
                 bandwidth_access_max = "--"
 
-            name = key.name if hasattr(key, "name") else key.function_name
-
-            tbl.add_row([name, num_values, f"{sum(times):{g}}",
+            tbl.add_row([key.name, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,

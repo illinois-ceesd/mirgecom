@@ -47,7 +47,7 @@ from typing import Optional, Callable
 import numpy as np
 
 
-def initialize_logmgr(enable_logmgr: bool, enable_profiling: bool,
+def initialize_logmgr(enable_logmgr: bool,
                       filename: str = None, mode: str = "wu",
                       mpi_comm=None) -> LogManager:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
@@ -81,20 +81,19 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
-    for quantity in ["pressure", "temperature"]:
-        for op in ["min", "max", "norm"]:
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
-    for quantity in ["mass", "energy"]:
-        for op in ["min", "max", "norm"]:
+    for op in ["min", "max", "L2_norm"]:
+        for quantity in ["pressure", "temperature"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, quantity, op, extract_vars_for_logging, units_for_logging))
 
-    for dim in range(dim):
-        for op in ["min", "max", "norm"]:
+        for quantity in ["mass", "energy"]:
+            logmgr.add_quantity(DiscretizationBasedQuantity(
+                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+
+        for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=dim))
+                axis=d))
 
 
 # {{{ Package versions
@@ -154,7 +153,8 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
     Parameters
     ----------
     mgr
-        The :class:`logpyle.LogManager` to set the state of.
+        The :class:`logpyle.LogManager` whose :class:`StateConsumer` quantities
+        will receive *state*.
     """
     state_vars = {}
 
@@ -182,8 +182,9 @@ class StateConsumer:
 
         Parameters
         ----------
-        extract_vars_for_logging
-            Returns a dict of the state vars for a particular state.
+        extract_vars_for_logging(dim, state, eos)
+            Returns a dict(quantity_name: values) of the state vars for a particular
+            state.
         """
         self.extract_state_vars = extract_vars_for_logging
         self.state_vars = None
@@ -200,7 +201,7 @@ class StateConsumer:
 class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
-    Possible rank aggregation operations (``op``) are: min, max, norm.
+    Possible rank aggregation operations (``op``) are: min, max, L2_norm.
     """
 
     def __init__(self, discr: Discretization, quantity: str, op: str,
@@ -227,8 +228,8 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         elif op == "max":
             self._discr_reduction = partial(self.discr.nodal_max, "vol")
             self.rank_aggr = max
-        elif op == "norm":
-            self._discr_reduction = partial(self.discr.norm)
+        elif op == "L2_norm":
+            self._discr_reduction = partial(self.discr.norm, p=2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
@@ -245,10 +246,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
-        if self.axis is not None:  # momentum
-            return self._discr_reduction(quantity[self.axis])
-        else:  # mass, energy
-            return self._discr_reduction(quantity)
+        if self.axis is not None:  # e.g. momentum
+            quantity = quantity[self.axis]
+
+        return self._discr_reduction(quantity)
 
 # }}}
 

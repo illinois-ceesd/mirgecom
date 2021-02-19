@@ -69,7 +69,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
 
-    logmgr = initialize_logmgr(use_logmgr, use_profiling,
+    logmgr = initialize_logmgr(use_logmgr,
         filename="vortex.sqlite", mode="wu", mpi_comm=comm)
 
     cl_ctx = ctx_factory()
@@ -134,7 +134,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                              extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
-                            "min_temperature", "norm_momentum1"])
+                            "min_temperature", "L2_norm_momentum1"])
 
         try:
             logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
