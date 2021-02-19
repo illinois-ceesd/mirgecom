@@ -3,7 +3,7 @@
 Time integrators
 ^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
-.. autofunction:: lserk_step
+.. autofunction:: lsrk4_step
 .. autofunction:: euler_step
 """
 
