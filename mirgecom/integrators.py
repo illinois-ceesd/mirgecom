@@ -3,6 +3,7 @@
 Time integrators
 ^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
+.. autofunction:: lserk_step
 .. autofunction:: euler_step
 """
 
@@ -35,6 +36,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
+
 
 def rk4_step(state, t, dt, rhs):
     """Take one step using 4th order Runge-Kutta."""
@@ -43,6 +46,41 @@ def rk4_step(state, t, dt, rhs):
     k3 = rhs(t+dt/2, state + dt/2*k2)
     k4 = rhs(t+dt, state + dt*k3)
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+
+
+def lsrk4_step(state, t, dt, rhs):
+    """Take one step using low storage 4th order Runge-Kutta."""
+
+    # LSERK coefficients from [Hesthaven_2008]_, Section 3.4
+    a = np.array([
+        0,
+        -567301805773/1357537059087,
+        -2404267990393/2016746695238,
+        -355091866646/2091501179385,
+        -1275806237668/842570457699])
+
+    b = np.array([
+        1432997174477/9575080441755,
+        5161836677717/13612068292357,
+        1720146321549/2090206949498,
+        3134564353537/4481467310338,
+        2277821191437/14882151754819])
+
+    c = np.array([
+        0,
+        1432997174477/9575080441755,
+        2526269341429/6820363962896,
+        2006345519317/3224310063776,
+        2802321613138/2924317926251])
+
+    p = state
+    k = p * 0
+                  
+    for i in range(1,5):
+        k = a[i-1]*k + dt*rhs(t + c[i]*dt, p)
+        p = p + b[i]*k
+
+    return p
 
 
 def euler_step(state, t, dt, rhs):
