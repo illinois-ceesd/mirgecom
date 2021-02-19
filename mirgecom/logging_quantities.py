@@ -150,7 +150,8 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
     Parameters
     ----------
     mgr
-        The :class:`logpyle.LogManager` whose :class:`StateConsumer` quantities will receive *state*.
+        The :class:`logpyle.LogManager` whose :class:`StateConsumer` quantities
+        will receive *state*.
     """
     state_vars = {}
 
@@ -178,7 +179,7 @@ class StateConsumer:
 
         Parameters
         ----------
-        extract_vars_for_logging
+        extract_vars_for_logging(dim, state, eos) -> dict(quantity_name: values)
             Returns a dict of the state vars for a particular state.
         """
         self.extract_state_vars = extract_vars_for_logging

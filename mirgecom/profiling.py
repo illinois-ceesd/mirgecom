@@ -110,6 +110,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
 
         name = knl.function_name
+        knl.name = knl.function_name  # "name" is used by the LoopKernels
 
         args_tuple = tuple(
             (arg.size)
@@ -160,11 +161,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self._finish_profile_events()
 
         def _gather_data(results_dict: dict):
-            results = [key for key in results_dict if hasattr(key, "name")
-                       and key.name == kernel_name]
-            results.extend(
-                [key for key in results_dict if hasattr(key, "function_name")
-                 and key.function_name == kernel_name])
+            results = [key for key in results_dict if key.name == kernel_name]
+
             num_calls = 0
             times = []
             flops = []
@@ -275,9 +273,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_mean = "--"
                 bandwidth_access_max = "--"
 
-            name = key.name if hasattr(key, "name") else key.function_name
-
-            tbl.add_row([name, num_values, f"{sum(times):{g}}",
+            tbl.add_row([key.name, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
