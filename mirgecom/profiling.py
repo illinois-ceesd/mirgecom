@@ -33,7 +33,6 @@ from dataclasses import dataclass
 import pytools
 from logpyle import LogManager
 from mirgecom.logging_quantities import KernelProfile
-from statistics import mean
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
