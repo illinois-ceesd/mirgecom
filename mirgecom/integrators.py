@@ -76,7 +76,6 @@ def lsrk4_step(state, t, dt, rhs):
     k = p * 0.
 
     for i in range(5):
-        print(i)
         k = a[i]*k + dt*rhs(t + c[i]*dt, p)
         p = p + b[i]*k
 
