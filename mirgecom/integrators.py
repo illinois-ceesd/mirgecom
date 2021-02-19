@@ -70,8 +70,11 @@ def rk4_step(state, t, dt, rhs):
 
 
 def lsrk4_step(state, t, dt, rhs):
-    """Take one step using Carpenter-Kennedy low storage 4th order Runge-Kutta."""
-    """LSERK coefficients from [Hesthaven_2008]_, Section 3.4."""
+    """
+    Take one step using Carpenter-Kennedy low storage 4th order Runge-Kutta.
+
+    LSERK coefficients from [Hesthaven_2008]_, Section 3.4.
+    """
     p = state
     k = p * 0.
 
