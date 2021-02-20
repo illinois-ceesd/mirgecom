@@ -110,11 +110,11 @@ class GasEOS:
         """Get the ratio of gas specific heats Cp/Cv."""
         raise NotImplementedError()
 
-    def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
+    def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
         """Get an agglomerated array of the depedent variables."""
         return EOSDependentVars(
-            pressure=self.pressure(q),
-            temperature=self.temperature(q),
+            pressure=self.pressure(cv),
+            temperature=self.temperature(cv),
             )
 
 
@@ -139,11 +139,11 @@ class IdealSingleGas(GasEOS):
         self._gamma = gamma
         self._gas_const = gas_const
 
-    def gamma(self):
+    def gamma(self, cv: ConservedVars = None):
         """Get specific heat ratio Cp/Cv."""
         return self._gamma
 
-    def gas_const(self):
+    def gas_const(self, cv: ConservedVars = None):
         """Get specific gas constant R."""
         return self._gas_const
 
