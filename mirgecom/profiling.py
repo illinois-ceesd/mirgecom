@@ -116,7 +116,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             for arg in actual_args if isinstance(arg, cl.array.Array))
 
         try:
-            ignore = self.kernel_stats[knl][args_tuple]  # noqa
+            self.kernel_stats[knl][args_tuple]
         except KeyError:
             nbytes = 0
             nops = 0
