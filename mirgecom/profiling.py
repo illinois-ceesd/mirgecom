@@ -135,7 +135,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return evt
 
-    def _finish_profile_events(self) -> None:
+    def _wait_and_transfer_profile_events(self) -> None:
         # First, wait for completion of all events
         if self.profile_events:
             cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
@@ -157,7 +157,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                                  wait_for_events=True) -> MultiCallKernelProfile:
         """Return and reset profiling data for kernel `kernel_name`."""
         if wait_for_events:
-            self._finish_profile_events()
+            self._wait_and_transfer_profile_events()
 
         num_calls = 0
         time = 0
@@ -198,7 +198,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
         if wait_for_events:
-            self._finish_profile_events()
+            self._wait_and_transfer_profile_events()
 
         tbl = pytools.Table()
 
