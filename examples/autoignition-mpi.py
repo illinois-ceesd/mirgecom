@@ -186,13 +186,15 @@ def main(ctx_factory=cl.create_some_context):
     # Cantera equilibrate calculates the expected end state @ chemical equilibrium
     # i.e. the expected state after all reactions
     cantera_soln.equilibrate("UV")
-    can_eq_t, can_eq_rho, can_eq_y = cantera_soln.TDY
-    can_eq_p = cantera_soln.P
+    eq_temperature, eq_density, eq_mass_fractions = cantera_soln.TDY
+    eq_pressure = cantera_soln.P
+
     # Report the expected final state to the user
     if rank == 0:
         logger.info(init_message)
-        logger.info(f"Expected (p, T, rho, y) = ({can_eq_p}, {can_eq_t},"
-                    f" {can_eq_rho}, {can_eq_y})")
+        logger.info(f"Expected equilibrium state:"
+                    f" {eq_pressure=}, {eq_temperature=},"
+                    f" {eq_density=}, {eq_mass_fractions=}")
 
     get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
                            dt=current_dt, cfl=current_cfl, eos=eos,
