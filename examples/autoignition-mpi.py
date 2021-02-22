@@ -40,6 +40,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
+    check_step,
     create_parallel_grid,
     ExactSolutionMismatch
 )
@@ -109,29 +110,48 @@ def main(ctx_factory=cl.create_some_context):
 
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     nspecies = cantera_soln.n_species
-    init_temperature = 1500.0
+
+    # ====== Set up the initial state ========
+    # Initial temperature, pressure, and mixutre mole fractions are needed to
+    # set up the initial state in Cantera.
+    init_temperature = 1500.0  # Initial temperature hot enough to burn
+    # Parameters for calculating the amounts of fuel, oxidizer, and inert species
     equiv_ratio = 1.0
     ox_di_ratio = 0.21
     stoich_ratio = 3.0
+    # Grab the array indices for the specific species, ethylene, oxygen, and nitrogen
     i_fu = cantera_soln.species_index("C2H4")
     i_ox = cantera_soln.species_index("O2")
     i_di = cantera_soln.species_index("N2")
     x = np.zeros(nspecies)
+    # Set the species mole fractions according to our desired fuel/air mixture
     x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
     x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
     # one_atm = cantera.one_atm
     one_atm = 101325.0
 
+    # Let the user know about how Cantera is being initilized
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
+    # Set Cantera internal gas temperature, pressure, and mole fractios
     cantera_soln.TPX = init_temperature, one_atm, x
+    # Pull temperature, total density, mass fractions, and pressure from Cantera
+    # We need total density, and mass fractions to initialize the fluid/gas state.
     can_t, can_rho, can_y = cantera_soln.TDY
     can_p = cantera_soln.P
+    # *can_t*, *can_p* should not differ (significantly) from user's initial data,
+    # but we want to ensure that we use exactly the same starting point as Cantera,
+    # so we use Cantera's version of these data.
 
+    # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
+    # generates a set of methods to calculate chemothermomechanical properties and
+    # states for this particular mechanism.
     casename = "autoignition"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism, tguess=init_temperature)
 
+    # Initialize the fluid/gas state with Cantera-consistent data:
+    # (density, pressure, temperature, mass_fractions)
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
@@ -162,17 +182,16 @@ def main(ctx_factory=cl.create_some_context):
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
                                      eosname=eosname, casename=casename)
+
+    # Cantera equilibrate calculates the expected end state @ chemical equilibrium
+    # i.e. the expected state after all reactions
     cantera_soln.equilibrate("UV")
     can_eq_t, can_eq_rho, can_eq_y = cantera_soln.TDY
     can_eq_p = cantera_soln.P
-    #    can_eq_e = cantera_soln.int_energy_mass
-    #    can_eq_k = cantera_soln.forward_rate_constants
-    #    can_eq_c = cantera_soln.concentrations
-    #    can_eq_r = cantera_soln.net_rates_of_progress
-    #    can_eq_omega = cantera_soln.net_production_rates
+    # Report the expected final state to the user
     if rank == 0:
         logger.info(init_message)
-        logger.info(f"Expected (p,T,rho, y) = ({can_eq_p}, {can_eq_t},"
+        logger.info(f"Expected (p, T, rho, y) = ({can_eq_p}, {can_eq_t},"
                     f" {can_eq_rho}, {can_eq_y})")
 
     get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
@@ -186,7 +205,6 @@ def main(ctx_factory=cl.create_some_context):
                 + eos.get_species_source_terms(cv))
 
     def my_checkpoint(step, t, dt, state):
-        global checkpoint_t
         cv = split_conserved(dim, state)
         reaction_rates = eos.get_production_rates(cv)
         viz_fields = [("reaction_rates", reaction_rates)]
@@ -208,7 +226,7 @@ def main(ctx_factory=cl.create_some_context):
         current_t = ex.t
         current_state = ex.state
 
-    if current_t != checkpoint_t:  # This check because !overwrite
+    if not check_step(current_step, nviz):  # If final step not an output step
         if rank == 0:
             logger.info("Checkpointing final state ...")
         my_checkpoint(current_step, t=current_t,
