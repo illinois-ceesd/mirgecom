@@ -216,27 +216,27 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         total_calls = 0
         total_time = 0
 
-        for key, value in self.profile_results.items():
-            num_values = len(value)
+        for knl, results in self.profile_results.items():
+            num_values = len(results)
 
             total_calls += num_values
 
-            times = [v.time / 1e9 for v in value]
+            times = [v.time / 1e9 for v in results]
 
             total_time += sum(times)
 
             flops = [v.flops / 1e9 if v.flops is not None and v.flops > 0 else None
-                     for v in value]
+                     for v in results]
             flops_per_sec = [f / t if f is not None else None
                               for f, t in zip(flops, times)]
 
             bytes_accessed = [v.bytes_accessed / 1e9
                              if v.bytes_accessed is not None else None
-                             for v in value]
+                             for v in results]
             bandwidth_access = [b / t if b is not None else None
                                  for b, t in zip(bytes_accessed, times)]
 
-            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in value],
+            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in results],
                 None)
             fprint_mean = np.mean(fprint_bytes) / 1e9
 
@@ -271,7 +271,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_mean = "--"
                 bandwidth_access_max = "--"
 
-            tbl.add_row([key.name, num_values, f"{sum(times):{g}}",
+            tbl.add_row([knl.name, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
