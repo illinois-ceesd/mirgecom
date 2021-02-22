@@ -109,7 +109,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
 
         name = knl.function_name
-        knl.name = knl.function_name  # "name" is used by the LoopKernels
 
         args_tuple = tuple(
             (arg.size)
@@ -165,7 +164,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         bytes_accessed = 0
         fprint_bytes = 0
 
-        keys = [k for k in self.profile_results.keys() if k.name == kernel_name]
+        keys = [k for k in self.profile_results.keys() if
+                (hasattr(k, "name") and k.name == kernel_name)
+                or (hasattr(k, "function_name") and k.function_name == kernel_name)]
 
         for key in keys:
             value = self.profile_results[key]
