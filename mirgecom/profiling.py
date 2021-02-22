@@ -163,27 +163,27 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         bytes_accessed = 0
         fprint_bytes = 0
 
-        keys = [k for k in self.profile_results.keys() if
-                (hasattr(k, "name") and k.name == kernel_name)
+        matching_knls = [k for k in self.profile_results.keys() if
+                         (hasattr(k, "name") and k.name == kernel_name)
                 or (hasattr(k, "function_name") and k.function_name == kernel_name)]
 
-        for key in keys:
-            value = self.profile_results[key]
+        for knl in matching_knls:
+            knl_results = self.profile_results[knl]
 
-            num_calls += len(value)
+            num_calls += len(knl_results)
 
-            time += sum([v.time for v in value])
+            time += sum([v.time for v in knl_results])
 
-            if value[0].flops is not None:
-                flops += sum([v.flops for v in value])
+            if knl_results[0].flops is not None:
+                flops += sum([v.flops for v in knl_results])
 
-            if value[0].bytes_accessed is not None:
-                bytes_accessed += sum([v.bytes_accessed for v in value])
+            if knl_results[0].bytes_accessed is not None:
+                bytes_accessed += sum([v.bytes_accessed for v in knl_results])
 
-            if value[0].footprint_bytes is not None:
-                fprint_bytes += sum([v.footprint_bytes for v in value])
+            if knl_results[0].footprint_bytes is not None:
+                fprint_bytes += sum([v.footprint_bytes for v in knl_results])
 
-            del self.profile_results[key]
+            del self.profile_results[knl]
 
         if num_calls == 0:
             return MultiCallKernelProfile(0, 0, 0, 0, 0)
@@ -295,7 +295,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         # Are kernel stats already in the cache?
         try:
-            x = self.kernel_stats[program][args_tuple]  # noqa
+            self.kernel_stats[program][args_tuple]
             return args_tuple
         except KeyError:
             # If not, calculate and cache the stats
