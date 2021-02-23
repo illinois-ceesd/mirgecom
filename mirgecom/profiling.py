@@ -64,7 +64,7 @@ class MultiCallKernelProfile:
 
 @dataclass
 class ProfileEvent:
-    """Class to hold a profile event that has not been seen by the profiler yet."""
+    """Holds a profile event that has not been collected by the profiler yet."""
 
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
@@ -89,8 +89,13 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                  "Please create the queue with "
                  "cl.command_queue_properties.PROFILING_ENABLE.")
 
+        # list of ProfileEvents that haven't been transferred to profiled results yet
         self.profile_events = []
+
+        # dict of Kernel -> SingleCallKernelProfile results
         self.profile_results = {}
+
+        # dict of (LoopyKernel, args_tuple) -> calculated number of flops, bytes
         self.kernel_stats = {}
         self.logmgr = logmgr
 
@@ -271,7 +276,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_mean = "--"
                 bandwidth_access_max = "--"
 
-            tbl.add_row([knl.name, num_values, f"{sum(times):{g}}",
+            if hasattr(knl, "name"):
+                name = knl.name
+            else:
+                name = knl.function_name
+
+            tbl.add_row([name, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
