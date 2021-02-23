@@ -92,10 +92,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # list of ProfileEvents that haven't been transferred to profiled results yet
         self.profile_events = []
 
-        # dict of Kernel -> SingleCallKernelProfile results
+        # dict of kernel name -> SingleCallKernelProfile results
         self.profile_results = {}
 
-        # dict of (LoopyKernel, args_tuple) -> calculated number of flops, bytes
+        # dict of (Kernel, args_tuple) -> calculated number of flops, bytes
         self.kernel_stats = {}
         self.logmgr = logmgr
 
@@ -147,13 +147,17 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # Then, collect all events and store them
         for t in self.profile_events:
             program = t.program
+            if hasattr(program, "name"):
+                name = program.name
+            else:
+                name = program.function_name
             r = self._get_kernel_stats(program, t.args_tuple)
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
             new = SingleCallKernelProfile(time, r.flops, r.bytes_accessed,
                                           r.footprint_bytes)
 
-            self.profile_results.setdefault(program, []).append(new)
+            self.profile_results.setdefault(name, []).append(new)
 
         self.profile_events = []
 
@@ -162,43 +166,37 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         """Return and reset profiling data for kernel `kernel_name`."""
         self._wait_and_transfer_profile_events()
 
-        num_calls = 0
-        time = 0
-        flops = 0
-        bytes_accessed = 0
-        fprint_bytes = 0
+        if kernel_name not in self.profile_results:
+            return MultiCallKernelProfile(None, None, None, None, None)
 
-        matching_knls = [k for k in self.profile_results.keys() if
-                         (hasattr(k, "name") and k.name == kernel_name)
-                or (hasattr(k, "function_name") and k.function_name == kernel_name)]
+        knl_results = self.profile_results[kernel_name]
 
-        for knl in matching_knls:
-            knl_results = self.profile_results[knl]
+        num_calls = len(knl_results)
 
-            num_calls += len(knl_results)
+        time = sum([v.time for v in knl_results]) / num_calls / 1e9
 
-            time += sum([v.time for v in knl_results])
-
-            if knl_results[0].flops is not None:
-                flops += sum([v.flops for v in knl_results])
-
-            if knl_results[0].bytes_accessed is not None:
-                bytes_accessed += sum([v.bytes_accessed for v in knl_results])
-
-            if knl_results[0].footprint_bytes is not None:
-                fprint_bytes += sum([v.footprint_bytes for v in knl_results])
-
-            del self.profile_results[knl]
-
-        if num_calls == 0:
-            return MultiCallKernelProfile(0, 0, 0, 0, 0)
+        if knl_results[0].flops is not None:
+            gflops = sum([v.flops for v in knl_results]) / num_calls / 1e9
         else:
-            time_avg = time / num_calls / 1e9
-            flops_avg = flops / num_calls / 1e9
-            bytes_accessed_avg = bytes_accessed / num_calls / 1e9
-            fprint_bytes_avg = fprint_bytes / num_calls / 1e9
-            return MultiCallKernelProfile(num_calls, time_avg, flops_avg,
-                                          bytes_accessed_avg, fprint_bytes_avg)
+            gflops = None
+
+        if knl_results[0].bytes_accessed is not None:
+            gbytes_accessed = sum([v.bytes_accessed for v in knl_results]) \
+                / num_calls / 1e9
+
+        else:
+            gbytes_accessed = None
+
+        if knl_results[0].footprint_bytes is not None:
+            fprint_gbytes = sum([v.footprint_bytes for v in knl_results]) \
+                / num_calls / 1e9
+        else:
+            fprint_gbytes = None
+
+        del self.profile_results[kernel_name]
+
+        return MultiCallKernelProfile(num_calls, time, gflops,
+                                          gbytes_accessed, fprint_gbytes)
 
     def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
@@ -206,6 +204,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         tbl = pytools.Table()
 
+        # Table header
         tbl.add_row(["Function", "Calls",
             "Time_sum [s]", "Time_min [s]", "Time_avg [s]", "Time_max [s]",
             "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
@@ -276,12 +275,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_mean = "--"
                 bandwidth_access_max = "--"
 
-            if hasattr(knl, "name"):
-                name = knl.name
-            else:
-                name = knl.function_name
-
-            tbl.add_row([name, num_values, f"{sum(times):{g}}",
+            tbl.add_row([knl, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
