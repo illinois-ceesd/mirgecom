@@ -76,7 +76,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
-    .. automethod:: get_and_reset_profiling_data_for_kernel
+    .. automethod:: get_profiling_data_for_kernel
+    .. automethod:: reset_profiling_data_for_kernel
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
     """
