@@ -57,7 +57,7 @@ from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_default_discretization_quantities, logmgr_add_device_name)
+    logmgr_add_many_discretization_quantities, logmgr_add_device_name)
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
-        logmgr_add_default_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",

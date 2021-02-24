@@ -31,7 +31,7 @@ __doc__ = """
 .. autoclass:: PythonMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
-.. autofunction:: logmgr_add_default_discretization_quantities
+.. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 """
@@ -75,7 +75,7 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     logmgr.set_constant("cl_device_name", str(queue.device))
 
 
-def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
+def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
     for op in ["min", "max", "L2_norm"]:
