@@ -174,23 +174,23 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         num_calls = len(knl_results)
 
-        time = sum([v.time for v in knl_results]) / num_calls / 1e9
+        from statistics import mean
+
+        time = mean([v.time for v in knl_results]) / 1e9
 
         if knl_results[0].flops is not None:
-            gflops = sum([v.flops for v in knl_results]) / num_calls / 1e9
+            gflops = mean([v.flops for v in knl_results]) / 1e9
         else:
             gflops = None
 
         if knl_results[0].bytes_accessed is not None:
-            gbytes_accessed = sum([v.bytes_accessed for v in knl_results]) \
-                / num_calls / 1e9
+            gbytes_accessed = mean([v.bytes_accessed for v in knl_results]) / 1e9
 
         else:
             gbytes_accessed = None
 
         if knl_results[0].footprint_bytes is not None:
-            fprint_gbytes = sum([v.footprint_bytes for v in knl_results]) \
-                / num_calls / 1e9
+            fprint_gbytes = mean([v.footprint_bytes for v in knl_results]) / 1e9
         else:
             fprint_gbytes = None
 

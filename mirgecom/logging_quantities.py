@@ -254,8 +254,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 # {{{ Kernel profile quantities
 
 class KernelProfile(MultiLogQuantity):
-    """Logging support for statistics of the OpenCL kernel profiling (time, \
-    num_calls, flops, bytes_accessed, footprint).
+    """Logging support for statistics of the OpenCL kernel profiling (num_calls, \
+    time, flops, bytes_accessed, footprint).
+
+    All statistics except num_calls are averages.
 
     Parameters
     ----------
@@ -275,7 +277,7 @@ class KernelProfile(MultiLogQuantity):
         from dataclasses import fields
         from mirgecom.profiling import MultiCallKernelProfile
 
-        units_default = {"num_calls": "1", "flops": "GFlops", "time": "s",
+        units_default = {"num_calls": "1",  "time": "s", "flops": "GFlops",
                          "bytes_accessed": "GByte", "footprint_bytes": "GByte"}
 
         names = [f"{kernel_name}_{f.name}" for f in fields(MultiCallKernelProfile)]
