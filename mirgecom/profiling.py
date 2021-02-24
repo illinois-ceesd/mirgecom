@@ -31,54 +31,18 @@ import loopy as lp
 import numpy as np
 from dataclasses import dataclass
 import pytools
+from logpyle import LogManager
+from mirgecom.logging_quantities import KernelProfile
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
+.. autoclass:: SingleCallKernelProfile
+.. autoclass:: MultiCallKernelProfile
 """
 
 
-# {{{ Support for non-Loopy results (e.g., pyopencl kernels)
-
-nonloopy_profile_events = []
-
-
-def init_pyopencl_array_monkey_patch():
-    """Add the :mod:`pyopencl` monkey patching."""
-    cl.array.ARRAY_KERNEL_EXEC_HOOK = array_kernel_exec_hook
-
-
-def del_pyopencl_array_monkey_patch():
-    """Remove the :mod:`pyopencl` monkey patching."""
-    cl.array.ARRAY_KERNEL_EXEC_HOOK = None
-
-
-@dataclass(eq=True, frozen=True)
-class NonLoopyProfilekernel:
-    """Class to hold the name for a non-loopy profile result.
-
-    This is necessary so that :meth:`tabulate_profiling_data` can
-    access the 'name' field of the non-Loopy kernel.
-    """
-
-    name: str
-
-
-@dataclass(eq=True, frozen=True)
-class NonLoopyProfileEvent:
-    r"""Hold a non-Loopy profile event that has not been seen by the profiler yet.
-
-    These events typically arise from operations performed on
-    :class:`pyopencl.array.Array`\ s.
-    """
-
-    cl_event: cl._cl.Event
-    knl: NonLoopyProfilekernel
-    nops: int    # Assumption: all operations are floating-point
-    nbytes: int  # Assumption: nbytes covers both bytes accessed and memory footprint
-
-
 @dataclass
-class ProfileResult:
+class SingleCallKernelProfile:
     """Class to hold the results of a single kernel execution."""
 
     time: int
@@ -87,31 +51,20 @@ class ProfileResult:
     footprint_bytes: int
 
 
-def array_kernel_exec_hook(knl, queue, gs, ls, *actual_args, wait_for):
-    """Extract data from the elementwise array kernel."""
-    evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
+@dataclass
+class MultiCallKernelProfile:
+    """Class to hold the results of multiple kernel executions."""
 
-    nbytes = 0
-    nops = 0
-
-    for arg in actual_args:
-        if isinstance(arg, cl.array.Array):
-            nbytes += arg.size * arg.dtype.itemsize
-            nops += arg.size
-
-    name = knl.get_info(cl.kernel_info.FUNCTION_NAME)
-
-    nonloopy_profile_events.append(
-        NonLoopyProfileEvent(evt, NonLoopyProfilekernel(name), nops, nbytes))
-
-    return evt
-
-# }}}
+    num_calls: int
+    time: float
+    flops: float
+    bytes_accessed: float
+    footprint_bytes: float
 
 
 @dataclass
 class ProfileEvent:
-    """Class to hold a profile event that has not been seen by the profiler yet."""
+    """Holds a profile event that has not been collected by the profiler yet."""
 
     cl_event: cl._cl.Event
     program: lp.kernel.LoopKernel
@@ -123,12 +76,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
+    .. automethod:: get_and_reset_profiling_data_for_kernel
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
     """
 
-    def __init__(self, queue, allocator=None) -> None:
-        """Initialize the object."""
+    def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:
         super().__init__(queue, allocator)
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
@@ -136,11 +89,17 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                  "Please create the queue with "
                  "cl.command_queue_properties.PROFILING_ENABLE.")
 
+        # list of ProfileEvents that haven't been transferred to profiled results yet
         self.profile_events = []
-        self.profile_results = {}
-        self.kernel_stats = {}
 
-        init_pyopencl_array_monkey_patch()
+        # dict of kernel name -> SingleCallKernelProfile results
+        self.profile_results = {}
+
+        # dict of (Kernel, args_tuple) -> calculated number of flops, bytes
+        self.kernel_stats = {}
+        self.logmgr = logmgr
+
+        cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
 
     def __del__(self):
         """Release resources and undo monkey patching."""
@@ -148,42 +107,104 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.profile_results.clear()
         self.kernel_stats.clear()
 
-        del_pyopencl_array_monkey_patch()
+        cl.array.ARRAY_KERNEL_EXEC_HOOK = None
 
-    def _finish_profile_events(self) -> None:
+    def array_kernel_exec_hook(self, knl, queue, gs, ls, *actual_args, wait_for):
+        """Extract data from the elementwise array kernel."""
+        evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
+
+        name = knl.function_name
+
+        args_tuple = tuple(
+            (arg.size)
+            for arg in actual_args if isinstance(arg, cl.array.Array))
+
+        try:
+            self.kernel_stats[knl][args_tuple]
+        except KeyError:
+            nbytes = 0
+            nops = 0
+            for arg in actual_args:
+                if isinstance(arg, cl.array.Array):
+                    nbytes += arg.size * arg.dtype.itemsize
+                    nops += arg.size
+            res = SingleCallKernelProfile(time=0, flops=nops, bytes_accessed=nbytes,
+                                footprint_bytes=nbytes)
+            self.kernel_stats.setdefault(knl, {})[args_tuple] = res
+
+        if self.logmgr and f"{name}_time" not in self.logmgr.quantity_data:
+            self.logmgr.add_quantity(KernelProfile(self, name))
+
+        self.profile_events.append(ProfileEvent(evt, knl, args_tuple))
+
+        return evt
+
+    def _wait_and_transfer_profile_events(self) -> None:
         # First, wait for completion of all events
         if self.profile_events:
             cl.wait_for_events([pevt.cl_event for pevt in self.profile_events])
 
-        global nonloopy_profile_events
-        if nonloopy_profile_events:
-            cl.wait_for_events([npe.cl_event for npe in nonloopy_profile_events])
-
         # Then, collect all events and store them
         for t in self.profile_events:
             program = t.program
+            if hasattr(program, "name"):
+                name = program.name
+            else:
+                name = program.function_name
             r = self._get_kernel_stats(program, t.args_tuple)
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
-            new = ProfileResult(time, r.flops, r.bytes_accessed, r.footprint_bytes)
+            new = SingleCallKernelProfile(time, r.flops, r.bytes_accessed,
+                                          r.footprint_bytes)
 
-            self.profile_results.setdefault(program, []).append(new)
-
-        for t in nonloopy_profile_events:
-            program = t.knl
-            time = t.cl_event.profile.end - t.cl_event.profile.start
-            new = ProfileResult(time, t.nops, t.nbytes, t.nbytes)
-            self.profile_results.setdefault(program, []).append(new)
+            self.profile_results.setdefault(name, []).append(new)
 
         self.profile_events = []
-        nonloopy_profile_events = []
+
+    def get_and_reset_profiling_data_for_kernel(self, kernel_name: str) \
+          -> MultiCallKernelProfile:
+        """Return and reset profiling data for kernel `kernel_name`."""
+        self._wait_and_transfer_profile_events()
+
+        if kernel_name not in self.profile_results:
+            return MultiCallKernelProfile(None, None, None, None, None)
+
+        knl_results = self.profile_results[kernel_name]
+
+        num_calls = len(knl_results)
+
+        time = sum([v.time for v in knl_results]) / num_calls / 1e9
+
+        if knl_results[0].flops is not None:
+            gflops = sum([v.flops for v in knl_results]) / num_calls / 1e9
+        else:
+            gflops = None
+
+        if knl_results[0].bytes_accessed is not None:
+            gbytes_accessed = sum([v.bytes_accessed for v in knl_results]) \
+                / num_calls / 1e9
+
+        else:
+            gbytes_accessed = None
+
+        if knl_results[0].footprint_bytes is not None:
+            fprint_gbytes = sum([v.footprint_bytes for v in knl_results]) \
+                / num_calls / 1e9
+        else:
+            fprint_gbytes = None
+
+        del self.profile_results[kernel_name]
+
+        return MultiCallKernelProfile(num_calls, time, gflops,
+                                          gbytes_accessed, fprint_gbytes)
 
     def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
-        self._finish_profile_events()
+        self._wait_and_transfer_profile_events()
 
         tbl = pytools.Table()
 
+        # Table header
         tbl.add_row(["Function", "Calls",
             "Time_sum [s]", "Time_min [s]", "Time_avg [s]", "Time_max [s]",
             "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
@@ -199,27 +220,27 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         total_calls = 0
         total_time = 0
 
-        for key, value in self.profile_results.items():
-            num_values = len(value)
+        for knl, results in self.profile_results.items():
+            num_values = len(results)
 
             total_calls += num_values
 
-            times = [v.time / 1e9 for v in value]
+            times = [v.time / 1e9 for v in results]
 
             total_time += sum(times)
 
             flops = [v.flops / 1e9 if v.flops is not None and v.flops > 0 else None
-                     for v in value]
+                     for v in results]
             flops_per_sec = [f / t if f is not None else None
                               for f, t in zip(flops, times)]
 
             bytes_accessed = [v.bytes_accessed / 1e9
                              if v.bytes_accessed is not None else None
-                             for v in value]
+                             for v in results]
             bandwidth_access = [b / t if b is not None else None
                                  for b, t in zip(bytes_accessed, times)]
 
-            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in value],
+            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in results],
                 None)
             fprint_mean = np.mean(fprint_bytes) / 1e9
 
@@ -254,7 +275,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 bandwidth_access_mean = "--"
                 bandwidth_access_max = "--"
 
-            tbl.add_row([key.name, num_values, f"{sum(times):{g}}",
+            tbl.add_row([knl, num_values, f"{sum(times):{g}}",
                 f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
@@ -266,7 +287,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         return tbl
 
     def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) \
-      -> ProfileResult:
+      -> SingleCallKernelProfile:
         return self.kernel_stats[program][args_tuple]
 
     def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) \
@@ -278,7 +299,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         # Are kernel stats already in the cache?
         try:
-            x = self.kernel_stats[program][args_tuple]  # noqa
+            self.kernel_stats[program][args_tuple]
             return args_tuple
         except KeyError:
             # If not, calculate and cache the stats
@@ -333,11 +354,16 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             except lp.symbolic.UnableToDetermineAccessRange:
                 footprint_bytes = None
 
-            res = ProfileResult(
+            res = SingleCallKernelProfile(
                 time=0, flops=flops, bytes_accessed=bytes_accessed,
                 footprint_bytes=footprint_bytes)
 
             self.kernel_stats.setdefault(program, {})[args_tuple] = res
+
+            if self.logmgr:
+                if f"{program.name}_time" not in self.logmgr.quantity_data:
+                    self.logmgr.add_quantity(KernelProfile(self, program.name))
+
             return args_tuple
 
     def call_loopy(self, program, **kwargs) -> dict:

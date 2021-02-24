@@ -93,7 +93,10 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   viz_fields=None, s0=None, kappa=None, constant_cfl=False, comm=None, overwrite=False):
+                   viz_fields=None, s0=None, kappa=None, constant_cfl=False, 
+                   comm=None, overwrite=False, vis_timer=None):
+                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
+                   vis_timer=None):
     """Check simulation health, status, viz dumps, and restart."""
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
@@ -143,9 +146,18 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
-        visualizer.write_parallel_vtk_file(
-            comm, rank_fn, io_fields, overwrite=overwrite,
-            par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
+
+        from contextlib import nullcontext
+
+        if vis_timer:
+            ctm = vis_timer.start_sub_timer()
+        else:
+            ctm = nullcontext()
+
+        with ctm:
+            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
+                overwrite=overwrite, par_manifest_filename=make_par_fname(
+                    basename=vizname, step=step, t=t))
 
     if do_status is True:
         #        if constant_cfl is False:
