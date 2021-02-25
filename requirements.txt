@@ -4,6 +4,7 @@ numpy
 pytest
 pyvisfile
 pymetis
+logpyle
 importlib-resources
 
 # The following packages will be git cloned by emirge:

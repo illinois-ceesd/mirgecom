@@ -35,3 +35,7 @@ run-debug-*
 .pytest_cache
 
 test/nodal-dg
+
+# Logging output files
+*.sqlite
+*.sqlite-journal

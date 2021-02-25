@@ -352,6 +352,32 @@ def get_inviscid_cfl(discr, eos, dt, q):
     return dt / wanted_dt
 
 
+# By default, run unitless
+NAME_TO_UNITS = {
+    "mass": "",
+    "energy": "",
+    "momentum": "",
+    "temperature": "",
+    "pressure": ""
+}
+
+
+def units_for_logging(quantity: str) -> str:
+    """Return unit for quantity."""
+    return NAME_TO_UNITS[quantity]
+
+
+def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
+    """Extract state vars."""
+    cv = split_conserved(dim, state)
+    dv = eos.dependent_vars(cv)
+
+    from mirgecom.utils import asdict_shallow
+    name_to_field = asdict_shallow(cv)
+    name_to_field.update(asdict_shallow(dv))
+    return name_to_field
+
+
 def get_inviscid_timestep(discr, eos, cfl, q):
     """Routine (will) return the (local) maximum stable inviscid timestep.
 
