@@ -168,10 +168,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         """Return profiling data for kernel `kernel_name`."""
         self._wait_and_transfer_profile_events()
 
-        time = StatisticsAccumulator(scale_factor=1e9)
-        gflops = StatisticsAccumulator(scale_factor=1e9)
-        gbytes_accessed = StatisticsAccumulator(scale_factor=1e9)
-        fprint_gbytes = StatisticsAccumulator(scale_factor=1e9)
+        time = StatisticsAccumulator(scale_factor=1e-9)
+        gflops = StatisticsAccumulator(scale_factor=1e-9)
+        gbytes_accessed = StatisticsAccumulator(scale_factor=1e-9)
+        fprint_gbytes = StatisticsAccumulator(scale_factor=1e-9)
         num_calls = 0
 
         if kernel_name in self.profile_results:

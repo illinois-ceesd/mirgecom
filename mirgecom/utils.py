@@ -91,25 +91,25 @@ class StatisticsAccumulator:
         if self.num_values == 0:
             return None
 
-        return self._sum / self.scale_factor
+        return self._sum * self.scale_factor
 
     def mean(self) -> Optional[float]:
         """Return the mean of added values."""
         if self.num_values == 0:
             return None
 
-        return self._sum / self.num_values / self.scale_factor
+        return self._sum / self.num_values * self.scale_factor
 
     def max(self) -> Optional[float]:
         """Return the max of added values."""
         if self.num_values == 0:
             return None
 
-        return self._max / self.scale_factor
+        return self._max * self.scale_factor
 
     def min(self) -> Optional[float]:
         """Return the min of added values."""
         if self.num_values == 0:
             return None
 
-        return self._min / self.scale_factor
+        return self._min * self.scale_factor
