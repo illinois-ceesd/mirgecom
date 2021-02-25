@@ -31,7 +31,7 @@ __doc__ = """
 .. autoclass:: PythonMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
-.. autofunction:: logmgr_add_default_discretization_quantities
+.. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 """
@@ -75,7 +75,7 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     logmgr.set_constant("cl_device_name", str(queue.device))
 
 
-def logmgr_add_default_discretization_quantities(logmgr: LogManager, discr, dim,
+def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
     for op in ["min", "max", "L2_norm"]:
@@ -254,8 +254,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 # {{{ Kernel profile quantities
 
 class KernelProfile(MultiLogQuantity):
-    """Logging support for statistics of the OpenCL kernel profiling (time, \
-    num_calls, flops, bytes_accessed, footprint).
+    """Logging support for statistics of the OpenCL kernel profiling (num_calls, \
+    time, flops, bytes_accessed, footprint).
+
+    All statistics except num_calls are averages.
 
     Parameters
     ----------
@@ -275,7 +277,7 @@ class KernelProfile(MultiLogQuantity):
         from dataclasses import fields
         from mirgecom.profiling import MultiCallKernelProfile
 
-        units_default = {"num_calls": "1", "flops": "GFlops", "time": "s",
+        units_default = {"num_calls": "1",  "time": "s", "flops": "GFlops",
                          "bytes_accessed": "GByte", "footprint_bytes": "GByte"}
 
         names = [f"{kernel_name}_{f.name}" for f in fields(MultiCallKernelProfile)]
@@ -288,9 +290,11 @@ class KernelProfile(MultiLogQuantity):
 
     def __call__(self) -> list:
         """Return the requested kernel profile quantity."""
-        from dataclasses import astuple
-        r = self.actx.get_and_reset_profiling_data_for_kernel(self.kernel_name)
-        return astuple(r)
+        r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
+        self.actx.reset_profiling_data_for_kernel(self.kernel_name)
+
+        return [r.num_calls, r.time.mean(), r.flops.mean(), r.bytes_accessed.mean(),
+                r.footprint_bytes.mean()]
 
 # }}}
 

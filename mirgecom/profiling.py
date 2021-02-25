@@ -33,6 +33,7 @@ from dataclasses import dataclass
 import pytools
 from logpyle import LogManager
 from mirgecom.logging_quantities import KernelProfile
+from mirgecom.utils import StatisticsAccumulator
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -56,10 +57,10 @@ class MultiCallKernelProfile:
     """Class to hold the results of multiple kernel executions."""
 
     num_calls: int
-    time: float
-    flops: float
-    bytes_accessed: float
-    footprint_bytes: float
+    time: StatisticsAccumulator
+    flops: StatisticsAccumulator
+    bytes_accessed: StatisticsAccumulator
+    footprint_bytes: StatisticsAccumulator
 
 
 @dataclass
@@ -76,7 +77,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
-    .. automethod:: get_and_reset_profiling_data_for_kernel
+    .. automethod:: get_profiling_data_for_kernel
+    .. automethod:: reset_profiling_data_for_kernel
 
     Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
     """
@@ -161,42 +163,34 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         self.profile_events = []
 
-    def get_and_reset_profiling_data_for_kernel(self, kernel_name: str) \
+    def get_profiling_data_for_kernel(self, kernel_name: str) \
           -> MultiCallKernelProfile:
-        """Return and reset profiling data for kernel `kernel_name`."""
+        """Return profiling data for kernel `kernel_name`."""
         self._wait_and_transfer_profile_events()
 
-        if kernel_name not in self.profile_results:
-            return MultiCallKernelProfile(None, None, None, None, None)
+        time = StatisticsAccumulator(scale_factor=1e-9)
+        gflops = StatisticsAccumulator(scale_factor=1e-9)
+        gbytes_accessed = StatisticsAccumulator(scale_factor=1e-9)
+        fprint_gbytes = StatisticsAccumulator(scale_factor=1e-9)
+        num_calls = 0
 
-        knl_results = self.profile_results[kernel_name]
+        if kernel_name in self.profile_results:
+            knl_results = self.profile_results[kernel_name]
 
-        num_calls = len(knl_results)
+            num_calls = len(knl_results)
 
-        time = sum([v.time for v in knl_results]) / num_calls / 1e9
+            for r in knl_results:
+                time.add_value(r.time)
+                gflops.add_value(r.flops)
+                gbytes_accessed.add_value(r.bytes_accessed)
+                fprint_gbytes.add_value(r.footprint_bytes)
 
-        if knl_results[0].flops is not None:
-            gflops = sum([v.flops for v in knl_results]) / num_calls / 1e9
-        else:
-            gflops = None
+        return MultiCallKernelProfile(num_calls, time, gflops, gbytes_accessed,
+                                      fprint_gbytes)
 
-        if knl_results[0].bytes_accessed is not None:
-            gbytes_accessed = sum([v.bytes_accessed for v in knl_results]) \
-                / num_calls / 1e9
-
-        else:
-            gbytes_accessed = None
-
-        if knl_results[0].footprint_bytes is not None:
-            fprint_gbytes = sum([v.footprint_bytes for v in knl_results]) \
-                / num_calls / 1e9
-        else:
-            fprint_gbytes = None
-
-        del self.profile_results[kernel_name]
-
-        return MultiCallKernelProfile(num_calls, time, gflops,
-                                          gbytes_accessed, fprint_gbytes)
+    def reset_profiling_data_for_kernel(self, kernel_name: str) -> None:
+        """Reset profiling data for kernel `kernel_name`."""
+        self.profile_results.pop(kernel_name, None)
 
     def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
@@ -215,71 +209,61 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         # Precision of results
         g = ".4g"
 
-        from statistics import mean
-
         total_calls = 0
         total_time = 0
 
-        for knl, results in self.profile_results.items():
-            num_values = len(results)
+        for knl in self.profile_results.keys():
+            r = self.get_profiling_data_for_kernel(knl)
 
-            total_calls += num_values
+            # Extra statistics that are derived from the main values returned by
+            # self.get_profiling_data_for_kernel(). These are already GFlops/s and
+            # GBytes/s respectively, so no need to scale them.
+            flops_per_sec = StatisticsAccumulator()
+            bandwidth_access = StatisticsAccumulator()
 
-            times = [v.time / 1e9 for v in results]
+            knl_results = self.profile_results[knl]
+            for knl_res in knl_results:
+                flops_per_sec.add_value(knl_res.flops/knl_res.time)
+                bandwidth_access.add_value(knl_res.bytes_accessed/knl_res.time)
 
-            total_time += sum(times)
+            total_calls += r.num_calls
 
-            flops = [v.flops / 1e9 if v.flops is not None and v.flops > 0 else None
-                     for v in results]
-            flops_per_sec = [f / t if f is not None else None
-                              for f, t in zip(flops, times)]
+            total_time += r.time.sum()
 
-            bytes_accessed = [v.bytes_accessed / 1e9
-                             if v.bytes_accessed is not None else None
-                             for v in results]
-            bandwidth_access = [b / t if b is not None else None
-                                 for b, t in zip(bytes_accessed, times)]
+            time_sum = f"{r.time.sum():{g}}"
+            time_min = f"{r.time.min():{g}}"
+            time_avg = f"{r.time.mean():{g}}"
+            time_max = f"{r.time.max():{g}}"
 
-            fprint_bytes = np.ma.masked_equal([v.footprint_bytes for v in results],
-                None)
-            fprint_mean = np.mean(fprint_bytes) / 1e9
-
-            # pylint: disable=E1101
-            if len(fprint_bytes.compressed()) > 0:
-                fprint_min = f"{np.min(fprint_bytes.compressed() / 1e9):{g}}"
-                fprint_max = f"{np.max(fprint_bytes.compressed() / 1e9):{g}}"
+            if r.footprint_bytes.sum() is not None:
+                fprint_mean = f"{r.footprint_bytes.mean():{g}}"
+                fprint_min = f"{r.footprint_bytes.min():{g}}"
+                fprint_max = f"{r.footprint_bytes.max():{g}}"
             else:
+                fprint_mean = "--"
                 fprint_min = "--"
                 fprint_max = "--"
 
-            bytes_per_flop = [f / b if b is not None and f is not None and b > 0
-                              else None for f, b in zip(flops, bytes_accessed)]
-            bytes_per_flop_mean = f"{mean(bytes_per_flop):{g}}" \
-                                    if None not in bytes_per_flop else "--"
-
-            if None not in flops_per_sec:
-                flops_per_sec_min = f"{min(flops_per_sec):{g}}"
-                flops_per_sec_mean = f"{mean(flops_per_sec):{g}}"
-                flops_per_sec_max = f"{max(flops_per_sec):{g}}"
+            if r.flops.sum() > 0:
+                bytes_per_flop_mean = f"{r.bytes_accessed.sum() / r.flops.sum():{g}}"
+                flops_per_sec_min = f"{flops_per_sec.min():{g}}"
+                flops_per_sec_mean = f"{flops_per_sec.mean():{g}}"
+                flops_per_sec_max = f"{flops_per_sec.max():{g}}"
             else:
+                bytes_per_flop_mean = "--"
                 flops_per_sec_min = "--"
                 flops_per_sec_mean = "--"
                 flops_per_sec_max = "--"
 
-            if None not in bandwidth_access:
-                bandwidth_access_min = f"{min(bandwidth_access):{g}}"
-                bandwidth_access_mean = f"{mean(bandwidth_access):{g}}"
-                bandwidth_access_max = f"{max(bandwidth_access):{g}}"
-            else:
-                bandwidth_access_min = "--"
-                bandwidth_access_mean = "--"
-                bandwidth_access_max = "--"
+            bandwidth_access_min = f"{bandwidth_access.min():{g}}"
+            bandwidth_access_mean = f"{bandwidth_access.sum():{g}}"
+            bandwidth_access_max = f"{bandwidth_access.max():{g}}"
 
-            tbl.add_row([knl, num_values, f"{sum(times):{g}}",
-                f"{min(times):{g}}", f"{mean(times):{g}}", f"{max(times):{g}}",
+            tbl.add_row([knl, r.num_calls, time_sum,
+                time_min, time_avg, time_max,
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
-                fprint_min, f"{fprint_mean:{g}}", fprint_max,
+                fprint_min, fprint_mean, fprint_max,
                 bytes_per_flop_mean])
 
         tbl.add_row(["Total", total_calls, f"{total_time:{g}}"] + ["--"] * 13)
