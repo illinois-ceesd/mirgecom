@@ -174,7 +174,7 @@ PRs and full PRs will undergo CI tests.
 
 To check the code automatically on your local machine before creating the git
 commit, you can use a git hook such as the following one (save this script as
-``.git/pre-commit`` in the mirgecom/ folder and make it executable):
+``.git/hooks/pre-commit`` in the mirgecom/ folder and make it executable):
 
 .. code-block:: bash
 
