@@ -362,6 +362,8 @@ class DeviceMemoryUsage(LogQuantity):
         ret = self.mem_func(ctypes.byref(self.free), ctypes.byref(self.total))
 
         if ret != 0:
+            from warnings import warn
+            warn(f"cudaMemGetInfo failed with error {ret}.")
             return None
         else:
             return (self.total.value - self.free.value) / 1024 / 1024
