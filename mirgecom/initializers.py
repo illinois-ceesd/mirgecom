@@ -936,7 +936,7 @@ class Discontinuity:
               + rhoer / 2.0 * (actx.np.tanh(xtanh) + 1.0))
         u = (ul / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
            + ur / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-mom = mass * make_obj_array([u, zeros])
+        mom = mass * make_obj_array([u, zeros])
         energy = rhoe + 0.5 * mass * (u * u)
 
 
