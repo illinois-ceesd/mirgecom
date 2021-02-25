@@ -290,10 +290,11 @@ class KernelProfile(MultiLogQuantity):
 
     def __call__(self) -> list:
         """Return the requested kernel profile quantity."""
-        from dataclasses import astuple
         r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
         self.actx.reset_profiling_data_for_kernel(self.kernel_name)
-        return astuple(r)
+
+        return [r.num_calls, r.time.mean(), r.flops.mean(), r.bytes_accessed.mean(),
+                r.footprint_bytes.mean()]
 
 # }}}
 
