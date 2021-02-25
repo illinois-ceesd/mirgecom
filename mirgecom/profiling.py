@@ -33,12 +33,12 @@ from dataclasses import dataclass
 import pytools
 from logpyle import LogManager
 from mirgecom.logging_quantities import KernelProfile
+from mirgecom.utils import StatisticsAccumulator
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
 .. autoclass:: SingleCallKernelProfile
 .. autoclass:: MultiCallKernelProfile
-.. autoclass:: StatisticsAccumulator
 """
 
 
@@ -50,74 +50,6 @@ class SingleCallKernelProfile:
     flops: int
     bytes_accessed: int
     footprint_bytes: int
-
-
-class StatisticsAccumulator:
-    """Class that provides statistical functions for multiple values.
-
-    .. automethod:: __init__
-    .. automethod:: add_value
-    .. automethod:: sum
-    .. automethod:: mean
-    .. automethod:: max
-    .. automethod:: min
-    .. autoattribute:: num_values
-    """
-
-    def __init__(self, scale_factor: float = 1):
-        """Initialize an empty StatisticsAccumulator object.
-
-        Parameters
-        ----------
-        scale_factor
-            Scale returned statistics by this factor.
-        """
-        self.num_values = 0
-        """Number of values stored in the StatisticsAccumulator."""
-
-        self._sum = 0
-        self._min = None
-        self._max = None
-        self.scale_factor = scale_factor
-
-    def add_value(self, v: float):
-        """Add a new value to the statistics."""
-        if v is None:
-            return
-        self.num_values += 1
-        self._sum += v
-        if self._min is None or v < self._min:
-            self._min = v
-        if self._max is None or v > self._max:
-            self._max = v
-
-    def sum(self):
-        """Return the sum of added values."""
-        if self.num_values == 0:
-            return None
-
-        return self._sum / self.scale_factor
-
-    def mean(self):
-        """Return the mean of added values."""
-        if self.num_values == 0:
-            return None
-
-        return self._sum / self.num_values / self.scale_factor
-
-    def max(self):
-        """Return the max of added values."""
-        if self.num_values == 0:
-            return None
-
-        return self._max / self.scale_factor
-
-    def min(self):
-        """Return the min of added values."""
-        if self.num_values == 0:
-            return None
-
-        return self._min / self.scale_factor
 
 
 @dataclass
