@@ -939,8 +939,6 @@ class Discontinuity:
 mom = mass * make_obj_array([u, zeros])
         energy = rhoe + 0.5 * mass * (u * u)
 
-        mom = make_obj_array([0 * x_rel for i in range(self._dim)])
-        mom[0] = rhou
 
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
