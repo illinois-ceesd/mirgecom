@@ -5,7 +5,6 @@ Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
-.. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
@@ -262,101 +261,6 @@ class SodShock1D:
 
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
-
-
-class DoubleMachReflection:
-    r"""Implement the double shock reflection problem.
-
-        - Woodward and Collela
-
-    The inital condition is defined
-
-    .. math::
-
-        (\rho,u,v,P) =
-
-    This function only serves as an initial condition
-
-    .. automethod:: __init__
-    .. automethod:: __call__
-    """
-
-    def __init__(
-            self, dim=2, shock_location=1.0/6.0, shock_speed=4.0
-    ):
-        """Initialize initial condition options.
-
-        Parameters
-        ----------
-        dim: int
-           dimension of domain, must be 2
-        shock_location: float
-           location of shock
-        shock_speed: float
-           shock speed, Mach number
-        """
-        self._shock_location = shock_location
-        self._dim = dim
-        self._shock_speed = shock_speed
-
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
-        """
-        Create the 1D Sod's shock solution at locations *x_vec*.
-
-        Parameters
-        ----------
-        t: float
-            Current time at which the solution is desired (unused)
-        x_vec: numpy.ndarray
-            Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
-        """
-        assert self._dim == 2, "only defined for dim=2"
-
-        gm1 = eos.gamma() - 1.0
-        gp1 = eos.gamma() + 1.0
-        gmn1 = 1.0 / gm1
-        x_rel = x_vec[0]
-        y_rel = x_vec[1]
-        actx = x_rel.array_context
-
-        zeros = 0*x_rel
-
-        shock_location = zeros + self._shock_location
-        shock_speed = zeros + self._shock_speed
-        t = zeros + t
-
-        # Normal Shock Relations
-        shock_speed_2 = self._shock_speed * self._shock_speed
-        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
-        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
-        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
-
-        rhol = zeros + eos.gamma() * rho_jump
-        rhor = zeros + eos.gamma()
-        ul = zeros + up * np.cos(np.pi/6.0)
-        ur = zeros + 0.0
-        vl = zeros - up * np.sin(np.pi/6.0)
-        vr = zeros + 0.0
-        rhoel = zeros + gmn1 * p_jump
-        rhoer = zeros + gmn1 * 1.0
-
-        xinter = (shock_location + y_rel/np.sqrt(3.0)
-                  + 2.0*shock_speed*t/np.sqrt(3.0))
-        sigma = 0.05
-        xtanh = 1.0/sigma*(x_rel-xinter)
-        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
-                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
-        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
-        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhou = mass*u
-        rhov = mass*v
-        energy = rhoe + 0.5*mass*(u*u + v*v)
-
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=make_obj_array([rhou, rhov]))
 
 
 class Lump:
@@ -939,12 +843,11 @@ class MixtureInitializer:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
 
-
 class Discontinuity:
-    r"""Initializes the flow to a discontinuous state.
+    r"""Initializes the flow to a discontinuous state, 
 
-    The inital condition is defined by a hyperbolic tanh function
-    on a planar interface located at x=xloc for all conserved variables
+    The inital condition is defined by a hyperbolic tanh function 
+    on a planar interface located at x=xloc
 
     This function only serves as an initial condition
 
@@ -953,10 +856,10 @@ class Discontinuity:
     """
 
     def __init__(
-            self, dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10.,
+            self,dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10., 
             ul=0.1, ur=0., sigma=0.5
     ):
-        """Initialize initial condition options.
+        """Initialize initial condition options
 
         Parameters
         ----------
@@ -990,15 +893,10 @@ class Discontinuity:
         self._sigma = sigma
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        r"""
+        """
         Create the discontinuity at locations *x_vec*.
 
-        profile is defined by:
-
-        .. math::
-
-        {\rho} = \frac{{\rho}_{l}}{2}*(tanh(\frac{{x}_{0}-{x}}{\sigma})+1) +
-                 \frac{{\rho}_{r}}{2}*(tanh(\frac{{x}-{x}_{0}}{\sigma})+1)
+        profile is defined by <left_val>/2.0*(tanh(-(x-x0)/\sigma)+1)+<right_val>/2.0*(tanh((x-x0)/\sigma)+1.0)
 
         Parameters
         ----------
@@ -1012,8 +910,8 @@ class Discontinuity:
         x_rel = x_vec[0]
         actx = x_rel.array_context
         gm1 = eos.gamma() - 1.0
-        zeros = 0 * x_rel
-        sigma = self._sigma
+        zeros = 0*x_rel
+        sigma=self._sigma
 
         x0 = zeros + self._x0
         t = zeros + t
@@ -1025,18 +923,20 @@ class Discontinuity:
         rhoel = zeros + self._pl/gm1
         rhoer = zeros + self._pr/gm1
 
-        xtanh = 1.0 / sigma * (x_rel - x0)
-        mass = (rhol / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
-              + rhor / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        rhoe = (rhoel / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
-              + rhoer / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        u = (ul / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
-           + ur / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        rhou = mass * u
-        energy = rhoe + 0.5 * mass * (u * u)
+        xtanh = 1.0/sigma*(x_rel-x0)
+        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)+rhoer/2.0*(actx.np.tanh(xtanh)+1.0)
+        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhou = mass*u
+        energy = rhoe + 0.5*mass*(u*u)
 
-        mom = make_obj_array([0 * x_rel for i in range(self._dim)])
-        mom[0] = rhou
+        mom = make_obj_array(
+            [
+                0*x_rel
+                for i in range(self._dim)
+            ]
+        )
+        mom[0]=rhou
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+        return flat_obj_array(mass, energy, mom)
+
