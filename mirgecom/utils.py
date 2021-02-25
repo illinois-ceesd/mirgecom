@@ -32,8 +32,10 @@ __doc__ = """
 .. autofunction:: asdict_shallow
 """
 
+from typing import Optional
 
-def asdict_shallow(dc_instance):
+
+def asdict_shallow(dc_instance) -> dict:
     """Convert a dataclass into a dict.
 
     What :func:`dataclasses.asdict` should have been: no
@@ -57,7 +59,7 @@ class StatisticsAccumulator:
     .. autoattribute:: num_values
     """
 
-    def __init__(self, scale_factor: float = 1):
+    def __init__(self, scale_factor: float = 1) -> None:
         """Initialize an empty StatisticsAccumulator object.
 
         Parameters
@@ -65,7 +67,7 @@ class StatisticsAccumulator:
         scale_factor
             Scale returned statistics by this factor.
         """
-        self.num_values = 0
+        self.num_values: int = 0
         """Number of values stored in the StatisticsAccumulator."""
 
         self._sum = 0
@@ -73,7 +75,7 @@ class StatisticsAccumulator:
         self._max = None
         self.scale_factor = scale_factor
 
-    def add_value(self, v: float):
+    def add_value(self, v: float) -> None:
         """Add a new value to the statistics."""
         if v is None:
             return
@@ -84,28 +86,28 @@ class StatisticsAccumulator:
         if self._max is None or v > self._max:
             self._max = v
 
-    def sum(self):
+    def sum(self) -> Optional[float]:
         """Return the sum of added values."""
         if self.num_values == 0:
             return None
 
         return self._sum / self.scale_factor
 
-    def mean(self):
+    def mean(self) -> Optional[float]:
         """Return the mean of added values."""
         if self.num_values == 0:
             return None
 
         return self._sum / self.num_values / self.scale_factor
 
-    def max(self):
+    def max(self) -> Optional[float]:
         """Return the max of added values."""
         if self.num_values == 0:
             return None
 
         return self._max / self.scale_factor
 
-    def min(self):
+    def min(self) -> Optional[float]:
         """Return the min of added values."""
         if self.num_values == 0:
             return None
