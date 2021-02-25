@@ -843,6 +843,7 @@ class MixtureInitializer:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
 
+
 class Discontinuity:
     r"""Initializes the flow to a discontinuous state.
 
