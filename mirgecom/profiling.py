@@ -53,17 +53,32 @@ class SingleCallKernelProfile:
 
 
 class StatisticsAccumulator:
-    """Class that provides statistical functions for profile results.
+    """Class that provides statistical functions for multiple values.
 
-    Values are converted to "Giga".
+    .. automethod:: __init__
+    .. automethod:: add_value
+    .. automethod:: sum
+    .. automethod:: mean
+    .. automethod:: max
+    .. automethod:: min
+    .. autoattribute:: num_values
     """
 
-    def __init__(self):
-        import sys
+    def __init__(self, scale_factor: float = 1):
+        """Initialize an empty StatisticsAccumulator object.
+
+        Parameters
+        ----------
+        scale_factor
+            Scale returned statistics by this factor.
+        """
         self.num_values = 0
+        """Number of values stored in the StatisticsAccumulator."""
+
         self._sum = 0
-        self._min = sys.maxsize
-        self._max = 0
+        self._min = None
+        self._max = None
+        self.scale_factor = scale_factor
 
     def add_value(self, v: float):
         """Add a new value to the statistics."""
@@ -71,9 +86,9 @@ class StatisticsAccumulator:
             return
         self.num_values += 1
         self._sum += v
-        if v < self._min:
+        if self._min is None or v < self._min:
             self._min = v
-        if v > self._max:
+        if self._max is None or v > self._max:
             self._max = v
 
     def sum(self):
@@ -81,28 +96,28 @@ class StatisticsAccumulator:
         if self.num_values == 0:
             return None
 
-        return self._sum / 1e9
+        return self._sum / self.scale_factor
 
     def mean(self):
         """Return the mean of added values."""
         if self.num_values == 0:
             return None
 
-        return self._sum / self.num_values / 1e9
+        return self._sum / self.num_values / self.scale_factor
 
     def max(self):
         """Return the max of added values."""
         if self.num_values == 0:
             return None
 
-        return self._max / 1e9
+        return self._max / self.scale_factor
 
     def min(self):
         """Return the min of added values."""
         if self.num_values == 0:
             return None
 
-        return self._min / 1e9
+        return self._min / self.scale_factor
 
 
 @dataclass
@@ -221,10 +236,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         """Return profiling data for kernel `kernel_name`."""
         self._wait_and_transfer_profile_events()
 
-        time = StatisticsAccumulator()
-        gflops = StatisticsAccumulator()
-        gbytes_accessed = StatisticsAccumulator()
-        fprint_gbytes = StatisticsAccumulator()
+        time = StatisticsAccumulator(scale_factor=1e9)
+        gflops = StatisticsAccumulator(scale_factor=1e9)
+        gbytes_accessed = StatisticsAccumulator(scale_factor=1e9)
+        fprint_gbytes = StatisticsAccumulator(scale_factor=1e9)
         num_calls = 0
 
         if kernel_name in self.profile_results:
@@ -268,6 +283,17 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         for knl in self.profile_results.keys():
             r = self.get_profiling_data_for_kernel(knl)
 
+            # Extra statistics that are derived from the main values returned by
+            # self.get_profiling_data_for_kernel(). These are already GFlops/s and
+            # GBytes/s respectively, so no need to scale them.
+            flops_per_sec = StatisticsAccumulator()
+            bandwidth_access = StatisticsAccumulator()
+
+            knl_results = self.profile_results[knl]
+            for knl_res in knl_results:
+                flops_per_sec.add_value(knl_res.flops/knl_res.time)
+                bandwidth_access.add_value(knl_res.bytes_accessed/knl_res.time)
+
             total_calls += r.num_calls
 
             total_time += r.time.sum()
@@ -288,18 +314,18 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             if r.flops.sum() > 0:
                 bytes_per_flop_mean = f"{r.bytes_accessed.sum() / r.flops.sum():{g}}"
-                flops_per_sec_min = f"{r.flops.min() / r.time.max():{g}}"
-                flops_per_sec_mean = f"{r.flops.sum() / r.time.sum():{g}}"
-                flops_per_sec_max = f"{r.flops.max() / r.time.min():{g}}"
+                flops_per_sec_min = f"{flops_per_sec.min():{g}}"
+                flops_per_sec_mean = f"{flops_per_sec.mean():{g}}"
+                flops_per_sec_max = f"{flops_per_sec.max():{g}}"
             else:
                 bytes_per_flop_mean = "--"
                 flops_per_sec_min = "--"
                 flops_per_sec_mean = "--"
                 flops_per_sec_max = "--"
 
-            bandwidth_access_min = f"{r.bytes_accessed.min() / r.time.max():{g}}"
-            bandwidth_access_mean = f"{r.bytes_accessed.sum() / r.time.sum():{g}}"
-            bandwidth_access_max = f"{r.bytes_accessed.max() / r.time.min():{g}}"
+            bandwidth_access_min = f"{bandwidth_access.min():{g}}"
+            bandwidth_access_mean = f"{bandwidth_access.sum():{g}}"
+            bandwidth_access_max = f"{bandwidth_access.max():{g}}"
 
             tbl.add_row([knl, r.num_calls, time_sum,
                 time_min, time_avg, time_max,
