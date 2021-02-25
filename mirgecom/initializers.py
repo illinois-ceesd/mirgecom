@@ -843,7 +843,6 @@ class MixtureInitializer:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
 
-
 class Discontinuity:
     r"""Initializes the flow to a discontinuous state.
 
@@ -869,17 +868,17 @@ class Discontinuity:
         x0: float
            location of discontinuity
         rhol: float
-           density to the left of the discontinuity
+           left density
         rhor: float
-           density to the right of the discontinuity
+           right density
         pl: float
-           pressure to the left of the discontinuity
+           left pressure
         pr: float
-           pressure to the right of the discontinutiy
-        ul: numpy.ndarray
-            flow velocity to the left of the discontinuity
-        ur: numpy.ndarray
-            flow velocity to the right of the discontinuity
+           right pressure
+        ul: float
+           left velocity
+        ur: float
+           right velocity
         sigma: float
            sharpness parameter
         """
