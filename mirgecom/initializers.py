@@ -843,11 +843,12 @@ class MixtureInitializer:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
 
-class Discontinuity:
-    r"""Initializes the flow to a discontinuous state, 
 
-    The inital condition is defined by a hyperbolic tanh function 
-    on a planar interface located at x=xloc
+class Discontinuity:
+    r"""Initializes the flow to a discontinuous state.
+
+    The inital condition is defined by a hyperbolic tanh function
+    on a planar interface located at x=xloc for all conserved variables
 
     This function only serves as an initial condition
 
@@ -856,10 +857,10 @@ class Discontinuity:
     """
 
     def __init__(
-            self,dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10., 
+            self, dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10.,
             ul=0.1, ur=0., sigma=0.5
     ):
-        """Initialize initial condition options
+        """Initialize initial condition options.
 
         Parameters
         ----------
@@ -893,10 +894,15 @@ class Discontinuity:
         self._sigma = sigma
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        """
+        r"""
         Create the discontinuity at locations *x_vec*.
 
-        profile is defined by <left_val>/2.0*(tanh(-(x-x0)/\sigma)+1)+<right_val>/2.0*(tanh((x-x0)/\sigma)+1.0)
+        profile is defined by:
+
+        .. math::
+
+        {\rho} = \frac{{\rho}_{l}}{2}*(tanh(\frac{{x}_{0}-{x}}{\sigma})+1) +
+                 \frac{{\rho}_{r}}{2}*(tanh(\frac{{x}-{x}_{0}}{\sigma})+1)
 
         Parameters
         ----------
@@ -910,8 +916,8 @@ class Discontinuity:
         x_rel = x_vec[0]
         actx = x_rel.array_context
         gm1 = eos.gamma() - 1.0
-        zeros = 0*x_rel
-        sigma=self._sigma
+        zeros = 0 * x_rel
+        sigma = self._sigma
 
         x0 = zeros + self._x0
         t = zeros + t
@@ -923,20 +929,18 @@ class Discontinuity:
         rhoel = zeros + self._pl/gm1
         rhoer = zeros + self._pr/gm1
 
-        xtanh = 1.0/sigma*(x_rel-x0)
-        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhoe = rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)+rhoer/2.0*(actx.np.tanh(xtanh)+1.0)
-        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhou = mass*u
-        energy = rhoe + 0.5*mass*(u*u)
+        xtanh = 1.0 / sigma * (x_rel - x0)
+        mass = (rhol / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
+              + rhor / 2.0 * (actx.np.tanh(xtanh) + 1.0))
+        rhoe = (rhoel / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
+              + rhoer / 2.0 * (actx.np.tanh(xtanh) + 1.0))
+        u = (ul / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
+           + ur / 2.0 * (actx.np.tanh(xtanh) + 1.0))
+        rhou = mass * u
+        energy = rhoe + 0.5 * mass * (u * u)
 
-        mom = make_obj_array(
-            [
-                0*x_rel
-                for i in range(self._dim)
-            ]
-        )
-        mom[0]=rhou
+        mom = make_obj_array([0 * x_rel for i in range(self._dim)])
+        mom[0] = rhou
 
-        return flat_obj_array(mass, energy, mom)
-
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
