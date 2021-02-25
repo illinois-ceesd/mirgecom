@@ -32,6 +32,7 @@ __doc__ = """
 .. autoclass:: DeviceMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
+.. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
@@ -68,14 +69,19 @@ def initialize_logmgr(enable_logmgr: bool,
         warn("psutil module not found, not tracking memory consumption."
              "Install it with 'pip install psutil'")
 
-    logmgr.add_quantity(DeviceMemoryUsage())
-
     return logmgr
 
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     """Add the OpenCL device name to the log."""
     logmgr.set_constant("cl_device_name", str(queue.device))
+
+
+def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
+    """Add the OpenCL device memory usage to the log."""
+    if not (queue.device.type & cl.device_type.GPU):
+        return
+    logmgr.add_quantity(DeviceMemoryUsage())
 
 
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
@@ -328,7 +334,7 @@ class PythonMemoryUsage(LogQuantity):
 class DeviceMemoryUsage(LogQuantity):
     """Logging support for GPU memory usage (Nvidia only currently)."""
 
-    def __init__(self, name: str = None):
+    def __init__(self, name: str = None) -> None:
 
         if name is None:
             name = "memory_usage_gpu"
