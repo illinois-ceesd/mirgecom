@@ -71,19 +71,17 @@ class PrescribedBoundary:
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
     def exterior_sol(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
+            self, discr, q, btag, **kwargs):
         """Get the interior solution on the boundary."""
         actx = q[0].array_context
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(t, nodes)
+        ext_soln = self._userfunc(nodes, **kwargs)
         return ext_soln
 
     def av(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
+            self, discr, q, btag, **kwargs):
         """Do artificial viscosity function."""
         return discr.project("vol", btag, q)
 
@@ -100,15 +98,13 @@ class DummyBoundary:
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
     def exterior_sol(
-        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
+        self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
 
     def av(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
+            self, discr, q, btag, **kwargs):
         """Do artificial viscosity function."""
         return discr.project("vol", btag, q)
 
@@ -171,8 +167,7 @@ class AdiabaticSlipBoundary:
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
     def exterior_sol(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
+            self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -211,8 +206,7 @@ class AdiabaticSlipBoundary:
         return bndry_soln
 
     def av(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
+            self, discr, q, btag, **kwargs):
         """Do artificial viscosity function."""
         # Grab some boundary-relevant data
         dim = discr.dim
