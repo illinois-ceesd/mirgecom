@@ -61,7 +61,7 @@ class PrescribedBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        ext_soln = self.exterior_soln(self, discr, q, btag, **kwargs)
+        ext_soln = self.exterior_soln(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
@@ -87,7 +87,7 @@ class DummyBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = self.exterior_soln(self, discr, q, btag, **kwargs)
+        dir_soln = self.exterior_soln(discr, q, btag, **kwargs)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
     def exterior_soln(self, discr, q, btag, **kwargs):
