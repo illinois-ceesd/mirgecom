@@ -192,48 +192,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         """Reset profiling data for kernel `kernel_name`."""
         self.profile_results.pop(kernel_name, None)
 
-    def get_and_reset_profiling_data_for_kernel(self, kernel_name: str,
-                                 wait_for_events=True) -> MultiCallKernelProfile:
-        """Return and reset profiling data for kernel `kernel_name`."""
-        if wait_for_events:
-            self._finish_profile_events()
-
-        num_calls = 0
-        time = 0
-        flops = 0
-        bytes_accessed = 0
-        fprint_bytes = 0
-
-        keys = [k for k in self.profile_results.keys() if k.name == kernel_name]
-
-        for key in keys:
-            value = self.profile_results[key]
-
-            num_calls += len(value)
-
-            time += sum([v.time for v in value])
-
-            if value[0].flops is not None:
-                flops += sum([v.flops for v in value])
-
-            if value[0].bytes_accessed is not None:
-                bytes_accessed += sum([v.bytes_accessed for v in value])
-
-            if value[0].footprint_bytes is not None:
-                fprint_bytes += sum([v.footprint_bytes for v in value])
-
-            del self.profile_results[key]
-
-        if num_calls == 0:
-            return MultiCallKernelProfile(0, 0, 0, 0, 0)
-        else:
-            time_avg = time / num_calls / 1e9
-            flops_avg = flops / num_calls / 1e9
-            bytes_accessed_avg = bytes_accessed / num_calls / 1e9
-            fprint_bytes_avg = fprint_bytes / num_calls / 1e9
-            return MultiCallKernelProfile(num_calls, time_avg, flops_avg,
-                                          bytes_accessed_avg, fprint_bytes_avg)
-
     def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
         self._wait_and_transfer_profile_events()

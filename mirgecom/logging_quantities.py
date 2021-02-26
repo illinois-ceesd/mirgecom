@@ -346,8 +346,10 @@ class DeviceMemoryUsage(LogQuantity):
         self.total = ctypes.c_size_t()
 
         try:
-            # Use libcudart, not libcuda, since the latter requires a CUDA
-            # device context which interferes with pyopencl.
+            # FIXME: This currently uses libcudart, not libcuda, since the
+            # latter requires a CUDA device context which interferes with
+            # pyopencl. See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3645873 and # noqa
+            # https://github.com/illinois-ceesd/mirgecom/pull/255 for details.
             libcudart = ctypes.cdll.LoadLibrary("libcudart.so")
             self.mem_func = libcudart.cudaMemGetInfo
         except OSError:
