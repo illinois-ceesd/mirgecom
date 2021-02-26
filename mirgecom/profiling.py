@@ -192,7 +192,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         """Reset profiling data for kernel `kernel_name`."""
         self.profile_results.pop(kernel_name, None)
 
-    def tabulate_profiling_data(self, wait_for_events=True) -> pytools.Table:
+    def tabulate_profiling_data(self) -> pytools.Table:
         """Return a :class:`pytools.Table` with the profiling results."""
         self._wait_and_transfer_profile_events()
 
