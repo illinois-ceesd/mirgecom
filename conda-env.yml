@@ -16,6 +16,5 @@ dependencies:
 - pyopencl
 - pymetis
 - python=3.8
-- gmsh
 - pip
 - pytest

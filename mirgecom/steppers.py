@@ -27,9 +27,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from logpyle import set_dt
+from mirgecom.logging_quantities import set_sim_state
+
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0):
+                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -70,6 +73,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
     while t < t_final:
 
+        if logmgr:
+            logmgr.tick_before()
+
         dt = get_timestep(state=state)
         if dt < 0:
             return istep, t, state
@@ -80,5 +86,10 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         t += dt
         istep += 1
+
+        if logmgr:
+            set_dt(logmgr, dt)
+            set_sim_state(logmgr, dim, state, eos)
+            logmgr.tick_after()
 
     return istep, t, state
