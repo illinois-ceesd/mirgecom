@@ -31,8 +31,6 @@ THE SOFTWARE.
 
 import logging
 
-from mirgecom.io import make_status_message
-
 logger = logging.getLogger(__name__)
 
 
@@ -57,17 +55,8 @@ def check_step(step, interval):
     return False
 
 
-def sim_checkpoint(state, step=0, t=0, dt=0, nstatus=-1,
-        get_extra_status=None, nviz=-1, write_vis=None, comm=None):
+def sim_checkpoint(state, step=0, t=0, dt=0, nviz=-1, write_vis=None):
     """Check simulation health, status, viz dumps, and restart."""
-    rank = comm.Get_rank() if comm is not None else 0
-
-    if check_step(step, nstatus):
-        statusmsg = make_status_message(step=step, t=t, dt=dt,
-            extra_status=get_extra_status(step=step, t=t, dt=dt, state=state) if
-            get_extra_status else None)
-        if rank == 0:
-            logger.info(statusmsg)
     if check_step(step, nviz):
         if write_vis is not None:
             write_vis(step, t, state)

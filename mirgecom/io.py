@@ -1,7 +1,6 @@
 """I/O - related functions and utilities.
 
 .. autofunction:: make_init_message
-.. autofunction:: make_status_message
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
 .. autofunction:: write_visualization_file
@@ -34,8 +33,8 @@ THE SOFTWARE.
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
-def make_init_message(*, dim, order, dt, t_final, nstatus, nviz, casename,
-        extra_init=None, nelements=0, global_nelements=0):
+def make_init_message(*, dim, order, dt, t_final, casename, extra_init=None,
+        nelements=0, global_nelements=0):
     """Create a summary of some general simulation parameters and inputs."""
     initmsg = (
         f"Initialization for Case({casename})\n"
@@ -47,14 +46,6 @@ def make_init_message(*, dim, order, dt, t_final, nstatus, nviz, casename,
     if extra_init is not None:
         initmsg += extra_init
     return initmsg
-
-
-def make_status_message(*, t, step, dt, extra_status=None):
-    r"""Make simulation status and health message."""
-    statusmsg = f"Status: {step=} {t=} {dt=}\n"
-    if extra_status is not None:
-        statusmsg += extra_status
-    return statusmsg
 
 
 def make_rank_fname(basename, rank=0, step=0, t=0):

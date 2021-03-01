@@ -91,7 +91,6 @@ def main(ctx_factory=cl.create_some_context):
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
     constant_cfl = False
-    nstatus = 10
     nviz = 10
     rank = 0
     current_step = 0
@@ -131,8 +130,7 @@ def main(ctx_factory=cl.create_some_context):
     init_message = make_init_message(dim=dim, order=order, casename=casename,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
-                                     dt=current_dt, t_final=t_final, nstatus=nstatus,
-                                     nviz=nviz)
+                                     dt=current_dt, t_final=t_final)
     if rank == 0:
         logger.info(init_message)
 
@@ -154,8 +152,8 @@ def main(ctx_factory=cl.create_some_context):
                     basename=casename, step=step, t=t, comm=comm)
 
     def checkpoint(step, t, dt, state):
-        return sim_checkpoint(state=state, step=step, t=t, dt=dt, nstatus=nstatus,
-            nviz=nviz, write_vis=write_vis, comm=comm)
+        return sim_checkpoint(state=state, step=step, t=t, dt=dt, nviz=nviz,
+            write_vis=write_vis)
 
     (current_step, current_t, current_state) = \
         advance_state(rhs=rhs, timestepper=timestepper,
