@@ -4,6 +4,7 @@ Time integrators
 ^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
 .. autofunction:: lsrk4_step
+.. autofunction:: lsrk144_step
 .. autofunction:: euler_step
 """
 
@@ -36,28 +37,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-
-_LSRK4_A = np.array([
-    0.,
-    -567301805773/1357537059087,
-    -2404267990393/2016746695238,
-    -3550918686646/2091501179385,
-    -1275806237668/842570457699])
-
-_LSRK4_B = np.array([
-    1432997174477/9575080441755,
-    5161836677717/13612068292357,
-    1720146321549/2090206949498,
-    3134564353537/4481467310338,
-    2277821191437/14882151754819])
-
-_LSRK4_C = np.array([
-    0.,
-    1432997174477/9575080441755,
-    2526269341429/6820363962896,
-    2006345519317/3224310063776,
-    2802321613138/2924317926251])
+import mirgecom.butcher_tableau as bt
 
 
 def rk4_step(state, t, dt, rhs):
@@ -79,8 +59,24 @@ def lsrk4_step(state, t, dt, rhs):
     k = p * 0.
 
     for i in range(5):
-        k = _LSRK4_A[i]*k + dt*rhs(t + _LSRK4_C[i]*dt, p)
-        p = p + _LSRK4_B[i]*k
+        k = bt._LSRK4_A[i]*k + dt*rhs(t + bt._LSRK4_C[i]*dt, p)
+        p = p + bt._LSRK4_B[i]*k
+
+    return p
+
+
+def lsrk144_step(state, t, dt, rhs):
+    """
+    Take one step using the low storage 14-stage 4th order Runge-Kutta method.
+
+    LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
+    """
+    p = state
+    k = p * 0.
+
+    for i in range(14):
+        k = bt._LSRK144_A[i]*k + dt*rhs(t + bt._LSRK144_C[i]*dt, p)
+        p = p + bt._LSRK144_B[i]*k
 
     return p
 
