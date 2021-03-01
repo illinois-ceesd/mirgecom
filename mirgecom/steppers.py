@@ -43,13 +43,12 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         Function that advances the state from t=time to t=(time+dt), and
         returns the advanced state.
     checkpoint
-        Function is user-defined and can be used to preform simulation status
+        Function is user-defined and can be used to perform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
         indicates that this function should stop gracefully.
     get_timestep
         Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully.
+        user-defined adaptive timestepping.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -76,10 +75,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         if logmgr:
             logmgr.tick_before()
 
-        dt = get_timestep(state=state)
-        if dt < 0:
-            raise ValueError(f"Invalid timestep {dt}")
-        dt = min(dt, t_final - t)
+        dt = min(get_timestep(state=state), t_final - t)
 
         checkpoint(state=state, step=istep, t=t, dt=dt)
 
