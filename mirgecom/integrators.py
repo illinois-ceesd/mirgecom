@@ -69,8 +69,7 @@ def lsrk144_step(state, t, dt, rhs):
     """
     Take one step using the low storage 14-stage 4th order Runge-Kutta method.
 
-    LSRK coefficients are summarized in Table 3 of Niegemann, Diehl, and
-    Busch (2012): https://doi.org/10.1016/j.jcp.2011.09.003.
+    LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
     """
     p = state
     k = p * 0.
