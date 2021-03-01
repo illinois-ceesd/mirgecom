@@ -44,7 +44,7 @@ from mirgecom.euler import (
 )
 from mirgecom.simutil import (
     create_parallel_grid,
-    sim_checkpoint,
+    check_step,
 )
 from mirgecom.io import (
     make_init_message,
@@ -129,14 +129,14 @@ def main(ctx_factory=cl.create_some_context):
 
     init_message = make_init_message(dim=dim, order=order, casename=casename,
                                      nelements=local_nelements,
-                                     global_nelements=global_nelements,
-                                     dt=current_dt, t_final=t_final)
+                                     global_nelements=global_nelements)
     if rank == 0:
         logger.info(init_message)
 
-    def get_timestep(state):
-        return get_inviscid_timestep(discr=discr, q=state, cfl=current_cfl,
+    def get_timestep(t, state):
+        dt = get_inviscid_timestep(discr=discr, q=state, cfl=current_cfl,
             eos=eos) if constant_cfl else current_dt
+        return min(dt, t_final - t)
 
     def rhs(t, state):
         return inviscid_operator(discr, q=state, t=t,
@@ -152,13 +152,19 @@ def main(ctx_factory=cl.create_some_context):
                     basename=casename, step=step, t=t, comm=comm)
 
     def checkpoint(step, t, dt, state):
-        return sim_checkpoint(state=state, step=step, t=t, dt=dt, nviz=nviz,
-            write_vis=write_vis)
+        done = t >= t_final
+        if check_step(step, nviz) or done:
+            write_vis(step, t, state)
+        return done
+
+    if current_step == 0:
+        dt = get_timestep(current_t, current_state)
+        done = checkpoint(0, current_t, dt, current_state)
+        assert not done
 
     (current_step, current_t, current_state) = \
-        advance_state(rhs=rhs, timestepper=timestepper,
-                      checkpoint=checkpoint, get_timestep=get_timestep,
-                      state=current_state, t=current_t, t_final=t_final)
+        advance_state(rhs=rhs, timestepper=timestepper, checkpoint=checkpoint,
+            get_timestep=get_timestep, state=current_state, t=current_t)
 
     if rank == 0:
         logger.info("Timestepping completed.")

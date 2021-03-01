@@ -31,9 +31,9 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
 
-def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None):
-    """Advance state from some time (t) to some time (t_final).
+def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t=0.0,
+        istep=0, logmgr=None):
+    """Advance state starting from some time *t* and step *istep*.
 
     Parameters
     ----------
@@ -44,16 +44,14 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         returns the advanced state.
     checkpoint
         Function is user-defined and can be used to perform simulation status
-        reporting, viz, and restart i/o.  A non-zero return code from this function
-        indicates that this function should stop gracefully.
+        reporting, viz, and restart i/o. Returns a boolean indicating if the
+        stepping should terminate.
     get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
-    t_final: float
-        Simulated time at which to stop
     t: float
         Time at which to start
     istep: int
@@ -67,22 +65,23 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         the current time
     state: numpy.ndarray
     """
-    if t_final <= t:
-        return istep, t, state
+    done = False
 
-    while t < t_final:
+    dt = get_timestep(state=state, t=t)
+
+    while not done:
 
         if logmgr:
             logmgr.tick_before()
-
-        dt = min(get_timestep(state=state), t_final - t)
-
-        checkpoint(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
         t += dt
         istep += 1
+
+        dt = get_timestep(state=state, t=t)
+
+        done = checkpoint(state=state, step=istep, t=t, dt=dt)
 
         if logmgr:
             set_dt(logmgr, dt)

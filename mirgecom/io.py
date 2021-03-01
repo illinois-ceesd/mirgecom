@@ -33,16 +33,14 @@ THE SOFTWARE.
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
-def make_init_message(*, dim, order, dt, t_final, casename, extra_init=None,
+def make_init_message(*, dim, order, casename, extra_init=None,
         nelements=0, global_nelements=0):
     """Create a summary of some general simulation parameters and inputs."""
     initmsg = (
         f"Initialization for Case({casename})\n"
         f"===\n"
         f"Num {dim}d order-{order} elements: {nelements}\n"
-        f"Num global elements: {global_nelements}\n"
-        f"Timestep:        {dt}\n"
-        f"Final time:      {t_final}\n")
+        f"Num global elements: {global_nelements}\n")
     if extra_init is not None:
         initmsg += extra_init
     return initmsg

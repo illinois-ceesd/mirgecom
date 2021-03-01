@@ -1,7 +1,6 @@
 """Provide some utilities for building simulation applications.
 
 .. autofunction:: check_step
-.. autofunction:: sim_checkpoint
 .. autofunction:: create_parallel_grid
 """
 
@@ -53,13 +52,6 @@ def check_step(step, interval):
     elif step % interval == 0:
         return True
     return False
-
-
-def sim_checkpoint(state, step=0, t=0, dt=0, nviz=-1, write_vis=None):
-    """Check simulation health, status, viz dumps, and restart."""
-    if check_step(step, nviz):
-        if write_vis is not None:
-            write_vis(step, t, state)
 
 
 def create_parallel_grid(comm, generate_grid):
