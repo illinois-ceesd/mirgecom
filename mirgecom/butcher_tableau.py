@@ -1,5 +1,4 @@
-"""Butcher tableau for Runge-Kutta timestepping methods.
-"""
+"""Butcher tableau for Runge-Kutta timestepping methods."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -31,9 +30,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-
-__all__ = ("_LSRK4_A", "_LSRK4_B", "_LSRK4_C",
-           "_LSRK144_A", "_LSRK144_B", "_LSRK144_C")
 
 # Butcher table for the Kennedy-Carpenter explicit 5-stage, 4th order,
 # low-storage Runge-Kutta method

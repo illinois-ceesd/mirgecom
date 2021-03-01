@@ -37,7 +37,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from mirgecom.butcher_tableau import *
+import mirgecom.butcher_tableau as bt
+
 
 def rk4_step(state, t, dt, rhs):
     """Take one step using 4th order Runge-Kutta."""
@@ -58,22 +59,25 @@ def lsrk4_step(state, t, dt, rhs):
     k = p * 0.
 
     for i in range(5):
-        k = _LSRK4_A[i]*k + dt*rhs(t + _LSRK4_C[i]*dt, p)
-        p = p + _LSRK4_B[i]*k
+        k = bt._LSRK4_A[i]*k + dt*rhs(t + bt._LSRK4_C[i]*dt, p)
+        p = p + bt._LSRK4_B[i]*k
 
     return p
 
+
 def lsrk144_step(state, t, dt, rhs):
     """
-    Take one step using Carpenter-Kennedy low storage 14-stage, 4th order
-    Runge-Kutta method of Niegemann, Diehl, and Busch (2012).
+    Take one step using the low storage 14-stage 4th order Runge-Kutta method.
+
+    LSRK coefficients are summarized in Table 3 of Niegemann, Diehl, and
+    Busch (2012): https://doi.org/10.1016/j.jcp.2011.09.003.
     """
     p = state
     k = p * 0.
 
     for i in range(14):
-        k = _LSRK144_A[i]*k + dt*rhs(t + _LSRK144_C[i]*dt, p)
-        p = p + _LSRK144_B[i]*k
+        k = bt._LSRK144_A[i]*k + dt*rhs(t + bt._LSRK144_C[i]*dt, p)
+        p = p + bt._LSRK144_B[i]*k
 
     return p
 
