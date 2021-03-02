@@ -37,7 +37,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import mirgecom.butcher_tableau as bt
+import mirgecom.timesteppers.butcher_tableau as bt
+
+
+__all__ = ("rk4_step", "lsrk4_step", "lsrk144_step", "euler_step")
 
 
 def rk4_step(state, t, dt, rhs):

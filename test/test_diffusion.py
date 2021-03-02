@@ -293,10 +293,11 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         u = sym_eval(p.sym_u, t)
 
-        from mirgecom.integrators import rk4_step
+        from mirgecom.timesteppers import RK4Classical
+        stepper = RK4Classical()
 
         for istep in range(nsteps):
-            u = rk4_step(u, t, dt, get_rhs)
+            u = stepper.step(u, t, dt, get_rhs)
             t += dt
 
         expected_u = sym_eval(p.sym_u, t)

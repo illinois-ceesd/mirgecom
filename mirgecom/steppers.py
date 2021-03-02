@@ -40,8 +40,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
     rhs
         Function that should return the time derivative of the state
     timestepper
-        Function that advances the state from t=time to t=(time+dt), and
-        returns the advanced state.
+        Object of type `TimestepperBase` that advances the state from
+        t=time to t=(time+dt), and returns the advanced state.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
@@ -82,7 +82,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
         checkpoint(state=state, step=istep, t=t, dt=dt)
 
-        state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
+        state = timestepper.step(state=state, t=t, dt=dt, rhs=rhs)
 
         t += dt
         istep += 1

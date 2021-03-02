@@ -50,7 +50,7 @@ from meshmode.array_context import (  # noqa
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.euler import get_inviscid_timestep
-from mirgecom.integrators import rk4_step
+from mirgecom.timesteppers import RK4Classical
 
 logger = logging.getLogger(__name__)
 
@@ -796,6 +796,7 @@ def _euler_flow_stepper(actx, parameters):
     def rhs(t, q):
         return inviscid_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
 
+    stepper = RK4Classical()
     while t < t_final:
 
         if constantcfl is True:
@@ -807,7 +808,7 @@ def _euler_flow_stepper(actx, parameters):
             if istep % nstepstatus == 0:
                 write_soln()
 
-        fields = rk4_step(fields, t, dt, rhs)
+        fields = stepper.step(fields, t, dt, rhs)
         t += dt
         istep += 1
 
