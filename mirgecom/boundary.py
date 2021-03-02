@@ -181,21 +181,17 @@ class AdiabaticSlipBoundary:
         result = np.zeros(2+dim, dtype=object)
 
         # flip signs on mass and energy
+        # to apply a neumann condition on q
         result[0] = -1.0*bndry_q.mass
         result[1] = -1.0*bndry_q.energy
 
-        # This needs to be removed
-        result[2:] = bndry_q.momentum
-
-        # things are in the wrong order here...flip?
-        for i in range(dim):
-            tmp = np.zeros(dim, dtype=object)
-            for j in range(dim):
-                tmp[j] = bndry_q.momentum[j][i]
-            flip = np.dot(tmp, normal)
-            norm_flip = normal*flip
-            tmp = tmp - 2.0*norm_flip
-            for j in range(dim):
-                result[2+j][i] = -1.0*tmp[j]
+        # Subtract 2*wall-normal component of q
+        # to enforce q=0 on the wall
+        # flip remaining components to set a neumann condition
+        from pytools.obj_array import make_obj_array
+        q_mom_normcomp = make_obj_array(
+            [np.outer(normal,np.dot(bndry_q.momentum,normal))[i] for i in range(dim)]
+        )
+        result[2:] = -1*(bndry_q.momentum-2.0*q_mom_normcomp)
 
         return(result)
