@@ -191,13 +191,16 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         done = checkpoint(0, current_t, dt, current_state)
         assert not done
 
+    if rank == 0:
+        logger.info("Timestepping started.")
+
     (current_step, current_t, current_state) = \
         advance_state(rhs=rhs, timestepper=timestepper, checkpoint=checkpoint,
             get_timestep=get_timestep, state=current_state, t=current_t,
             logmgr=logmgr)
 
     if rank == 0:
-        logger.info("Timestepping completed.")
+        logger.info("Timestepping finished.")
 
     if logmgr:
         logmgr.close()
