@@ -34,7 +34,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
 from grudge.symbolic.primitives import QTAG_NONE
-from mirgecom.timesteppers import RK4Classical
+from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -114,7 +114,6 @@ def main():
 
     rank = comm.Get_rank()
 
-    stepper = RK4Classical()
     t = 0
     t_final = 0.01
     istep = 0
@@ -130,7 +129,7 @@ def main():
         if t >= t_final:
             break
 
-        u = stepper.step(u, t, dt, rhs)
+        u = rk4_step(u, t, dt, rhs)
         t += dt
         istep += 1
 

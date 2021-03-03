@@ -248,11 +248,10 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     fields = flat_obj_array(u, v)
 
-    from mirgecom.timesteppers import RK4Classical
-    stepper = RK4Classical()
+    from mirgecom.integrators import rk4_step
     dt = timestep_scale/order**2
     for istep in range(10):
-        fields = stepper.step(fields, t, dt, get_rhs)
+        fields = rk4_step(fields, t, dt, get_rhs)
         t += dt
 
     expected_u = sym_eval(sym_u, 10*dt)

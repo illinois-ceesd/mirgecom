@@ -37,7 +37,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.timesteppers import RK4Classical
+from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
 
@@ -123,12 +123,11 @@ def main():
 
     rank = comm.Get_rank()
 
-    timestepper = RK4Classical()
     t = 0
     t_final = 3
     istep = 0
     while t < t_final:
-        fields = timestepper.step(fields, t, dt, rhs)
+        fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))

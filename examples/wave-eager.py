@@ -30,7 +30,7 @@ from pytools.obj_array import flat_obj_array
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
-from mirgecom.timesteppers import RK4Classical
+from mirgecom.integrators import rk4_step
 from meshmode.dof_array import thaw
 from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
@@ -104,12 +104,11 @@ def main(use_profiling=False):
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
 
-    timestepper = RK4Classical()
     t = 0
     t_final = 3
     istep = 0
     while t < t_final:
-        fields = timestepper.step(fields, t, dt, rhs)
+        fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
             if use_profiling:

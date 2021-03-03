@@ -28,17 +28,17 @@ import numpy as np
 import logging
 import pytest
 
-from mirgecom.timesteppers import *
+from mirgecom.integrators import *
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.parametrize(("timestepper", "method_order"),
-                         [(LSRKEuler, 1),
-                          (LSRK54CarpenterKennedy, 4),
-                          (LSRK144NiegemannDiehlBusch, 4),
-                          (RK4Classical, 4)])
-def test_integration_order(timestepper, method_order):
+@pytest.mark.parametrize(("integrator", "method_order"),
+                         [(lsrkeuler_step, 1),
+                          (lsrk54_step, 4),
+                          (lsrk144_step, 4),
+                          (rk4_step, 4)])
+def test_integration_order(integrator, method_order):
     """Test that time integrators have correct order."""
 
     def exact_soln(t):
@@ -50,9 +50,6 @@ def test_integration_order(timestepper, method_order):
     from pytools.convergence import EOCRecorder
     integrator_eoc = EOCRecorder()
 
-    # Instantiate integrator
-    integrator = timestepper()
-
     dt = 1.0
     for refine in [1, 2, 4, 8]:
         dt = dt / refine
@@ -60,7 +57,7 @@ def test_integration_order(timestepper, method_order):
         state = exact_soln(t)
 
         while t < 4:
-            state = integrator.step(state, t, dt, rhs)
+            state = integrator(state, t, dt, rhs)
             t = t + dt
 
         error = np.abs(state - exact_soln(t)) / exact_soln(t)

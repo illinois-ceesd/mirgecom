@@ -47,8 +47,7 @@ from mirgecom.simutil import (
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
-from mirgecom.timesteppers import RK4Classical
-from mirgecom.steppers import advance_state
+from mirgecom.integrators import rk4_step, advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
@@ -79,7 +78,7 @@ def main(ctx_factory=cl.create_some_context):
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = RK4Classical()
+    timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
 
