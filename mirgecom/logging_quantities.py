@@ -34,6 +34,7 @@ __doc__ = """
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
+.. autofunction:: set_time
 """
 
 from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
@@ -165,6 +166,19 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
                         extract_state_vars_func(dim, state, eos)
 
                 gd.quantity.set_state_vars(state_vars[extract_state_vars_func])
+
+
+def set_time(mgr: LogManager, steps: int, time: float) -> None:
+    """Set the time/steps explicitly (e.g., for restart)."""
+    from logpyle import TimestepCounter, SimulationTime
+
+    for gd_lst in [mgr.before_gather_descriptors,
+            mgr.after_gather_descriptors]:
+        for gd in gd_lst:
+            if isinstance(gd.quantity, TimestepCounter):
+                gd.quantity.steps = steps
+            if isinstance(gd.quantity, SimulationTime):
+                gd.quantity.t = time
 
 
 class StateConsumer:
