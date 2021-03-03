@@ -1,5 +1,4 @@
-"""Timestepping routines for low-storage variants of explicit
-Runge-Kutta methods.
+"""Timestepping routines for low-storage variants of explicit Runge-Kutta methods.
 
 .. autofunction:: lsrkeuler_step
 .. autofunction:: lsrk54_step
@@ -40,9 +39,11 @@ __all__ = ("lsrkeuler_step", "lsrk54_step", "lsrk144_step")
 
 @dataclass(frozen=True)
 class LSRKCoefficients:
-    """Dataclass which defines a given low-storage Runge-Kutta (LSRK)
-    scheme based on the provided `A`, `B` and `C` coefficient numpy arrays.
+    """Dataclass which defines a given low-storage Runge-Kutta (LSRK) scheme.
+
+    The methods are determined by the provided `A`, `B` and `C` coefficient arrays.
     """
+
     A: np.ndarray
     B: np.ndarray
     C: np.ndarray
@@ -50,7 +51,6 @@ class LSRKCoefficients:
 
 def lsrk_step(coefs, state, t, dt, rhs):
     """Take one step using a low-storage Runge-Kutta method."""
-
     k = 0.0 * state
     for i in range(len(coefs.A)):
         k = coefs.A[i]*k + dt*rhs(t + coefs.C[i]*dt, state)
@@ -66,10 +66,7 @@ LSRKEulerCoefs = LSRKCoefficients(
 
 
 def lsrkeuler_step(state, t, dt, rhs):
-    """
-    Take one step using the explicit, 1st-order accurate, Euler method
-    expressed as an LSRK method.
-    """
+    """Take one step using the explicit, 1st-order accurate, Euler method."""
     return lsrk_step(LSRKEulerCoefs, state, t, dt, rhs)
 
 
@@ -95,9 +92,7 @@ LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
 
 
 def lsrk54_step(state, t, dt, rhs):
-    """
-    Take one step using the explicit 5-stage, 4th-order accurate, LSRK method
-    derived by Carpenter and Kennedy.
+    """Take one step using an explicit 5-stage, 4th-order, LSRK method.
 
     Coefficients are summarized in [Hesthaven_2008]_, Section 3.4.
     """
@@ -153,10 +148,10 @@ LSRK144NiegemannDiehlBuschCoefs = LSRKCoefficients(
 
 
 def lsrk144_step(state, t, dt, rhs):
-    """
-    Take one step using the explicit 14-stage, 4th-order accurate, LSRK method
-    derived by Niegemann, Diehl, and Busch (2012).
+    """Take one step using an explicit 14-stage, 4th-order, LSRK method.
 
+    This method is derived by Niegemann, Diehl, and Busch (2012), with
+    an optimal stability region for advection-dominated flows. The
     LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
     """
     return lsrk_step(LSRK144NiegemannDiehlBuschCoefs, state, t, dt, rhs)
