@@ -26,3 +26,7 @@ THE SOFTWARE.
 
 from .explicit_rk import *             # noqa: F401, F403
 from .lsrk import *                    # noqa: F401, F403
+
+__doc__ = """
+.. automodule:: mirgecom.integrators.lsrk
+"""
