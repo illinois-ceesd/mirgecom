@@ -35,7 +35,6 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 from grudge.symbolic.primitives import TracePair
 
@@ -62,29 +61,21 @@ class PrescribedBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
+        ext_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        int_soln = discr.project("vol", btag, q)
+        return TracePair(btag, interior=int_soln, exterior=ext_soln)
+
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
         actx = q[0].array_context
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
         ext_soln = self._userfunc(nodes, **kwargs)
-        int_soln = discr.project("vol", btag, q)
-        return TracePair(btag, interior=int_soln, exterior=ext_soln)
-
-    def exterior_sol(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        """Get the interior solution on the boundary."""
-        actx = q[0].array_context
-
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(t, nodes)
         return ext_soln
 
-    def av(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        """Do artificial viscosity function."""
+    def av(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
         return discr.project("vol", btag, q)
 
 
@@ -96,20 +87,16 @@ class DummyBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = discr.project("vol", btag, q)
+        dir_soln = self.exterior_soln(discr, q, btag, **kwargs)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
-    def exterior_sol(
-        self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        """Get the interior and exterior solution on the boundary."""
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
 
-    def av(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        """Do artificial viscosity function."""
+    def av(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
         return discr.project("vol", btag, q)
 
 
@@ -132,48 +119,14 @@ class AdiabaticSlipBoundary:
     """
 
     def boundary_pair(self, discr, q, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary.
-
-        The exterior solution is set such that there will be vanishing
-        flux through the boundary, preserving mass, momentum (magnitude) and
-        energy.
-        rho_plus = rho_minus
-        v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
-        mom_plus = rho_plus * v_plus
-        E_plus = E_minus
-        """
-        # Grab some boundary-relevant data
-        dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass.array_context
-
-        # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
-
-        # Get the interior/exterior solns
+        """Get the interior and exterior solution on the boundary."""
+        bndry_soln = self.exterior_soln(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
-        int_cv = split_conserved(dim, int_soln)
-
-        # Subtract out the 2*wall-normal component
-        # of velocity from the velocity at the wall to
-        # induce an equal but opposite wall-normal (reflected) wave
-        # preserving the tangential component
-        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
-        wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
-        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
-
-        # Form the external boundary solution with the new momentum
-        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
-                                    energy=int_cv.energy,
-                                    momentum=ext_mom,
-                                    species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
-    def exterior_sol(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        """Get the interior and exterior solution on the boundary.
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
         flux through the boundary, preserving mass, momentum (magnitude) and
@@ -210,10 +163,8 @@ class AdiabaticSlipBoundary:
 
         return bndry_soln
 
-    def av(
-            self, discr, q, t=0.0, btag=BTAG_ALL, eos=IdealSingleGas()
-    ):
-        """Do artificial viscosity function."""
+    def av(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)
@@ -230,21 +181,17 @@ class AdiabaticSlipBoundary:
         result = np.zeros(2+dim, dtype=object)
 
         # flip signs on mass and energy
+        # to apply a neumann condition on q
         result[0] = -1.0*bndry_q.mass
         result[1] = -1.0*bndry_q.energy
 
-        # This needs to be removed
-        result[2:] = bndry_q.momentum
-
-        # things are in the wrong order here...flip?
-        for i in range(dim):
-            tmp = np.zeros(dim, dtype=object)
-            for j in range(dim):
-                tmp[j] = bndry_q.momentum[j][i]
-            flip = np.dot(tmp, normal)
-            norm_flip = normal*flip
-            tmp = tmp - 2.0*norm_flip
-            for j in range(dim):
-                result[2+j][i] = -1.0*tmp[j]
+        # Subtract 2*wall-normal component of q
+        # to enforce q=0 on the wall
+        # flip remaining components to set a neumann condition
+        from pytools.obj_array import make_obj_array
+        q_mom_normcomp = make_obj_array(
+            [np.outer(normal,np.dot(bndry_q.momentum,normal))[i] for i in range(dim)]
+        )
+        result[2:] = -1*(bndry_q.momentum-2.0*q_mom_normcomp)
 
         return(result)
