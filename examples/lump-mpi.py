@@ -46,7 +46,8 @@ from mirgecom.simutil import (
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
-from mirgecom.integrators import rk4_step, advance_state
+from mirgecom.integrators import rk4_step
+from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
