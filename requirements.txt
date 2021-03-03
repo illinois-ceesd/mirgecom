@@ -4,7 +4,6 @@ numpy
 pytest
 pyvisfile
 pymetis
-logpyle
 importlib-resources
 psutil
 
@@ -19,7 +18,7 @@ psutil
 --editable git+https://github.com/inducer/grudge.git#egg=grudge
 --editable git+https://github.com/inducer/pytato.git#egg=pytato
 --editable git+https://github.com/ecisneros8/pyrometheus@kinetics-mirge-generator#egg=pyrometheus
-
+--editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 
 # Toy Fortran parser for Loopy
 #
