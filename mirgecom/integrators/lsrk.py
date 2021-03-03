@@ -31,7 +31,6 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from functools import partial
 
 import numpy as np
 
@@ -65,11 +64,13 @@ LSRKEulerCoefs = LSRKCoefficients(
     B=np.array([1.]),
     C=np.array([0.]))
 
-lsrkeuler_step = partial(lsrk_step, LSRKEulerCoefs)
-lsrkeuler_step.__doc__ = """
-Take one step using the explicit, 1st-order accurate, Euler method
-expressed as an LSRK method.
-"""
+
+def lsrkeuler_step(state, t, dt, rhs):
+    """
+    Take one step using the explicit, 1st-order accurate, Euler method
+    expressed as an LSRK method.
+    """
+    return lsrk_step(LSRKEulerCoefs, state, t, dt, rhs)
 
 
 LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
@@ -92,13 +93,15 @@ LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
         2006345519317/3224310063776,
         2802321613138/2924317926251]))
 
-lsrk54_step = partial(lsrk_step, LSRK54CarpenterKennedyCoefs)
-lsrk54_step.__doc__ = """
-Take one step using the explicit 5-stage, 4th-order accurate, LSRK method
-derived by Carpenter and Kennedy.
 
-Coefficients are summarized in [Hesthaven_2008]_, Section 3.4.
-"""
+def lsrk54_step(state, t, dt, rhs):
+    """
+    Take one step using the explicit 5-stage, 4th-order accurate, LSRK method
+    derived by Carpenter and Kennedy.
+
+    Coefficients are summarized in [Hesthaven_2008]_, Section 3.4.
+    """
+    return lsrk_step(LSRK54CarpenterKennedyCoefs, state, t, dt, rhs)
 
 
 LSRK144NiegemannDiehlBuschCoefs = LSRKCoefficients(
@@ -148,10 +151,12 @@ LSRK144NiegemannDiehlBuschCoefs = LSRKCoefficients(
         0.8627060376969976,
         0.8734213127600976]))
 
-lsrk144_step = partial(lsrk_step, LSRK144NiegemannDiehlBuschCoefs)
-lsrk144_step.__doc__ = """
-Take one step using the explicit 14-stage, 4th-order accurate, LSRK method
-derived by Niegemann, Diehl, and Busch (2012).
 
-LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
-"""
+def lsrk144_step(state, t, dt, rhs):
+    """
+    Take one step using the explicit 14-stage, 4th-order accurate, LSRK method
+    derived by Niegemann, Diehl, and Busch (2012).
+
+    LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
+    """
+    return lsrk_step(LSRK144NiegemannDiehlBuschCoefs, state, t, dt, rhs)

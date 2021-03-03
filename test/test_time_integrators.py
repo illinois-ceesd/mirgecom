@@ -28,7 +28,10 @@ import numpy as np
 import logging
 import pytest
 
-from mirgecom.integrators import *
+from mirgecom.integrators import (lsrkeuler_step,
+                                  lsrk54_step,
+                                  lsrk144_step,
+                                  rk4_step)
 
 logger = logging.getLogger(__name__)
 
