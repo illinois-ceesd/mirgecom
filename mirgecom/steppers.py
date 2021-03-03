@@ -1,5 +1,4 @@
-"""Helper functions for advancing the prognostic state
-forward in time using mirgecom timestepper functions.
+"""Helper functions for advancing a gas state.
 
 .. autofunction:: advance_state
 """
@@ -30,9 +29,6 @@ THE SOFTWARE.
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
-
-
-__all__ = ("advance_state",)
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
