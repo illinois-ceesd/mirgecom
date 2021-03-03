@@ -32,8 +32,9 @@ RHS Evaluation
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
+.. autoclass:: InviscidTimestepError
+.. autofunction:: get_inviscid_timestep
 
 Logging
 ^^^^^^^
@@ -356,6 +357,11 @@ def get_inviscid_cfl(discr, eos, dt, q):
     """Calculate and return CFL based on current state and timestep."""
     wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
+
+
+class InviscidTimestepError(RuntimeError):
+    """Raised when inviscid timestep computation fails."""
+    pass
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):

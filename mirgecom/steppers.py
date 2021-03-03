@@ -67,7 +67,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t=0.0,
     """
     done = False
 
-    dt = get_timestep(state=state, t=t)
+    dt = get_timestep(state=state, step=istep, t=t)
 
     while not done:
 
@@ -79,7 +79,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t=0.0,
         t += dt
         istep += 1
 
-        dt = get_timestep(state=state, t=t)
+        dt = get_timestep(state=state, step=istep, t=t)
 
         done = checkpoint(state=state, step=istep, t=t, dt=dt)
 
