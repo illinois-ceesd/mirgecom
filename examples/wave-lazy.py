@@ -29,7 +29,7 @@ import pyopencl.array as cla  # noqa
 from pytools.obj_array import flat_obj_array
 #         obj_array_vectorize)
 from grudge.eager import EagerDGDiscretization
-# from grudge.shortcuts import make_visualizer
+from grudge.shortcuts import make_visualizer
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
@@ -100,7 +100,7 @@ def main(use_profiling=False):
                   [discr.zeros(actx) for i in range(discr.dim)]
                   )))
 
-    # vis = make_visualizer(discr, order + 3 if dim == 2 else order)
+    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
@@ -113,7 +113,13 @@ def main(use_profiling=False):
     while t < t_final:
         fields = compiled_rhs(fields)
 
-        print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
+        if istep % 10 == 0:
+            print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
+            vis.write_vtk_file("fld-wave-lazy-%04d.vtu" % istep,
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                    ])
 
         t += dt
         istep += 1
