@@ -1,4 +1,5 @@
-"""Helper functions for advancing a gas state.
+"""Helper functions for advancing the prognostic state
+forward in time using mirgecom timestepper functions.
 
 .. autofunction:: advance_state
 """
@@ -31,6 +32,9 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
 
+__all__ = ("advance_state",)
+
+
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
@@ -40,8 +44,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
     rhs
         Function that should return the time derivative of the state
     timestepper
-        Object of type `TimestepperBase` that advances the state from
-        t=time to t=(time+dt), and returns the advanced state.
+        Function that advances the state from t=time to t=(time+dt), and
+        returns the advanced state.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function

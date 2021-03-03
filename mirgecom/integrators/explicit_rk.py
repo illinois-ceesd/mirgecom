@@ -1,4 +1,7 @@
-"""Mirgecom high-speed reactive flow simulation package for scramjet design."""
+"""Timestepping routines for standard explicit Runge-Kutta methods.
+
+.. autofunction:: rk4_step
+"""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -24,6 +27,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import mirgecom.version
 
-__version__ = mirgecom.version.VERSION_TEXT
+__all__ = ("rk4_step", )
+
+
+def rk4_step(state, t, dt, rhs):
+    """Take one step using 4th-order Classical Runge-Kutta method."""
+
+    k1 = rhs(t, state)
+    k2 = rhs(t+dt/2, state + dt/2*k1)
+    k3 = rhs(t+dt/2, state + dt/2*k2)
+    k4 = rhs(t+dt, state + dt*k3)
+
+    return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
