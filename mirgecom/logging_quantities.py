@@ -169,9 +169,7 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
 
 
 def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
-    """Set the (current/initial) time/step count explicitly
-    (e.g., for restart).
-    """
+    """Set the (current/initial) time/step count explicitly (e.g., for restart)."""
     from logpyle import TimestepCounter, SimulationTime
 
     for gd_lst in [mgr.before_gather_descriptors,
