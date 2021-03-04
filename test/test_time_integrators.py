@@ -28,7 +28,7 @@ import numpy as np
 import logging
 import pytest
 
-from mirgecom.integrators import (lsrkeuler_step,
+from mirgecom.integrators import (euler_step,
                                   lsrk54_step,
                                   lsrk144_step,
                                   rk4_step)
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(("integrator", "method_order"),
-                         [(lsrkeuler_step, 1),
+                         [(euler_step, 1),
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
                           (rk4_step, 4)])

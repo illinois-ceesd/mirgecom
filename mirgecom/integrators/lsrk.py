@@ -34,9 +34,6 @@ from dataclasses import dataclass
 import numpy as np
 
 
-__all__ = ("lsrkeuler_step", "lsrk54_step", "lsrk144_step")
-
-
 @dataclass(frozen=True)
 class LSRKCoefficients:
     """Dataclass which defines a given low-storage Runge-Kutta (LSRK) scheme.
@@ -59,15 +56,15 @@ def lsrk_step(coefs, state, t, dt, rhs):
     return state
 
 
-LSRKEulerCoefs = LSRKCoefficients(
+EulerCoefs = LSRKCoefficients(
     A=np.array([0.]),
     B=np.array([1.]),
     C=np.array([0.]))
 
 
-def lsrkeuler_step(state, t, dt, rhs):
+def euler_step(state, t, dt, rhs):
     """Take one step using the explicit, 1st-order accurate, Euler method."""
-    return lsrk_step(LSRKEulerCoefs, state, t, dt, rhs)
+    return lsrk_step(EulerCoefs, state, t, dt, rhs)
 
 
 LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
