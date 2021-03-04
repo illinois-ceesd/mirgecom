@@ -119,7 +119,7 @@ class StatisticsAccumulator:
 
 def get_containing_interval(x0, dx, x):
     """
-    Maps *x* into uniformly-spaced intervals of size *dx* starting at *x0*.
+    Map *x* into uniformly-spaced intervals of size *dx* starting at *x0*.
 
     Returns a tuple (iinterval, x_start, x_end) representing the interval
     containing *x*.

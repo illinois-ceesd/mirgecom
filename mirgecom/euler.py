@@ -362,6 +362,7 @@ def get_inviscid_cfl(discr, eos, dt, q):
 
 class InviscidTimestepError(RuntimeError):
     """Raised when inviscid timestep computation fails."""
+
     pass
 
 
@@ -389,6 +390,7 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 
 
 def get_inviscid_vis_fields(dim, q, eos):
+    """Get the default Euler visualization fields."""
     cv = split_conserved(dim, q)
     return [
         ("cv", cv),

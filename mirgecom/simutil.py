@@ -60,9 +60,7 @@ def check_step(step, interval):
 
 
 def check_time(t, interval, tol=1e-15):
-    """
-    Check simulation time against a user-specified interval.
-    """
+    """Check simulation time against a user-specified interval."""
     _, t_interval_start, t_interval_end = get_containing_interval(
         0, interval, t)
     return t_interval_end-t <= tol or t-t_interval_start <= tol
@@ -115,10 +113,7 @@ def create_parallel_grid(comm, generate_grid):
 
 
 def get_sim_timestep(dt_max, t, t_final=None, key_every=None):
-    """
-    Compute the size of the next timestep given a maximum possible size and various
-    constraints.
-    """
+    """Compute the timestep given a maximum value and various constraints."""
     if key_every is None:
         key_every = []
 
@@ -136,11 +131,7 @@ def get_sim_timestep(dt_max, t, t_final=None, key_every=None):
 
 def sim_checkpoint(step, t, dt, state, nsteps=None, t_final=None, nvis=None,
         vis_dt=None, write_vis=None, nrestart=None, write_restart=None):
-    """
-    Handle logic for basic checkpointing functionality: visualization dumps,
-    restarting, etc.
-    """
-
+    """Handle logic for basic checkpointing functionality."""
     done = False
     if nsteps is not None:
         done = step == nsteps
