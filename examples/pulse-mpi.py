@@ -135,6 +135,11 @@ def main(ctx_factory=cl.create_some_context):
     if rank == 0:
         logger.info(init_message)
 
+    def write_vis(step, t, state):
+        io_fields = get_inviscid_vis_fields(dim, state, eos)
+        return write_visualization_file(visualizer, fields=io_fields,
+                    basename=casename, step=step, t=t, comm=comm)
+
     def get_timestep(step, t, state):
         try:
             dt_max = get_inviscid_timestep(discr=discr, q=state, cfl=current_cfl,
@@ -147,11 +152,6 @@ def main(ctx_factory=cl.create_some_context):
     def rhs(t, state):
         return inviscid_operator(discr, q=state, t=t,
                                  boundaries=boundaries, eos=eos)
-
-    def write_vis(step, t, state):
-        io_fields = get_inviscid_vis_fields(dim, state, eos)
-        return write_visualization_file(visualizer, fields=io_fields,
-                    basename=casename, step=step, t=t, comm=comm)
 
     def checkpoint(step, t, dt, state):
         return sim_checkpoint(step, t, dt, state, t_final=t_final, nvis=nviz,
