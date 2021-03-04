@@ -1,6 +1,7 @@
 """Provide some utilities for building simulation applications.
 
 .. autofunction:: check_step
+.. autofunction:: check_time
 .. autofunction:: create_parallel_grid
 .. autofunction:: get_sim_timestep
 .. autofunction:: sim_checkpoint
@@ -56,6 +57,15 @@ def check_step(step, interval):
     elif step % interval == 0:
         return True
     return False
+
+
+def check_time(t, interval, tol=1e-15):
+    """
+    Check simulation time against a user-specified interval.
+    """
+    _, t_interval_start, t_interval_end = get_containing_interval(
+        0, interval, t)
+    return t_interval_end-t <= tol or t-t_interval_start <= tol
 
 
 def create_parallel_grid(comm, generate_grid):
@@ -125,7 +135,7 @@ def get_sim_timestep(dt_max, t, t_final=None, key_every=None):
 
 
 def sim_checkpoint(step, t, dt, state, nsteps=None, t_final=None, nvis=None,
-        write_vis=None, nrestart=None, write_restart=None):
+        vis_dt=None, write_vis=None, nrestart=None, write_restart=None):
     """
     Handle logic for basic checkpointing functionality: visualization dumps,
     restarting, etc.
@@ -140,6 +150,8 @@ def sim_checkpoint(step, t, dt, state, nsteps=None, t_final=None, nvis=None,
     do_vis = done
     if nvis is not None:
         do_vis = do_vis or check_step(step, nvis)
+    if vis_dt is not None:
+        do_vis = do_vis or check_time(t, vis_dt)
     if do_vis and write_vis is not None:
         write_vis(step, t, state)
 
