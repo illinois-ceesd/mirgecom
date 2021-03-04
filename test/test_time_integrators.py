@@ -28,16 +28,19 @@ import numpy as np
 import logging
 import pytest
 
-from mirgecom.integrators import rk4_step, lsrk4_step, lsrk144_step, euler_step
+from mirgecom.integrators import (euler_step,
+                                  lsrk54_step,
+                                  lsrk144_step,
+                                  rk4_step)
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(("integrator", "method_order"),
-                         [(rk4_step, 4),
-                          (lsrk4_step, 4),
+                         [(euler_step, 1),
+                          (lsrk54_step, 4),
                           (lsrk144_step, 4),
-                          (euler_step, 1)])
+                          (rk4_step, 4)])
 def test_integration_order(integrator, method_order):
     """Test that time integrators have correct order."""
 
