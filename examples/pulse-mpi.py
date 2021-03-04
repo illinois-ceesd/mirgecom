@@ -42,6 +42,7 @@ from mirgecom.euler import (
     split_conserved,
     get_inviscid_timestep,
     InviscidTimestepError,
+    get_inviscid_vis_fields,
 )
 from mirgecom.simutil import (
     create_parallel_grid,
@@ -148,11 +149,7 @@ def main(ctx_factory=cl.create_some_context):
                                  boundaries=boundaries, eos=eos)
 
     def write_vis(step, t, state):
-        cv = split_conserved(dim, state)
-        io_fields = [
-            ("cv", cv),
-            ("dv", eos.dependent_vars(cv)),
-        ]
+        io_fields = get_inviscid_vis_fields(dim, state, eos)
         return write_visualization_file(visualizer, fields=io_fields,
                     basename=casename, step=step, t=t, comm=comm)
 

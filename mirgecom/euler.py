@@ -35,6 +35,7 @@ Time Step Computation
 .. autofunction:: get_inviscid_cfl
 .. autoclass:: InviscidTimestepError
 .. autofunction:: get_inviscid_timestep
+.. autofunction:: get_inviscid_vis_fields
 
 Logging
 ^^^^^^^
@@ -385,6 +386,13 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 #    wavespeeds = _get_wavespeed(w,eos=eos)
 #    max_v = clmath.max(wavespeeds)
 #    return c*dt_ngf*dt_gf/max_v
+
+
+def get_inviscid_vis_fields(dim, q, eos):
+    cv = split_conserved(dim, q)
+    return [
+        ("cv", cv),
+        ("dv", eos.dependent_vars(cv))]
 
 
 def logmgr_add_inviscid_quantities(logmgr, discr, eos, quantity_to_unit=None):
