@@ -39,7 +39,6 @@ from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import (
     inviscid_operator,
-    split_conserved,
     get_inviscid_timestep,
     InviscidTimestepError,
     get_inviscid_vis_fields,
