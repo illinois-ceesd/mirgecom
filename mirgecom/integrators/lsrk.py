@@ -34,6 +34,13 @@ from dataclasses import dataclass
 import numpy as np
 
 
+def lsrk4_step(state, t, dt, rhs):
+    from warnings import warn
+    warn("Do not call lsrk4; it is now callled lsrk54_step. This function will "
+         "disappear April 1, 2021", DeprecationWarning, stacklevel=2)
+    return lsrk54_step(state, t, dt, rhs)
+
+
 @dataclass(frozen=True)
 class LSRKCoefficients:
     """Dataclass which defines a given low-storage Runge-Kutta (LSRK) scheme.
