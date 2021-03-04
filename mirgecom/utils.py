@@ -1,6 +1,7 @@
 """Useful bits and bobs.
 
 .. autofunction:: asdict_shallow
+.. autofunction:: get_containing_interval
 """
 
 __copyright__ = """
@@ -32,6 +33,7 @@ __doc__ = """
 .. autofunction:: asdict_shallow
 """
 
+import math
 from typing import Optional
 
 
@@ -113,3 +115,15 @@ class StatisticsAccumulator:
             return None
 
         return self._min * self.scale_factor
+
+
+def get_containing_interval(x0, dx, x):
+    """
+    Maps *x* into uniformly-spaced intervals of size *dx* starting at *x0*.
+
+    Returns a tuple (iinterval, x_start, x_end) representing the interval
+    containing *x*.
+    """
+    offset = x - x0
+    iinterval = int(math.floor(offset/dx))
+    return iinterval, x0 + dx*iinterval, x0 + dx*(iinterval+1)

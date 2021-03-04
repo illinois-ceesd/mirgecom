@@ -46,6 +46,7 @@ from mirgecom.euler import (
 )
 from mirgecom.simutil import (
     create_parallel_grid,
+    get_sim_timestep,
     sim_checkpoint,
 )
 from mirgecom.io import (
@@ -160,12 +161,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     def get_timestep(step, t, state):
         try:
-            dt = get_inviscid_timestep(discr=discr, q=state, cfl=current_cfl,
+            dt_max = get_inviscid_timestep(discr=discr, q=state, cfl=current_cfl,
                 eos=eos) if constant_cfl else current_dt
         except InviscidTimestepError:
             write_vis(step, t, state)
             raise
-        return min(dt, t_final - t)
+        return get_sim_timestep(dt_max, t, t_final=t_final)
 
     def rhs(t, state):
         return inviscid_operator(discr, q=state, t=t,

@@ -2,6 +2,7 @@
 
 .. autofunction:: check_step
 .. autofunction:: create_parallel_grid
+.. autofunction:: get_sim_timestep
 .. autofunction:: sim_checkpoint
 """
 
@@ -30,6 +31,8 @@ THE SOFTWARE.
 """
 
 import logging
+
+from mirgecom.utils import get_containing_interval
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,26 @@ def create_parallel_grid(comm, generate_grid):
         local_mesh = mesh_dist.receive_mesh_part()
 
     return local_mesh, global_nelements
+
+
+def get_sim_timestep(dt_max, t, t_final=None, key_every=None):
+    """
+    Compute the size of the next timestep given a maximum possible size and various
+    constraints.
+    """
+    if key_every is None:
+        key_every = []
+
+    if t_final is not None:
+        key_every.append(t_final)
+
+    dt = dt_max
+
+    for key_dt in key_every:
+        _, _, t_next_key = get_containing_interval(0, key_dt, t)
+        dt = min(dt, t_next_key - t)
+
+    return dt
 
 
 def sim_checkpoint(step, t, dt, state, nsteps=None, t_final=None, nvis=None,
