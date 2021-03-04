@@ -151,13 +151,13 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
-
     init_message = make_init_message(dim=dim, order=order, casename=casename,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements)
     if rank == 0:
         logger.info(init_message)
+
+    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
 
     def write_vis(step, t, state):
         io_fields = get_inviscid_vis_fields(dim, state, eos)
