@@ -2,6 +2,7 @@
 
 .. autofunction:: check_step
 .. autofunction:: create_parallel_grid
+.. autofunction:: sim_checkpoint
 """
 
 __copyright__ = """
@@ -98,3 +99,31 @@ def create_parallel_grid(comm, generate_grid):
         local_mesh = mesh_dist.receive_mesh_part()
 
     return local_mesh, global_nelements
+
+
+def sim_checkpoint(step, t, dt, state, nsteps=None, t_final=None, nvis=None,
+        write_vis=None, nrestart=None, write_restart=None):
+    """
+    Handle logic for basic checkpointing functionality: visualization dumps,
+    restarting, etc.
+    """
+
+    done = False
+    if nsteps is not None:
+        done = step == nsteps
+    if t_final is not None:
+        done = done or t >= t_final
+
+    do_vis = done
+    if nvis is not None:
+        do_vis = do_vis or check_step(step, nvis)
+    if do_vis and write_vis is not None:
+        write_vis(step, t, state)
+
+    do_restart = done
+    if nrestart is not None:
+        do_restart = do_vis or check_step(step, nrestart)
+    if do_restart and write_restart is not None:
+        write_restart(step, t, dt, state)
+
+    return done

@@ -46,7 +46,7 @@ from mirgecom.euler import (
 )
 from mirgecom.simutil import (
     create_parallel_grid,
-    check_step,
+    sim_checkpoint,
 )
 from mirgecom.io import (
     make_init_message,
@@ -154,10 +154,8 @@ def main(ctx_factory=cl.create_some_context):
                     basename=casename, step=step, t=t, comm=comm)
 
     def checkpoint(step, t, dt, state):
-        done = t >= t_final
-        if check_step(step, nviz) or done:
-            write_vis(step, t, state)
-        return done
+        return sim_checkpoint(step, t, dt, state, t_final=t_final, nvis=nviz,
+            write_vis=write_vis)
 
     if current_step == 0:
         dt = get_timestep(0, current_t, current_state)
