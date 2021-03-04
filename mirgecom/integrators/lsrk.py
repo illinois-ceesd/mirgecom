@@ -1,6 +1,6 @@
 """Timestepping routines for low-storage variants of explicit Runge-Kutta methods.
 
-.. autofunction:: lsrkeuler_step
+.. autofunction:: euler_step
 .. autofunction:: lsrk54_step
 .. autofunction:: lsrk144_step
 """
