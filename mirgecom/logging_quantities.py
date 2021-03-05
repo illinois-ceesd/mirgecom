@@ -360,7 +360,7 @@ class DeviceMemoryUsage(LogQuantity):
         self.total = ctypes.c_size_t()
 
         try:
-            # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335
+            # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
             # on why this calls cuMemGetInfo_v2 and not cuMemGetInfo
             libcuda = ctypes.cdll.LoadLibrary("libcuda.so")
             self.mem_func = libcuda.cuMemGetInfo_v2
