@@ -1,20 +1,10 @@
-"""Functions for time integration.
+"""Timestepping routines for standard explicit Runge-Kutta methods.
 
-Time integrators
-^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
-.. autofunction:: lsrk4_step
-.. autofunction:: lsrk144_step
-.. autofunction:: euler_step
 """
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
-"""
-
-__author__ = """
-Center for Exascale-Enabled Scramjet Design
-University of Illinois, Urbana, IL 61801
 """
 
 __license__ = """
@@ -37,50 +27,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import mirgecom.butcher_tableau as bt
-
 
 def rk4_step(state, t, dt, rhs):
-    """Take one step using 4th order Runge-Kutta."""
+    """Take one step using the fourth-order Classical Runge-Kutta method."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)
     k3 = rhs(t+dt/2, state + dt/2*k2)
     k4 = rhs(t+dt, state + dt*k3)
+
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
-
-
-def lsrk4_step(state, t, dt, rhs):
-    """
-    Take one step using Carpenter-Kennedy low storage 4th order Runge-Kutta.
-
-    LSERK coefficients from [Hesthaven_2008]_, Section 3.4.
-    """
-    p = state
-    k = p * 0.
-
-    for i in range(5):
-        k = bt._LSRK4_A[i]*k + dt*rhs(t + bt._LSRK4_C[i]*dt, p)
-        p = p + bt._LSRK4_B[i]*k
-
-    return p
-
-
-def lsrk144_step(state, t, dt, rhs):
-    """
-    Take one step using the low storage 14-stage 4th order Runge-Kutta method.
-
-    LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
-    """
-    p = state
-    k = p * 0.
-
-    for i in range(14):
-        k = bt._LSRK144_A[i]*k + dt*rhs(t + bt._LSRK144_C[i]*dt, p)
-        p = p + bt._LSRK144_B[i]*k
-
-    return p
-
-
-def euler_step(state, t, dt, rhs):
-    """Take one step using forward Euler time integration."""
-    return state + dt*rhs(t, state)

@@ -4,7 +4,6 @@ numpy
 pytest
 pyvisfile
 pymetis
-logpyle
 importlib-resources
 psutil
 
@@ -18,6 +17,7 @@ psutil
 --editable git+https://github.com/kaushikcfd/meshmode.git@pytato_array_context#egg=meshmode
 --editable git+https://github.com/matthiasdiener/grudge.git@pytato_array_context#egg=grudge
 --editable git+https://github.com/kaushikcfd/pytato.git@pytato_array_context#egg=pytato
+--editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 
 # Toy Fortran parser for Loopy
 #
