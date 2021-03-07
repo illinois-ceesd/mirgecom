@@ -29,8 +29,10 @@ __doc__ = """
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
+.. autoclass:: DeviceMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_device_name
+.. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
@@ -74,6 +76,13 @@ def initialize_logmgr(enable_logmgr: bool,
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     """Add the OpenCL device name to the log."""
     logmgr.set_constant("cl_device_name", str(queue.device))
+
+
+def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
+    """Add the OpenCL device memory usage to the log."""
+    if not (queue.device.type & cl.device_type.GPU):
+        return
+    logmgr.add_quantity(DeviceMemoryUsage())
 
 
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
@@ -324,7 +333,7 @@ class PythonMemoryUsage(LogQuantity):
     def __init__(self, name: str = None):
 
         if name is None:
-            name = "memory_usage"
+            name = "memory_usage_python"
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
@@ -334,5 +343,43 @@ class PythonMemoryUsage(LogQuantity):
     def __call__(self) -> float:
         """Return the memory usage in MByte."""
         return self.process.memory_info()[0] / 1024 / 1024
+
+
+class DeviceMemoryUsage(LogQuantity):
+    """Logging support for GPU memory usage (Nvidia only currently)."""
+
+    def __init__(self, name: str = None) -> None:
+
+        if name is None:
+            name = "memory_usage_gpu"
+
+        super().__init__(name, "MByte", description="Memory usage (GPU)")
+
+        import ctypes
+        self.free = ctypes.c_size_t()
+        self.total = ctypes.c_size_t()
+
+        try:
+            # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
+            # on why this calls cuMemGetInfo_v2 and not cuMemGetInfo
+            libcuda = ctypes.cdll.LoadLibrary("libcuda.so")
+            self.mem_func = libcuda.cuMemGetInfo_v2
+        except OSError:
+            self.mem_func = None
+
+    def __call__(self) -> float:
+        """Return the memory usage in MByte."""
+        if self.mem_func is None:
+            return None
+
+        import ctypes
+        ret = self.mem_func(ctypes.byref(self.free), ctypes.byref(self.total))
+
+        if ret != 0:
+            from warnings import warn
+            warn(f"cudaMemGetInfo failed with error {ret}.")
+            return None
+        else:
+            return (self.total.value - self.free.value) / 1024 / 1024
 
 # }}}
