@@ -37,7 +37,7 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
-from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.fluid import split_conserved, join_conserved
 
 
 class PrescribedBoundary:

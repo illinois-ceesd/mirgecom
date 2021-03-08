@@ -34,7 +34,7 @@ import pytest
 from pytools.obj_array import make_obj_array
 
 from meshmode.dof_array import thaw
-from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.fluid import split_conserved, join_conserved
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context

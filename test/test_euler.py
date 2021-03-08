@@ -38,7 +38,8 @@ from meshmode.dof_array import DOFArray, thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
-from mirgecom.euler import inviscid_operator, split_conserved, join_conserved
+from mirgecom.euler import inviscid_operator
+from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
