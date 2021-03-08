@@ -5,3 +5,4 @@ Gas Dynamics
 .. automodule:: mirgecom.boundary
 .. automodule:: mirgecom.eos
 .. automodule:: mirgecom.initializers
+.. automodule:: mirgecom.fluid
