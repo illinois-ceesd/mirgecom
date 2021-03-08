@@ -19,14 +19,7 @@ where:
 RHS Evaluation
 ^^^^^^^^^^^^^^
 
-.. autofunction:: inviscid_flux
 .. autofunction:: inviscid_operator
-
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: get_inviscid_timestep
-.. autofunction:: get_inviscid_cfl
 """
 
 __copyright__ = """
@@ -62,41 +55,10 @@ from grudge.eager import (
 from mirgecom.fluid import (
     compute_wavespeed,
     split_conserved,
-    join_conserved
 )
-
-
-def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*.
-
-    The inviscid fluxes are
-    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
-    +p\mathbf{I}, \rho{Y_s}\vec{V})$
-
-    .. note::
-
-        The fluxes are returned as a 2D object array with shape:
-        ``(num_equations, ndim)``.  Each entry in the
-        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-        form and shape for the flux data is required by the built-in
-        state data handling mechanism in :mod:`mirgecom.euler`. That
-        mechanism is used by at least
-        :class:`mirgecom.fluid.ConservedVars`, and
-        :func:`mirgecom.fluid.join_conserved`, and
-        :func:`mirgecom.fluid.split_conserved`.
-    """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
-    p = eos.pressure(cv)
-
-    mom = cv.momentum
-
-    return join_conserved(dim,
-            mass=mom,
-            energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            species_mass=(  # reshaped: (nspecies, dim)
-                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+from mirgecom.inviscid import (
+    inviscid_flux
+)
 
 
 def _facial_flux(discr, eos, q_tpair, local=False):
@@ -212,12 +174,6 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     )
 
 
-def get_inviscid_cfl(discr, eos, dt, q):
-    """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
-    return dt / wanted_dt
-
-
 # By default, run unitless
 NAME_TO_UNITS = {
     "mass": "",
@@ -242,26 +198,3 @@ def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
     name_to_field = asdict_shallow(cv)
     name_to_field.update(asdict_shallow(dv))
     return name_to_field
-
-
-def get_inviscid_timestep(discr, eos, cfl, q):
-    """Routine (will) return the (local) maximum stable inviscid timestep.
-
-    Currently, it's a hack waiting for the geometric_factor helpers port
-    from grudge.
-    """
-    dim = discr.dim
-    mesh = discr.mesh
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
-    nelements = mesh.nelements
-    nel_1d = nelements ** (1.0 / (1.0 * dim))
-
-    # This roughly reproduces the timestep AK used in wave toy
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return cfl * dt
-
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = compute_wavespeed(w,eos=eos)
-#    max_v = clmath.max(wavespeeds)
-#    return c*dt_ngf*dt_gf/max_v

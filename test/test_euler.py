@@ -50,7 +50,11 @@ from meshmode.array_context import (  # noqa
 
 
 from grudge.shortcuts import make_visualizer
-from mirgecom.euler import get_inviscid_timestep
+from mirgecom.inviscid import (
+    get_inviscid_timestep,
+    inviscid_flux
+)
+
 from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
@@ -60,7 +64,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux(actx_factory, nspecies, dim):
     """Identity test - directly check inviscid flux routine
-    :func:`mirgecom.euler.inviscid_flux` against the exact expected result.
+    :func:`mirgecom.inviscid.inviscid_flux` against the exact expected result.
     This test is designed to fail if the flux routine is broken.
 
     The expected inviscid flux is:
@@ -120,8 +124,6 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    from mirgecom.euler import inviscid_flux
-
     flux = inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
@@ -144,7 +146,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
 
     Checks that the Euler-internal inviscid flux routine
-    :func:`mirgecom.euler.inviscid_flux` returns exactly the expected result
+    :func:`mirgecom.inviscid.inviscid_flux` returns exactly the expected result
     with a constant pressure and no flow.
 
     Expected inviscid flux is:
@@ -156,8 +158,6 @@ def test_inviscid_flux_components(actx_factory, dim):
     actx = actx_factory()
 
     eos = IdealSingleGas()
-
-    from mirgecom.euler import inviscid_flux
 
     p0 = 1.0
 
@@ -220,8 +220,6 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     eos = IdealSingleGas()
 
     p0 = 1.0
-
-    from mirgecom.euler import inviscid_flux
 
     tolerance = 1e-15
     for livedim in range(dim):
