@@ -60,7 +60,7 @@ from grudge.eager import (
     cross_rank_trace_pairs
 )
 from mirgecom.fluid import (
-    ConservedVars,
+    compute_wavespeed,
     split_conserved,
     join_conserved
 )
@@ -99,14 +99,6 @@ def inviscid_flux(discr, eos, q):
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def _get_wavespeed(dim, eos, cv: ConservedVars):
-    """Return the maximum wavespeed in for flow solution *q*."""
-    actx = cv.mass.array_context
-
-    v = cv.momentum / cv.mass
-    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
-
-
 def _facial_flux(discr, eos, q_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
@@ -136,8 +128,8 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
+        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
     )
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
@@ -270,6 +262,6 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 
 #    dt_ngf = dt_non_geometric_factor(discr.mesh)
 #    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = _get_wavespeed(w,eos=eos)
+#    wavespeeds = compute_wavespeed(w,eos=eos)
 #    max_v = clmath.max(wavespeeds)
 #    return c*dt_ngf*dt_gf/max_v
