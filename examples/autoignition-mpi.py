@@ -132,8 +132,9 @@ def main(ctx_factory=cl.create_some_context):
     x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
     x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
-    one_atm = cantera.one_atm
-    # one_atm = 101325.0
+    # Uncomment next line to make pylint fail when it can't find cantera.one_atm
+    # one_atm = cantera.one_atm
+    one_atm = 101325.0
 
     # Let the user know about how Cantera is being initilized
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
