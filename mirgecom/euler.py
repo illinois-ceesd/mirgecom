@@ -24,8 +24,8 @@ RHS Evaluation
 Logging Helpers
 ^^^^^^^^^^^^^^^
 
-.. autofunction: units_for_logging
-.. autofunction: extract_vars_for_logging
+.. autofunction:: units_for_logging
+.. autofunction:: extract_vars_for_logging
 """
 
 __copyright__ = """
