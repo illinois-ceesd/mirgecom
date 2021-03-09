@@ -245,7 +245,7 @@ def main(ctx_factory=cl.create_some_context):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    logging.basicConfig(level=logging.INFO)
     main()
 
 # vim: foldmethod=marker
