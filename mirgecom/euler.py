@@ -59,6 +59,8 @@ from mirgecom.fluid import (
 from mirgecom.inviscid import (
     inviscid_flux
 )
+from functools import partial
+from mirgecom.flux import lfr_flux
 
 
 def _facial_flux(discr, eos, q_tpair, local=False):
@@ -79,25 +81,18 @@ def _facial_flux(discr, eos, q_tpair, local=False):
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
     """
+    actx = q_tpair[0].int.array_context
     dim = discr.dim
 
-    actx = q_tpair[0].int.array_context
-
-    flux_int = inviscid_flux(discr, eos, q_tpair.int)
-    flux_ext = inviscid_flux(discr, eos, q_tpair.ext)
-
-    # Lax-Friedrichs/Rusanov after [Hesthaven_2008]_, Section 6.6
-    flux_avg = 0.5*(flux_int + flux_ext)
-
+    euler_flux = partial(inviscid_flux, discr, eos)
     lam = actx.np.maximum(
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
     )
-
     normal = thaw(actx, discr.normal(q_tpair.dd))
-    flux_weak = (
-        flux_avg @ normal
-        - 0.5 * lam * (q_tpair.ext - q_tpair.int))
+
+    # todo: user-supplied flux routine
+    flux_weak = lfr_flux(q_tpair, compute_flux=euler_flux, normal=normal, lam=lam)
 
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)

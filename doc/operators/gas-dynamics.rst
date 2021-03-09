@@ -7,3 +7,4 @@ Gas Dynamics
 .. automodule:: mirgecom.initializers
 .. automodule:: mirgecom.inviscid
 .. automodule:: mirgecom.fluid
+.. automodule:: mirgecom.flux
