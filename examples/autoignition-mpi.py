@@ -88,7 +88,8 @@ def main(ctx_factory=cl.create_some_context):
     timestepper = rk4_step
     box_ll = -0.005
     box_ur = 0.005
-    error_state = 0
+    error_state = False
+    debug = False
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -105,6 +106,8 @@ def main(ctx_factory=cl.create_some_context):
     )
     nodes = thaw(actx, discr.nodes())
 
+    # {{{  Set up initial state using Cantera
+
     # Use Cantera for initialization
     # -- Pick up a CTI for the thermochemistry config
     from mirgecom.mechanisms import get_mechanism_cti
@@ -113,7 +116,6 @@ def main(ctx_factory=cl.create_some_context):
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     nspecies = cantera_soln.n_species
 
-    # ====== Set up the initial state ========
     # Initial temperature, pressure, and mixutre mole fractions are needed to
     # set up the initial state in Cantera.
     init_temperature = 1500.0  # Initial temperature hot enough to burn
@@ -130,8 +132,8 @@ def main(ctx_factory=cl.create_some_context):
     x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
     x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
-    # one_atm = cantera.one_atm
-    one_atm = 101325.0
+    one_atm = cantera.one_atm
+    # one_atm = 101325.0
 
     # Let the user know about how Cantera is being initilized
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
@@ -145,12 +147,20 @@ def main(ctx_factory=cl.create_some_context):
     # but we want to ensure that we use exactly the same starting point as Cantera,
     # so we use Cantera's version of these data.
 
+    # }}}
+
+    # {{{ Create Pyrometheus thermochemistry object & EOS
+
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
     casename = "autoignition"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism, tguess=init_temperature)
+
+    # }}}
+
+    # {{{ MIRGE-Com state initialization
 
     # Initialize the fluid/gas state with Cantera-consistent data:
     # (density, pressure, temperature, mass_fractions)
@@ -164,14 +174,18 @@ def main(ctx_factory=cl.create_some_context):
     current_state = initializer(eos=eos, x_vec=nodes, t=0)
 
     # Inspection at physics debugging time
-    #    cv = split_conserved(dim, current_state)
-    #    print(f"Initial CV rho: {cv.mass}")
-    #    print(f"Initial CV rhoE: {cv.energy}")
-    #    print(f"Initial CV rhoV: {cv.momentum}")
-    #    print(f"Initial CV rhoY: {cv.mass_fractions}")
-    #    print(f"Initial Y: {cv.mass_fractions / cv.mass}")
-    #    print(f"Initial DV pressure: {eos.pressure(cv)}")
-    #    print(f"Initial DV temperature: {eos.temperature(cv)}")
+    if debug:
+        cv = split_conserved(dim, current_state)
+        print("Initial MIRGE-Com state:")
+        print(f"{cv.mass=}")
+        print(f"{cv.energy=}")
+        print(f"{cv.momentum=}")
+        print(f"{cv.species_mass=}")
+        print(f"Initial Y: {cv.species_mass / cv.mass}")
+        print(f"Initial DV pressure: {eos.pressure(cv)}")
+        print(f"Initial DV temperature: {eos.temperature(cv)}")
+
+    # }}}
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -225,7 +239,7 @@ def main(ctx_factory=cl.create_some_context):
                           get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
-        error_state = 1
+        error_state = True
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state
@@ -238,7 +252,7 @@ def main(ctx_factory=cl.create_some_context):
                       state=current_state)
 
     if current_t - t_final < 0:
-        error_state = 1
+        error_state = True
 
     if error_state:
         raise ValueError("Simulation did not complete successfully.")
