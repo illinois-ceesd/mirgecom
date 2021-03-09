@@ -57,7 +57,8 @@ from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name)
+    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
+    logmgr_add_device_memory_usage)
 
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
@@ -137,7 +139,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                             "min_temperature", "L2_norm_momentum1"])
 
         try:
-            logmgr.add_watches(["memory_usage.max"])
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
         except KeyError:
             pass
 
