@@ -201,7 +201,7 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     .. math::
 
-        s_w = |\mathbf{v}| + c,
+        s_w = \|\mathbf{v}\| + c,
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
