@@ -46,7 +46,7 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
     jump term coefficient.
 
     Parameters
-    ^^^^^^^^^^
+    ----------
     q_tpair:
 
         Trace pair (grudge.symbolic.TracePair) for the face upon which flux
@@ -66,7 +66,7 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
         lambda parameter for Lax-Friedrichs/Rusanov flux
 
     Returns
-    ^^^^^^^
+    -------
     numpy.ndarray
 
         object array of meshmode.dof_array.DOFArray with the Lax-Friedrichs/Rusanov
