@@ -105,7 +105,7 @@ def main(use_profiling=False):
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
 
-    compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), fields)
+    compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
 
     t = 0
     t_final = 1
