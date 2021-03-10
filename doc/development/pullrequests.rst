@@ -3,7 +3,7 @@ Working with Pull Requests
 
 We are using GitHub's pull requests (PRs) feature to integrate changes into
 mirgecom and its supporting packages. Pull requests are based on git branches
-that are merged into another branch (usually the master branch). Note that
+that are merged into another branch (usually the ``main`` branch). Note that
 pull requests are a GitHub feature and live outside the main git
 functionality; the ``git`` program itself has no knowledge of them.
 
@@ -68,8 +68,8 @@ Creating a new pull request
 
    https://github.com/illinois-ceesd/mirgecom/pulls
 
-   The `base` branch should be the `master` branch of the repo you want to
-   merge into in most cases. The `compare` branch is the branch with your
+   The ``base`` branch should be the ``main`` branch of the repo you want to
+   merge into in most cases. The ``compare`` branch is the branch with your
    changes.
 
 6. After the pull request has been merged, please delete the branch
@@ -138,7 +138,7 @@ in progress and only a high-level review is requested.
    article:
 
    - `How to Make Your Code Reviewer Fall in Love with You <https://mtlynch.io/code-review-love/>`__
-   
+
    A similar (but mirrored) set of concerns applies from the other direction. You will definitely
    want to read these articles when you start reviewing other folks' code, but it may be
    helpful to read them even before then to gain a better understanding of the process:
@@ -213,7 +213,7 @@ and merge**, **rebase and merge**, and **create a merge commit**.
 Squash and merge
 ^^^^^^^^^^^^^^^^
 
-Squash all commits into one commit and merge it to the main branch. This is
+Squash all commits into one commit and merge it to the ``main`` branch. This is
 the preferred option, especially for small changes, as it keeps the history
 shorter and cleaner, makes git bisection easier, and makes it easier to revert
 a pull request.
@@ -221,20 +221,20 @@ a pull request.
 Rebase and merge
 ^^^^^^^^^^^^^^^^
 
-Rebase all commits to top of the main branch and merge all commits. This
+Rebase all commits to top of the ``main`` branch and merge all commits. This
 is the preferred option for larger changes, for example, by having
 separate commits for the implementation of a feature and its
 documentation
 
 Other possibilities (such as squashing only some commits and then
-merging multiple commits into ``master``) are not directly supported by
+merging multiple commits into ``main``) are not directly supported by
 GitHub’s Web UI, but can be done manually on the command line (these
 might need to be force pushed to a branch).
 
 Create a merge commit
 ^^^^^^^^^^^^^^^^^^^^^
 
-This options just merges all commits into the master branch. This is the simplest
+This options just merges all commits into the ``main`` branch. This is the simplest
 way to merge a pull request, but can lead to issues with bisection and reverting PRs
 later.
 

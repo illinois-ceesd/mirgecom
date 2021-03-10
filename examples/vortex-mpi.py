@@ -63,7 +63,10 @@ from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer
 
-from mirgecom.logging_quantities import initialize_logmgr, logmgr_add_device_name
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_device_name,
+    logmgr_add_device_memory_usage)
 from mirgecom.euler import logmgr_add_inviscid_quantities
 
 
@@ -136,12 +139,13 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_inviscid_quantities(logmgr, discr, eos)
+        logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "L2_norm_momentum1"])
 
         try:
-            logmgr.add_watches(["memory_usage.max"])
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
         except KeyError:
             pass
 

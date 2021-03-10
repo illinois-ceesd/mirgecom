@@ -66,4 +66,4 @@ What do these packages do?
 
 The source repository (and current branch) of most of these packages
 in use is determined by the file
-`requirements.txt in mirgecom <https://github.com/illinois-ceesd/mirgecom/blob/master/requirements.txt>`__.
+`requirements.txt in mirgecom <https://github.com/illinois-ceesd/mirgecom/blob/main/requirements.txt>`__.
