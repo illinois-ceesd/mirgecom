@@ -27,8 +27,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
+from pytools import memoize_in
+
+
+def compile(actx, timestepper, state, rhs):
+    @memoize_in(actx, ("mirgecom_compiled_operator",
+                       timestepper, rhs,
+                       tuple(len(el) for el in state)))
+    def get():
+        return actx.compile(lambda y, t, dt: timestepper(state=y, t=t,
+                                                         dt=dt,
+                                                         rhs=rhs),
+                            [state, np.float64(0), np.float64(0)])
+
+    return get()
 
 
 def advance_state(rhs, timestepper, checkpoint, get_timestep,
@@ -68,21 +83,25 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         the current time
     state: numpy.ndarray
     """
+    t = np.float64(t)
+
     if t_final <= t:
         return istep, t, state
+
+    actx = state[0].array_context
+    compiled_timestepper = compile(actx, timestepper, state, rhs)
 
     while t < t_final:
 
         if logmgr:
             logmgr.tick_before()
 
-        dt = get_timestep(state=state)
+        dt = np.float64(get_timestep(state=state))
         if dt < 0:
             return istep, t, state
 
         checkpoint(state=state, step=istep, t=t, dt=dt)
-
-        state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
+        state = compiled_timestepper(state, t, dt)
 
         t += dt
         istep += 1
