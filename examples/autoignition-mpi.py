@@ -110,6 +110,8 @@ def main(ctx_factory=cl.create_some_context):
 
     # Use Cantera for initialization
     # -- Pick up a CTI for the thermochemistry config
+    # --- Note: Users may add their own CTI file by dropping it into
+    # ---       mirgecom/mechanisms alongside the other CTI files.
     from mirgecom.mechanisms import get_mechanism_cti
     mech_cti = get_mechanism_cti("uiuc")
 
