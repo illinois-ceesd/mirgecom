@@ -1,4 +1,4 @@
-"""Demonstrate wave-eager serial example."""
+"""Demonstrate wave serial example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
 
@@ -27,12 +27,14 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
 from pytools.obj_array import flat_obj_array
+#         obj_array_vectorize)
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.dof_array import thaw, freeze
+from meshmode.array_context import PytatoArrayContext, PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
@@ -57,18 +59,23 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False):
+def main(use_profiling: bool, lazy_eval: bool):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     if use_profiling:
+        if lazy_eval:
+            raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
         actx = PyOpenCLProfilingArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        if lazy_eval:
+            actx = PytatoArrayContext(queue)
+        else:
+            actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
@@ -94,31 +101,46 @@ def main(use_profiling=False):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    fields = flat_obj_array(
-        bump(actx, discr),
-        [discr.zeros(actx) for i in range(discr.dim)]
-        )
+    if lazy_eval:
+        fields = thaw(actx, freeze(flat_obj_array(
+                    bump(actx, discr),
+                    [discr.zeros(actx) for i in range(discr.dim)]
+                    )))
+    else:
+        fields = flat_obj_array(
+                    bump(actx, discr),
+                    [discr.zeros(actx) for i in range(discr.dim)]
+                    )
 
     vis = make_visualizer(discr, order + 3 if dim == 2 else order)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
 
+    if lazy_eval:
+        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
+
     t = 0
     t_final = 3
     istep = 0
     while t < t_final:
-        fields = rk4_step(fields, t, dt, rhs)
+        if lazy_eval:
+            fields = compiled_rhs(fields)
+        else:
+            fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
+            if lazy_eval:
+                print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
+            else:
+                print(istep, t, discr.norm(fields[0], np.inf))
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, discr.norm(fields[0], np.inf))
-            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
+            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                    ])
 
         t += dt
         istep += 1
@@ -126,11 +148,13 @@ def main(use_profiling=False):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
+    parser = argparse.ArgumentParser(description="Wave (non-MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
+    parser.add_argument("--lazy", action="store_true",
+        help="enable lazy evaluation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile)
+    main(use_profiling=args.profile, lazy_eval=args.lazy)
 
 # vim: foldmethod=marker
