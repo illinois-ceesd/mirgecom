@@ -31,11 +31,11 @@ from meshmode.dof_array import DOFArray  # noqa
 from mirgecom.euler import ConservedVars
 
 
-def compute_velocity_gradient(discr, cv: ConservedVars):
+def compute_local_velocity_gradient(discr, cv: ConservedVars):
     r"""
-    Compute the gradient of fluid velocity.
+    Compute the cell-local gradient of fluid velocity.
 
-    Computes the gradient of fluid velocity from:
+    Computes the cell-local gradient of fluid velocity from:
 
     .. math::
 
