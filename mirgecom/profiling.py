@@ -353,8 +353,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     def call_loopy(self, program, **kwargs) -> dict:
         """Execute the loopy kernel and profile it."""
         program = self.transform_loopy_program(program)
-        assert program.options.return_dict
-        assert program.options.no_numpy
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 
