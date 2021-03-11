@@ -1,6 +1,6 @@
 """:mod:`mirgecom.fluid` provides common utilities for fluid simulation.
 
-.. autofunction:: compute_velocity_gradient
+.. autofunction:: compute_local_velocity_gradient
 """
 
 __copyright__ = """
