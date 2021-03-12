@@ -204,6 +204,8 @@ commit, you can use a git hook such as the following one (save this script as
    fi
 
 
+While highly recommended, hooks can sometimes be annoying. After setting up your hooks, you can use ``git --no-verify`` or equivalently ``git -n`` to run ``git`` commands without triggering the hooks.
+
 Merging a pull request
 ----------------------
 
