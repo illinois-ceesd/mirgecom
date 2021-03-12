@@ -328,6 +328,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     [
         get_decaying_trig(1, 1.)
     ])
+@pytest.mark.octave
 def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             print_err=False):
     """Compares diffusion operator to Hesthaven/Warburton Nodal-DG code."""

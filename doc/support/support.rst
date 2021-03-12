@@ -10,3 +10,4 @@ Simulation Support
    input-output
    tools
    symbolic
+   thermochem

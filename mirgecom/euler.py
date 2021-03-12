@@ -5,7 +5,7 @@ Euler's equations of gas dynamics:
 .. math::
 
     \partial_t \mathbf{Q} = -\nabla\cdot{\mathbf{F}} +
-    (\mathbf{F}\cdot\hat{n})_{\partial\Omega} + \mathbf{S}
+    (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
 where:
 
@@ -13,7 +13,6 @@ where:
 -  flux $\mathbf{F} = [\rho\vec{V},(\rho{E} + p)\vec{V},
    (\rho(\vec{V}\otimes\vec{V}) + p*\mathbf{I}), \rho{Y}_\alpha\vec{V}]$,
 -  unit normal $\hat{n}$ to the domain boundary $\partial\Omega$,
--  sources $\mathbf{S} = [{s}_\rho, {s}_e, \mathbf{s}_p, \mathbf{s}_s]$
 -  vector of species mass fractions ${Y}_\alpha$,
    with $1\le\alpha\le\mathtt{nspecies}$.
 
@@ -199,6 +198,18 @@ def inviscid_flux(discr, eos, q):
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
     +p\mathbf{I}, \rho{Y_s}\vec{V})$
+
+    .. note::
+
+        The fluxes are returned as a 2D object array with shape:
+        ``(num_equations, ndim)``.  Each entry in the
+        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
+        form and shape for the flux data is required by the built-in
+        state data handling mechanism in :mod:`mirgecom.euler`. That
+        mechanism is used by at least
+        :class:`mirgecom.euler.ConservedVars`, and
+        :func:`mirgecom.euler.join_conserved`, and
+        :func:`mirgecom.euler.split_conserved`.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
@@ -275,7 +286,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
 
         .. math::
 
-            \dot{\mathbf{q}} = \mathbf{S} - \nabla\cdot\mathbf{F} +
+            \dot{\mathbf{q}} = - \nabla\cdot\mathbf{F} +
                 (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
 
     Parameters
@@ -339,6 +350,32 @@ def get_inviscid_cfl(discr, eos, dt, q):
     """Calculate and return CFL based on current state and timestep."""
     wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
+
+
+# By default, run unitless
+NAME_TO_UNITS = {
+    "mass": "",
+    "energy": "",
+    "momentum": "",
+    "temperature": "",
+    "pressure": ""
+}
+
+
+def units_for_logging(quantity: str) -> str:
+    """Return unit for quantity."""
+    return NAME_TO_UNITS[quantity]
+
+
+def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
+    """Extract state vars."""
+    cv = split_conserved(dim, state)
+    dv = eos.dependent_vars(cv)
+
+    from mirgecom.utils import asdict_shallow
+    name_to_field = asdict_shallow(cv)
+    name_to_field.update(asdict_shallow(dv))
+    return name_to_field
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):

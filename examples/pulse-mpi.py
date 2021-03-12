@@ -29,6 +29,7 @@ from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 import pyopencl as cl
+import pyopencl.tools as cl_tools
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -67,7 +68,8 @@ def main(ctx_factory=cl.create_some_context):
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
 
@@ -126,8 +128,8 @@ def main(ctx_factory=cl.create_some_context):
                                    center=orig)
     current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
 
-    visualizer = make_visualizer(discr, discr.order + 3
-                                 if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+
     initname = "pulse"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,

@@ -1,4 +1,4 @@
-"""Boundary condition implementations.
+""":mod:`mirgecom.boundary` provides methods and constructs for boundary treatments.
 
 Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^
