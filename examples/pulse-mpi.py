@@ -31,7 +31,7 @@ from functools import partial
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -64,11 +64,11 @@ from mirgecom.eos import IdealSingleGas
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
+    actx = actx_class(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
@@ -181,6 +181,12 @@ def main(ctx_factory=cl.create_some_context):
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Pulse (MPI version)")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    args = parser.parse_args()
+
+    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext)
 
 # vim: foldmethod=marker

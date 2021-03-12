@@ -216,7 +216,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wave-lazy (non-MPI version)")
+    parser = argparse.ArgumentParser(description="Vortex (MPI version)")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     args = parser.parse_args()
