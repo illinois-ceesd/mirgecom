@@ -1,4 +1,31 @@
-""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler."""
+r""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler.
+
+Artificial viscosity for the Euler Equations:
+
+.. math::
+
+    \partial_t \mathbf{Q} = \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
+
+where:
+
+-  state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y}_\alpha]$
+-  artifical viscosity coefficient $\varepsilon$
+
+To evalutate the second order derivative the problem is recast as a set of first
+ order problems:
+
+.. math::
+
+    \partial_t \mathbf{Q} = \nabla\cdot{\mathbf{R}}
+    \mathbf{R} = \varepsilon\nabla\mathbf{Q}
+
+where $\mathbf{R}$ is an intermediate variable.
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
+.. autofunction:: artificial_viscosity
+"""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
