@@ -10,6 +10,7 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
+.. autofunction:: compute_wavespeed
 .. autofunction:: compute_local_velocity_gradient
 """
 
@@ -191,3 +192,20 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
     dmass = discr.grad(cv.mass)
     dmom = [discr.grad(cv.momentum[i]) for i in range(dim)]
     return [(dmom[i] - velocity[i]*dmass)/cv.mass for i in range(dim)]
+
+
+def compute_wavespeed(dim, eos, cv: ConservedVars):
+    r"""Return the wavespeed in the flow.
+
+    The wavespeed is calculated as:
+
+    .. math::
+
+        s_w = |\mathbf{v}| + c,
+
+    where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
+    """
+    actx = cv.mass.array_context
+
+    v = cv.momentum / cv.mass
+    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
