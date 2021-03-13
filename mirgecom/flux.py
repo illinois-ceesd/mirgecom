@@ -2,6 +2,7 @@
 
 Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
+
 .. autofunction:: lfr_flux
 """
 
@@ -47,14 +48,13 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
 
     Parameters
     ----------
-    q_tpair:
-
-        Trace pair (grudge.symbolic.TracePair) for the face upon which flux
-        calculation is to be performed
-
     compute_flux:
 
         function should return ambient dim-vector fluxes given *q* values
+
+    q_tpair: :class:`grudge.sym.TracePair`
+
+        Trace pair for the face upon which flux calculation is to be performed
 
     normal: numpy.ndarray
 
