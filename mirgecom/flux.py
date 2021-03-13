@@ -6,7 +6,7 @@ Numerical Flux Routines
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -42,7 +42,7 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
 
     where $f^-, f^+$, and $q^-, q^+$ are the fluxes and scalar solution components on
     the interior and the exterior of the face on which the LFR flux is to be
-    calculated. The The face normal is $\hat{n}$, and $\lambda$ is the user-supplied
+    calculated. The face normal is $\hat{n}$, and $\lambda$ is the user-supplied
     jump term coefficient.
 
     Parameters
@@ -69,7 +69,7 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
     -------
     numpy.ndarray
 
-        object array of meshmode.dof_array.DOFArray with the Lax-Friedrichs/Rusanov
+        object array of :class:`meshmode.dof_array.DOFArray` with the Lax-Friedrichs/Rusanov
         flux.
     """
     flux_avg = 0.5*(compute_flux(q_tpair.int)
