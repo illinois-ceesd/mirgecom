@@ -10,7 +10,7 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
-.. autofunction:: compute_velocity_gradient
+.. autofunction:: compute_local_velocity_gradient
 """
 
 __copyright__ = """
@@ -162,11 +162,11 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-def compute_velocity_gradient(discr, cv: ConservedVars):
+def compute_local_velocity_gradient(discr, cv: ConservedVars):
     r"""
-    Compute the gradient of fluid velocity.
+    Compute the cell-local gradient of fluid velocity.
 
-    Computes the gradient of fluid velocity from:
+    Computes the cell-local gradient of fluid velocity from:
 
     .. math::
 
