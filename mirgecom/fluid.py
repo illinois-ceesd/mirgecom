@@ -42,7 +42,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ConservedVars:  # FIXME: Name?
+class ConservedVars:
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
