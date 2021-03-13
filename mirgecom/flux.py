@@ -69,8 +69,8 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
     -------
     numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with the Lax-Friedrichs/Rusanov
-        flux.
+        object array of :class:`meshmode.dof_array.DOFArray` with the 
+        Lax-Friedrichs/Rusanov flux.
     """
     flux_avg = 0.5*(compute_flux(q_tpair.int)
                     + compute_flux(q_tpair.ext))
