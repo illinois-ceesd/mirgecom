@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_velocity_gradient(actx_factory, dim):
     """Test that the velocity gradient does the right things."""
-    from mirgecom.fluid import compute_velocity_gradient
+    from mirgecom.fluid import compute_local_velocity_gradient
     actx = actx_factory()
 
     nel_1d = 16
@@ -73,7 +73,7 @@ def test_velocity_gradient(actx_factory, dim):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     cv = split_conserved(dim, q)
-    grad_v = compute_velocity_gradient(discr, cv)
+    grad_v = compute_local_velocity_gradient(discr, cv)
 
     grad_v_norm = [discr.norm(grad_v[i], np.inf) for i in range(dim)]
     tol = 1e-16
@@ -84,7 +84,7 @@ def test_velocity_gradient(actx_factory, dim):
     mom = nodes
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
-    grad_v = compute_velocity_gradient(discr, cv)
+    grad_v = compute_local_velocity_gradient(discr, cv)
     tol = 1e-12
     for i in range(dim):
         grad_v_comp = grad_v[i]
@@ -100,7 +100,7 @@ def test_velocity_gradient(actx_factory, dim):
     mom = mass*nodes
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
-    grad_v = compute_velocity_gradient(discr, cv)
+    grad_v = compute_local_velocity_gradient(discr, cv)
     tol = 1e-12
     for i in range(dim):
         grad_v_comp = grad_v[i]
@@ -116,7 +116,7 @@ def test_velocity_gradient(actx_factory, dim):
     mom = mass*nodes
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
-    grad_v = compute_velocity_gradient(discr, cv)
+    grad_v = compute_local_velocity_gradient(discr, cv)
     tol = 1e-12
     for i in range(dim):
         grad_v_comp = grad_v[i]
@@ -149,7 +149,7 @@ def test_velocity_gradient(actx_factory, dim):
         mom = mass*velocity
         q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
         cv = split_conserved(dim, q)
-        grad_v = compute_velocity_gradient(discr, cv)
+        grad_v = compute_local_velocity_gradient(discr, cv)
         comp_err = make_obj_array([discr.norm(grad_v[i] - discr.grad(velocity[i]),
                                               np.inf) for i in range(dim)])
         max_err = comp_err.max()
