@@ -1,0 +1,236 @@
+"""
+:mod:`mirgecom.transport` provides methods/utils for tranport properties.
+
+Transport Models
+^^^^^^^^^^^^^^^^
+This module is designed provide Transport Model objects used to compute and
+manage the transport properties in viscous flows.
+
+.. autoclass:: TransportDependentVars
+.. autoclass:: TransportModel
+"""
+
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
+from dataclasses import dataclass
+import numpy as np
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from mirgecom.fluid import ConservedVars
+
+
+@dataclass
+class TransportDependentVars:
+    """State-dependent quantities for :class:`TransportModel`.
+
+    Prefer individual methods for model use, use this
+    structure for visualization or probing.
+
+    .. attribute:: bulk_viscosity
+    .. attribute:: viscosity
+    .. attribute:: thermal_conductivity
+    .. attribute:: species_diffusivity
+    """
+
+    temperature: np.ndarray
+    pressure: np.ndarray
+
+
+class GasEOS:
+    r"""Abstract interface to equation of state class.
+
+    Equation of state (EOS) classes are responsible for
+    computing relations between fluid or gas state variables.
+
+    Each interface call expects that the agglomerated
+    object array representing the state vector ($q$),
+    contains the relevant simulation state quantities. Each
+    EOS class should document its own state data requirements.
+
+    .. automethod:: pressure
+    .. automethod:: temperature
+    .. automethod:: sound_speed
+    .. automethod:: internal_energy
+    .. automethod:: gas_const
+    .. automethod:: dependent_vars
+    .. automethod:: total_energy
+    .. automethod:: kinetic_energy
+    .. automethod:: gamma
+    """
+
+    def pressure(self, cv: ConservedVars):
+        """Get the gas pressure."""
+        raise NotImplementedError()
+
+    def temperature(self, cv: ConservedVars):
+        """Get the gas temperature."""
+        raise NotImplementedError()
+
+    def sound_speed(self, cv: ConservedVars):
+        """Get the gas sound speed."""
+        raise NotImplementedError()
+
+    def gas_const(self, cv: ConservedVars):
+        r"""Get the specific gas constant ($R$)."""
+        raise NotImplementedError()
+
+    def internal_energy(self, cv: ConservedVars):
+        """Get the thermal energy of the gas."""
+        raise NotImplementedError()
+
+    def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
+        """Get the total (thermal + kinetic) energy for the gas."""
+        raise NotImplementedError()
+
+    def kinetic_energy(self, cv: ConservedVars):
+        """Get the kinetic energy for the gas."""
+        raise NotImplementedError()
+
+    def gamma(self):
+        """Get the ratio of gas specific heats Cp/Cv."""
+        raise NotImplementedError()
+
+    def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
+        """Get an agglomerated array of the dependent variables."""
+        return EOSDependentVars(
+            pressure=self.pressure(q),
+            temperature=self.temperature(q),
+            )
+
+
+class IdealSingleGas(GasEOS):
+    r"""Ideal gas law single-component gas ($p = \rho{R}{T}$).
+
+    The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
+    but can be set according to simulation units and materials.
+
+    Each interface call expects that the agglomerated
+    object array representing the state vector ($q$),
+    contains at least the canonical conserved quantities
+    mass ($\rho$), energy ($\rho{E}$), and
+    momentum ($\rho\vec{V}$).
+
+    .. automethod:: __init__
+
+    Inherits from (and implements) :class:`GasEOS`.
+    """
+
+    def __init__(self, gamma=1.4, gas_const=287.1):
+        """Initialize Ideal Gas EOS parameters."""
+        self._gamma = gamma
+        self._gas_const = gas_const
+
+    def gamma(self):
+        """Get specific heat ratio Cp/Cv."""
+        return self._gamma
+
+    def gas_const(self):
+        """Get specific gas constant R."""
+        return self._gas_const
+
+    def kinetic_energy(self, cv: ConservedVars):
+        r"""Get kinetic (i.e. not internal) energy of gas.
+
+        The kinetic energy is calculated as:
+        .. :math::
+
+            k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        mom = cv.momentum
+        return (0.5 * np.dot(mom, mom) / cv.mass)
+
+    def internal_energy(self, cv: ConservedVars):
+        r"""Get internal thermal energy of gas.
+
+        The internal energy (e) is calculated as:
+        .. :math::
+
+            e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+        """
+        return (cv.energy - self.kinetic_energy(cv))
+
+    def pressure(self, cv: ConservedVars):
+        r"""Get thermodynamic pressure of the gas.
+
+        Gas pressure (p) is calculated from the internal energy (e) as:
+
+        .. :math::
+
+            p = (\gamma - 1)e
+        """
+        return self.internal_energy(cv) * (self._gamma - 1.0)
+
+    def sound_speed(self, cv: ConservedVars):
+        r"""Get the speed of sound in the gas.
+
+        The speed of sound (c) is calculated as:
+
+        .. :math::
+
+            c = \sqrt{\frac{\gamma{p}}{\rho}}
+        """
+        actx = cv.mass.array_context
+
+        p = self.pressure(cv)
+        c2 = self._gamma / cv.mass * p
+        return actx.np.sqrt(c2)
+
+    def temperature(self, cv: ConservedVars):
+        r"""Get the thermodynamic temperature of the gas.
+
+        The thermodynamic temperature (T) is calculated from
+        the internal energy (e) and specific gas constant (R)
+        as:
+
+        .. :math::
+
+            T = \frac{(\gamma - 1)e}{R\rho}
+        """
+        return (
+            (((self._gamma - 1.0) / self._gas_const)
+            * self.internal_energy(cv) / cv.mass)
+        )
+
+    def total_energy(self, cv, pressure):
+        r"""
+        Get gas total energy from mass, pressure, and momentum.
+
+        The total energy density (rhoE) is calculated from
+        the mass density (rho) , pressure (p) , and
+        momentum (rhoV) as:
+
+        .. :math::
+
+            \rhoE = \frac{p}{(\gamma - 1)} +
+            \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
+
+        .. note::
+
+            The total_energy function computes cv.energy from pressure,
+            mass, and momentum in this case. In general in the EOS we need
+            DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
+            inversion interfaces.
+        """
+        return (pressure / (self._gamma - 1.0)
+                + self.kinetic_energy(cv))
