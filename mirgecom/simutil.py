@@ -132,16 +132,13 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                 ("exact_soln", expected_state),
             ]
             io_fields.extend(exact_list)
-<<<<<<< HEAD
         if s0 is not None and kappa is not None:
             tagged_list = [
                 ("tagged", tagedcells),
             ]
             io_fields.extend(tagged_list)
-=======
         if viz_fields is not None:
             io_fields.extend(viz_fields)
->>>>>>> main
 
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
