@@ -15,7 +15,7 @@ Helper Functions
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -185,13 +185,16 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$.
+        representing $\partial_j{v_i}$. e.g. for 2D:
+        $\left( \begin{array}{cc}
+        \partial_{x}\mathbf{v}_{x}&\partial_{y}\mathbf{v}_{x} \\
+        \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
     """
     dim = discr.dim
     velocity = cv.momentum/cv.mass
     dmass = discr.grad(cv.mass)
-    dmom = [discr.grad(cv.momentum[i]) for i in range(dim)]
-    return [(dmom[i] - velocity[i]*dmass)/cv.mass for i in range(dim)]
+    dmom = np.array([discr.grad(cv.momentum[i]) for i in range(dim)], dtype=object)
+    return (dmom - np.outer(velocity, dmass))/cv.mass
 
 
 def compute_wavespeed(dim, eos, cv: ConservedVars):
@@ -209,3 +212,4 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
+  
