@@ -62,4 +62,4 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
     velocity = cv.momentum/cv.mass
     dmass = discr.grad(cv.mass)
     dmom = np.array([discr.grad(cv.momentum[i]) for i in range(dim)], dtype=object)
-    return np.array([(dmom[i] - velocity[i]*dmass) for i in range(dim)])/cv.mass
+    return (dmom - np.outer(velocity, dmass))/cv.mass
