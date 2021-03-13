@@ -10,12 +10,12 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
-.. autofunction:: compute_velocity_gradient
 .. autofunction:: compute_wavespeed
+.. autofunction:: compute_local_velocity_gradient
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -43,7 +43,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ConservedVars:  # FIXME: Name?
+class ConservedVars:
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
@@ -163,11 +163,11 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-def compute_velocity_gradient(discr, cv: ConservedVars):
+def compute_local_velocity_gradient(discr, cv: ConservedVars):
     r"""
-    Compute the gradient of fluid velocity.
+    Compute the cell-local gradient of fluid velocity.
 
-    Computes the gradient of fluid velocity from:
+    Computes the cell-local gradient of fluid velocity from:
 
     .. math::
 
@@ -185,13 +185,16 @@ def compute_velocity_gradient(discr, cv: ConservedVars):
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$.
+        representing $\partial_j{v_i}$. e.g. for 2D:
+        $\left( \begin{array}{cc}
+        \partial_{x}\mathbf{v}_{x}&\partial_{y}\mathbf{v}_{x} \\
+        \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
     """
     dim = discr.dim
     velocity = cv.momentum/cv.mass
     dmass = discr.grad(cv.mass)
-    dmom = [discr.grad(cv.momentum[i]) for i in range(dim)]
-    return [(dmom[i] - velocity[i]*dmass)/cv.mass for i in range(dim)]
+    dmom = np.array([discr.grad(cv.momentum[i]) for i in range(dim)], dtype=object)
+    return (dmom - np.outer(velocity, dmass))/cv.mass
 
 
 def compute_wavespeed(dim, eos, cv: ConservedVars):
