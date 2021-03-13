@@ -212,4 +212,3 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
-  
