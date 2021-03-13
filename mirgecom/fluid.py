@@ -53,10 +53,13 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$.
+        representing $\partial_j{v_i}$. e.g. for 2D:
+        $\left( \begin{array}{cc}
+        \partial_{x}\mathbf{v}_{x}&\partial_{y}\mathbf{v}_{x} \\
+        \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
     """
     dim = discr.dim
     velocity = cv.momentum/cv.mass
     dmass = discr.grad(cv.mass)
     dmom = np.array([discr.grad(cv.momentum[i]) for i in range(dim)], dtype=object)
-    return dmom - np.outer(velocity, dmass)/cv.mass
+    return np.array([(dmom[i] - velocity[i]*dmass) for i in range(dim)])/cv.mass
