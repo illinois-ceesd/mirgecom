@@ -100,7 +100,6 @@ def compute_smoothness_indicator():
         " vec[iel,j]*vec[iel,j]+1.0e-12/ndiscr_nodes_in)",
         name="smooth_comp",
     )
-    # knl = lp.tag_array_axes(knl, "vec", "stride:auto,stride:auto")
     return knl
 
 
@@ -108,11 +107,9 @@ def smoothness_indicator(u, discr, kappa=1.0, s0=-6.0):
     """Calculate the smoothness indicator."""
     assert isinstance(u, DOFArray)
 
-    # #@memoize_in(u.array_context, (smoothness_indicator, "get_kernel"))
     def get_kernel():
         return linear_operator_kernel()
 
-    # #@memoize_in(u.array_context, (smoothness_indicator, "get_indicator"))
     def get_indicator():
         return compute_smoothness_indicator()
 
@@ -147,11 +144,9 @@ def smoothness_indicator(u, discr, kappa=1.0, s0=-6.0):
             vec=uhat[group.index],
             modes=actx.from_numpy(highest_mode),
         )
-
-    # Take log10 of indicator
     indicator = actx.np.log10(indicator + 1.0e-12)
 
-    # Compute artificail viscosity percentage based on idicator and set parameters
+    # Compute artificial viscosity percentage based on indicator and set parameters
     yesnol = indicator > (s0 - kappa)
     yesnou = indicator > (s0 + kappa)
     sin_indicator = actx.np.where(
