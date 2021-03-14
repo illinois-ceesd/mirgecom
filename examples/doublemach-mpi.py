@@ -54,6 +54,51 @@ from mirgecom.eos import IdealSingleGas
 
 logger = logging.getLogger(__name__)
 
+def get_doublemach_mesh():
+    """Generate or import a grid using `gmsh`.
+
+    Input required:
+        doubleMach.msh (read existing mesh
+
+    This routine will generate a new grid if it does
+    not find the grid file (doubleMach.msh).
+    """
+    from meshmode.mesh.io import (
+        read_gmsh,
+        generate_gmsh,
+        ScriptWithFilesSource,
+        ScriptSource,
+    )
+    import os
+    meshfile="doubleMach.msh"
+    if os.path.exists(meshfile) is False:
+        mesh = generate_gmsh(
+            ScriptSource("""
+                x0=1.0/6.0;
+                setsize=0.025;
+                Point(1) = {0, 0, 0, setsize};
+                Point(2) = {x0,0, 0, setsize};
+                Point(3) = {4, 0, 0, setsize};
+                Point(4) = {4, 1, 0, setsize};
+                Point(5) = {0, 1, 0, setsize};
+                Line(1) = {1, 2};
+                Line(2) = {2, 3};
+                Line(5) = {3, 4};
+                Line(6) = {4, 5};
+                Line(7) = {5, 1};
+                Line Loop(8) = {-5, -6, -7, -1, -2};
+                Plane Surface(8) = {8};
+                Physical Surface('domain') = {8};
+                Physical Curve('ic1') = {6};
+                Physical Curve('ic2') = {7};
+                Physical Curve('ic3') = {1};
+                Physical Curve('wall') = {2};
+                Physical Curve('out') = {5};
+        ""","geo"), force_ambient_dim=2, dimensions=2, target_unit="M")
+    else:
+        mesh = read_gmsh(meshfile,force_ambient_dim=2)
+
+    return mesh
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
@@ -65,19 +110,14 @@ def main(ctx_factory=cl.create_some_context):
     )
 
     dim = 2
-    # nel = (40, 10)
     order = 3
-    # tolerate large errors; case is unstable
-    exittol = 2.0  # .2
-    t_final = 0.0001
+    t_final = 1.0e-2
     current_cfl = 0.1
-    current_dt = 0.000001
+    current_dt = 1.0e-4
     current_t = 0
     eos = IdealSingleGas()
     initializer = DoubleMachReflection(dim)
-    # initializer = SodShock1D(dim,x0=0.5)
-    casename = "sod1d"
-    # boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
+    casename = "doubleMach"
     from grudge import sym
 
     boundaries = {
@@ -94,16 +134,16 @@ def main(ctx_factory=cl.create_some_context):
     checkpoint_t = current_t
     current_step = 0
     timestepper = rk4_step
-    # box_ll = (0.0, 0.0)
-    # box_ur = (4.0, 1.0)
 
+    s0 = -6.0
+    kappa = 1.0
+    alpha = 2.0e-2
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
+    rank = comm.Get_rank
 
-    from meshmode.mesh.io import read_gmsh
-    gen_grid = partial(read_gmsh, "doubleMach2.msh", force_ambient_dim=2)
+    gen_grid = partial(get_doublemach_mesh)
 
     local_mesh, global_nelements = create_parallel_grid(comm, gen_grid)
 
@@ -112,10 +152,8 @@ def main(ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+    current_state = initializer(nodes)
 
-    # visualizer = make_visualizer(discr, discr.order + 3
-    #                             if discr.dim == 2 else discr.order)
     visualizer = make_visualizer(discr,
                                  discr.order if discr.dim == 2 else discr.order)
     initname = initializer.__class__.__name__
@@ -153,12 +191,9 @@ def main(ctx_factory=cl.create_some_context):
         return inviscid_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
         ) + artificial_viscosity(
-            discr, t=t, r=state, eos=eos, boundaries=boundaries, alpha=2.0e-2
+            discr, t=t, r=state, eos=eos, boundaries=boundaries, alpha=alpha,
+            s0=s0, kappa=kappa
         )
-        # return (
-        # inviscid_operator(discr, q=state, t=t,boundaries=boundaries, eos=eos)
-        # + artificial_viscosity(discr, r=state, eos=eos, boundaries=boundaries,
-        # alpha=1.0e-3)
 
     def my_checkpoint(step, t, dt, state):
         return sim_checkpoint(
@@ -172,9 +207,11 @@ def main(ctx_factory=cl.create_some_context):
             dt=dt,
             nstatus=nstatus,
             nviz=nviz,
-            exittol=exittol,
             constant_cfl=constant_cfl,
             comm=comm,
+            s0=s0,
+            kappa=kappa,
+            overwrite=True,
         )
 
     try:
