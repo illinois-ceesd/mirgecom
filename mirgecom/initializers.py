@@ -298,7 +298,7 @@ class DoubleMachReflection:
         self._dim = dim
         self._us = us
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -325,28 +325,6 @@ class DoubleMachReflection:
         us = zeros + self._us
         t = zeros + t
 
-        # Mach 10
-        # rhol = zeros + 8.0
-        # rhor = zeros + 1.4
-
-        # ul = zeros + 8.25*np.cos(np.pi/6.0)
-        # ur = zeros + 0.0
-        # vl = zeros - 8.25*np.sin(np.pi/6.0)
-        # vr = zeros + 0.0
-        # rhoel = zeros + gmn1 * 116.5
-        # rhoer = zeros + gmn1 * 1.0
-
-        # Mach 2.0
-        # rhol = zeros + 2.666666*1.4
-        # rhor = zeros + 1.4
-
-        # ul = zeros + 1.25*np.cos(np.pi/6.0)
-        # ur = zeros + 0.0
-        # vl = zeros - 1.25*np.sin(np.pi/6.0)
-        # vr = zeros + 0.0
-        # rhoel = zeros + gmn1 * 4.5
-        # rhoer = zeros + gmn1 * 1.0
-
         # Mach 4.0
         rhol = zeros + 4.57142857*1.4
         rhor = zeros + 1.4
@@ -358,11 +336,6 @@ class DoubleMachReflection:
         rhoel = zeros + gmn1 * 18.5
         rhoer = zeros + gmn1 * 1.0
 
-        # yesno = x_rel > (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
-        # mass = actx.np.where(yesno, rhor, rhol)
-        # rhoe = actx.np.where(yesno, rhoer, rhoel)
-        # u = actx.np.where(yesno, ur, ul)
-        # v = actx.np.where(yesno, vr, vl)
         xinter = (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
         sigma = 0.05
         xtanh = 1.0/sigma*(x_rel-xinter)
@@ -375,7 +348,7 @@ class DoubleMachReflection:
         rhov = mass*v
         energy = rhoe + 0.5*mass*(u*u + v*v)
 
-        return flat_obj_array(mass, energy, rhou, rhov)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=make_obj_array([u,v]))
 
 
 class Lump:
