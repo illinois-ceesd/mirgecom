@@ -348,7 +348,8 @@ class DoubleMachReflection:
         rhov = mass*v
         energy = rhoe + 0.5*mass*(u*u + v*v)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=make_obj_array([u,v]))
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=make_obj_array([rhou, rhov]))
 
 
 class Lump:
