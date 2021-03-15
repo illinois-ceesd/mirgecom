@@ -51,7 +51,7 @@ def test_tag_cells(ctx_factory, dim, order):
     """Test tag_cells.
 
     Tests that the cells tagging properly tags cells
-    given a prescirbed solutions.
+    given prescribed solutions.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
