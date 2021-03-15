@@ -35,8 +35,9 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import inviscid_operator, split_conserved
 from mirgecom.artificial_viscosity import artificial_viscosity
+from mirgecom.tag_cells import smoothness_indicator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
@@ -59,7 +60,7 @@ def get_doublemach_mesh():
     """Generate or import a grid using `gmsh`.
 
     Input required:
-        doubleMach.msh (read existing mesh
+        doubleMach.msh (read existing mesh)
 
     This routine will generate a new grid if it does
     not find the grid file (doubleMach.msh).
@@ -203,11 +204,14 @@ def main(ctx_factory=cl.create_some_context):
         return inviscid_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
         ) + artificial_viscosity(
-            discr, t=t, r=state, eos=eos, boundaries=boundaries, alpha=alpha,
+            discr, t=t, r=state, boundaries=boundaries, alpha=alpha, eos=eos,
             s0=s0, kappa=kappa
         )
 
     def my_checkpoint(step, t, dt, state):
+        cv = split_conserved(dim, state)
+        tagged_cells = smoothness_indicator(discr, cv.mass, s0=s0, kappa=kappa)
+        viz_fields = [("tagged cells", tagged_cells)]
         return sim_checkpoint(
             discr,
             visualizer,
@@ -221,8 +225,7 @@ def main(ctx_factory=cl.create_some_context):
             nviz=nviz,
             constant_cfl=constant_cfl,
             comm=comm,
-            s0=s0,
-            kappa=kappa,
+            viz_fields=viz_fields,
             overwrite=True,
         )
 

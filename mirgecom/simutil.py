@@ -93,8 +93,8 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   s0=None, kappa=None, constant_cfl=False, comm=None,
-                   viz_fields=None, overwrite=False, vis_timer=None):
+                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
+                   vis_timer=None):
     """Check simulation health, status, viz dumps, and restart."""
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
@@ -104,10 +104,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     from mirgecom.euler import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
-
-    from mirgecom.tag_cells import smoothness_indicator
-    if s0 is not None and kappa is not None:
-        tagedcells = smoothness_indicator(q[0], discr, kappa=kappa, s0=s0)
 
     rank = 0
     if comm is not None:
@@ -132,11 +128,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                 ("exact_soln", expected_state),
             ]
             io_fields.extend(exact_list)
-        if s0 is not None and kappa is not None:
-            tagged_list = [
-                ("tagged", tagedcells),
-            ]
-            io_fields.extend(tagged_list)
         if viz_fields is not None:
             io_fields.extend(viz_fields)
 
