@@ -61,7 +61,7 @@ def test_tag_cells(ctx_factory, dim, order):
     tolerance = 1.e-16
 
     def norm_indicator(expected, discr, soln, **kwargs):
-        return(discr.norm(expected-smoothness_indicator(soln, discr, **kwargs),
+        return(discr.norm(expected-smoothness_indicator(discr, soln, **kwargs),
                           np.inf))
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
