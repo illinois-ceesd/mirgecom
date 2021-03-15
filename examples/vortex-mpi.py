@@ -88,7 +88,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     dim = 2
     nel_1d = 16
     order = 3
-    exittol = .09
+    exittol = .1
     t_final = 0.1
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
