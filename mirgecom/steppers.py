@@ -34,6 +34,7 @@ from pytools import memoize_in
 
 
 def compile(actx, timestepper, state, rhs):
+    """Create lazy evaluation version of the timestepper."""
     @memoize_in(actx, ("mirgecom_compiled_operator",
                        timestepper, rhs,
                        tuple(len(el) for el in state)))

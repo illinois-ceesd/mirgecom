@@ -103,14 +103,12 @@ def main(use_profiling: bool, lazy_eval: bool):
 
     if lazy_eval:
         fields = thaw(actx, freeze(flat_obj_array(
-                    bump(actx, discr),
-                    [discr.zeros(actx) for i in range(discr.dim)]
-                    )))
+                      bump(actx, discr),
+                      [discr.zeros(actx) for i in range(discr.dim)]
+                      )))
     else:
-        fields = flat_obj_array(
-                    bump(actx, discr),
-                    [discr.zeros(actx) for i in range(discr.dim)]
-                    )
+        fields = flat_obj_array(bump(actx, discr),
+                                [discr.zeros(actx) for i in range(discr.dim)])
 
     vis = make_visualizer(discr, order + 3 if dim == 2 else order)
 
