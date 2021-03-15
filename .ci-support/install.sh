@@ -5,6 +5,7 @@ if [ "$(uname)" = "Darwin" ]; then
 else
     PLATFORM=Linux
     sudo touch /etc/apt/apt.conf.d/99verify-peer.conf
+    sudo chmod ug+w /etc/apt/apt.conf.d/99verify-peer.conf
     sudo echo >>/etc/apt/apt.conf.d/99verify-peer.conf "Acquire { https::Verify-Peer false }"
     sudo apt-get update
     sudo apt-get -y install openmpi-bin libopenmpi-dev
