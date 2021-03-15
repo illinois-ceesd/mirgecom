@@ -281,7 +281,7 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self, dim=2, x0=1.0/6.0, us=4.0
+            self, dim=2, shock_location=1.0/6.0, shock_speed=4.0
     ):
         """Initialize initial condition options.
 
@@ -289,14 +289,14 @@ class DoubleMachReflection:
         ----------
         dim: int
            dimension of domain, must be 2
-        x0: float
+        shock_location: float
            location of shock
-        us: float
-           shock speed
+        shock_speed: float
+           shock speed, Mach number
         """
-        self._x0 = x0
+        self._shock_location = shock_location
         self._dim = dim
-        self._us = us
+        self._shock_speed = shock_speed
 
     def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
@@ -321,8 +321,8 @@ class DoubleMachReflection:
 
         zeros = 0*x_rel
 
-        x0 = zeros + self._x0
-        us = zeros + self._us
+        shock_location = zeros + self._shock_location
+        shock_speed = zeros + self._shock_speed
         t = zeros + t
 
         # Mach 4.0
@@ -336,7 +336,8 @@ class DoubleMachReflection:
         rhoel = zeros + gmn1 * 18.5
         rhoer = zeros + gmn1 * 1.0
 
-        xinter = (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
+        xinter = (shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*shock_speed*t/np.sqrt(3.0))
         sigma = 0.05
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
