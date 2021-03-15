@@ -314,6 +314,7 @@ class DoubleMachReflection:
         assert self._dim == 2, "only defined for dim=2"
 
         gm1 = eos.gamma() - 1.0
+        gp1 = eos.gamma() + 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[0]
         y_rel = x_vec[1]
@@ -325,15 +326,19 @@ class DoubleMachReflection:
         shock_speed = zeros + self._shock_speed
         t = zeros + t
 
-        # Mach 4.0
-        rhol = zeros + 4.57142857*1.4
-        rhor = zeros + 1.4
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
 
-        ul = zeros + 3.125*np.cos(np.pi/6.0)
+        rhol = zeros + eos.gamma() * rho_jump
+        rhor = zeros + eos.gamma()
+        ul = zeros + up * np.cos(np.pi/6.0)
         ur = zeros + 0.0
-        vl = zeros - 3.125*np.sin(np.pi/6.0)
+        vl = zeros - up * np.sin(np.pi/6.0)
         vr = zeros + 0.0
-        rhoel = zeros + gmn1 * 18.5
+        rhoel = zeros + gmn1 * p_jump
         rhoer = zeros + gmn1 * 1.0
 
         xinter = (shock_location + y_rel/np.sqrt(3.0)
