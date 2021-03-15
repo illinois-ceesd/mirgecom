@@ -61,7 +61,7 @@ Here’s an example, to give you an impression:
        istep += 1
 
 (This example is derived from
-:download:`examples/wave-eager.py <../examples/wave-eager.py>` in the MirgeCOM
+:download:`examples/wave.py <../examples/wave.py>` in the MirgeCOM
 source distribution.)
 
 Table of Contents
