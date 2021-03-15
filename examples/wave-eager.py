@@ -77,7 +77,7 @@ def main(use_profiling=False):
     mesh = generate_regular_rect_mesh(
         a=(-0.5,)*dim,
         b=(0.5,)*dim,
-        n=(nel_1d,)*dim)
+        n=(nel_1d+1,)*dim)
 
     order = 3
 

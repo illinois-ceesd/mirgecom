@@ -84,7 +84,7 @@ def main():
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*dim,
             b=(0.5,)*dim,
-            n=(nel_1d,)*dim)
+            n=(nel_1d+1,)*dim)
 
         print("%d elements" % mesh.nelements)
 

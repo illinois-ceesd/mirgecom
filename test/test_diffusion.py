@@ -89,7 +89,7 @@ def get_box_mesh(dim, a, b, n):
         boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
         boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
+    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n+1,)*dim,
         boundary_tag_to_face=boundary_tag_to_face)
 
 
@@ -231,10 +231,10 @@ def sym_diffusion(dim, sym_alpha, sym_u):
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
     [
-        (get_decaying_trig_truncated_domain(1, 2.), 50, 5.e-5, [8, 12, 16]),
+        (get_decaying_trig_truncated_domain(1, 2.), 50, 5.e-5, [8, 16, 24]),
         (get_decaying_trig_truncated_domain(2, 2.), 50, 5.e-5, [8, 12, 16]),
         (get_decaying_trig_truncated_domain(3, 2.), 50, 5.e-5, [8, 10, 12]),
-        (get_static_trig_var_diff(1), 50, 5.e-5, [8, 12, 16]),
+        (get_static_trig_var_diff(1), 50, 5.e-5, [8, 16, 24]),
         (get_static_trig_var_diff(2), 50, 5.e-5, [8, 12, 16]),
         (get_static_trig_var_diff(3), 50, 5.e-5, [8, 10, 12]),
     ])

@@ -117,7 +117,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+                            b=(box_ur,) * dim, n=(nel_1d+1,) * dim)
     local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
     local_nelements = local_mesh.nelements
 
