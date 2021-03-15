@@ -54,6 +54,7 @@ from mirgecom.eos import IdealSingleGas
 
 logger = logging.getLogger(__name__)
 
+
 def get_doublemach_mesh():
     """Generate or import a grid using `gmsh`.
 
@@ -66,11 +67,10 @@ def get_doublemach_mesh():
     from meshmode.mesh.io import (
         read_gmsh,
         generate_gmsh,
-        ScriptWithFilesSource,
         ScriptSource,
     )
     import os
-    meshfile="doubleMach.msh"
+    meshfile = "doubleMach.msh"
     if os.path.exists(meshfile) is False:
         mesh = generate_gmsh(
             ScriptSource("""
@@ -94,11 +94,12 @@ def get_doublemach_mesh():
                 Physical Curve('ic3') = {1};
                 Physical Curve('wall') = {2};
                 Physical Curve('out') = {5};
-        ""","geo"), force_ambient_dim=2, dimensions=2, target_unit="M")
+        """, "geo"), force_ambient_dim=2, dimensions=2, target_unit="M")
     else:
-        mesh = read_gmsh(meshfile,force_ambient_dim=2)
+        mesh = read_gmsh(meshfile, force_ambient_dim=2)
 
     return mesh
+
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context):
@@ -151,6 +152,17 @@ def main(ctx_factory=cl.create_some_context):
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
+
+    # Temporary fix for Issue #280
+    local_boundaries = {}
+    for btag in boundaries:
+        bnd_discr = discr.discr_from_dd(btag)
+        bnd_nodes = thaw(actx, bnd_discr.nodes())
+        if bnd_nodes[0][0].shape[0] > 0:
+            local_boundaries[btag] = boundaries[btag]
+    boundaries = local_boundaries
+    # End fix
+
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(nodes)
 
