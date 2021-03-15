@@ -41,7 +41,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
@@ -121,9 +121,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         raise ValueError("This example must be run with dim = 2.")
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
-    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
