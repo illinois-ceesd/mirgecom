@@ -18,7 +18,7 @@ The elementwise viscoisty is then calculated:
 
 .. math::
 
-    \varepsilon_e = \varepsilon_0
+    \varepsilon_e =
         \begin{cases}
             0, & s_e < s_0 - \kappa \\
             \frac{1}{2}\left( 1 + \sin \frac{\pi(s_e - s_0)}{2 \kappa} \right ),
@@ -28,10 +28,9 @@ The elementwise viscoisty is then calculated:
 
 where:
 - $\varepsilon_e$ is the element viscosity
-- $\varepsilon_0 ~\sim h/p$ is a reference viscosity
 - $s_e = \log_{10}{S_e} \sim 1/p^4$ is the smoothness indicator
 - $s_0$ is a reference smoothness value
-- $\kappa$ controls the width of the transition between 0 to $\varepsilon_0$
+- $\kappa$ controls the width of the transition between 0 to 1
 
 Smoothness Indicator Evaluation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -103,8 +102,29 @@ def compute_smoothness_indicator():
     return knl
 
 
-def smoothness_indicator(u, discr, kappa=1.0, s0=-6.0):
-    """Calculate the smoothness indicator."""
+def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
+    """Calculate the smoothness indicator.
+
+    Parameters
+    ----------
+    u
+        A DOF Array of the field that is used to calculate the
+        smoothness indicator.
+
+    kappa
+        A optional argument that sets the controls the width of the
+        transition between 0 to 1.
+    s0
+        A optional argument that sets the smoothness level to limit
+        on. Logical values are [0,-infinity) where -infinity results in
+        all cells being tagged and 0 results in none.
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray
+        A DOF Array containing elementwise constant values between 0 and 1
+        which indicate the smoothness of a given element.
+    """
     assert isinstance(u, DOFArray)
 
     def get_kernel():

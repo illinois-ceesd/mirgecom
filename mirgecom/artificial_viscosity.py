@@ -4,11 +4,11 @@ Artificial viscosity for the Euler Equations:
 
 .. math::
 
-    \partial_t \mathbf{Q} = \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
+    \partial_t \mathbf{R} = \nabla\cdot{\varepsilon\nabla\mathbf{R}}
 
 where:
 
--  state $\mathbf{Q} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y}_\alpha]$
+-  state $\mathbf{R} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y}_\alpha]$
 -  artifical viscosity coefficient $\varepsilon$
 
 To evalutate the second order derivative the problem is recast as a set of first
@@ -16,10 +16,10 @@ To evalutate the second order derivative the problem is recast as a set of first
 
 .. math::
 
-    \partial_t \mathbf{Q} = \nabla\cdot{\mathbf{R}}
-    \mathbf{R} = \varepsilon\nabla\mathbf{Q}
+    \partial_t \mathbf{R} = \nabla\cdot{\mathbf{Q}}
+    \mathbf{Q} = \varepsilon\nabla\mathbf{R}
 
-where $\mathbf{R}$ is an intermediate variable.
+where $\mathbf{Q}$ is an intermediate variable.
 
 RHS Evaluation
 ^^^^^^^^^^^^^^
@@ -88,9 +88,45 @@ def _facial_flux_q(discr, q_tpair):
 
 
 def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
-    r"""Compute artifical viscosity for the euler equations."""
+    r"""Compute artifical viscosity for the euler equations.
+
+    Calculates
+    ----------
+    numpy.ndarray
+        The right-hand-side for artificial viscosity for the euler equations.
+
+        .. math::
+
+            \dot{\nabla\cdot{\varepsilon\nabla\mathbf{R}}}
+
+    Parameters
+    ----------
+    r
+        State array which expects the quantity to be limited on to be listed
+        first in the array. For the Euler equations this could be the canonical
+        conserved variables (mass, energy, mometum) for the fluid along with a
+        vector of species masses for multi-component fluids.
+
+    boundaries
+        Dicitionary of boundary functions, one for each valid boundary tag
+
+    t
+        Time
+
+    alpha
+       The maximum artifical viscosity coeffiecent to be applied
+
+    eos: mirgecom.eos.GasEOS
+       Only used as a pass through to the boundary conditions.
+
+    Returns
+    -------
+    numpy.ndarray
+        Agglomerated object array of DOF Arrays representing the RHS associated
+        with the artificial viscosity application.
+    """
     # Get smoothness indicator
-    indicator = smoothness_indicator(r[0], discr, **kwargs)
+    indicator = smoothness_indicator(discr, r[0], **kwargs)
 
     dflux_r = obj_array_vectorize(discr.weak_grad, r)
 
@@ -117,7 +153,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
             )
             return _facial_flux_r(discr, q_tpair=q_tpair)
 
-        r_ext = boundaries[btag].exterior_soln(discr, eos=eos, btag=btag, t=t, q=r)
+        r_ext = boundaries[btag].exterior_soln(discr, btag=btag, t=t, q=r, eos=eos)
         r_int = discr.project("vol", btag, r)
         dbf_r = dbf_r + obj_array_vectorize_n_args(
             my_facialflux_r_boundary, r_ext, r_int
@@ -150,7 +186,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
             q_tpair = TracePair(btag, interior=sol_int, exterior=sol_ext)
             return _facial_flux_q(discr, q_tpair=q_tpair)
 
-        q_ext = boundaries[btag].av(discr, eos=eos, btag=btag, t=t, q=q)
+        q_ext = boundaries[btag].av(discr, btag=btag, t=t, q=q, eos=eos)
         q_int = discr.project("vol", btag, q)
         dbf_q = dbf_q + obj_array_vectorize_n_args(
             my_facialflux_q_boundary, q_ext, q_int
