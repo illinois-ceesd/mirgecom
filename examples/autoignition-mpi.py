@@ -41,7 +41,7 @@ from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
     check_step,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     ExactSolutionMismatch
 )
 from mirgecom.io import make_init_message
@@ -96,9 +96,9 @@ def main(ctx_factory=cl.create_some_context):
     rank = comm.Get_rank()
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
-    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
@@ -135,8 +135,8 @@ def main(ctx_factory=cl.create_some_context):
     x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
     x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
     # Uncomment next line to make pylint fail when it can't find cantera.one_atm
-    # one_atm = cantera.one_atm
-    one_atm = 101325.0
+    one_atm = cantera.one_atm  # pylint: disable=no-member
+    # one_atm = 101325.0
 
     # Let the user know about how Cantera is being initilized
     print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
