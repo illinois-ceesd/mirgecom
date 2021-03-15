@@ -43,7 +43,7 @@ from mirgecom.euler import (
 )
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     sim_checkpoint,
     ExactSolutionMismatch,
 )
@@ -109,9 +109,10 @@ def main(ctx_factory=cl.create_some_context):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     if num_parts > 1:
-        generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                                 b=(box_ur,) * dim, n=(nel_1d+1,) * dim)
-        local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    generate_mesh)
     else:
         local_mesh = generate_regular_rect_mesh(
             a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d+1,) * dim
