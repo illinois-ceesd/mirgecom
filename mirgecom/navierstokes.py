@@ -117,7 +117,6 @@ def ns_operator(discr, eos, tv_model, boundaries, q, t=0.0):
     inviscid_flux_vol = inviscid_flux(discr, eos, q)
 
     from mirgecom.viscous import (
-        fluid_viscosity,
         viscous_stress_tensor,
         diffusive_flux,
         convective_heat_flux,
@@ -126,6 +125,7 @@ def ns_operator(discr, eos, tv_model, boundaries, q, t=0.0):
     )
 
     from mirgecom.transport import (
+        fluid_viscosity
         heat_conductivity,
         species_diffusvity
     )
