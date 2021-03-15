@@ -121,7 +121,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if do_viz:
         io_fields = [
             ("cv", cv),
-            ("dv", dependent_vars),
+            ("dv", dependent_vars)
         ]
         if exact_soln is not None:
             exact_list = [
