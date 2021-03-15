@@ -1,12 +1,14 @@
 if [ "$(uname)" = "Darwin" ]; then
-PLATFORM=MacOSX
-brew install open-mpi
-brew install octave
+    PLATFORM=MacOSX
+    brew install open-mpi
+    brew install octave
 else
-PLATFORM=Linux
-sudo apt-get update
-sudo apt-get -y install openmpi-bin libopenmpi-dev
-sudo apt-get -y install octave
+    PLATFORM=Linux
+    sudo touch /etc/apt/apt.conf.d/99verify-peer.conf
+    sudo echo >>/etc/apt/apt.conf.d/99verify-peer.conf "Acquire { https::Verify-Peer false }"
+    sudo apt-get update
+    sudo apt-get -y install openmpi-bin libopenmpi-dev
+    sudo apt-get -y install octave
 fi
 MINIFORGE_INSTALL_DIR=.miniforge3
 MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
