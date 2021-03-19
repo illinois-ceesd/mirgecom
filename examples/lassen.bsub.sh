@@ -28,6 +28,9 @@ jsrun_cmd="jsrun -g 1 -a 1 -n $nproc"
 # on why this is important
 export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
 
+# Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
+export POCL_CACHE_DIR="/tmp/$USER/pocl-cache"
+
 # Print task allocation
 $jsrun_cmd js_task_info
 
