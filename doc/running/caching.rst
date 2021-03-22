@@ -18,15 +18,27 @@ The following list discusses mirgecom-related packages that use caching.
 Loopy
 +++++
 
-Loopy stores generated PyOpenCL kernels in ``$XDG_CACHE_HOME`` by default. You can
-export ``LOOPY_NO_CACHE=1`` to disable caching. See
-`here <https://github.com/inducer/loopy/blob/e21e8f85d289abbca27ac6abfd71874155fa49da/loopy/__init__.py#L402-L406>`__
+:mod:`loopy` stores the source of generated PyOpenCL kernels and their invokers in
+``$XDG_CACHE_HOME/pytools/pdict-*`` by default. You can export ``LOOPY_NO_CACHE=1`` to disable caching.
+See `here <https://github.com/inducer/loopy/blob/e21e8f85d289abbca27ac6abfd71874155fa49da/loopy/__init__.py#L402-L406>`__
 for details.
+
+.. note::
+
+   :mod:`loopy` uses :class:`pytools.persistent_dict.PersistentDict`
+   for caching. :class:`~pytools.persistent_dict.PersistentDict` also keeps an in-memory
+   cache.
+
+.. note::
+
+   ``$XDG_CACHE_HOME`` by default refers to ``~/.cache`` on Linux and
+   ``~/Library/Caches/`` on MacOS.
+
 
 PyOpenCL
 ++++++++
 
-PyOpenCL stores generated OpenCL kernels in ``$XDG_CACHE_HOME`` by default. You can
+:mod:`pyopencl` stores generated OpenCL kernels (their C source code as well as compiled binary code) in ``$XDG_CACHE_HOME/.pyopencl`` by default. You can
 export ``PYOPENCL_NO_CACHE=1`` to disable caching. See
 `here <https://documen.tician.de/pyopencl/runtime_program.html#envvar-PYOPENCL_NO_CACHE>`__
 for details.
@@ -34,9 +46,14 @@ for details.
 POCL
 ++++
 
-POCL stores compilation results in ``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME``
-by default. You can export ``POCL_KERNEL_CACHE=0`` to disable caching. See
-`here <http://portablecl.org/docs/html/env_variables.html>`__ for details.
+POCL stores compilation results (LLVM bitcode and shared libraries) in
+``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You can export
+``POCL_KERNEL_CACHE=0`` to disable caching. See `here
+<http://portablecl.org/docs/html/env_variables.html>`__ for details.
+
+.. note::
+
+   For POCL, ``$XDG_CACHE_HOME`` refers to ``~/.cache`` even on MacOS.
 
 CUDA
 ++++
