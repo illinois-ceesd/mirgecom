@@ -18,9 +18,10 @@ The following list discusses mirgecom-related packages that use caching.
 Loopy
 +++++
 
-:mod:`loopy` stores the source of generated PyOpenCL kernels and their invokers in
-``$XDG_CACHE_HOME/pytools/pdict-*`` by default. You can export ``LOOPY_NO_CACHE=1`` to disable caching.
-See `here <https://github.com/inducer/loopy/blob/e21e8f85d289abbca27ac6abfd71874155fa49da/loopy/__init__.py#L402-L406>`__
+:mod:`loopy` stores the source of generated PyOpenCL kernels and their
+invokers in ``$XDG_CACHE_HOME/pytools/pdict-*`` by default. You can export
+``LOOPY_NO_CACHE=1`` to disable caching. See `here
+<https://github.com/inducer/loopy/blob/e21e8f85d289abbca27ac6abfd71874155fa49da/loopy/__init__.py#L402-L406>`__
 for details.
 
 .. note::
@@ -38,9 +39,10 @@ for details.
 PyOpenCL
 ++++++++
 
-:mod:`pyopencl` stores generated OpenCL kernels (their C source code as well as compiled binary code) in ``$XDG_CACHE_HOME/.pyopencl`` by default. You can
-export ``PYOPENCL_NO_CACHE=1`` to disable caching. See
-`here <https://documen.tician.de/pyopencl/runtime_program.html#envvar-PYOPENCL_NO_CACHE>`__
+:mod:`pyopencl` stores generated OpenCL kernels (their C source code as well
+as compiled binary code) in ``$XDG_CACHE_HOME/.pyopencl`` by default. You
+can export ``PYOPENCL_NO_CACHE=1`` to disable caching. See `here
+<https://documen.tician.de/pyopencl/runtime_program.html#envvar-PYOPENCL_NO_CACHE>`__
 for details.
 
 POCL
@@ -59,8 +61,8 @@ CUDA
 ++++
 
 CUDA stores binary kernels in ``~/.nv/ComputeCache`` by default. You can
-export ``CUDA_CACHE_DISABLE=1`` to disable caching. See
-`here <https://developer.nvidia.com/blog/cuda-pro-tip-understand-fat-binaries-jit-caching/>`__
+export ``CUDA_CACHE_DISABLE=1`` to disable caching. See `here
+<https://developer.nvidia.com/blog/cuda-pro-tip-understand-fat-binaries-jit-caching/>`__
 for details.
 
 
