@@ -8,4 +8,6 @@ Gas Dynamics
 .. automodule:: mirgecom.inviscid
 .. automodule:: mirgecom.fluid
 .. automodule:: mirgecom.flux
+.. automodule:: mirgecom.viscous
+.. automodule:: mirgecom.transport
 .. automodule:: mirgecom.navierstokes
