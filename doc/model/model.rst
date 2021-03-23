@@ -21,8 +21,8 @@ Model
 .. _NS-eqns:
 
 *MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for a number of mixture
-species = $N_s$, with chemical reactions on unstructured meshes in a Discontinuous-Galerkin setting.  The basic conservation
-equations are as follows:
+species = $N_s$, with chemical reactions on unstructured meshes in a Discontinuous-Galerkin setting.  The formulation
+presented here is after [Ihme_2014]_ and [Cook_2009]_. The basic conservation equations are as follows:
 
 .. math::
     \partial_{t}{\rho} + \partial_{j}{\rho v_j} &= S_\rho \\
@@ -58,8 +58,8 @@ with the components of each following directly from above:
 
 where ${E}^{\mathtt{chem}}$, and $W^{\mathtt{chem}}_{\alpha}$, are the chemical reaction source terms
 in the energy and species conservation equations, respectively.  See :ref:`Chemistry` for more details
-on chemical reaction source terms, and :ref:`here<order2-rhs>` for details on the viscous 2nd order terms
-on the RHS.
+on chemical reaction source terms, and :ref:`here<viscous-rhs>` for details on the 2nd order terms
+in the viscous RHS.
 
 .. _viscous-stress-tensor:
 
@@ -159,17 +159,31 @@ the fluid $\mathbf{Q}$, in general, and are provided by transport models.  Trans
 by *MIRGE-Com* are documented in :mod:`mirgecom.transport`.
 
 
-.. _order2-rhs:
+.. _viscous-rhs:
+
+Viscous RHS
+-----------
+
+How to discretize the conservation equations with DG, including how to handle the required fluxes,
+particularly in the viscous setting, is a current topic of research and internal discussion.  The
+following references are useful:
+
+* [Hesthaven_2008]_
+* [Ihme_2014]_
+* [Cook_2009]_
+* [Ayuso_2009]_
+* [Bassi_2000]_
 
 2nd order terms on the RHS
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The viscous fluxes $\mathbf{F}^{V}$ are proportional to gradients of the fluid state variables,
 introducing 2nd order terms on the RHS of the conservation equations. These 2nd order terms with their
 relevant rhs component are summarized below.
 
 Momentum equation
-^^^^^^^^^^^^^^^^^
+"""""""""""""""""
+The 2nd order terms in the viscous RHS for the moementum equation are:
 
 .. math::
    \partial_j \tau_{ij} = \left[\partial_j\left(\mu\partial_j{v}_i\right) +
@@ -178,12 +192,11 @@ Momentum equation
 
 
 Energy equation
-^^^^^^^^^^^^^^^
+"""""""""""""""
 The 2nd order terms in the energy equation RHS have convective, conductive, and
 diffusive terms as follows:
 
-Convective part
-"""""""""""""""
+- Convective part
 
 .. math::
    \partial_j \tau_{jk} {v}_k = \left[\partial_j\left(\mu\partial_k{v}_j{v}_k\right) +
@@ -191,8 +204,8 @@ Convective part
    \frac{2}{3}\mu\right)\partial_m{v}_m\delta_{jk}{v}_k\right]
    
 
-Conductive part
-"""""""""""""""
+- Conductive part
+
 The conductive heat part of the RHS is:
 
 .. math::
@@ -200,8 +213,8 @@ The conductive heat part of the RHS is:
 
 where $T$ is the fluid temperature.
 
-Diffusive part
-""""""""""""""
+- Diffusive part
+
 The diffusive heat part of the RHS is:
 
 .. math::
@@ -211,7 +224,7 @@ with fluid density $\rho$, species diffusivity ${d}_{(\alpha)}$, and species mas
 ${Y}_{\alpha}$. 
 
 Species equation
-^^^^^^^^^^^^^^^^
+""""""""""""""""
 The species diffusive transport RHS is:
 
 .. math::
