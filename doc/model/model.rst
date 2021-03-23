@@ -31,9 +31,10 @@ equations are as follows:
     \partial_{t}(\rho{Y}_{\alpha}) + \partial_j\left(\rho{Y}_{\alpha}v_j + (\mathbf{J}_{\alpha})_j\right) &= S_{\alpha},
 
 with fluid density $\rho$, velocity components $v_i$, momentum density components $\rho v_i$, total energy $\rho E$,
-and vector of species mass fractions ${Y}_{\alpha}$. The thermodynamic pressure of the fluid is $p$.  ${\tau_{ij}}$
-are the components of the viscous stress tensor, $q_i$ are the components of the total heat flux vector, and the
-components of the species diffusive flux vector are $(\mathbf{J}_{\alpha})_i)$. Mixtures have $N_s$ components
+and vector of species mass fractions ${Y}_{\alpha}$. The :ref:`thermodynamic pressure<eos-and-matprop>` of the fluid
+is $p$.  ${\tau_{ij}}$ are the components of the :ref:`viscous stress tensor<viscous-stress-tensor>`, $q_i$ are the
+components of the total :ref:`heat flux<heat-flux>` vector, and the components of the
+species :ref:`diffusive flux<diffusive-flux>` vector are $(\mathbf{J}_{\alpha})_i)$. Mixtures have $N_s$ components
 with $1 \le \alpha \le N_s$. Unless otherwise noted, repeated indices imply summation.
 
 The equations can be recast in this more compact form:
@@ -57,7 +58,8 @@ with the components of each following directly from above:
 
 where ${E}^{\mathtt{chem}}$, and $W^{\mathtt{chem}}_{\alpha}$, are the chemical reaction source terms
 in the energy and species conservation equations, respectively.  See :ref:`Chemistry` for more details
-on chemical reaction source terms.
+on chemical reaction source terms, and :ref:`here<order2-rhs>` for details on the viscous 2nd order terms
+on the RHS.
 
 .. _viscous-stress-tensor:
 
