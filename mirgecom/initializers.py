@@ -858,7 +858,7 @@ class Discontinuity:
 
     def __init__(
             self, dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10.,
-            ul=None, ur=None, sigma=0.5
+            ul=None, ur=None, uc=None, sigma=0.5
     ):
         """Initialize initial condition options.
 
@@ -869,17 +869,19 @@ class Discontinuity:
         x0: float
            location of discontinuity
         rhol: float
-           left density
+           density to the left of the discontinuity
         rhor: float
-           right density
+           density to the right of the discontinuity
         pl: float
-           left pressure
+           pressure to the left of the discontinuity
         pr: float
-           right pressure
-        ul: float
-           left velocity
-        ur: float
-           right velocity
+           pressure to the right of the discontinutiy
+        ul: numpy.ndarray
+            flow velocity to the left of the discontinuity
+        ur: numpy.ndarray
+            flow velocity to the right of the discontinuity
+        uc: numpy.ndarray
+            convective velocity (discontinuity advection speed)
         sigma: float
            sharpness parameter
         """
@@ -895,9 +897,12 @@ class Discontinuity:
             ul = np.zeros(shape=(dim,))
         if ur is None:
             ur = np.zeros(shape=(dim,))
+        if uc is None:
+            uc = np.zeros(shape=(dim,))
 
         self._ul = ul
         self._ur = ur
+        self._uc = uc
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         r"""
@@ -925,7 +930,7 @@ class Discontinuity:
         zeros = 0 * x_rel
         sigma = self._sigma
 
-        x0 = zeros + self._x0
+        x0 = zeros + self._uc[0]*t + self._x0
         t = zeros + t
         ones = (1.0 + x_vec[0]) - x_vec[0]
 
