@@ -858,7 +858,7 @@ class Discontinuity:
 
     def __init__(
             self, dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10.,
-            ul=0.1, ur=0., sigma=0.5
+            ul=None, ur=None, uc=None, sigma=0.5
     ):
         """Initialize initial condition options.
 
@@ -869,17 +869,19 @@ class Discontinuity:
         x0: float
            location of discontinuity
         rhol: float
-           left density
+           density to the left of the discontinuity
         rhor: float
-           right density
+           density to the right of the discontinuity
         pl: float
-           left pressure
+           pressure to the left of the discontinuity
         pr: float
-           right pressure
-        ul: float
-           left velocity
-        ur: float
-           right velocity
+           pressure to the right of the discontinutiy
+        ul: numpy.ndarray
+            flow velocity to the left of the discontinuity
+        ur: numpy.ndarray
+            flow velocity to the right of the discontinuity
+        uc: numpy.ndarray
+            convective velocity (discontinuity advection speed)
         sigma: float
            sharpness parameter
         """
@@ -889,9 +891,18 @@ class Discontinuity:
         self._rhor = rhor
         self._pl = pl
         self._pr = pr
+        self._sigma = sigma
+
+        if ul is None:
+            ul = np.zeros(shape=(dim,))
+        if ur is None:
+            ur = np.zeros(shape=(dim,))
+        if uc is None:
+            uc = np.zeros(shape=(dim,))
+
         self._ul = ul
         self._ur = ur
-        self._sigma = sigma
+        self._uc = uc
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         r"""
@@ -919,13 +930,16 @@ class Discontinuity:
         zeros = 0 * x_rel
         sigma = self._sigma
 
-        x0 = zeros + self._x0
+        x0 = zeros + self._uc[0]*t + self._x0
         t = zeros + t
+        ones = (1.0 + x_vec[0]) - x_vec[0]
 
         rhol = zeros + self._rhol
         rhor = zeros + self._rhor
-        ul = zeros + self._ul
-        ur = zeros + self._ur
+        ul = make_obj_array([self._ul[i] * ones
+                                   for i in range(self._dim)])
+        ur = make_obj_array([self._ur[i] * ones
+                                   for i in range(self._dim)])
         rhoel = zeros + self._pl/gm1
         rhoer = zeros + self._pr/gm1
 
@@ -936,8 +950,8 @@ class Discontinuity:
               + rhoer / 2.0 * (actx.np.tanh(xtanh) + 1.0))
         u = (ul / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
            + ur / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        mom = mass * make_obj_array([u, zeros])
-        energy = rhoe + 0.5 * mass * (u * u)
+        mom = mass * u
+        energy = rhoe + 0.5 * mass * np.dot(u, u)
 
 
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
