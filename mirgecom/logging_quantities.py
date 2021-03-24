@@ -81,8 +81,8 @@ def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue):
     logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
-def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
-    """Deprecated. Do not use in new code."""  # noqa: D401
+def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
+    """Deprecated. Do not use in new code."""
     from warnings import warn
     warn("logmgr_add_device_name is deprecated and will disappear in Q3 2021. "
          "Use logmgr_add_cl_device_info instead.", DeprecationWarning,
