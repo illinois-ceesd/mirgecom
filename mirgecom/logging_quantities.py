@@ -29,11 +29,14 @@ __doc__ = """
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
+.. autoclass:: DeviceMemoryUsage
 .. autofunction:: initialize_logmgr
-.. autofunction:: logmgr_add_device_name
+.. autofunction:: logmgr_add_cl_device_info
+.. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
+.. autofunction:: logmgr_set_time
 """
 
 from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
@@ -70,9 +73,28 @@ def initialize_logmgr(enable_logmgr: bool,
     return logmgr
 
 
-def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
-    """Add the OpenCL device name to the log."""
-    logmgr.set_constant("cl_device_name", str(queue.device))
+def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue):
+    """Add information about the OpenCL device to the log."""
+    dev = queue.device
+    logmgr.set_constant("cl_device_name", str(dev))
+    logmgr.set_constant("cl_device_version", dev.version)
+    logmgr.set_constant("cl_platform_version", dev.platform.version)
+
+
+def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
+    """Deprecated. Do not use in new code."""
+    from warnings import warn
+    warn("logmgr_add_device_name is deprecated and will disappear in Q3 2021. "
+         "Use logmgr_add_cl_device_info instead.", DeprecationWarning,
+         stacklevel=2)
+    logmgr_add_cl_device_info(logmgr, queue)
+
+
+def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
+    """Add the OpenCL device memory usage to the log."""
+    if not (queue.device.type & cl.device_type.GPU):
+        return
+    logmgr.add_quantity(DeviceMemoryUsage())
 
 
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
@@ -165,6 +187,19 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
                         extract_state_vars_func(dim, state, eos)
 
                 gd.quantity.set_state_vars(state_vars[extract_state_vars_func])
+
+
+def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
+    """Set the (current/initial) time/step count explicitly (e.g., for restart)."""
+    from logpyle import TimestepCounter, SimulationTime
+
+    for gd_lst in [mgr.before_gather_descriptors,
+            mgr.after_gather_descriptors]:
+        for gd in gd_lst:
+            if isinstance(gd.quantity, TimestepCounter):
+                gd.quantity.steps = steps
+            if isinstance(gd.quantity, SimulationTime):
+                gd.quantity.t = time
 
 
 class StateConsumer:
@@ -310,7 +345,7 @@ class PythonMemoryUsage(LogQuantity):
     def __init__(self, name: str = None):
 
         if name is None:
-            name = "memory_usage"
+            name = "memory_usage_python"
 
         super().__init__(name, "MByte", description="Memory usage (RSS, host)")
 
@@ -320,5 +355,43 @@ class PythonMemoryUsage(LogQuantity):
     def __call__(self) -> float:
         """Return the memory usage in MByte."""
         return self.process.memory_info()[0] / 1024 / 1024
+
+
+class DeviceMemoryUsage(LogQuantity):
+    """Logging support for GPU memory usage (Nvidia only currently)."""
+
+    def __init__(self, name: str = None) -> None:
+
+        if name is None:
+            name = "memory_usage_gpu"
+
+        super().__init__(name, "MByte", description="Memory usage (GPU)")
+
+        import ctypes
+        self.free = ctypes.c_size_t()
+        self.total = ctypes.c_size_t()
+
+        try:
+            # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
+            # on why this calls cuMemGetInfo_v2 and not cuMemGetInfo
+            libcuda = ctypes.cdll.LoadLibrary("libcuda.so")
+            self.mem_func = libcuda.cuMemGetInfo_v2
+        except OSError:
+            self.mem_func = None
+
+    def __call__(self) -> float:
+        """Return the memory usage in MByte."""
+        if self.mem_func is None:
+            return None
+
+        import ctypes
+        ret = self.mem_func(ctypes.byref(self.free), ctypes.byref(self.total))
+
+        if ret != 0:
+            from warnings import warn
+            warn(f"cudaMemGetInfo failed with error {ret}.")
+            return None
+        else:
+            return (self.total.value - self.free.value) / 1024 / 1024
 
 # }}}
