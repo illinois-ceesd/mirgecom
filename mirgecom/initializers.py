@@ -281,7 +281,7 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self, dim=2, x0=1.0/6.0, us=4.0
+            self, dim=2, shock_location=1.0/6.0, shock_speed=4.0
     ):
         """Initialize initial condition options.
 
@@ -289,16 +289,16 @@ class DoubleMachReflection:
         ----------
         dim: int
            dimension of domain, must be 2
-        x0: float
+        shock_location: float
            location of shock
-        us: float
-           shock speed
+        shock_speed: float
+           shock speed, Mach number
         """
-        self._x0 = x0
+        self._shock_location = shock_location
         self._dim = dim
-        self._us = us
+        self._shock_speed = shock_speed
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -314,6 +314,7 @@ class DoubleMachReflection:
         assert self._dim == 2, "only defined for dim=2"
 
         gm1 = eos.gamma() - 1.0
+        gp1 = eos.gamma() + 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[0]
         y_rel = x_vec[1]
@@ -321,49 +322,27 @@ class DoubleMachReflection:
 
         zeros = 0*x_rel
 
-        x0 = zeros + self._x0
-        us = zeros + self._us
+        shock_location = zeros + self._shock_location
+        shock_speed = zeros + self._shock_speed
         t = zeros + t
 
-        # Mach 10
-        # rhol = zeros + 8.0
-        # rhor = zeros + 1.4
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
 
-        # ul = zeros + 8.25*np.cos(np.pi/6.0)
-        # ur = zeros + 0.0
-        # vl = zeros - 8.25*np.sin(np.pi/6.0)
-        # vr = zeros + 0.0
-        # rhoel = zeros + gmn1 * 116.5
-        # rhoer = zeros + gmn1 * 1.0
-
-        # Mach 2.0
-        # rhol = zeros + 2.666666*1.4
-        # rhor = zeros + 1.4
-
-        # ul = zeros + 1.25*np.cos(np.pi/6.0)
-        # ur = zeros + 0.0
-        # vl = zeros - 1.25*np.sin(np.pi/6.0)
-        # vr = zeros + 0.0
-        # rhoel = zeros + gmn1 * 4.5
-        # rhoer = zeros + gmn1 * 1.0
-
-        # Mach 4.0
-        rhol = zeros + 4.57142857*1.4
-        rhor = zeros + 1.4
-
-        ul = zeros + 3.125*np.cos(np.pi/6.0)
+        rhol = zeros + eos.gamma() * rho_jump
+        rhor = zeros + eos.gamma()
+        ul = zeros + up * np.cos(np.pi/6.0)
         ur = zeros + 0.0
-        vl = zeros - 3.125*np.sin(np.pi/6.0)
+        vl = zeros - up * np.sin(np.pi/6.0)
         vr = zeros + 0.0
-        rhoel = zeros + gmn1 * 18.5
+        rhoel = zeros + gmn1 * p_jump
         rhoer = zeros + gmn1 * 1.0
 
-        # yesno = x_rel > (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
-        # mass = actx.np.where(yesno, rhor, rhol)
-        # rhoe = actx.np.where(yesno, rhoer, rhoel)
-        # u = actx.np.where(yesno, ur, ul)
-        # v = actx.np.where(yesno, vr, vl)
-        xinter = (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
+        xinter = (shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*shock_speed*t/np.sqrt(3.0))
         sigma = 0.05
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
@@ -375,7 +354,8 @@ class DoubleMachReflection:
         rhov = mass*v
         energy = rhoe + 0.5*mass*(u*u + v*v)
 
-        return flat_obj_array(mass, energy, rhou, rhov)
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=make_obj_array([rhou, rhov]))
 
 
 class Lump:

@@ -190,7 +190,8 @@ class AdiabaticSlipBoundary:
         # flip remaining components to set a neumann condition
         from pytools.obj_array import make_obj_array
         q_mom_normcomp = make_obj_array(
-            [np.outer(normal,np.dot(bndry_q.momentum,normal))[i] for i in range(dim)]
+            [np.outer(normal, np.dot(bndry_q.momentum, normal))[i]
+            for i in range(dim)]
         )
         result[2:] = -1*(bndry_q.momentum-2.0*q_mom_normcomp)
 
