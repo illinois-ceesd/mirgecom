@@ -5,7 +5,6 @@ Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
-.. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
@@ -262,121 +261,6 @@ class SodShock1D:
 
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
-
-
-class DoubleMachReflection:
-    r"""Implement the double shock reflection problem.
-
-        - Woodward and Collela
-
-    The inital condition is defined
-
-    .. math::
-
-        (\rho,u,v,P) =
-
-    This function only serves as an initial condition
-
-    .. automethod:: __init__
-    .. automethod:: __call__
-    """
-
-    def __init__(
-            self, dim=2, x0=1.0/6.0, us=4.0
-    ):
-        """Initialize initial condition options.
-
-        Parameters
-        ----------
-        dim: int
-           dimension of domain, must be 2
-        x0: float
-           location of shock
-        us: float
-           shock speed
-        """
-        self._x0 = x0
-        self._dim = dim
-        self._us = us
-
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        """
-        Create the 1D Sod's shock solution at locations *x_vec*.
-
-        Parameters
-        ----------
-        t: float
-            Current time at which the solution is desired (unused)
-        x_vec: numpy.ndarray
-            Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
-        """
-        assert self._dim == 2, "only defined for dim=2"
-
-        gm1 = eos.gamma() - 1.0
-        gmn1 = 1.0 / gm1
-        x_rel = x_vec[0]
-        y_rel = x_vec[1]
-        actx = x_rel.array_context
-
-        zeros = 0*x_rel
-
-        x0 = zeros + self._x0
-        us = zeros + self._us
-        t = zeros + t
-
-        # Mach 10
-        # rhol = zeros + 8.0
-        # rhor = zeros + 1.4
-
-        # ul = zeros + 8.25*np.cos(np.pi/6.0)
-        # ur = zeros + 0.0
-        # vl = zeros - 8.25*np.sin(np.pi/6.0)
-        # vr = zeros + 0.0
-        # rhoel = zeros + gmn1 * 116.5
-        # rhoer = zeros + gmn1 * 1.0
-
-        # Mach 2.0
-        # rhol = zeros + 2.666666*1.4
-        # rhor = zeros + 1.4
-
-        # ul = zeros + 1.25*np.cos(np.pi/6.0)
-        # ur = zeros + 0.0
-        # vl = zeros - 1.25*np.sin(np.pi/6.0)
-        # vr = zeros + 0.0
-        # rhoel = zeros + gmn1 * 4.5
-        # rhoer = zeros + gmn1 * 1.0
-
-        # Mach 4.0
-        rhol = zeros + 4.57142857*1.4
-        rhor = zeros + 1.4
-
-        ul = zeros + 3.125*np.cos(np.pi/6.0)
-        ur = zeros + 0.0
-        vl = zeros - 3.125*np.sin(np.pi/6.0)
-        vr = zeros + 0.0
-        rhoel = zeros + gmn1 * 18.5
-        rhoer = zeros + gmn1 * 1.0
-
-        # yesno = x_rel > (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
-        # mass = actx.np.where(yesno, rhor, rhol)
-        # rhoe = actx.np.where(yesno, rhoer, rhoel)
-        # u = actx.np.where(yesno, ur, ul)
-        # v = actx.np.where(yesno, vr, vl)
-        xinter = (x0 + y_rel/np.sqrt(3.0) + 2.0*us*t/np.sqrt(3.0))
-        sigma = 0.05
-        xtanh = 1.0/sigma*(x_rel-xinter)
-        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
-                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
-        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
-        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhou = mass*u
-        rhov = mass*v
-        energy = rhoe + 0.5*mass*(u*u + v*v)
-
-        return flat_obj_array(mass, energy, rhou, rhov)
 
 
 class Lump:
@@ -974,7 +858,7 @@ class Discontinuity:
 
     def __init__(
             self, dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10.,
-            ul=None, ur=None, sigma=0.5
+            ul=None, ur=None, uc=None, sigma=0.5
     ):
         """Initialize initial condition options.
 
@@ -996,6 +880,8 @@ class Discontinuity:
             flow velocity to the left of the discontinuity
         ur: numpy.ndarray
             flow velocity to the right of the discontinuity
+        uc: numpy.ndarray
+            convective velocity (discontinuity advection speed)
         sigma: float
            sharpness parameter
         """
@@ -1011,9 +897,12 @@ class Discontinuity:
             ul = np.zeros(shape=(dim,))
         if ur is None:
             ur = np.zeros(shape=(dim,))
+        if uc is None:
+            uc = np.zeros(shape=(dim,))
 
         self._ul = ul
         self._ur = ur
+        self._uc = uc
 
     def __call__(self, t, x_vec, eos=IdealSingleGas()):
         r"""
@@ -1041,7 +930,7 @@ class Discontinuity:
         zeros = 0 * x_rel
         sigma = self._sigma
 
-        x0 = zeros + self._x0
+        x0 = zeros + self._uc[0]*t + self._x0
         t = zeros + t
         ones = (1.0 + x_vec[0]) - x_vec[0]
 

@@ -41,7 +41,7 @@ from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
@@ -57,7 +57,8 @@ from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name)
+    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
+    logmgr_add_device_memory_usage)
 
 
 logger = logging.getLogger(__name__)
@@ -115,9 +116,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         raise ValueError("This example must be run with dim = 2.")
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
-    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
@@ -130,6 +131,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
@@ -137,7 +139,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                             "min_temperature", "L2_norm_momentum1"])
 
         try:
-            logmgr.add_watches(["memory_usage.max"])
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
         except KeyError:
             pass
 

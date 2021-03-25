@@ -1,13 +1,43 @@
 r""":mod:`mirgecom.tag_cells` Compute smoothness indicator.
 
-Perssons smoothness indicator:
+Evalutes the smoothness indicator of Persson:
 
 .. math::
 
     S_e = \frac{\langle u_{N_p} - u_{N_{p-1}}, u_{N_p} -
         u_{N_{p-1}}\rangle_e}{\langle u_{N_p}, u_{N_p} \rangle_e}
 
+where:
+- $S_e$ is the smoothness indicator
+- $u_{N_p}$ is the modal representation of the solution at the current polynomial
+  order
+- $u_{N_{p-1}}$ is the truncated modal represention to the polynomial order $p-1$
+- The $L_2$ inner product on an element is denoted $\langle \cdot,\cdot \rangle_e$
+
+The elementwise viscoisty is then calculated:
+
+.. math::
+
+    \varepsilon_e =
+        \begin{cases}
+            0, & s_e < s_0 - \kappa \\
+            \frac{1}{2}\left( 1 + \sin \frac{\pi(s_e - s_0)}{2 \kappa} \right ),
+            & s_0-\kappa \le s_e \le s_0+\kappa \\
+            1, & s_e > s_0+\kappa
+        \end{cases}
+
+where:
+- $\varepsilon_e$ is the element viscosity
+- $s_e = \log_{10}{S_e} \sim 1/p^4$ is the smoothness indicator
+- $s_0$ is a reference smoothness value
+- $\kappa$ controls the width of the transition between 0 to 1
+
+Smoothness Indicator Evaluation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: smoothness_indicator
 """
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -69,19 +99,39 @@ def compute_smoothness_indicator():
         " vec[iel,j]*vec[iel,j]+1.0e-12/ndiscr_nodes_in)",
         name="smooth_comp",
     )
-    # knl = lp.tag_array_axes(knl, "vec", "stride:auto,stride:auto")
     return knl
 
 
-def smoothness_indicator(u, discr, kappa=1.0, s0=-6.0):
-    """Calculate the smoothness indicator."""
+def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
+    """Calculate the smoothness indicator.
+
+    Parameters
+    ----------
+    u
+        A DOF Array of the field that is used to calculate the
+        smoothness indicator.
+
+    kappa
+        A optional argument that sets the controls the width of the
+        transition between 0 to 1.
+    s0
+        A optional argument that sets the smoothness level to limit
+        on. Logical values are [0,-infinity) where -infinity results in
+        all cells being tagged and 0 results in none.
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray
+        A DOF Array containing elementwise constant values between 0 and 1
+        which indicate the smoothness of a given element.
+    """
     assert isinstance(u, DOFArray)
 
-    # #@memoize_in(u.array_context, (smoothness_indicator, "get_kernel"))
+    
     def get_kernel():
         return linear_operator_kernel()
 
-    # #@memoize_in(u.array_context, (smoothness_indicator, "get_indicator"))
+      
     def get_indicator():
         return compute_smoothness_indicator()
 
@@ -117,10 +167,9 @@ def smoothness_indicator(u, discr, kappa=1.0, s0=-6.0):
             modes=actx.from_numpy(highest_mode),
         )
 
-    # Take log10 of indicator
     indicator = actx.np.log10(indicator + 1.0e-12)
 
-    # Compute artificail viscosity percentage based on idicator and set parameters
+    # Compute artificial viscosity percentage based on indicator and set parameters
     yesnol = indicator > (s0 - kappa)
     yesnou = indicator > (s0 + kappa)
     sin_indicator = actx.np.where(
