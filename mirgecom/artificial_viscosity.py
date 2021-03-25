@@ -146,7 +146,7 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
             )
             return _facial_flux_r(discr, q_tpair=q_tpair)
 
-        r_ext = boundaries[btag].exterior_soln(discr, btag=btag, t=t, q=r, eos=eos)
+        r_ext = boundaries[btag].exterior_sol(discr, btag=btag, t=t, q=r, eos=eos)
         r_int = discr.project("vol", btag, r)
         dbf_r = dbf_r + obj_array_vectorize_n_args(
             my_facialflux_r_boundary, r_ext, r_int

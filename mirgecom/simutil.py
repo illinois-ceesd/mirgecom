@@ -105,10 +105,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 
-    from mirgecom.tag_cells import smoothness_indicator
-    if s0 is not None and kappa is not None:
-        tagedcells = smoothness_indicator(q[0], discr, kappa=kappa, s0=s0)
-
     rank = 0
     if comm is not None:
         rank = comm.Get_rank()
@@ -135,12 +131,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
         if viz_fields is not None:
             io_fields.extend(viz_fields)
-
-        if s0 is not None and kappa is not None:
-            tagged_list = [
-                ("tagged", tagedcells),
-            ]
-            io_fields.extend(tagged_list)
 
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
