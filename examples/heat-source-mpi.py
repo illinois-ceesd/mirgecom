@@ -20,12 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
+import logging
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
 from meshmode.dof_array import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -44,8 +44,9 @@ import pyopencl.tools as cl_tools
 
 
 @mpi_entry_point
-def main():
-    cl_ctx = cl.create_some_context()
+def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
+    """Drive example."""
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
@@ -135,6 +136,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+
+    import argparse
+    parser = argparse.ArgumentParser(description="Heat-source (MPI version)")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    args = parser.parse_args()
+
+    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext)
 
 # vim: foldmethod=marker
