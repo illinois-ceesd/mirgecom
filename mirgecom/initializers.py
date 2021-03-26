@@ -350,12 +350,11 @@ class DoubleMachReflection:
                 + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
         u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
         v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
-        rhou = mass*u
-        rhov = mass*v
-        energy = rhoe + 0.5*mass*(u*u + v*v)
+        vel = make_obj_array([u, v])
+        mom = mass * vel
+        energy = rhoe + .5*mass*np.dot(vel, vel)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=make_obj_array([rhou, rhov]))
+        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
 
 
 class Lump:
