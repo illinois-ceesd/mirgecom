@@ -76,6 +76,7 @@ class GasEOS:
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
     .. automethod:: gamma
+    .. automethod:: transport_model
     """
 
     def pressure(self, cv: ConservedVars):
@@ -108,6 +109,10 @@ class GasEOS:
 
     def gamma(self):
         """Get the ratio of gas specific heats Cp/Cv."""
+        raise NotImplementedError()
+
+    def transport_model(self):
+        """Get the transport model if it exists."""
         raise NotImplementedError()
 
     def dependent_vars(self, q: ConservedVars) -> EOSDependentVars:
