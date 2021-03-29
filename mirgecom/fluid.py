@@ -10,8 +10,9 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
-.. autofunction:: compute_velocity_gradient
 .. autofunction:: compute_wavespeed
+.. autofunction:: species_mass_fraction_gradient
+.. autofunction:: velocity_gradient
 """
 
 __copyright__ = """
@@ -40,6 +41,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
+from pytools.obj_array import make_obj_array
 
 
 @dataclass(frozen=True)
@@ -163,7 +165,7 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-def compute_velocity_gradient(discr, cv: ConservedVars):
+def velocity_gradient(discr, cv, grad_q):
     r"""
     Compute the gradient of fluid velocity.
 
@@ -187,11 +189,41 @@ def compute_velocity_gradient(discr, cv: ConservedVars):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{v_i}$.
     """
-    dim = discr.dim
-    velocity = cv.momentum/cv.mass
-    dmass = discr.grad(cv.mass)
-    dmom = [discr.grad(cv.momentum[i]) for i in range(dim)]
-    return [(dmom[i] - velocity[i]*dmass)/cv.mass for i in range(dim)]
+    velocity = cv.momentum / cv.mass
+    return (1/cv.mass)*make_obj_array([grad_q[i+2] - velocity[i]*grad_q[0]
+                                       for i in range(discr.dim)])
+
+
+def species_mass_fraction_gradient(discr, cv, grad_q):
+    r"""
+    Compute the gradient of species mass fractions.
+
+    Computes the gradient of species mass fractions from:
+
+    .. math::
+
+        \nabla{Y}_{\alpha} =
+        \frac{1}{\rho}\left(\nabla(\rho{Y}_{\alpha})-{Y_\alpha}(\nabla{\rho})\right),
+
+    where ${Y}_{\alpha}$ is the mass fraction for species ${\alpha}$.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    cv: mirgecom.fluid.ConservedVars
+        the fluid conserved variables
+    Returns
+    -------
+    numpy.ndarray
+        object array of :class:`~meshmode.dof_array.DOFArray`
+        representing $\partial_j{v_i}$.
+    """
+    nspecies = len(cv.species_mass)
+    y = cv.species_mass / cv.mass
+    ind = discr.dim + 1
+    return (1/cv.mass)*make_obj_array([grad_q[i+ind] - y[i]*grad_q[0]
+                                       for i in range(nspecies)])
 
 
 def compute_wavespeed(dim, eos, cv: ConservedVars):
