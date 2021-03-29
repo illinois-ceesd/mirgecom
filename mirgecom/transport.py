@@ -8,6 +8,7 @@ manage the transport properties in viscous flows.
 
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
+.. autoclass:: SimpleTransport
 """
 
 __copyright__ = """
@@ -54,7 +55,7 @@ class TransportDependentVars:
     .. attribute:: species_diffusivity
     """
 
-    bulk_viscosity: float
+    bulk_viscosity: np.ndarray
     viscosity: np.ndarray
     thermal_conductivity: np.ndarray
     species_diffusivity: np.ndarray
@@ -73,8 +74,8 @@ class TransportModel:
     .. automethod:: species_diffusivity
     """
 
-    def bulk_viscosity(self):
-        r"""Get the bulk viscosity for the gas ($\mu_{B})."""
+    def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the bulk viscosity for the gas (${\mu}_{B}$)."""
         raise NotImplementedError()
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -86,7 +87,7 @@ class TransportModel:
         raise NotImplementedError()
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the vector of species diffusivities ($D_{\alpha}$)."""
+        r"""Get the vector of species diffusivities (${d}_{\alpha}$)."""
         raise NotImplementedError()
 
 
@@ -107,9 +108,11 @@ class SimpleTransport(TransportModel):
         self._kappa = thermal_conductivity
         self._d_alpha = species_diffusivity
 
-    def bulk_viscosity(self):
+    def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the bulk viscosity for the gas, $\mu_{B}."""
-        return self._mu_bulk
+        actx = cv.mass.array_context
+        ones = actx.ones_like(cv.mass)
+        return self._mu_bulk * ones
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$."""
@@ -124,7 +127,7 @@ class SimpleTransport(TransportModel):
         return self._kappa * ones
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the vector of species diffusivities, $D_{\alpha}$."""
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         actx = cv.mass.array_context
         ones = actx.ones_like(cv.mass)
         nspecies = len(cv.species_mass)
