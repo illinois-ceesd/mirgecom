@@ -28,6 +28,46 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import numpy as np  # noqa
+from pytools.obj_array import make_obj_array
+
+
+def central_scalar_flux(trace_pair, normal):
+    r"""Compute a central scalar flux.
+
+    The central scalar flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
+
+    where $\mathbf{u}^-, \matbhf{u}^+$, are the vector of independent scalar
+    components and scalar solution components on the interior and exterior of the
+    face on which the central flux is to be calculated, and $\hat{n}$ is the normal
+    vector.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.sym.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    tp_avg = trace_pair.avg
+    ncomp = 1
+    if isinstance(tp_avg, np.ndarray):
+        ncomp = len(tp_avg)
+    if ncomp > 1:
+        return make_obj_array([tp_avg[i]*normal for i in range(ncomp)])
+    return trace_pair.avg*normal
 
 
 def lfr_flux(q_tpair, compute_flux, normal, lam):
