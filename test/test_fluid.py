@@ -89,7 +89,6 @@ def test_velocity_gradient_eoc(actx_factory, dim):
     from mirgecom.fluid import compute_local_velocity_gradient
     actx = actx_factory()
 
-    nel_1d = 16
     order = 3
 
     from pytools.convergence import EOCRecorder
@@ -118,7 +117,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
             actx = xdata.array_context
             zeros = 0 * xdata
             exact_grad_row = make_obj_array([zeros for _ in range(dim)])
-            exact_grad_row[gdim] = actx.np.sin(xdata)
+            exact_grad_row[gdim] = -actx.np.sin(xdata)
             return exact_grad_row
 
         mom = mass*velocity
@@ -126,7 +125,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         cv = split_conserved(dim, q)
         grad_v = compute_local_velocity_gradient(discr, cv)
         comp_err = make_obj_array([
-            discr.norm(grad_v[i] + exact_grad_row(nodes[i], i, dim), np.inf)
+            discr.norm(grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf)
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
