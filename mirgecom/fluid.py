@@ -64,7 +64,7 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
         $\nabla\mathbf{Q}$, following [Hesthaven_2008]_, section 7.5.2. If something
         like BR1 ([Bassi_1997]_) is done to treat the viscous terms, then
         $\mathbf{Q}$ and $\nabla{\mathbf{Q}$ should be naturally available.<br>
-        Some advantages of doing it this way:
+        Some advantages of doing it this way:<br>
         * avoids an additional DG gradient computation
         * enables the use of a quadrature discretization for computation
         * jibes with the already-applied bcs of $\mathbf{Q}$
