@@ -66,6 +66,7 @@ import numpy as np
 import loopy as lp
 from meshmode.dof_array import DOFArray
 from modepy import vandermonde
+from pytools import memoize_in
 
 
 def linear_operator_kernel():
@@ -127,29 +128,38 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     """
     assert isinstance(u, DOFArray)
 
-    
+    @memoize_in(u.array_context, (smoothness_indicator, "get_kernel"))
     def get_kernel():
         return linear_operator_kernel()
 
-      
+    @memoize_in(u.array_context, (smoothness_indicator, "get_indicator"))
     def get_indicator():
         return compute_smoothness_indicator()
 
+    @memoize_in(u.array_context, ("smoothness_indicator_fix_param"))
+    def fix_parameters(knl, ndiscr_nodes_out, ndiscr_nodes_in):
+        return lp.fix_parameters(knl, ndiscr_nodes_out=ndiscr_nodes_out,
+                ndiscr_nodes_in=ndiscr_nodes_in)
+
     # Convert to modal solution representation
     actx = u.array_context
-    uhat = discr.empty(actx, dtype=u.entry_dtype)
+
+    uhat_grps = []
     for group in discr.discr_from_dd("vol").groups:
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
-        actx.call_loopy(
-            get_kernel(),
+        assert vanderm1.shape == (group.nunit_dofs, group.nunit_dofs)
+        uhat_grps.append(actx.call_loopy(
+            fix_parameters(get_kernel(), group.nunit_dofs, group.nunit_dofs),
             mat=actx.from_numpy(vanderm1),
-            result=uhat[group.index],
             vec=u[group.index],
-        )
+            nelements=group.nelements,
+        )["result"])
+
+    uhat = DOFArray.from_list(actx, uhat_grps)
 
     # Compute smoothness indicator value
-    indicator = discr.empty(actx, dtype=u.entry_dtype)
+    indicator_grps = []
     for group in discr.discr_from_dd("vol").groups:
         mode_ids = group.mode_ids()
         modes = len(mode_ids)
@@ -160,12 +170,16 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
                 sum(mode_id) == order
             )
 
-        actx.call_loopy(
-            get_indicator(),
-            result=indicator[group.index],
+        assert uhat[group.index].shape[1] == group.nunit_dofs
+
+        indicator_grps.append(actx.call_loopy(
+            fix_parameters(get_indicator(), group.nunit_dofs, group.nunit_dofs),
             vec=uhat[group.index],
             modes=actx.from_numpy(highest_mode),
-        )
+            nelements=group.nelements,
+        )["result"])
+
+    indicator = DOFArray.from_list(actx, indicator_grps)
 
     indicator = actx.np.log10(indicator + 1.0e-12)
 
