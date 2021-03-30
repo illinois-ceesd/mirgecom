@@ -33,7 +33,7 @@ from mirgecom.logging_quantities import set_sim_state
 from pytools import memoize_in
 
 
-def compile(actx, timestepper, state, rhs):
+def compile_timestepper(actx, timestepper, state, rhs):
     """Create lazy evaluation version of the timestepper."""
     @memoize_in(actx, ("mirgecom_compiled_operator",
                        timestepper, rhs,
@@ -43,6 +43,16 @@ def compile(actx, timestepper, state, rhs):
                                                          dt=dt,
                                                          rhs=rhs),
                             [state, np.float64(0), np.float64(0)])
+
+    return get()
+
+
+def compile_rhs(actx, rhs, state):
+    @memoize_in(actx, ("mirgecom_compiled_rhs",
+                       rhs,
+                       tuple(len(el) for el in state)))
+    def get():
+        return actx.compile(rhs, [np.float64(0), state])
 
     return get()
 
@@ -90,10 +100,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         return istep, t, state
 
     actx = state[0].array_context
-    compiled_timestepper = compile(actx, timestepper, state, rhs)
+    compiled_rhs = compile_rhs(actx, rhs, state)
 
     while t < t_final:
-
         if logmgr:
             logmgr.tick_before()
 
@@ -102,7 +111,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
             return istep, t, state
 
         checkpoint(state=state, step=istep, t=t, dt=dt)
-        state = compiled_timestepper(state, t, dt)
+        state = timestepper(state=t, t=t, dt=dt, rhs=compiled_rhs)
 
         t += dt
         istep += 1
