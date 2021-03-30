@@ -57,6 +57,17 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
         $\left( \begin{array}{cc}
         \partial_{x}\mathbf{v}_{x}&\partial_{y}\mathbf{v}_{x} \\
         \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
+
+    .. note:
+        We use the product rule to evaluate gradients of the primitive variables
+        from the existing data of the gradient of the fluid solution,
+        $\nabla\mathbf{Q}$, following [Hesthaven_2008]_, section 7.5.2. If something
+        like BR1 ([Bassi_1997]_) is done to treat the viscous terms, then
+        $\mathbf{Q}$ and $\nabla{\mathbf{Q}$ should be naturally available.<br>
+        Some advantages of doing it this way:
+        * avoids an additional DG gradient computation
+        * enables the use of a quadrature discretization for computation
+        * jibes with the already-applied bcs of $\mathbf{Q}$
     """
     dim = discr.dim
     velocity = cv.momentum/cv.mass
