@@ -173,6 +173,7 @@ following references are useful:
 * [Cook_2009]_
 * [Ayuso_2009]_
 * [Bassi_2000]_
+* [Bassi_1997]_ This summarizes the BR1 algorithm that *MIRGE-Com* follows for discretization of NS
 
 2nd order terms on the RHS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
