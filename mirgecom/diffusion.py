@@ -208,7 +208,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
 
 
-def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
+def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_q=False):
     r"""
     Compute the diffusion operator.
 
@@ -225,19 +225,25 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
     quad_tag:
         quadrature tag indicating which discretization in *discr* to use for
         overintegration
-    alpha: Union[numbers.Number, meshmode.dof_array.DOFArray]
+    alpha: numbers.Number or meshmode.dof_array.DOFArray
         the diffusivity value(s)
     boundaries:
         dictionary (or list of dictionaries) mapping boundary tags to
         :class:`DiffusionBoundary` instances
-    u: Union[meshmode.dof_array.DOFArray, numpy.ndarray]
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
         the DOF array (or object array of DOF arrays) to which the operator should be
         applied
+    return_q: bool
+        an optional flag indicating whether the auxiliary variable
+        $\mathbf{q} = \sqrt{\alpha} \nabla u$ should also be returned
 
     Returns
     -------
-    meshmode.dof_array.DOFArray or numpy.ndarray
+    diff_u: meshmode.dof_array.DOFArray or numpy.ndarray
         the diffusion operator applied to *u*
+    q: numpy.ndarray
+        the auxiliary variable $\mathbf{q} = \sqrt{\alpha} \nabla u$; only returned
+        if *return_q* is True
     """
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
@@ -245,8 +251,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
         return obj_array_vectorize_n_args(lambda boundaries_i, u_i:
-            diffusion_operator(discr, quad_tag, alpha, boundaries_i, u_i),
-            make_obj_array(boundaries), u)
+            diffusion_operator(discr, quad_tag, alpha, boundaries_i, u_i,
+            return_q=return_q), make_obj_array(boundaries), u)
 
     for btag, bdry in boundaries.items():
         if not isinstance(bdry, DiffusionBoundary):
@@ -287,21 +293,24 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u):
 
     q_quad = discr.project("vol", dd_quad, q)
 
-    return (
-        discr.inverse_mass(
-            discr.weak_div(dd_quad, -sqrt_alpha_quad*q_quad)
-            -  # noqa: W504
-            discr.face_mass(
-                dd_allfaces_quad,
-                _u_flux(discr, quad_tag, alpha, interior_trace_pair(discr, q))
-                + sum(
-                    bdry.get_u_flux(discr, quad_tag, alpha, as_dofdesc(btag),
-                        q)
-                    for btag, bdry in boundaries.items()
-                )
-                + sum(
-                    _u_flux(discr, quad_tag, alpha, tpair)
-                    for tpair in cross_rank_trace_pairs(discr, q))
-                )
+    diff_u = discr.inverse_mass(
+        discr.weak_div(dd_quad, -sqrt_alpha_quad*q_quad)
+        -  # noqa: W504
+        discr.face_mass(
+            dd_allfaces_quad,
+            _u_flux(discr, quad_tag, alpha, interior_trace_pair(discr, q))
+            + sum(
+                bdry.get_u_flux(discr, quad_tag, alpha, as_dofdesc(btag),
+                    q)
+                for btag, bdry in boundaries.items()
             )
-        )
+            + sum(
+                _u_flux(discr, quad_tag, alpha, tpair)
+                for tpair in cross_rank_trace_pairs(discr, q)
+            )
+        ))
+
+    if return_q:
+        return diff_u, q
+    else:
+        return diff_u

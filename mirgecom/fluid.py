@@ -11,12 +11,12 @@ Helper Functions
 ^^^^^^^^^^^^^^^^
 
 .. autofunction:: compute_wavespeed
-.. autofunction:: species_mass_fraction_gradient
 .. autofunction:: velocity_gradient
+.. autofunction:: species_mass_fraction_gradient
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -39,13 +39,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
-from pytools.obj_array import make_obj_array
 
 
 @dataclass(frozen=True)
-class ConservedVars:  # FIXME: Name?
+class ConservedVars:
     r"""Resolve the canonical conserved quantities.
 
     Get the canonical conserved quantities (mass, energy, momentum,
@@ -165,7 +165,7 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-def velocity_gradient(discr, cv, grad_q):
+def velocity_gradient(discr, cv, grad_cv):
     r"""
     Compute the gradient of fluid velocity.
 
@@ -177,24 +177,45 @@ def velocity_gradient(discr, cv, grad_q):
 
     where $v_i$ is ith velocity component.
 
+    .. note::
+        The product rule is used to evaluate gradients of the primitive variables
+        from the existing data of the gradient of the fluid solution,
+        $\nabla\mathbf{Q}$, following [Hesthaven_2008]_, section 7.5.2. If something
+        like BR1 ([Bassi_1997]_) is done to treat the viscous terms, then
+        $\nabla{\mathbf{Q}}$ should be naturally available.
+
+        Some advantages of doing it this way:
+
+        * avoids an additional DG gradient computation
+        * enables the use of a quadrature discretization for computation
+        * jibes with the already-applied bcs of $\mathbf{Q}$
+
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    cv: mirgecom.fluid.ConservedVars
+    cv: ConservedVars
         the fluid conserved variables
+    grad_cv: ConservedVars
+        the gradients of the fluid conserved variables
+
     Returns
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$.
+        for each row of $\partial_j{v_i}$. e.g. for 2D:
+        $\left( \begin{array}{cc}
+        \partial_{x}\mathbf{v}_{x}&\partial_{y}\mathbf{v}_{x} \\
+        \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
+
     """
     velocity = cv.momentum / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_q[i+2] - velocity[i]*grad_q[0]
+    return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
+                                       - velocity[i]*grad_cv.mass
                                        for i in range(discr.dim)])
 
 
-def species_mass_fraction_gradient(discr, cv, grad_q):
+def species_mass_fraction_gradient(discr, cv, grad_cv):
     r"""
     Compute the gradient of species mass fractions.
 
@@ -211,18 +232,21 @@ def species_mass_fraction_gradient(discr, cv, grad_q):
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    cv: mirgecom.fluid.ConservedVars
+    cv: ConservedVars
         the fluid conserved variables
+    grad_cv: ConservedVars
+        the gradients of the fluid conserved variables
+
     Returns
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$.
+        representing $\partial_j{Y}_{\alpha}$.
     """
     nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
-    ind = discr.dim + 1
-    return (1/cv.mass)*make_obj_array([grad_q[i+ind] - y[i]*grad_q[0]
+    return (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
+                                       - y[i]*grad_cv.mass
                                        for i in range(nspecies)])
 
 
@@ -233,7 +257,7 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     .. math::
 
-        s_w = |\mathbf{v}| + c,
+        s_w = \|\mathbf{v}\| + c,
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
