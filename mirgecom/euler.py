@@ -56,6 +56,7 @@ from mirgecom.fluid import (
     compute_wavespeed,
     split_conserved,
 )
+
 from mirgecom.inviscid import (
     inviscid_flux
 )
