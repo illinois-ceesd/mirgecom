@@ -80,7 +80,7 @@ def inviscid_flux(discr, eos, q):
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def inviscid_interface_flux(discr, eos, q_tpair, local=False):
+def interior_inviscid_flux(discr, eos, q_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
     Parameters
@@ -114,27 +114,6 @@ def inviscid_interface_flux(discr, eos, q_tpair, local=False):
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)
     return flux_weak
-
-
-def interior_inviscid_flux(discr, eos, q_tpair, local=False):
-    """Return the flux across a face given the solution on both sides *q_tpair*.
-
-    Parameters
-    ----------
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-
-    q_tpair: :class:`grudge.sym.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
-
-    local: bool
-        Indicates whether to skip projection of fluxes to "all_faces" or not. If
-        set to *False* (the default), the returned fluxes are projected to
-        "all_faces."  If set to *True*, the returned fluxes are not projected to
-        "all_faces"; remaining instead on the boundary restriction.
-    """
-    return inviscid_interface_flux(discr, eos, q_tpair, local)
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):

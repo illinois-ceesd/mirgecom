@@ -54,20 +54,17 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import thaw
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
 from mirgecom.fluid import (
     compute_wavespeed,
     split_conserved,
 )
-
 from mirgecom.inviscid import (
-    inviscid_flux
+    inviscid_flux,
+    interior_inviscid_flux
 )
 from functools import partial
 from mirgecom.flux import lfr_flux
+from mirgecom.operators import element_boundary_flux
 
 
 def _facial_flux(discr, eos, q_tpair, local=False):
@@ -147,33 +144,24 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
     vol_flux = inviscid_flux(discr, eos, q)
     dflux = discr.weak_div(vol_flux)
 
-    interior_face_flux = _facial_flux(
-        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
+    def compute_interior_flux(q_tpair):
+        return interior_inviscid_flux(discr, eos=eos, q_tpair=q_tpair)
 
-    # Domain boundaries
-    domain_boundary_flux = sum(
-        _facial_flux(
-            discr,
+    def compute_boundary_flux(btag):
+        return interior_inviscid_flux(
+            discr, eos=eos,
             q_tpair=boundaries[btag].boundary_pair(discr,
                                                    eos=eos,
                                                    btag=btag,
                                                    t=t,
-                                                   q=q),
-            eos=eos
-        )
-        for btag in boundaries
-    )
+                                                   q=q)
+            )
 
-    # Flux across partition boundaries
-    partition_boundary_flux = sum(
-        _facial_flux(discr, eos=eos, q_tpair=part_pair)
-        for part_pair in cross_rank_trace_pairs(discr, q)
-    )
+    bnd_flux = element_boundary_flux(discr, compute_interior_flux,
+                                     compute_boundary_flux,
+                                     boundaries, q)
 
-    return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux)
-    )
+    return discr.inverse_mass(dflux - discr.face_mass(bnd_flux))
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
