@@ -2,7 +2,8 @@ r""":mod:`mirgecom.operators` provides helper functions for composing DG operato
 
 Calculus
 ^^^^^^^^
-
+.. autofunction:: element_local_grad
+.. autofunction:: weak_grad
 .. autofunction:: dg_grad
 """
 
@@ -37,14 +38,17 @@ from grudge.eager import (
 )
 
 
-def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):
-    r"""Compute a DG gradient for the input *u*.
+def element_local_grad(discr, u):
+    r"""Compute an element-local gradient for the input volume function *u*.
+
+    This function simply wraps :func:`grudge.eager.grad` and adds support for
+    vector-valued volume functions.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    u: Union[meshmode.dof_array.DOFArray, numpy.ndarray]
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
         the DOF array (or object array of DOF arrays) to which the operator should be
         applied
 
@@ -54,14 +58,64 @@ def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):
         the dg gradient operator applied to *u*
     """
     if isinstance(u, np.ndarray):
-        vol_part = obj_array_vectorize(discr.weak_grad, u)
+        return obj_array_vectorize(discr.grad, u)
     else:
-        vol_part = discr.weak_grad(u)
+        return discr.grad(u)
 
-    bnd_flux = compute_interior_flux(interior_trace_pair(discr, u))
-    bnd_flux_part = sum(compute_interior_flux(p_pair) for p_pair in
-                        cross_rank_trace_pairs(discr, u))
-    bnd_flux_bc = sum(compute_boundary_flux(btag) for btag in boundaries)
 
-    return -discr.inverse_mass(vol_part
-                               - discr.face_mass(bnd_flux+bnd_flux_part+bnd_flux_bc))
+def weak_grad(discr, u):
+    r"""Compute an element-local gradient for the input function *u*.
+
+    This function simply wraps :func:`grudge.eager.weak_grad` and adds support for
+    vector-valued volume functions.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg gradient operator applied to *u*
+    """
+    if isinstance(u, np.ndarray):
+        return obj_array_vectorize(discr.weak_grad, u)
+    else:
+        return discr.weak_grad(u)
+
+
+def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):
+    r"""Compute a DG gradient for the input *u*.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    compute_interior_flux:
+        function taking a `grudge.sym.TracePair` and returning the numerical flux
+        for the corresponding interior boundary.
+    compute_boundary_flux:
+        function taking a boundary tag and returning the numerical flux
+        for the corresponding domain boundary.
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg gradient operator applied to *u*
+    """
+    return -discr.inverse_mass(
+        weak_grad(discr, u) - discr.face_mass(
+            compute_interior_flux(interior_trace_pair(discr, u))
+            + sum(compute_interior_flux(p_pair) for p_pair in
+                  cross_rank_trace_pairs(discr, u))
+            + sum(compute_boundary_flux(btag) for btag in
+                  boundaries)
+            )
+        )

@@ -41,7 +41,11 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from mirgecom.flux import central_scalar_flux
-from mirgecom.operators import dg_grad
+from mirgecom.operators import (
+    dg_grad,
+    element_local_grad,
+    weak_grad,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +62,6 @@ def _get_box_mesh(dim, a, b, n):
         boundary_tag_to_face=boundary_tag_to_face)
 
 
-# Simple obj array vectorized weak grad call
-def _vector_weak_grad(discr, q):
-    return obj_array_vectorize(discr.weak_grad, q)
-
-
 # DG grad tester works only for continuous functions
 def _vector_dg_grad(discr, q):
     ncomp = 1
@@ -72,7 +71,7 @@ def _vector_dg_grad(discr, q):
     else:
         actx = q.array_context
 
-    vol_part = _vector_weak_grad(discr, q)
+    vol_part = weak_grad(discr, q)
     q_minus = discr.project("vol", "all_faces", q)
     dd = DOFDesc("all_faces")
     normal = thaw(actx, discr.normal(dd))
@@ -81,11 +80,6 @@ def _vector_dg_grad(discr, q):
     else:
         facial_flux = q_minus*normal
     return -discr.inverse_mass(vol_part - discr.face_mass(facial_flux))
-
-
-# Get the grudge internal grad for *q*
-def _grad(discr, q):
-    return obj_array_vectorize(discr.grad, q)
 
 
 # scalar flux - multiple disparate scalar components OK
@@ -136,7 +130,7 @@ def test_dg_gradient_of_scalar_function(actx_factory, dim):
 
         test_grad = dg_grad(discr, internal_flux, bnd_flux,
                             boundaries, test_func)
-        cont_grad = _grad(discr, test_func)  # manually verified "right" answer
+        cont_grad = element_local_grad(discr, test_func)
         print(f"{test_grad=}")
         print(f"{cont_grad=}")
         assert discr.norm(test_grad - cont_grad, np.inf) < tol
@@ -149,7 +143,7 @@ def test_dg_gradient_of_scalar_function(actx_factory, dim):
 
         test_grad = dg_grad(discr, internal_flux, bnd_flux,
                             boundaries, test_func)
-        cont_grad = _grad(discr, test_func)  # manually verified "right" answer
+        cont_grad = element_local_grad(discr, test_func)
         print(f"{test_grad=}")
         print(f"{cont_grad=}")
         assert discr.norm(test_grad - cont_grad, np.inf) < tol
@@ -199,7 +193,8 @@ def test_dg_gradient_of_vector_function(actx_factory, dim):
                             boundaries, test_func)
 
     # manually verified "right" answer given by discr.grad
-    cont_grad = make_obj_array([_grad(discr, nodes[i]) for i in range(dim)])
+    cont_grad = make_obj_array([element_local_grad(discr, nodes[i])
+                                for i in range(dim)])
     print(f"{test_grad=}")
     print(f"{cont_grad=}")
     assert discr.norm(test_grad - cont_grad, np.inf) < tol
@@ -208,7 +203,7 @@ def test_dg_gradient_of_vector_function(actx_factory, dim):
     test_grad = dg_grad(discr, internal_flux, bnd_flux,
                         boundaries, test_func)
     # manually verified "right" answer given by discr.grad
-    cont_grad = make_obj_array([_grad(discr, actx.np.cos(nodes[i]))
+    cont_grad = make_obj_array([element_local_grad(discr, actx.np.cos(nodes[i]))
                                 for i in range(dim)])
     print(f"{test_grad=}")
     print(f"{cont_grad=}")
