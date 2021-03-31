@@ -4,7 +4,7 @@
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
 .. autofunction:: sim_checkpoint
-.. autofunction:: create_parallel_grid
+.. autofunction:: generate_and_distribute_mesh
 """
 
 __copyright__ = """
@@ -164,27 +164,27 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         raise ExactSolutionMismatch(step, t=t, state=q)
 
 
-def create_parallel_grid(comm, generate_grid):
-    """Create and partition a grid.
+def generate_and_distribute_mesh(comm, generate_mesh):
+    """Generate a mesh and distribute it among all ranks in *comm*.
 
-    Create a grid with the user-supplied grid generation function
-    *generate_grid*, partition the grid, and distribute it to every
+    Generate the mesh with the user-supplied mesh generation function
+    *generate_mesh*, partition the mesh, and distribute it to every
     rank in the provided MPI communicator *comm*.
 
     Parameters
     ----------
     comm:
-        MPI communicator over which to partition the grid
-    generate_grid:
+        MPI communicator over which to partition the mesh
+    generate_mesh:
         Callable of zero arguments returning a :class:`meshmode.mesh.Mesh`.
         Will only be called on one (undetermined) rank.
 
     Returns
     -------
     local_mesh : :class:`meshmode.mesh.Mesh`
-        The local partition of the the mesh returned by *generate_grid*.
+        The local partition of the the mesh returned by *generate_mesh*.
     global_nelements : :class:`int`
-        The number of elements in the serial grid
+        The number of elements in the serial mesh
     """
     from meshmode.distributed import (
         MPIMeshDistributor,
@@ -196,7 +196,7 @@ def create_parallel_grid(comm, generate_grid):
 
     if mesh_dist.is_mananger_rank():
 
-        mesh = generate_grid()
+        mesh = generate_mesh()
 
         global_nelements = mesh.nelements
 
@@ -208,3 +208,12 @@ def create_parallel_grid(comm, generate_grid):
         local_mesh = mesh_dist.receive_mesh_part()
 
     return local_mesh, global_nelements
+
+
+def create_parallel_grid(comm, generate_grid):
+    """Generate and distribute mesh compatibility interface."""
+    from warnings import warn
+    warn("Do not call create_parallel_grid; use generate_and_distribute_mesh "
+         "instead. This function will disappear August 1, 2021",
+         DeprecationWarning, stacklevel=2)
+    return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)

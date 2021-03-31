@@ -11,7 +11,8 @@ Helper Functions
 ^^^^^^^^^^^^^^^^
 
 .. autofunction:: compute_wavespeed
-.. autofunction:: compute_local_velocity_gradient
+.. autofunction:: velocity_gradient
+.. autofunction:: species_mass_fraction_gradient
 """
 
 __copyright__ = """
@@ -38,6 +39,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
 
@@ -163,11 +165,11 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-def compute_local_velocity_gradient(discr, cv: ConservedVars):
+def velocity_gradient(discr, cv, grad_cv):
     r"""
-    Compute the cell-local gradient of fluid velocity.
+    Compute the gradient of fluid velocity.
 
-    Computes the cell-local gradient of fluid velocity from:
+    Computes the gradient of fluid velocity from:
 
     .. math::
 
@@ -175,26 +177,77 @@ def compute_local_velocity_gradient(discr, cv: ConservedVars):
 
     where $v_i$ is ith velocity component.
 
+    .. note::
+        The product rule is used to evaluate gradients of the primitive variables
+        from the existing data of the gradient of the fluid solution,
+        $\nabla\mathbf{Q}$, following [Hesthaven_2008]_, section 7.5.2. If something
+        like BR1 ([Bassi_1997]_) is done to treat the viscous terms, then
+        $\nabla{\mathbf{Q}}$ should be naturally available.
+
+        Some advantages of doing it this way:
+
+        * avoids an additional DG gradient computation
+        * enables the use of a quadrature discretization for computation
+        * jibes with the already-applied bcs of $\mathbf{Q}$
+
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    cv: mirgecom.fluid.ConservedVars
+    cv: ConservedVars
         the fluid conserved variables
+    grad_cv: ConservedVars
+        the gradients of the fluid conserved variables
+
     Returns
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$. e.g. for 2D:
+        for each row of $\partial_j{v_i}$. e.g. for 2D:
         $\left( \begin{array}{cc}
         \partial_{x}\mathbf{v}_{x}&\partial_{y}\mathbf{v}_{x} \\
         \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
+
     """
-    dim = discr.dim
-    velocity = cv.momentum/cv.mass
-    dmass = discr.grad(cv.mass)
-    dmom = np.array([discr.grad(cv.momentum[i]) for i in range(dim)], dtype=object)
-    return (dmom - np.outer(velocity, dmass))/cv.mass
+    velocity = cv.momentum / cv.mass
+    return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
+                                       - velocity[i]*grad_cv.mass
+                                       for i in range(discr.dim)])
+
+
+def species_mass_fraction_gradient(discr, cv, grad_cv):
+    r"""
+    Compute the gradient of species mass fractions.
+
+    Computes the gradient of species mass fractions from:
+
+    .. math::
+
+        \nabla{Y}_{\alpha} =
+        \frac{1}{\rho}\left(\nabla(\rho{Y}_{\alpha})-{Y_\alpha}(\nabla{\rho})\right),
+
+    where ${Y}_{\alpha}$ is the mass fraction for species ${\alpha}$.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    cv: ConservedVars
+        the fluid conserved variables
+    grad_cv: ConservedVars
+        the gradients of the fluid conserved variables
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of :class:`~meshmode.dof_array.DOFArray`
+        representing $\partial_j{Y}_{\alpha}$.
+    """
+    nspecies = len(cv.species_mass)
+    y = cv.species_mass / cv.mass
+    return (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
+                                       - y[i]*grad_cv.mass
+                                       for i in range(nspecies)])
 
 
 def compute_wavespeed(dim, eos, cv: ConservedVars):
