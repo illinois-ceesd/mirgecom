@@ -31,7 +31,10 @@ import pyopencl.clmath  # noqa
 import logging
 import pytest
 
-from pytools.obj_array import make_obj_array
+from pytools.obj_array import (
+    make_obj_array,
+    obj_array_vectorize
+)
 
 from meshmode.dof_array import thaw
 from mirgecom.fluid import split_conserved, join_conserved
@@ -48,8 +51,8 @@ logger = logging.getLogger(__name__)
                          [(0, 0), (0, 1),
                           (1, 1), (2, 1)])
 def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
-    """Test that the grad(v=r) returns I."""
-    from mirgecom.fluid import compute_local_velocity_gradient
+    """Test that the grad(v) returns {0, I} for v={constant, r_xyz}."""
+    from mirgecom.fluid import velocity_gradient
     actx = actx_factory()
 
     nel_1d = 16
@@ -65,31 +68,36 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
-    energy = zeros + 2.5
 
-    mass = ones
+    mass = 1*ones
     for i in range(mass_exp):
         mass *= (mass + i)
-
+    energy = zeros + 2.5
     velocity = vel_fac * nodes
     mom = mass * velocity
+
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
-    exp_result = vel_fac * np.eye(dim)
+
+    grad_q = obj_array_vectorize(discr.grad, q)
+    grad_cv = split_conserved(dim, grad_q)
+
+    grad_v = velocity_gradient(discr, cv, grad_cv)
 
     tol = 1e-12
-    grad_v = compute_local_velocity_gradient(discr, cv)
-    grad_v_err = discr.norm(grad_v - exp_result, np.inf)
-    assert grad_v_err < tol
+    exp_result = vel_fac * np.eye(dim) * ones
+    grad_v_err = [discr.norm(grad_v[i] - exp_result[i], np.inf)
+                  for i in range(dim)]
+
+    assert max(grad_v_err) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_velocity_gradient_eoc(actx_factory, dim):
     """Test that the velocity gradient converges at the proper rate."""
-    from mirgecom.fluid import compute_local_velocity_gradient
+    from mirgecom.fluid import velocity_gradient
     actx = actx_factory()
 
-    nel_1d = 16
     order = 3
 
     from pytools.convergence import EOCRecorder
@@ -113,20 +121,23 @@ def test_velocity_gradient_eoc(actx_factory, dim):
 
         mass = nodes[dim-1]*nodes[dim-1]
         velocity = make_obj_array([actx.np.cos(nodes[i]) for i in range(dim)])
-
-        def exact_grad_row(xdata, gdim, dim):
-            actx = xdata.array_context
-            zeros = 0 * xdata
-            exact_grad_row = make_obj_array([zeros for _ in range(dim)])
-            exact_grad_row[gdim] = actx.np.sin(xdata)
-            return exact_grad_row
-
         mom = mass*velocity
+
         q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
         cv = split_conserved(dim, q)
-        grad_v = compute_local_velocity_gradient(discr, cv)
+
+        grad_q = obj_array_vectorize(discr.grad, q)
+        grad_cv = split_conserved(dim, grad_q)
+
+        grad_v = velocity_gradient(discr, cv, grad_cv)
+
+        def exact_grad_row(xdata, gdim, dim):
+            exact_grad_row = make_obj_array([zeros for _ in range(dim)])
+            exact_grad_row[gdim] = -actx.np.sin(xdata)
+            return exact_grad_row
+
         comp_err = make_obj_array([
-            discr.norm(grad_v[i] + exact_grad_row(nodes[i], i, dim), np.inf)
+            discr.norm(grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf)
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
