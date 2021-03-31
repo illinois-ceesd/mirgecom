@@ -130,7 +130,11 @@ def test_dg_gradient_of_scalar_function(actx_factory, dim):
     # Test gradient of scalar functions
     for test_component in range(dim):
         test_func = nodes[test_component]
-        test_grad = dg_grad(discr, internal_flux, boundary_flux,
+
+        def bnd_flux(btag):
+            return boundary_flux(btag, test_func)
+
+        test_grad = dg_grad(discr, internal_flux, bnd_flux,
                             boundaries, test_func)
         cont_grad = _grad(discr, test_func)  # manually verified "right" answer
         print(f"{test_grad=}")
@@ -139,7 +143,11 @@ def test_dg_gradient_of_scalar_function(actx_factory, dim):
 
     for test_component in range(dim):
         test_func = actx.np.cos(nodes[test_component])
-        test_grad = dg_grad(discr, internal_flux, boundary_flux,
+
+        def bnd_flux(btag):
+            return boundary_flux(btag, test_func)
+
+        test_grad = dg_grad(discr, internal_flux, bnd_flux,
                             boundaries, test_func)
         cont_grad = _grad(discr, test_func)  # manually verified "right" answer
         print(f"{test_grad=}")
@@ -183,8 +191,13 @@ def test_dg_gradient_of_vector_function(actx_factory, dim):
 
     # Test gradient of vector functions
     test_func = nodes
-    test_grad = dg_grad(discr, internal_flux, boundary_flux,
+
+    def bnd_flux(btag):
+        return boundary_flux(btag, test_func)
+
+    test_grad = dg_grad(discr, internal_flux, bnd_flux,
                             boundaries, test_func)
+
     # manually verified "right" answer given by discr.grad
     cont_grad = make_obj_array([_grad(discr, nodes[i]) for i in range(dim)])
     print(f"{test_grad=}")
@@ -192,7 +205,7 @@ def test_dg_gradient_of_vector_function(actx_factory, dim):
     assert discr.norm(test_grad - cont_grad, np.inf) < tol
 
     test_func = actx.np.cos(nodes)
-    test_grad = dg_grad(discr, internal_flux, boundary_flux,
+    test_grad = dg_grad(discr, internal_flux, bnd_flux,
                         boundaries, test_func)
     # manually verified "right" answer given by discr.grad
     cont_grad = make_obj_array([_grad(discr, actx.np.cos(nodes[i]))
