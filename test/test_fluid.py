@@ -36,54 +36,11 @@ from pytools.obj_array import make_obj_array, obj_array_vectorize
 from meshmode.dof_array import thaw
 from mirgecom.fluid import split_conserved, join_conserved
 from grudge.eager import EagerDGDiscretization
-from grudge.symbolic.primitives import DOFDesc
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
 logger = logging.getLogger(__name__)
-
-
-# Box grid generator widget lifted from @majosm's diffusion tester
-def _get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
-
-
-# Simple obj array vectorized weak grad call
-def _vector_weak_grad(discr, q):
-    return obj_array_vectorize(discr.weak_grad, q)
-
-
-# DG grad tester works only for continuous functions
-def _vector_dg_grad(discr, q):
-    ncomp = 1
-    if isinstance(q, np.ndarray):
-        actx = q[0].array_context
-        ncomp = len(q)
-    else:
-        actx = q.array_context
-
-    vol_part = _vector_weak_grad(discr, q)
-    q_minus = discr.project("vol", "all_faces", q)
-    dd = DOFDesc("all_faces")
-    normal = thaw(actx, discr.normal(dd))
-    if ncomp > 1:
-        facial_flux = make_obj_array([q_minus[i]*normal for i in range(ncomp)])
-    else:
-        facial_flux = q_minus*normal
-    return -discr.inverse_mass(vol_part - discr.face_mass(facial_flux))
-
-
-# Get the grudge internal grad for *q*
-def _grad(discr, q):
-    return obj_array_vectorize(discr.grad, q)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
