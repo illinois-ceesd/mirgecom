@@ -61,7 +61,7 @@ def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):
     bnd_flux = compute_interior_flux(interior_trace_pair(discr, u))
     bnd_flux_part = sum(compute_interior_flux(p_pair) for p_pair in
                         cross_rank_trace_pairs(discr, u))
-    bnd_flux_bc = sum(compute_boundary_flux(btag, u) for btag in boundaries)
+    bnd_flux_bc = sum(compute_boundary_flux(btag) for btag in boundaries)
 
     return -discr.inverse_mass(vol_part
                                - discr.face_mass(bnd_flux+bnd_flux_part+bnd_flux_bc))
