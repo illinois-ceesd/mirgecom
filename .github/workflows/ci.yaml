@@ -139,7 +139,7 @@ jobs:
         - name: Install emirge
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew install mpich
+            [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
