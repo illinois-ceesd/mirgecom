@@ -168,12 +168,11 @@ How to discretize the conservation equations with DG, including how to handle th
 particularly in the viscous setting, is a current topic of research and internal discussion.  The
 following references are useful:
 
-* [Hesthaven_2008]_
-* [Ihme_2014]_
-* [Cook_2009]_
+* "The DG Book:" Nodal Discontinuous Galerkin Methods, [Hesthaven_2008]_
+* The BR1 algorithm for discretization of NS, [Bassi_1997]_
+* NS with reactions, [Ihme_2014]_, and [Cook_2009]_
+* The BR2 algorithm, [Bassi_2000]_
 * [Ayuso_2009]_
-* [Bassi_2000]_
-* [Bassi_1997]_ This summarizes the BR1 algorithm that *MIRGE-Com* follows for discretization of NS
 
 2nd order terms on the RHS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
