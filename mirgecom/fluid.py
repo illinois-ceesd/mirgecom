@@ -47,7 +47,7 @@ def velocity_gradient(discr, cv, grad_cv):
     where $v_i$ is ith velocity component.
 
     .. note::
-        We use the product rule to evaluate gradients of the primitive variables
+        The product rule is used to evaluate gradients of the primitive variables
         from the existing data of the gradient of the fluid solution,
         $\nabla\mathbf{Q}$, following [Hesthaven_2008]_, section 7.5.2. If something
         like BR1 ([Bassi_1997]_) is done to treat the viscous terms, then
@@ -97,20 +97,6 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
 
     where ${Y}_{\alpha}$ is the mass fraction for species ${\alpha}$.
 
-
-    .. note::
-        We use the product rule to evaluate gradients of the primitive variables
-        from the existing data of the gradient of the fluid solution,
-        $\nabla\mathbf{Q}$, following [Hesthaven_2008]_, section 7.5.2. If something
-        like BR1 ([Bassi_1997]_) is done to treat the viscous terms, then
-        $\nabla{\mathbf{Q}}$ should be naturally available.
-
-        Some advantages of doing it this way:
-
-        * avoids an additional DG gradient computation
-        * enables the use of a quadrature discretization for computation
-        * jibes with the already-applied bcs of $\mathbf{Q}$
-
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
@@ -124,7 +110,7 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     -------
     numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray`
-        representing $\partial_j{v_i}$.
+        representing $\partial_j{Y}_{\alpha}$.
     """
     nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
