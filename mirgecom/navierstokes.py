@@ -137,28 +137,30 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
-    # actx = cv.mass.array_context
+    actx = cv.mass.array_context
 
-    q_part_pairs = cross_rank_trace_pairs(discr, q)
-    num_partition_interfaces = len(q_part_pairs)
-    q_int_pair = interior_trace_pair(discr, q)
-    q_flux_bnd = interior_q_flux(discr, q_int_pair)
-    q_flux_bnd += sum(bnd.q_flux(discr, btag, q)
-                      for btag, bnd in boundaries.items())
-    q_flux_bnd += sum(interior_q_flux(discr, part_pair)
-                      for part_pair in q_part_pairs)
-    grad_q = discr.inverse_mass(discr.weak_grad(q) + discr.face_mass(q_flux_bnd))
+    from mirgecom.flux import central_scalar_flux
+
+    def scalar_flux_interior(int_tpair):
+        normal = thaw(actx, discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = central_scalar_flux(int_tpair, normal)
+        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+
+    def q_flux_bnd(btag):
+        return boundaries[btag].q_flux(discr, btag, q)
+
+    # [Bassi_1997]_ eqn 15 (s = grad_q)
+    from mirgecom.operators import dg_grad
+    grad_q = dg_grad(discr, scalar_flux_interior, q_flux_bnd, boundaries, q)
 
     gas_t = eos.temperature(cv)
 
-    t_int_pair = interior_trace_pair(discr, gas_t)
-    t_part_pairs = cross_rank_trace_pairs(discr, gas_t)
-    t_flux_bnd = interior_scalar_flux(discr, t_int_pair)
-    t_flux_bnd += sum(interior_scalar_flux(discr, part_pair)
-                      for part_pair in t_part_pairs)
-    t_flux_bnd += sum(bnd.t_flux(discr, btag, eos=eos, time=t, t=gas_t)
-                      for btag, bnd in boundaries.items())
-    grad_t = discr.inverse_mass(discr.weak_grad(gas_t) - discr.face_mass(t_flux_bnd))
+    def t_flux_bnd(btag):
+        return boundaries[btag].t_flux(discr, btag, eos=eos, time=t, q=q, t=gas_t)
+
+    # Grab temperature gradient for conductive heat flux
+    grad_t = dg_grad(discr, scalar_flux_interior, t_flux_bnd, boundaries, gas_t)
 
     # volume parts
     inv_flux = inviscid_flux(discr, eos, q)
@@ -167,6 +169,11 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # inviscid boundary
     # - interior boundaries
+    # what is the role in initiating comm?
+    q_part_pairs = cross_rank_trace_pairs(discr, q)
+    num_partition_interfaces = len(q_part_pairs)
+    q_int_pair = interior_trace_pair(discr, q)
+
     inv_flux_bnd = interior_inviscid_flux(discr, eos, q_int_pair)
     inv_flux_bnd += sum(interior_inviscid_flux(discr, eos, part_pair)
                         for part_pair in q_part_pairs)
@@ -175,6 +182,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                         for btag, bnd in boundaries.items())
 
     # viscous boundary
+    t_int_pair = interior_trace_pair(discr, gas_t)
+    t_part_pairs = cross_rank_trace_pairs(discr, gas_t)
     s_int_pair = interior_trace_pair(discr, grad_q)
     s_part_pairs = cross_rank_trace_pairs(discr, grad_q)
     delt_int_pair = interior_trace_pair(discr, grad_t)
