@@ -79,30 +79,6 @@ from mirgecom.operators import (
 from meshmode.dof_array import thaw
 
 
-def interior_q_flux(discr, q_tpair, local=False):
-    """Compute interface flux with fluid solution trace pair *q_tpair*."""
-    actx = q_tpair[0].int.array_context
-
-    normal = thaw(actx, discr.normal(q_tpair.dd))
-    flux_weak = q_tpair.avg * normal  # central flux hard-coded
-
-    if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
-    return flux_weak
-
-
-def interior_scalar_flux(discr, scalar_tpair, local=False):
-    """Compute interface flux with scalar data trace pair *scalar_tpair*."""
-    actx = scalar_tpair.int.array_context
-
-    normal = thaw(actx, discr.normal(scalar_tpair.dd))
-    flux_weak = scalar_tpair.avg * normal  # central flux hard-coded
-
-    if local is False:
-        return discr.project(scalar_tpair.dd, "all_faces", flux_weak)
-    return flux_weak
-
-
 def ns_operator(discr, eos, boundaries, q, t=0.0):
     r"""Compute RHS of the Navier-Stokes equations.
 
@@ -163,12 +139,10 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     def t_flux_bnd(btag):
         return boundaries[btag].t_flux(discr, btag, eos=eos, time=t, q=q, t=gas_t)
 
-    # Grab temperature gradient for conductive heat flux
+    # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     grad_t = dg_grad(discr, scalar_flux_interior, t_flux_bnd, boundaries, gas_t)
 
-    # inviscid volume
-    inv_flux = inviscid_flux(discr, eos, q)
-
+    # inviscid part
     def compute_inviscid_flux_interior(q_tpair):
         return interior_inviscid_flux(discr, eos, q_tpair)
 
@@ -213,5 +187,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                          for btag, bnd in boundaries.items())
 
     # NS RHS
-    return discr.inverse_mass(discr.weak_div(inv_flux + visc_flux)
-                              - discr.face_mass(inv_flux_bnd + visc_flux_bnd))
+    return discr.inverse_mass(
+        discr.weak_div(inviscid_flux(discr, eos, q) + visc_flux)
+        - discr.face_mass(inv_flux_bnd + visc_flux_bnd)
+    )
