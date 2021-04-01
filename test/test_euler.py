@@ -340,9 +340,9 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        from mirgecom.inviscid import interior_inviscid_flux
+        from mirgecom.inviscid import inviscid_facial_flux
 
-        interior_face_flux = interior_inviscid_flux(
+        interior_face_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
 
         def inf_norm(data):
@@ -383,7 +383,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                 species_mass=dir_mf)
 
-        boundary_flux = interior_inviscid_flux(
+        boundary_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(),
             q_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
         )
