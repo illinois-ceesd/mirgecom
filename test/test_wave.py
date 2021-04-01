@@ -79,7 +79,7 @@ def get_standing_wave(dim):
         return generate_regular_rect_mesh(
             a=(-0.5*np.pi,)*dim,
             b=(0.5*np.pi,)*dim,
-            n=(n,)*dim)
+            n=(n+1,)*dim)
     c = 2.
     sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
@@ -101,7 +101,7 @@ def get_manufactured_cubic(dim):
         return generate_regular_rect_mesh(
             a=(-1.,)*dim,
             b=(1.,)*dim,
-            n=(n,)*dim)
+            n=(n+1,)*dim)
     sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
