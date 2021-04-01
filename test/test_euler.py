@@ -73,7 +73,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     #    for dim in [1, 2, 3]:
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d+1,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -318,7 +318,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
     for nel_1d in [4, 8, 12]:
 
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d+1,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -431,7 +431,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     for nel_1d in [4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d+1,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         logger.info(
@@ -614,7 +614,7 @@ def test_lump_rhs(actx_factory, dim, order):
         )
 
         mesh = generate_regular_rect_mesh(
-            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d+1,) * dim,
+            a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -673,7 +673,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         )
 
         mesh = generate_regular_rect_mesh(
-            a=(-1,) * dim, b=(1,) * dim, n=(nel_1d+1,) * dim,
+            a=(-1,) * dim, b=(1,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -850,7 +850,7 @@ def test_isentropic_vortex(actx_factory, order):
         )
 
         mesh = generate_regular_rect_mesh(
-            a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d+1,) * dim
+            a=(-5.0,) * dim, b=(5.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         exittol = 1.0

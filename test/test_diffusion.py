@@ -89,8 +89,8 @@ def get_box_mesh(dim, a, b, n):
         boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
         boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n+1,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
+    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
+        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
 
 # 1D: u(x,t) = exp(-alpha*t)*cos(x)
