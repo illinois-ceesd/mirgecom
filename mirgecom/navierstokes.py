@@ -156,9 +156,6 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # Things are more complicated here because of multiple arguments to flux
     # functions - some of which need communication.
-    # viscous volume
-    visc_flux = viscous_flux(discr, eos, q=q, grad_q=grad_q,
-                             t=gas_t, grad_t=grad_t)
     # viscous boundary
     # what is the role in initiating comm?
     q_int_pair = interior_trace_pair(discr, q)
@@ -174,6 +171,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     # - internal boundaries
     visc_flux_bnd = interior_viscous_flux(discr, eos, q_int_pair,
                                           s_int_pair, t_int_pair, delt_int_pair)
+
     for bnd_index in range(num_partition_interfaces):
         visc_flux_bnd += interior_viscous_flux(discr, eos,
                                                q_part_pairs[bnd_index],
@@ -188,6 +186,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # NS RHS
     return discr.inverse_mass(
-        discr.weak_div(inviscid_flux(discr, eos, q) + visc_flux)
+        discr.weak_div(inviscid_flux(discr, eos, q)
+                       + viscous_flux(discr, eos, q=q, grad_q=grad_q,
+                                      t=gas_t, grad_t=grad_t))
         - discr.face_mass(inv_flux_bnd + visc_flux_bnd)
     )
