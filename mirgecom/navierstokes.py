@@ -134,6 +134,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     grad_q = dg_grad(discr, scalar_flux_interior, q_flux_bnd, boundaries, q)
 
+    # FIXME: Rename gas_t -> gas_temperature?
     gas_t = eos.temperature(cv)
 
     def t_flux_bnd(btag):
@@ -173,6 +174,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                                           s_int_pair, t_int_pair, delt_int_pair)
 
     for bnd_index in range(num_partition_interfaces):
+        # FIXME: viscous_facial_flux
         visc_flux_bnd += interior_viscous_flux(discr, eos,
                                                q_part_pairs[bnd_index],
                                                s_part_pairs[bnd_index],

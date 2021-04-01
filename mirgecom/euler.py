@@ -99,10 +99,13 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
+    # FIXME: pass q, (move outside?)
     def compute_vol_flux():
         return inviscid_flux(discr, eos, q)
 
     def compute_interior_flux(q_tpair):
+        # FIXME: Name?
+        # FIXME: inviscid_facial_flux?
         return interior_inviscid_flux(discr, eos=eos, q_tpair=q_tpair)
 
     def compute_boundary_flux(btag):
