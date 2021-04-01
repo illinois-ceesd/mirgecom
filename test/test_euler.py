@@ -559,7 +559,7 @@ def test_vortex_rhs(actx_factory, order):
     for nel_1d in [32, 48, 64]:
 
         mesh = generate_regular_rect_mesh(
-            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d+1,) * dim,
+            a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
 
         logger.info(
