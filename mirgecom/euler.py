@@ -56,7 +56,7 @@ import numpy as np
 from mirgecom.fluid import split_conserved
 from mirgecom.inviscid import (
     inviscid_flux,
-    interior_inviscid_flux
+    inviscid_facial_flux
 )
 from mirgecom.operators import dg_div
 
@@ -103,10 +103,10 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         return inviscid_flux(discr, eos, q)
 
     def compute_interior_flux(q_tpair):
-        return interior_inviscid_flux(discr, eos=eos, q_tpair=q_tpair)
+        return inviscid_facial_flux(discr, eos=eos, q_tpair=q_tpair)
 
     def compute_boundary_flux(btag):
-        return interior_inviscid_flux(
+        return inviscid_facial_flux(
             discr, eos=eos,
             q_tpair=boundaries[btag].boundary_pair(discr,
                                                    eos=eos,
