@@ -62,11 +62,11 @@ from grudge.eager import (
 )
 from mirgecom.inviscid import (
     inviscid_flux,
-    interior_inviscid_flux
+    inviscid_facial_flux
 )
 from mirgecom.viscous import (
     viscous_flux,
-    interior_viscous_flux
+    viscous_facial_flux
 )
 from mirgecom.flux import (
     central_scalar_flux
@@ -143,16 +143,16 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     grad_t = dg_grad(discr, scalar_flux_interior, t_flux_bnd, boundaries, gas_t)
 
     # inviscid part
-    def compute_inviscid_flux_interior(q_tpair):
-        return interior_inviscid_flux(discr, eos, q_tpair)
+    def finv_interior_face(q_tpair):
+        return inviscid_facial_flux(discr, eos, q_tpair)
 
-    def compute_inviscid_flux_boundary(btag):
+    def finv_domain_boundary(btag):
         return boundaries[btag].inviscid_flux(discr, btag, eos=eos, t=t, q=q)
 
     # inviscid boundary flux
-    inv_flux_bnd = element_boundary_flux(discr, compute_inviscid_flux_interior,
-                                         compute_inviscid_flux_boundary,
-                                         boundaries, q)
+    inv_flux_bnd = element_boundary_flux(
+        discr, finv_interior_face, finv_domain_boundary, boundaries, q
+    )
 
     # Things are more complicated here because of multiple arguments to flux
     # functions - some of which need communication.
@@ -169,16 +169,16 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     num_partition_interfaces = len(q_part_pairs)
 
     # - internal boundaries
-    visc_flux_bnd = interior_viscous_flux(discr, eos, q_int_pair,
+    visc_flux_bnd = viscous_facial_flux(discr, eos, q_int_pair,
                                           s_int_pair, t_int_pair, delt_int_pair)
 
     for bnd_index in range(num_partition_interfaces):
-        visc_flux_bnd += interior_viscous_flux(discr, eos,
-                                               q_part_pairs[bnd_index],
-                                               s_part_pairs[bnd_index],
-                                               t_part_pairs[bnd_index],
-                                               delt_part_pairs[bnd_index])
-
+        visc_flux_bnd += viscous_facial_flux(discr, eos,
+                                             q_part_pairs[bnd_index],
+                                             s_part_pairs[bnd_index],
+                                             t_part_pairs[bnd_index],
+                                             delt_part_pairs[bnd_index])
+        
     # - domain boundaries (viscous bc's applied here)
     visc_flux_bnd += sum(bnd.viscous_flux(discr, btag, eos=eos, time=t, q=q,
                                           grad_q=grad_q, t=gas_t, grad_t=grad_t)
