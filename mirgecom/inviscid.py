@@ -4,7 +4,7 @@ Flux Calculation
 ^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: interior_inviscid_flux
+.. autofunction:: inviscid_facial_flux
 
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -80,7 +80,7 @@ def inviscid_flux(discr, eos, q):
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def interior_inviscid_flux(discr, eos, q_tpair, local=False):
+def inviscid_facial_flux(discr, eos, q_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
     Parameters
