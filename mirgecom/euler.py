@@ -58,7 +58,7 @@ from mirgecom.inviscid import (
     inviscid_flux,
     interior_inviscid_flux
 )
-from mirgecom.operators import element_boundary_flux
+from mirgecom.operators import dg_div
 
 
 def euler_operator(discr, eos, boundaries, q, t=0.0):
@@ -115,12 +115,8 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
                                                    q=q)
             )
 
-    bnd_flux = element_boundary_flux(discr, compute_interior_flux,
-                                     compute_boundary_flux,
-                                     boundaries, q)
-
-    return discr.inverse_mass(discr.weak_div(compute_vol_flux())
-                              - discr.face_mass(bnd_flux))
+    return -dg_div(discr, compute_vol_flux, compute_interior_flux,
+                   compute_boundary_flux, boundaries, q)
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):

@@ -37,6 +37,15 @@ from grudge.eager import (
 )
 
 
+def element_boundary_flux(discr, compute_interior_flux, compute_boundary_flux,
+                          boundaries, u):
+    """Generically compute flux across element boundaries for simple f(u) flux."""
+    return (compute_interior_flux(interior_trace_pair(discr, u))
+            + sum(compute_interior_flux(part_tpair)
+                  for part_tpair in cross_rank_trace_pairs(discr, u))
+            + sum(compute_boundary_flux(btag) for btag in boundaries))
+
+
 def element_local_grad(discr, u):
     r"""Compute an element-local gradient for the input volume function *u*.
 
@@ -117,10 +126,33 @@ def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):
         )
 
 
-def element_boundary_flux(discr, compute_interior_flux, compute_boundary_flux,
-                          boundaries, u):
-    """Generically compute flux across element boundaries for simple f(u) flux."""
-    return (compute_interior_flux(interior_trace_pair(discr, u))
-            + sum(compute_interior_flux(part_tpair)
-                  for part_tpair in cross_rank_trace_pairs(discr, u))
-            + sum(compute_boundary_flux(btag) for btag in boundaries))
+def dg_div(discr, compute_vol_flux, compute_interface_flux,
+           compute_boundary_flux, boundaries, u):
+    r"""Compute a DG divergence for the vector fluxes computed for *u*.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    compute_interior_flux:
+        function taking a `grudge.sym.TracePair` and returning the numerical flux
+        for the corresponding interior boundary.
+    compute_boundary_flux:
+        function taking a boundary tag and returning the numerical flux
+        for the corresponding domain boundary.
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg divergence operator applied to the flux of *u*.
+    """
+    return -discr.inverse_mass(
+        discr.weak_div(compute_vol_flux())
+        - discr.face_mass(
+            element_boundary_flux(discr, compute_interface_flux,
+                                  compute_boundary_flux, boundaries, u)
+        )
+    )
