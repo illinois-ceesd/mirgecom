@@ -126,7 +126,7 @@ def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):
         )
 
 
-def dg_div(discr, compute_vol_flux, compute_interface_flux,
+def dg_div(discr, compute_vol_flux, compute_interior_flux,
            compute_boundary_flux, boundaries, u):
     r"""Compute a DG divergence for the vector fluxes computed for *u*.
 
@@ -152,7 +152,7 @@ def dg_div(discr, compute_vol_flux, compute_interface_flux,
     return -discr.inverse_mass(
         discr.weak_div(compute_vol_flux())
         - discr.face_mass(
-            element_boundary_flux(discr, compute_interface_flux,
+            element_boundary_flux(discr, compute_interior_flux,
                                   compute_boundary_flux, boundaries, u)
         )
     )
