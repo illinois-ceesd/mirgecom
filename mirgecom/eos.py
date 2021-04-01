@@ -12,7 +12,7 @@ manage the relationships between and among state and thermodynamic variables.
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
