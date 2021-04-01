@@ -8,7 +8,7 @@ Flux Calculation
 .. autofunction:: diffusive_flux
 .. autofunction:: conductive_heat_flux
 .. autofunction:: diffusive_heat_flux
-.. autofunction:: interior_viscous_flux
+.. autofunction:: viscous_facial_flux
 
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -168,8 +168,8 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
             momentum=(-tau), species_mass=j)
 
 
-def interior_viscous_flux(discr, eos, q_tpair, grad_q_tpair,
-                            t_tpair, grad_t_tpair, local=False):
+def viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
+                        t_tpair, grad_t_tpair, local=False):
     """Return the viscous flux across a face given the solution on both sides.
 
     Parameters
