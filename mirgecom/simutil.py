@@ -36,9 +36,7 @@ import logging
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
-from mirgecom.euler import (
-    get_inviscid_timestep,
-)
+from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 
 logger = logging.getLogger(__name__)
 
