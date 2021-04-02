@@ -178,7 +178,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                                              s_part_pairs[bnd_index],
                                              t_part_pairs[bnd_index],
                                              delt_part_pairs[bnd_index])
-        
+
     # - domain boundaries (viscous bc's applied here)
     visc_flux_bnd += sum(bnd.viscous_flux(discr, btag, eos=eos, time=t, q=q,
                                           grad_q=grad_q, t=gas_t, grad_t=grad_t)
