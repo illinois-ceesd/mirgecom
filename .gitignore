@@ -39,3 +39,7 @@ test/nodal-dg
 # Logging output files
 *.sqlite
 *.sqlite-journal
+
+# Emacs backups
+.#*
+\#*
