@@ -58,7 +58,11 @@ from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
 )
-from mirgecom.operators import dg_div
+from grudge.eager import (
+    interior_trace_pair,
+    cross_rank_trace_pairs
+)
+from mirgecom.operators import dg_div_low as dg_div
 
 
 def euler_operator(discr, eos, boundaries, q, t=0.0):
@@ -99,24 +103,19 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    def compute_vol_flux():
-        return inviscid_flux(discr, eos, q)
+    def get_bc_pairs(btag):
+        return boundaries[btag].boundary_pair(discr, eos=eos, btag=btag, t=t, q=q)
 
-    def compute_interior_flux(q_tpair):
-        return inviscid_facial_flux(discr, eos=eos, q_tpair=q_tpair)
+    inviscid_flux_vol = inviscid_flux(discr, eos, q)
+    inviscid_flux_bnd = (
+        inviscid_facial_flux(discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
+        + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=part_tpair)
+              for part_tpair in cross_rank_trace_pairs(discr, q))
+        + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=get_bc_pairs(btag))
+              for btag in boundaries)
+    )
 
-    def compute_boundary_flux(btag):
-        return inviscid_facial_flux(
-            discr, eos=eos,
-            q_tpair=boundaries[btag].boundary_pair(discr,
-                                                   eos=eos,
-                                                   btag=btag,
-                                                   t=t,
-                                                   q=q)
-            )
-
-    return -dg_div(discr, compute_vol_flux, compute_interior_flux,
-                   compute_boundary_flux, boundaries, q)
+    return -dg_div(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
