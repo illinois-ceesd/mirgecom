@@ -210,9 +210,13 @@ def velocity_gradient(discr, cv, grad_cv):
 
     """
     velocity = cv.momentum / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
+    obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
                                        for i in range(discr.dim)])
+    grad_v = np.empty(shape=(discr.dim, discr.dim), dtype=object)
+    for idx, v in enumerate(obj_ary):
+        grad_v[idx] = v
+    return grad_v
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -245,9 +249,13 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     """
     nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
+    obj_ary = (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
                                        - y[i]*grad_cv.mass
                                        for i in range(nspecies)])
+    grad_y = np.empty(shape=(nspecies, discr.dim), dtype=object)
+    for idx, v in enumerate(obj_ary):
+        grad_y[idx] = v
+    return grad_y
 
 
 def compute_wavespeed(dim, eos, cv: ConservedVars):
