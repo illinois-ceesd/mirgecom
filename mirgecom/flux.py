@@ -31,24 +31,24 @@ THE SOFTWARE.
 """
 
 
-def lfr_flux(q_tpair, compute_flux, normal, lam):
+def lfr_flux(q_tpair, flux_func, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
 
     .. math::
 
-        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{f}^{+} + \mathbf{f}^{-}) \cdot
+        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-) + \mathbf{F}(q^+)) \cdot
         \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
 
-    where $f^-, f^+$, and $q^-, q^+$ are the fluxes and scalar solution components on
-    the interior and the exterior of the face on which the LFR flux is to be
-    calculated. The face normal is $\hat{n}$, and $\lambda$ is the user-supplied
-    jump term coefficient.
+    where $q^-, q^+$ are the scalar solution components on the interior and the
+    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
+    the vector flux function, $\hat{n}$ is the face normal, and $\lambda$ is the
+    user-supplied jump term coefficient.
 
     Parameters
     ----------
-    compute_flux:
+    flux_func:
 
         function should return ambient dim-vector fluxes given *q* values
 
@@ -72,6 +72,6 @@ def lfr_flux(q_tpair, compute_flux, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    flux_avg = 0.5*(compute_flux(q_tpair.int)
-                    + compute_flux(q_tpair.ext))
+    flux_avg = 0.5*(flux_func(q_tpair.int)
+                    + flux_func(q_tpair.ext))
     return flux_avg @ normal - 0.5*lam*(q_tpair.ext - q_tpair.int)
