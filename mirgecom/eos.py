@@ -140,10 +140,15 @@ class IdealSingleGas(GasEOS):
     Inherits from (and implements) :class:`GasEOS`.
     """
 
-    def __init__(self, gamma=1.4, gas_const=287.1):
+    def __init__(self, gamma=1.4, gas_const=287.1, transport_model=None):
         """Initialize Ideal Gas EOS parameters."""
         self._gamma = gamma
         self._gas_const = gas_const
+        self._transport_model = transport_model
+
+    def transport_model(self):
+        """Get the transport model object for this EOS."""
+        return self._transport_model
 
     def gamma(self):
         """Get specific heat ratio Cp/Cv."""
