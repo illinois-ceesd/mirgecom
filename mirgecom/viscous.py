@@ -55,13 +55,14 @@ def viscous_stress_tensor(discr, eos, q, grad_q):
     """Compute the viscous stress tensor."""
     dim = discr.dim
     cv = split_conserved(dim, q)
+    grad_cv = split_conserved(dim, grad_q)
     transport = eos.transport_model()
     mu_b = transport.bulk_viscosity(eos, cv)
     mu = transport.viscosity(eos, cv)
     lam = mu_b - 2*mu/3
-    grad_v = velocity_gradient(dim, cv, grad_q)
+    grad_v = velocity_gradient(dim, cv, grad_cv)
     div_v = np.trace(grad_v)
-    tau = mu*(grad_v + grad_v.transpose) + lam*div_v*np.eye(dim)
+    tau = mu*(grad_v + grad_v.T) + lam*div_v*np.eye(dim)
     return tau
 
 
@@ -79,10 +80,13 @@ def diffusive_flux(discr, eos, q, grad_q):
     fractions ${Y}_{\alpha}$.
     """
     cv = split_conserved(discr.dim, q)
+    grad_cv = split_conserved(discr.dim, grad_q)
     nspecies = len(cv.species_mass)
     transport = eos.transport_model()
-    grad_y = species_mass_fraction_gradient(discr, cv, grad_q)
+
+    grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
+
     return make_obj_array([d[i]*grad_y[i] for i in range(nspecies)])
 
 
