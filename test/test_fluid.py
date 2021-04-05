@@ -146,3 +146,50 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < 1e-9
     )
+
+
+def test_velocity_gradient_structure(actx_factory):
+    """Test gradv data structure, verifying usability with other helper routines."""
+    from mirgecom.fluid import velocity_gradient
+    actx = actx_factory()
+    dim = 3
+    nel_1d = 5
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 1
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    zeros = discr.zeros(actx)
+    ones = zeros + 1.0
+
+    mass = 2*ones
+
+    energy = zeros + 2.5
+    velocity_x = nodes[0] + 2*nodes[1] + 3*nodes[2]
+    velocity_y = 4*nodes[0] + 5*nodes[1] + 6*nodes[2]
+    velocity_z = 7*nodes[0] + 8*nodes[1] + 9*nodes[2]
+    velocity = make_obj_array([velocity_x, velocity_y, velocity_z])
+
+    mom = mass * velocity
+
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = split_conserved(dim, q)
+
+    grad_q = obj_array_vectorize(discr.grad, q)
+    grad_cv = split_conserved(dim, grad_q)
+
+    grad_v = velocity_gradient(discr, cv, grad_cv)
+
+    tol = 1e-12
+    exp_result = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    exp_trans = [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
+    exp_trace = 15
+    assert discr.norm(grad_v - exp_result, np.inf) < tol
+    assert discr.norm(grad_v.T - exp_trans, np.inf) < tol
+    assert discr.norm(np.trace(grad_v) - exp_trace, np.inf) < tol
