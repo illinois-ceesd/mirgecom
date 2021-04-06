@@ -1,11 +1,16 @@
 """:mod:`mirgecom.boundary` provides methods and constructs for boundary treatments.
 
-Boundary Conditions
-^^^^^^^^^^^^^^^^^^^
+Inviscid Boundary Conditions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: PrescribedBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
+
+Viscous Boundary Conditions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: IsothermalNoSlip
 """
 
 __copyright__ = """
@@ -38,6 +43,37 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import split_conserved, join_conserved
+
+
+class ViscousBC:
+    r"""Abstract interface to viscous boundary conditions.
+
+    .. automethod:: q_flux
+    .. automethod:: t_flux
+    .. automethod:: inviscid_flux
+    .. automethod:: viscous_flux
+    .. automethod:: boundary_pair
+    """
+
+    def get_q_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the flux through boundary *btag* for each scalar in *q*."""
+        raise NotImplementedError()
+
+    def get_t_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the "temperature flux" through boundary *btag*."""
+        raise NotImplementedError()
+
+    def get_inviscid_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the inviscid part of the physical flux across the boundary *btag*."""
+        raise NotImplementedError()
+
+    def get_viscous_flux(self, discr, btag, eos, q, grad_q, t, grad_t, **kwargs):
+        """Get the viscous part of the physical flux across the boundary *btag*."""
+        raise NotImplementedError()
+
+    def get_boundary_pair(self, discr, btag, eos, u, **kwargs):
+        """Get the interior and exterior solution (*u*) on the boundary."""
+        raise NotImplementedError()
 
 
 class PrescribedBoundary:
@@ -139,3 +175,92 @@ class AdiabaticSlipBoundary:
                                     species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+
+
+class IsothermalNoSlip(ViscousBC):
+    r"""Isothermal no-slip viscous wall boundary.
+
+    This class implements an isothermal no-slip wall by:
+    (TBD)
+    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
+    boundary conditions described in detail in [Poinsot_1992]_.
+    """
+
+    def __init__(self, wall_temperature=300):
+        """Initialize the boundary condition object."""
+        self._wall_temp = wall_temperature
+
+    def get_boundary_pair(self, discr, btag, eos, q, **kwargs):
+        """Get the interior and exterior solution (*q*) on the boundary."""
+        q_minus = discr.project("vol", btag, q)
+        cv_minus = split_conserved(discr.dim, q_minus)
+
+        temperature_plus = self._wall_temp + 0*cv_minus.mass
+        velocity_plus = -cv_minus.momentum / cv_minus.mass
+        mass_frac_plus = cv_minus.species_mass / cv_minus.mass
+        internal_energy_plus = eos.get_internal_energy(
+            temperature=temperature_plus, species_fractions=mass_frac_plus
+        )
+        total_energy_plus = cv_minus.mass*(internal_energy_plus
+                                           + .5*np.dot(velocity_plus, velocity_plus))
+        q_plus = join_conserved(
+            discr.dim, mass=cv_minus.mass, energy=total_energy_plus,
+            momentum=-cv_minus.momentum, species_mass=cv_minus.species_mass
+        )
+        return TracePair(btag, q_minus, q_plus)
+
+    def get_q_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the flux through boundary *btag* for each scalar in *q*."""
+        bnd_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+        cv_minus = split_conserved(discr.dim, bnd_tpair.int)
+        actx = cv_minus.mass.array_context
+        nhat = thaw(actx, discr.normal(btag))
+        from mirgecom.flux import central_scalar_flux
+        flux_func = central_scalar_flux
+        if "numerical_flux_func" in kwargs:
+            flux_func = kwargs.get("numerical_flux_func")
+
+        return flux_func(bnd_tpair, nhat)
+
+    def get_t_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the "temperature flux" through boundary *btag*."""
+        q_minus = discr.project("vol", btag, q)
+        cv_minus = split_conserved(discr.dim, q_minus)
+
+        actx = cv_minus.mass.array_context
+        nhat = thaw(actx, discr.normal(btag))
+
+        t_minus = eos.temperature(cv_minus)
+        t_plus = 0*t_minus + self._wall_temp
+        bnd_tpair = TracePair(btag, t_minus, t_plus)
+
+        from mirgecom.flux import central_scalar_flux
+        flux_func = central_scalar_flux
+        if "numerical_flux_func" in kwargs:
+            flux_func = kwargs.get("numerical_flux_func")
+
+        return flux_func(bnd_tpair, nhat)
+
+    def get_inviscid_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the inviscid part of the physical flux across the boundary *btag*."""
+        bnd_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+        from mirgecom.inviscid import inviscid_facial_flux
+        return inviscid_facial_flux(discr, eos, bnd_tpair)
+
+    def get_viscous_flux(self, discr, btag, eos, q, grad_q, t, grad_t, **kwargs):
+        """Get the viscous part of the physical flux across the boundary *btag*."""
+        q_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+
+        grad_q_minus = discr.project("vol", btag, grad_q)
+        grad_q_tpair = TracePair(btag, grad_q_minus, grad_q_minus)
+
+        t_minus = discr.project("vol", btag, t)
+        t_plus = 0*t_minus + self._wall_temp
+        t_tpair = TracePair(btag, t_minus, t_plus)
+
+        grad_t_minus = discr.project("vol", btag, grad_t)
+        grad_t_tpair = TracePair(btag, grad_t_minus, grad_t_minus)
+
+        from mirgecom.viscous import viscous_facial_flux
+        return viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
+                                   t_tpair, grad_t_tpair)
