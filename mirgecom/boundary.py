@@ -256,7 +256,7 @@ class IsothermalNoSlip(ViscousBC):
 
         t_minus = discr.project("vol", btag, t)
         t_plus = 0*t_minus + self._wall_temp
-        t_tpair = TracePair(btag, t_minus, t_plus)
+        t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 
         grad_t_minus = discr.project("vol", btag, grad_t)
         grad_t_tpair = TracePair(btag, interior=grad_t_minus, exterior=grad_t_minus)
