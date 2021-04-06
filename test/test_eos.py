@@ -38,7 +38,7 @@ from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
-from mirgecom.euler import split_conserved
+from mirgecom.fluid import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,

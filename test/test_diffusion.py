@@ -284,10 +284,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             quad_tag = QTAG_NONE
 
         def get_rhs(t, u):
-            result = (diffusion_operator(discr, quad_tag=quad_tag, alpha=alpha,
+            return (diffusion_operator(discr, quad_tag=quad_tag, alpha=alpha,
                     boundaries=p.get_boundaries(discr, actx, t), u=u)
                 + sym_eval(sym_f, t))
-            return result
 
         t = 0.
 
@@ -321,6 +320,102 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     expected_order = order+1 if order % 2 == 0 else order
     assert(eoc_rec.order_estimate() >= expected_order - 0.5
                 or eoc_rec.max_error() < 1e-11)
+
+
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
+    """
+    Checks the accuracy of the diffusion operator for an alpha field that has a
+    jump across an element face.
+    """
+    actx = actx_factory()
+
+    n = 8
+
+    mesh = get_box_mesh(1, -1, 1, n+1)
+
+    from grudge.eager import EagerDGDiscretization
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+
+    nodes = thaw(actx, discr.nodes())
+
+    # Set up a 1D heat equation interface problem, apply the diffusion operator to
+    # the exact steady state solution, and check that it's zero
+
+    lower_mask_np = np.empty((n, order+1), dtype=int)
+    lower_mask_np[:, :] = 0
+    lower_mask_np[:int(n/2), :] = 1
+    lower_mask = DOFArray(actx, (actx.from_numpy(lower_mask_np),))
+
+    upper_mask_np = np.empty((n, order+1), dtype=int)
+    upper_mask_np[:, :] = 0
+    upper_mask_np[int(n/2):, :] = 1
+    upper_mask = DOFArray(actx, (actx.from_numpy(upper_mask_np),))
+
+    alpha_lower = 0.5
+    alpha_upper = 1
+
+    alpha = alpha_lower * lower_mask + alpha_upper * upper_mask
+
+    boundaries = {
+        DTAG_BOUNDARY("-0"): DirichletDiffusionBoundary(0.),
+        DTAG_BOUNDARY("+0"): DirichletDiffusionBoundary(1.),
+    }
+
+    flux = -alpha_lower*alpha_upper/(alpha_lower + alpha_upper)
+
+    u_steady = (
+              -flux/alpha_lower * (nodes[0] + 1)  * lower_mask  # noqa: E126, E221
+        + (1 - flux/alpha_upper * (nodes[0] - 1)) * upper_mask)  # noqa: E131
+
+    def get_rhs(t, u):
+        return diffusion_operator(
+            discr, quad_tag=QTAG_NONE, alpha=alpha, boundaries=boundaries, u=u)
+
+    rhs = get_rhs(0, u_steady)
+
+    if visualize:
+        from grudge.shortcuts import make_visualizer
+        vis = make_visualizer(discr, discr.order+3)
+        vis.write_vtk_file("diffusion_discontinuous_alpha_rhs_{order}.vtu"
+            .format(order=order), [
+                ("alpha", alpha),
+                ("u_steady", u_steady),
+                ("rhs", rhs),
+                ])
+
+    linf_err = discr.norm(rhs, np.inf)
+    assert(linf_err < 1e-11)
+
+    # Now check stability
+
+    from numpy.random import rand
+    perturb_np = np.empty((n, order+1), dtype=float)
+    for i in range(n):
+        perturb_np[i, :] = 0.1*(rand()-0.5)
+    perturb = DOFArray(actx, (actx.from_numpy(perturb_np),))
+
+    u = u_steady + perturb
+
+    dt = 1e-3 / order**2
+    t = 0
+
+    from mirgecom.integrators import rk4_step
+
+    for istep in range(50):
+        u = rk4_step(u, t, dt, get_rhs)
+        t += dt
+
+    if visualize:
+        vis.write_vtk_file("diffusion_disc_alpha_stability_{order}.vtu"
+            .format(order=order), [
+                ("alpha", alpha),
+                ("u", u),
+                ("u_steady", u_steady),
+                ])
+
+    linf_diff = discr.norm(u - u_steady, np.inf)
+    assert linf_diff < 0.1
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
