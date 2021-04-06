@@ -141,7 +141,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
 
-    print(eoc)
+    logger.info(eoc)
     assert (
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < 1e-9
