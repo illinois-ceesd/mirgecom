@@ -16,24 +16,10 @@ where:
 -  vector of species mass fractions ${Y}_\alpha$,
    with $1\le\alpha\le\mathtt{nspecies}$.
 
-State Vector Handling
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autoclass:: ConservedVars
-.. autofunction:: split_conserved
-.. autofunction:: join_conserved
-
 RHS Evaluation
 ^^^^^^^^^^^^^^
 
-.. autofunction:: inviscid_flux
 .. autofunction:: inviscid_operator
-
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: get_inviscid_timestep
-.. autofunction:: get_inviscid_cfl
 """
 
 __copyright__ = """
@@ -60,177 +46,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass
-
 import numpy as np
-from meshmode.dof_array import thaw, DOFArray
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.dof_array import thaw
 from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
+from mirgecom.fluid import (
+    compute_wavespeed,
+    split_conserved,
+)
 
-
-@dataclass(frozen=True)
-class ConservedVars:  # FIXME: Name?
-    r"""Resolve the canonical conserved quantities.
-
-    Get the canonical conserved quantities (mass, energy, momentum,
-    and species masses) per unit volume = $(\rho,\rho{E},\rho\vec{V},
-    \rho{Y_s})$ from an agglomerated object array.
-
-    .. attribute:: dim
-
-        Integer indicating spatial dimension of the state
-
-    .. attribute:: mass
-
-        :class:`~meshmode.dof_array.DOFArray` for the fluid mass per unit volume
-
-    .. attribute:: energy
-
-        :class:`~meshmode.dof_array.DOFArray` for total energy per unit volume
-
-    .. attribute:: momentum
-
-        Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
-        of :class:`~meshmode.dof_array.DOFArray` for momentum per unit volume.
-
-    .. attribute:: species_mass
-
-        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
-        of :class:`~meshmode.dof_array.DOFArray` for species mass per unit volume.
-        The species mass vector has components, $\rho~Y_\alpha$, where $Y_\alpha$
-        is the vector of species mass fractions.
-
-    .. automethod:: join
-    .. automethod:: replace
-    """
-
-    mass: DOFArray
-    energy: DOFArray
-    momentum: np.ndarray
-    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
-
-    @property
-    def dim(self):
-        """Return the number of physical dimensions."""
-        return len(self.momentum)
-
-    def join(self):
-        """Call :func:`join_conserved` on *self*."""
-        return join_conserved(
-            dim=self.dim,
-            mass=self.mass,
-            energy=self.energy,
-            momentum=self.momentum,
-            species_mass=self.species_mass)
-
-    def replace(self, **kwargs):
-        """Return a copy of *self* with the attributes in *kwargs* replaced."""
-        from dataclasses import replace
-        return replace(self, **kwargs)
-
-
-def _aux_shape(ary, leading_shape):
-    """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
-    from meshmode.dof_array import DOFArray
-    if (isinstance(ary, np.ndarray) and ary.dtype == np.object
-            and not isinstance(ary, DOFArray)):
-        naxes = len(leading_shape)
-        if ary.shape[:naxes] != leading_shape:
-            raise ValueError("array shape does not start with expected leading "
-                    "dimensions")
-        return ary.shape[naxes:]
-    else:
-        if leading_shape != ():
-            raise ValueError("array shape does not start with expected leading "
-                    "dimensions")
-        return ()
-
-
-def get_num_species(dim, q):
-    """Return number of mixture species."""
-    return len(q) - (dim + 2)
-
-
-def split_conserved(dim, q):
-    """Get the canonical conserved quantities.
-
-    Return a :class:`ConservedVars` that is the canonical conserved quantities,
-    mass, energy, momentum, and any species' masses, from the agglomerated
-    object array extracted from the state vector *q*. For single component gases,
-    i.e. for those state vectors *q* that do not contain multi-species mixtures, the
-    returned dataclass :attr:`ConservedVars.species_mass` will be set to an empty
-    array.
-    """
-    nspec = get_num_species(dim, q)
-    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                         species_mass=q[2+dim:2+dim+nspec])
-
-
-def join_conserved(dim, mass, energy, momentum,
-        # empty: immutable
-        species_mass=np.empty((0,), dtype=object)):
-    """Create an agglomerated solution array from the conserved quantities."""
-    nspec = len(species_mass)
-    aux_shapes = [
-        _aux_shape(mass, ()),
-        _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,)),
-        _aux_shape(species_mass, (nspec,))]
-
-    from pytools import single_valued
-    aux_shape = single_valued(aux_shapes)
-
-    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
-    result[0] = mass
-    result[1] = energy
-    result[2:dim+2] = momentum
-    result[dim+2:] = species_mass
-
-    return result
-
-
-def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*.
-
-    The inviscid fluxes are
-    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
-    +p\mathbf{I}, \rho{Y_s}\vec{V})$
-
-    .. note::
-
-        The fluxes are returned as a 2D object array with shape:
-        ``(num_equations, ndim)``.  Each entry in the
-        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-        form and shape for the flux data is required by the built-in
-        state data handling mechanism in :mod:`mirgecom.euler`. That
-        mechanism is used by at least
-        :class:`mirgecom.euler.ConservedVars`, and
-        :func:`mirgecom.euler.join_conserved`, and
-        :func:`mirgecom.euler.split_conserved`.
-    """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
-    p = eos.pressure(cv)
-
-    mom = cv.momentum
-
-    return join_conserved(dim,
-            mass=mom,
-            energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            species_mass=(  # reshaped: (nspecies, dim)
-                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
-
-
-def _get_wavespeed(dim, eos, cv: ConservedVars):
-    """Return the maximum wavespeed in for flow solution *q*."""
-    actx = cv.mass.array_context
-
-    v = cv.momentum / cv.mass
-    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
+from mirgecom.inviscid import (
+    inviscid_flux
+)
 
 
 def _facial_flux(discr, eos, q_tpair, local=False):
@@ -262,8 +91,8 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     flux_avg = 0.5*(flux_int + flux_ext)
 
     lam = actx.np.maximum(
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        _get_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
+        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
     )
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
@@ -346,12 +175,6 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     )
 
 
-def get_inviscid_cfl(discr, eos, dt, q):
-    """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
-    return dt / wanted_dt
-
-
 # By default, run unitless
 NAME_TO_UNITS = {
     "mass": "",
@@ -376,26 +199,3 @@ def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
     name_to_field = asdict_shallow(cv)
     name_to_field.update(asdict_shallow(dv))
     return name_to_field
-
-
-def get_inviscid_timestep(discr, eos, cfl, q):
-    """Routine (will) return the (local) maximum stable inviscid timestep.
-
-    Currently, it's a hack waiting for the geometric_factor helpers port
-    from grudge.
-    """
-    dim = discr.dim
-    mesh = discr.mesh
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
-    nelements = mesh.nelements
-    nel_1d = nelements ** (1.0 / (1.0 * dim))
-
-    # This roughly reproduces the timestep AK used in wave toy
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return cfl * dt
-
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = _get_wavespeed(w,eos=eos)
-#    max_v = clmath.max(wavespeeds)
-#    return c*dt_ngf*dt_gf/max_v
