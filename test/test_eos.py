@@ -47,7 +47,7 @@ from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
 )
-from mirgecom.euler import split_conserved
+from mirgecom.fluid import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,

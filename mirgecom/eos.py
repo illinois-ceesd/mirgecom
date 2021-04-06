@@ -39,7 +39,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import ConservedVars
+from mirgecom.fluid import ConservedVars
 
 
 @dataclass
