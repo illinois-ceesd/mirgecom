@@ -63,7 +63,7 @@ class GasEOS:
     Equation of state (EOS) classes are responsible for
     computing relations between fluid or gas state variables.
 
-    Each interface call takes an :class:`mirgecom.euler.ConservedVars` object
+    Each interface call takes an :class:`mirgecom.fluid.ConservedVars` object
     array representing the simulation state quantities. Each EOS class
     implementation should document its own state data requirements.
 
@@ -124,7 +124,7 @@ class IdealSingleGas(GasEOS):
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
 
-    Each interface call expects that the :class:`mirgecom.euler.ConservedVars` object
+    Each interface call expects that the :class:`mirgecom.fluid.ConservedVars` object
     representing the simulation conserved quantities contains at least the canonical
     conserved quantities mass ($\rho$), energy ($\rho{E}$), and
     momentum ($\rho\vec{V}$).
@@ -240,7 +240,7 @@ class PyrometheusMixture(GasEOS):
     This is the :mod:`pyrometheus`-based EOS. Please refer to the :any:`documentation
     of Pyrometheus <pyrometheus>` for underlying implementation details.
 
-    Each interface call expects that the :class:`mirgecom.euler.ConservedVars` object
+    Each interface call expects that the :class:`mirgecom.fluid.ConservedVars` object
     representing the simulation conserved quantities contains at least the
     canonical conserved quantities mass ($\rho$), energy ($\rho{E}$), and
     momentum ($\rho\vec{V}$), and the vector of species masses, ($\rho{Y}_\alpha$).
@@ -294,8 +294,8 @@ class PyrometheusMixture(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.euler.ConservedVars`
-            :class:`mirgecom.euler.ConservedVars` containing at least the mass
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
@@ -317,8 +317,8 @@ class PyrometheusMixture(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.euler.ConservedVars`
-            :class:`mirgecom.euler.ConservedVars` containing at least the mass
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
         """
