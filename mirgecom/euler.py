@@ -19,7 +19,13 @@ where:
 RHS Evaluation
 ^^^^^^^^^^^^^^
 
-.. autofunction:: inviscid_operator
+.. autofunction:: euler_operator
+
+Logging Helpers
+^^^^^^^^^^^^^^^
+
+.. autofunction:: units_for_logging
+.. autofunction:: extract_vars_for_logging
 """
 
 __copyright__ = """
@@ -100,7 +106,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     return flux_weak
 
 
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+def euler_operator(discr, eos, boundaries, q, t=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -168,6 +174,14 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
         dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
                                 + partition_boundary_flux)
     )
+
+
+def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+    """Interface :function:`euler_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call inviscid_operator; it is now called euler_operator. This"
+         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
+    return euler_operator(discr, eos, boundaries, q, t)
 
 
 # By default, run unitless
