@@ -1,4 +1,4 @@
-"""Demonstrate wave-eager MPI example."""
+"""Demonstrate wave MPI example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
@@ -22,14 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
+import logging
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
 from meshmode.dof_array import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -62,12 +62,14 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main():
+def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
-    cl_ctx = cl.create_some_context()
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
+    actx = actx_class(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    lazy_eval = isinstance(actx_class, PytatoArrayContext)
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -121,17 +123,27 @@ def main():
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
 
+    if lazy_eval:
+        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
+
     rank = comm.Get_rank()
 
     t = 0
     t_final = 3
     istep = 0
     while t < t_final:
-        fields = rk4_step(fields, t, dt, rhs)
+        if lazy_eval:
+            fields = compiled_rhs(fields)
+        else:
+            fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
-            vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+            if lazy_eval:
+                print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
+            else:
+                print(istep, t, discr.norm(fields[0], np.inf))
+
+            vis.write_vtk_file("fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
@@ -142,6 +154,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+
+    import argparse
+    parser = argparse.ArgumentParser(description="Wave (MPI version)")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    args = parser.parse_args()
+
+    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext)
+
 
 # vim: foldmethod=marker
