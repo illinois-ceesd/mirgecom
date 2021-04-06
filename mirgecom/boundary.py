@@ -207,7 +207,7 @@ class IsothermalNoSlip(ViscousBC):
             discr.dim, mass=cv_minus.mass, energy=total_energy_plus,
             momentum=-cv_minus.momentum, species_mass=cv_minus.species_mass
         )
-        return TracePair(btag, q_minus, q_plus)
+        return TracePair(btag, interior=q_minus, exterior=q_plus)
 
     def get_q_flux(self, discr, btag, eos, q, **kwargs):
         """Get the flux through boundary *btag* for each scalar in *q*."""
@@ -232,7 +232,7 @@ class IsothermalNoSlip(ViscousBC):
 
         t_minus = eos.temperature(cv_minus)
         t_plus = 0*t_minus + self._wall_temp
-        bnd_tpair = TracePair(btag, t_minus, t_plus)
+        bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 
         from mirgecom.flux import central_scalar_flux
         flux_func = central_scalar_flux
@@ -252,14 +252,14 @@ class IsothermalNoSlip(ViscousBC):
         q_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
 
         grad_q_minus = discr.project("vol", btag, grad_q)
-        grad_q_tpair = TracePair(btag, grad_q_minus, grad_q_minus)
+        grad_q_tpair = TracePair(btag, interior=grad_q_minus, exterior=grad_q_minus)
 
         t_minus = discr.project("vol", btag, t)
         t_plus = 0*t_minus + self._wall_temp
         t_tpair = TracePair(btag, t_minus, t_plus)
 
         grad_t_minus = discr.project("vol", btag, grad_t)
-        grad_t_tpair = TracePair(btag, grad_t_minus, grad_t_minus)
+        grad_t_tpair = TracePair(btag, interior=grad_t_minus, exterior=grad_t_minus)
 
         from mirgecom.viscous import viscous_facial_flux
         return viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
