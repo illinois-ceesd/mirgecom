@@ -93,7 +93,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # todo: user-supplied flux routine
-    flux_weak = lfr_flux(q_tpair, compute_flux=euler_flux, normal=normal, lam=lam)
+    flux_weak = lfr_flux(q_tpair, flux_func=euler_flux, normal=normal, lam=lam)
 
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)
