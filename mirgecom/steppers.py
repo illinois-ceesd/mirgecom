@@ -48,6 +48,7 @@ def compile_timestepper(actx, timestepper, state, rhs):
 
 
 def compile_rhs(actx, rhs, state):
+    """Create lazy evaluation version of the rhs."""
     @memoize_in(actx, ("mirgecom_compiled_rhs",
                        rhs,
                        tuple(len(el) for el in state)))
