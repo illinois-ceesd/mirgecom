@@ -110,26 +110,18 @@ class SimpleTransport(TransportModel):
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the bulk viscosity for the gas, $\mu_{B}."""
-        actx = cv.mass.array_context
-        ones = actx.ones_like(cv.mass)
-        return self._mu_bulk * ones
+        return self._mu_bulk * cv.mass / cv.mass
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$."""
-        actx = cv.mass.array_context
-        ones = actx.ones_like(cv.mass)
-        return self._mu * ones
+        return self._mu * cv.mass / cv.mass
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        actx = cv.mass.array_context
-        ones = actx.ones_like(cv.mass)
-        return self._kappa * ones
+        return self._kappa * cv.mass / cv.mass
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        actx = cv.mass.array_context
-        ones = actx.ones_like(cv.mass)
         nspecies = len(cv.species_mass)
         assert nspecies == len(self._d_alpha)
-        return self._d_alpha * ones
+        return self._d_alpha * cv.mass / cv.mass

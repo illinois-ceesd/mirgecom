@@ -57,13 +57,14 @@ def viscous_stress_tensor(discr, eos, q, grad_q):
     cv = split_conserved(dim, q)
     grad_cv = split_conserved(dim, grad_q)
     transport = eos.transport_model()
+
     mu_b = transport.bulk_viscosity(eos, cv)
     mu = transport.viscosity(eos, cv)
-    lam = mu_b - 2*mu/3
-    grad_v = velocity_gradient(dim, cv, grad_cv)
+
+    grad_v = velocity_gradient(discr, cv, grad_cv)
     div_v = np.trace(grad_v)
-    tau = mu*(grad_v + grad_v.T) + lam*div_v*np.eye(dim)
-    return tau
+
+    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*div_v*np.eye(dim)
 
 
 def diffusive_flux(discr, eos, q, grad_q):
