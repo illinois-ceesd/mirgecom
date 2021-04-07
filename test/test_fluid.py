@@ -193,3 +193,55 @@ def test_velocity_gradient_structure(actx_factory):
     assert discr.norm(grad_v - exp_result, np.inf) < tol
     assert discr.norm(grad_v.T - exp_trans, np.inf) < tol
     assert discr.norm(np.trace(grad_v) - exp_trace, np.inf) < tol
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_species_mass_gradient(actx_factory, dim):
+    """Test gradY structure and values against exact."""
+    actx = actx_factory()
+    nel_1d = 5
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 1
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    zeros = discr.zeros(actx)
+    ones = zeros + 1
+
+    nspecies = 2*dim
+    mass = 2*ones  # make mass != 1
+    energy = zeros + 2.5
+    velocity = make_obj_array([ones for _ in range(dim)])
+    mom = mass * velocity
+    # assemble y so that each one has simple, but unique grad components
+    y = make_obj_array([ones for _ in range(nspecies)])
+    for idim in range(dim):
+        ispec = 2*idim
+        y[ispec] = ispec*(idim*dim+1)*sum([(iidim+1)*nodes[iidim]
+                                           for iidim in range(dim)])
+        y[ispec+1] = -y[ispec]
+    species_mass = mass*y
+
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                       species_mass=species_mass)
+
+    cv = split_conserved(dim, q)
+
+    grad_q = obj_array_vectorize(discr.grad, q)
+    grad_cv = split_conserved(dim, grad_q)
+
+    from mirgecom.fluid import species_mass_fraction_gradient
+    grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
+
+    tol = 1e-12
+    for idim in range(dim):
+        ispec = 2*idim
+        exact_grad = np.array([(ispec*(idim*dim+1))*(iidim+1)
+                                for iidim in range(dim)])
+        assert discr.norm(grad_y[ispec] - exact_grad, np.inf) < tol
+        assert discr.norm(grad_y[ispec+1] + exact_grad, np.inf) < tol
