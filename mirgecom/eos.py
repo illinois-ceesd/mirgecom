@@ -264,7 +264,7 @@ class PyrometheusMixture(GasEOS):
     Inherits from (and implements) :class:`GasEOS`.
     """
 
-    def __init__(self, pyrometheus_mech, tguess=300.0):
+    def __init__(self, pyrometheus_mech, temperature_guess=300.0):
         """Initialize Pyrometheus-based EOS with mechanism class.
 
         Parameters
@@ -287,7 +287,7 @@ class PyrometheusMixture(GasEOS):
             that is TBD.
         """
         self._pyrometheus_mech = pyrometheus_mech
-        self._tguess = tguess
+        self._tguess = temperature_guess
 
     def gamma(self, cv: ConservedVars = None):
         r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_p - R_s}$.

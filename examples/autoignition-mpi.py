@@ -159,7 +159,8 @@ def main(ctx_factory=cl.create_some_context):
     # states for this particular mechanism.
     casename = "autoignition"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism, tguess=init_temperature)
+    eos = PyrometheusMixture(pyrometheus_mechanism,
+                             temperature_guess=init_temperature)
 
     # }}}
 
