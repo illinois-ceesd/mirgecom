@@ -108,20 +108,24 @@ class SimpleTransport(TransportModel):
         self._kappa = thermal_conductivity
         self._d_alpha = species_diffusivity
 
+    def _make_array(self, something, cv):
+        """Make an appropriate shaped array from the constant properties."""
+        return something * cv.mass / cv.mass
+
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the bulk viscosity for the gas, $\mu_{B}."""
-        return self._mu_bulk * cv.mass / cv.mass
+        return self._make_array(self._mu_bulk, cv)
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return self._mu * cv.mass / cv.mass
+        return self._make_array(self._mu, cv)
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        return self._kappa * cv.mass / cv.mass
+        return self._make_array(self._kappa, cv)
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         nspecies = len(cv.species_mass)
         assert nspecies == len(self._d_alpha)
-        return self._d_alpha * cv.mass / cv.mass
+        return self._make_array(self._d_alpha, cv)

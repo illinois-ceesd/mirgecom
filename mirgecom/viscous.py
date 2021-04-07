@@ -74,7 +74,7 @@ def diffusive_flux(discr, eos, q, grad_q):
 
     .. math::
 
-        \mathbf{J}_{\alpha} = -\rho{d}_{\alpha}\nabla{Y_{\alpha}}~~
+        \mathbf{J}_{\alpha} = -\rho{d}_{(\alpha)}\nabla{Y_{\alpha}}~~
         (\mathtt{no~implied~sum}),
 
     with species diffusivities ${d}_{\alpha}$, and species mass
@@ -88,7 +88,7 @@ def diffusive_flux(discr, eos, q, grad_q):
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
 
-    return make_obj_array([d[i]*grad_y[i] for i in range(nspecies)])
+    return -make_obj_array([cv.mass*d[i]*grad_y[i] for i in range(nspecies)])
 
 
 def conductive_heat_flux(discr, eos, q, grad_t):
