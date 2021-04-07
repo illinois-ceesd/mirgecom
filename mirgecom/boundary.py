@@ -35,8 +35,8 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import split_conserved, join_conserved
 from grudge.symbolic.primitives import TracePair
+from mirgecom.fluid import split_conserved, join_conserved
 
 
 class PrescribedBoundary:

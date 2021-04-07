@@ -42,7 +42,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.fluid import split_conserved, join_conserved
 
 
 def make_pulse(amp, r0, w, r):
@@ -827,7 +827,6 @@ class Uniform:
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
         species_mass = self._mass_fracs * mass
 
-        from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 

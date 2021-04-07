@@ -36,9 +36,7 @@ import logging
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
-from mirgecom.euler import (
-    get_inviscid_timestep,
-)
+from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +99,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if do_viz is False and do_status is False:
         return 0
 
-    from mirgecom.euler import split_conserved
+    from mirgecom.fluid import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 
