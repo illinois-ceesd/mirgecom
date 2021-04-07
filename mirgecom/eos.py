@@ -121,7 +121,7 @@ class GasEOS:
             pressure=self.pressure(cv),
             temperature=self.temperature(cv),
         )
-    
+
 
 class IdealSingleGas(GasEOS):
     r"""Ideal gas law single-component gas ($p = \rho{R}{T}$).
