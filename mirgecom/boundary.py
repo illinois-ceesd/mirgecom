@@ -36,7 +36,7 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.fluid import split_conserved, join_conserved
 from grudge.symbolic.primitives import TracePair
 
 
@@ -246,6 +246,7 @@ class AdiabaticSlipBoundary:
 
 class AdiabaticNoSlipBoundary:
     r"""Boundary condition implementing a noslip boundary.
+
     .. automethod:: boundary_pair
     """
 
@@ -257,8 +258,7 @@ class AdiabaticNoSlipBoundary:
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
     def exterior_sol(self, discr, q, btag, **kwargs):
-        """Get the exterior solution on the boundary.
-        """
+        """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
         # cv = split_conserved(dim, q)

@@ -127,11 +127,9 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     """
     assert isinstance(u, DOFArray)
 
-    
     def get_kernel():
         return linear_operator_kernel()
 
-      
     def get_indicator():
         return compute_smoothness_indicator()
 
