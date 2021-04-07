@@ -61,3 +61,5 @@ References
    `PDF <https://doi.org/10.1016/0021-9991(92)90046-2>`__
 .. [Niegemann_2012] J. Niegemann, R. Diehl, K. Busch (2012), Journal of Computational Physics 231 \
     `DOI: <https://doi.org/10.1016/j.jcp.2011.09.003>`__
+.. [Bassi_1997] F. Bassi and S. Rebay (1997), Journal of Computational Physics 131 \
+    `(DOI) <https://www.sciencedirect.com/science/article/pii/S0021999196955722?via%3Dihub>`__

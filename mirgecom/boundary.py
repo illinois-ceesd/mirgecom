@@ -36,7 +36,6 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.eos import IdealSingleGas
 from mirgecom.euler import split_conserved, join_conserved
 from grudge.symbolic.primitives import TracePair
 
@@ -99,7 +98,7 @@ class DummyBoundary:
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
     def exterior_sol(
-        self, discr, q, btag, **kwargs):
+            self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
@@ -262,11 +261,11 @@ class AdiabaticNoSlipBoundary:
         """
         # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass.array_context
+        # cv = split_conserved(dim, q)
+        # actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
+        # nhat = thaw(actx, discr.normal(btag))
 
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
@@ -288,11 +287,11 @@ class AdiabaticNoSlipBoundary:
         """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass[0].array_context
+        # cv = split_conserved(dim, q)
+        # actx = cv.mass[0].array_context
 
         # Grab a unit normal to the boundary
-        normal = thaw(actx, discr.normal(btag))
+        # normal = thaw(actx, discr.normal(btag))
 
         # Get the interior soln
         int_soln = discr.project("vol", btag, q)

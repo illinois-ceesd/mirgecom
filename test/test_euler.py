@@ -38,7 +38,8 @@ from meshmode.dof_array import DOFArray, thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
-from mirgecom.euler import inviscid_operator, split_conserved, join_conserved
+from mirgecom.euler import euler_operator
+from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
@@ -49,7 +50,11 @@ from meshmode.array_context import (  # noqa
 
 
 from grudge.shortcuts import make_visualizer
-from mirgecom.euler import get_inviscid_timestep
+from mirgecom.inviscid import (
+    get_inviscid_timestep,
+    inviscid_flux
+)
+
 from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
@@ -59,7 +64,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux(actx_factory, nspecies, dim):
     """Identity test - directly check inviscid flux routine
-    :func:`mirgecom.euler.inviscid_flux` against the exact expected result.
+    :func:`mirgecom.inviscid.inviscid_flux` against the exact expected result.
     This test is designed to fail if the flux routine is broken.
 
     The expected inviscid flux is:
@@ -119,8 +124,6 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    from mirgecom.euler import inviscid_flux
-
     flux = inviscid_flux(discr, eos, q)
     flux_resid = flux - expected_flux
 
@@ -143,7 +146,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     """Uniform pressure test
 
     Checks that the Euler-internal inviscid flux routine
-    :func:`mirgecom.euler.inviscid_flux` returns exactly the expected result
+    :func:`mirgecom.inviscid.inviscid_flux` returns exactly the expected result
     with a constant pressure and no flow.
 
     Expected inviscid flux is:
@@ -155,8 +158,6 @@ def test_inviscid_flux_components(actx_factory, dim):
     actx = actx_factory()
 
     eos = IdealSingleGas()
-
-    from mirgecom.euler import inviscid_flux
 
     p0 = 1.0
 
@@ -219,8 +220,6 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     eos = IdealSingleGas()
 
     p0 = 1.0
-
-    from mirgecom.euler import inviscid_flux
 
     tolerance = 1e-15
     for livedim in range(dim):
@@ -463,8 +462,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
-                                         boundaries=boundaries, q=fields, t=0.0)
+        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
+                                      boundaries=boundaries, q=fields, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         resid_split = split_conserved(dim, rhs_resid)
@@ -505,8 +504,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             species_mass=species_mass_input)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = inviscid_operator(discr, eos=IdealSingleGas(),
-                                         boundaries=boundaries, q=fields, t=0.0)
+        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
+                                      boundaries=boundaries, q=fields, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         resid_split = split_conserved(dim, rhs_resid)
@@ -574,7 +573,7 @@ def test_vortex_rhs(actx_factory, order):
         vortex_soln = vortex(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
 
-        inviscid_rhs = inviscid_operator(
+        inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
             q=vortex_soln, t=0.0)
 
@@ -628,7 +627,7 @@ def test_lump_rhs(actx_factory, dim, order):
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
-        inviscid_rhs = inviscid_operator(
+        inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
 
@@ -696,7 +695,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         lump_soln = lump(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
 
-        inviscid_rhs = inviscid_operator(
+        inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
         print(f"inviscid_rhs = {inviscid_rhs}")
@@ -794,7 +793,7 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return inviscid_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
+        return euler_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
 
     while t < t_final:
 
