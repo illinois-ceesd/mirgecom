@@ -159,7 +159,7 @@ def test_species_diffusive_flux(actx_factory):
     from mirgecom.viscous import diffusive_flux
     j = diffusive_flux(discr, eos, q, grad_q)
 
-    tol = 1e-11
+    tol = 1e-10
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)

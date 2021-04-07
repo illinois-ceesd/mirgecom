@@ -186,7 +186,7 @@ def test_velocity_gradient_structure(actx_factory):
 
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
-    tol = 1e-12
+    tol = 1e-11
     exp_result = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     exp_trans = [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
     exp_trace = 15
