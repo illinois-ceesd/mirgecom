@@ -238,7 +238,7 @@ def test_species_mass_gradient(actx_factory, dim):
     from mirgecom.fluid import species_mass_fraction_gradient
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
 
-    tol = 1e-12
+    tol = 1e-11
     for idim in range(dim):
         ispec = 2*idim
         exact_grad = np.array([(ispec*(idim*dim+1))*(iidim+1)
