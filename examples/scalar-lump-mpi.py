@@ -37,11 +37,11 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     ExactSolutionMismatch
 )
 from mirgecom.io import make_init_message
@@ -104,9 +104,9 @@ def main(ctx_factory=cl.create_some_context):
     casename = "mixture-lump"
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
-    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
@@ -134,8 +134,8 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos)
+        return euler_operator(discr, q=state, t=t,
+                              boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
         return sim_checkpoint(discr, visualizer, eos, q=state,
