@@ -11,6 +11,7 @@ Viscous Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: IsothermalNoSlip
+.. autoclass:: InflowOutflow
 """
 
 __copyright__ = """
@@ -256,6 +257,88 @@ class IsothermalNoSlip(ViscousBC):
 
         t_minus = discr.project("vol", btag, t)
         t_plus = 0*t_minus + self._wall_temp
+        t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
+
+        grad_t_minus = discr.project("vol", btag, grad_t)
+        grad_t_tpair = TracePair(btag, interior=grad_t_minus, exterior=grad_t_minus)
+
+        from mirgecom.viscous import viscous_facial_flux
+        return viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
+                                   t_tpair, grad_t_tpair)
+
+
+class InflowOutflow(ViscousBC):
+    r"""Inflow/outflow boundary for viscous flows.
+
+    This class implements an inflow/outflow by:
+    (TBD)
+    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
+    boundary conditions described in detail in [Poinsot_1992]_.
+    """
+
+    def __init__(self, flow_func):
+        """Initialize the boundary condition object."""
+        self._flow_func = flow_func
+
+    def get_boundary_pair(self, discr, btag, eos, q, **kwargs):
+        """Get the interior and exterior solution (*q*) on the boundary."""
+        boundary_discr = discr.discr_from_dd(btag)
+        q_minus = discr.project("vol", btag, q)
+        cv_minus = split_conserved(discr.dim, q_minus)
+        actx = cv_minus.mass.array_context
+        nodes = thaw(actx, boundary_discr.nodes())
+        q_plus = self._flow_func(nodes, eos, q, **kwargs)
+        return TracePair(btag, interior=q_minus, exterior=q_plus)
+
+    def get_q_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the flux through boundary *btag* for each scalar in *q*."""
+        bnd_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+        cv_minus = split_conserved(discr.dim, bnd_tpair.int)
+        actx = cv_minus.mass.array_context
+        nhat = thaw(actx, discr.normal(btag))
+        from mirgecom.flux import central_scalar_flux
+        flux_func = central_scalar_flux
+        if "numerical_flux_func" in kwargs:
+            flux_func = kwargs.get("numerical_flux_func")
+
+        return flux_func(bnd_tpair, nhat)
+
+    def get_t_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the "temperature flux" through boundary *btag*."""
+        bnd_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+        cv_minus = split_conserved(discr.dim, bnd_tpair.int)
+        cv_plus = split_conserved(discr.dim, bnd_tpair.ext)
+        t_minus = eos.temperature(cv_minus)
+        t_plus = eos.temperature(cv_plus)
+        bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
+
+        actx = cv_minus.mass.array_context
+        nhat = thaw(actx, discr.normal(btag))
+
+        from mirgecom.flux import central_scalar_flux
+        flux_func = central_scalar_flux
+        if "numerical_flux_func" in kwargs:
+            flux_func = kwargs.get("numerical_flux_func")
+
+        return flux_func(bnd_tpair, nhat)
+
+    def get_inviscid_flux(self, discr, btag, eos, q, **kwargs):
+        """Get the inviscid part of the physical flux across the boundary *btag*."""
+        bnd_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+        from mirgecom.inviscid import inviscid_facial_flux
+        return inviscid_facial_flux(discr, eos, bnd_tpair)
+
+    def get_viscous_flux(self, discr, btag, eos, q, grad_q, t, grad_t, **kwargs):
+        """Get the viscous part of the physical flux across the boundary *btag*."""
+        q_tpair = self.get_boundary_pair(discr, btag, eos, q, **kwargs)
+        cv_minus = split_conserved(discr.dim, q_tpair.int)
+        cv_plus = split_conserved(discr.dim, q_tpair.ext)
+
+        grad_q_minus = discr.project("vol", btag, grad_q)
+        grad_q_tpair = TracePair(btag, interior=grad_q_minus, exterior=grad_q_minus)
+
+        t_minus = eos.temperature(cv_minus)
+        t_plus = eos.temperature(cv_plus)
         t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 
         grad_t_minus = discr.project("vol", btag, grad_t)
