@@ -929,7 +929,7 @@ class PlanarDiscontinuity:
 
     def __call__(self, x_vec, eos, *, t=0.0):
         """
-        Create the mixture state at locations *x_vec*
+        Create the mixture state at locations *x_vec*.
 
         Parameters
         ----------
@@ -941,7 +941,7 @@ class PlanarDiscontinuity:
             `eos.get_density`
             `eos.get_internal_energy`
         t: float
-            Time at which solution is desired. 
+            Time at which solution is desired.
             The interface is advected by to convective velocity, uc
         """
         if x_vec.shape != (self._dim,):
@@ -953,7 +953,6 @@ class PlanarDiscontinuity:
         zeros = 0*x_rel
         x0 = zeros + self._uc[self._xdir]*t + self._x0
 
-        sigma = self._sigma
         xtanh = 1.0/self._sigma*(x0 - x_rel)
         weight = 0.5*(1.0 - actx.np.tanh(xtanh))
         pressure = self._pl + (self._pr - self._pl)*weight
