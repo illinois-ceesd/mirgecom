@@ -876,21 +876,21 @@ class MixtureDiscontinuity:
         nspeces: int
             specifies the number of mixture species
         pl: float
-            pressure to the left of the discontinuity 
+            pressure to the left of the discontinuity
         tl: float
-            temperature to the left of the discontinuity 
+            temperature to the left of the discontinuity
         ul: numpy.ndarray
-            velocity (vector) to the left of the discontinuity 
+            velocity (vector) to the left of the discontinuity
         yl: numpy.ndarray
-            species mass fractions to the left of the discontinuity 
+            species mass fractions to the left of the discontinuity
         pr: float
-            pressure to the right of the discontinuity 
+            pressure to the right of the discontinuity
         tr: float
-            temperaure to the right of the discontinuity 
+            temperaure to the right of the discontinuity
         ur: numpy.ndarray
-            velocity (vector) to the right of the discontinuity 
+            velocity (vector) to the right of the discontinuity
         yr: numpy.ndarray
-            species mass fractions to the right of the discontinuity 
+            species mass fractions to the right of the discontinuity
         sigma: float
            sharpness parameter
         uc: numpy.ndarray
@@ -925,7 +925,6 @@ class MixtureDiscontinuity:
         self._xdir = xdir
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
-
 
     def __call__(self, x_vec, eos, *, t=0.0):
         """
