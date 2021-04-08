@@ -108,7 +108,7 @@ class ConservedVars:
 def _aux_shape(ary, leading_shape):
     """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
     from meshmode.dof_array import DOFArray
-    if (isinstance(ary, np.ndarray) and ary.dtype == np.object
+    if (isinstance(ary, np.ndarray) and ary.dtype == object
             and not isinstance(ary, DOFArray)):
         naxes = len(leading_shape)
         if ary.shape[:naxes] != leading_shape:
