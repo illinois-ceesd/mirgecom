@@ -373,10 +373,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
         # Check the boundary facial fluxes as called on a boundary
-        dir_mass = discr.interp("vol", BTAG_ALL, mass_input)
-        dir_e = discr.interp("vol", BTAG_ALL, energy_input)
-        dir_mom = discr.interp("vol", BTAG_ALL, mom_input)
-        dir_mf = discr.interp("vol", BTAG_ALL, species_mass_input)
+        dir_mass = discr.project("vol", BTAG_ALL, mass_input)
+        dir_e = discr.project("vol", BTAG_ALL, energy_input)
+        dir_mom = discr.project("vol", BTAG_ALL, mom_input)
+        dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
 
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                   species_mass=dir_mf)
@@ -761,7 +761,7 @@ def _euler_flow_stepper(actx, parameters):
         f"EOS:             {eosname}"
     )
 
-    vis = make_visualizer(discr, discr.order + 3 if dim == 2 else discr.order)
+    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
 
     def write_soln(write_status=True):
         cv = split_conserved(dim, fields)
