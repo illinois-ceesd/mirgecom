@@ -8,4 +8,4 @@ pytest-pudb
 pyprof2calltree
 pyinstrument
 
-git+https://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64" 
+git+ssh://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64"
