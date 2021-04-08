@@ -97,8 +97,7 @@ class DummyBoundary:
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
-    def exterior_sol(
-        self, discr, q, btag, **kwargs):
+    def exterior_sol(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
@@ -246,6 +245,7 @@ class AdiabaticSlipBoundary:
 
 class AdiabaticNoSlipBoundary:
     r"""Boundary condition implementing a noslip boundary.
+
     .. automethod:: boundary_pair
     """
 
@@ -257,15 +257,14 @@ class AdiabaticNoSlipBoundary:
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
     def exterior_sol(self, discr, q, btag, **kwargs):
-        """Get the exterior solution on the boundary.
-        """
+        """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass.array_context
+        # cv = split_conserved(dim, q)
+        # actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
+        # nhat = thaw(actx, discr.normal(btag))
 
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
@@ -287,11 +286,11 @@ class AdiabaticNoSlipBoundary:
         """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass[0].array_context
+        # cv = split_conserved(dim, q)
+        # actx = cv.mass[0].array_context
 
         # Grab a unit normal to the boundary
-        normal = thaw(actx, discr.normal(btag))
+        # normal = thaw(actx, discr.normal(btag))
 
         # Get the interior soln
         int_soln = discr.project("vol", btag, q)
