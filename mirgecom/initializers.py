@@ -850,7 +850,7 @@ class Discontinuity:
     given an initial thermal state (pressure, temperature) and an EOS.
 
     The solution varies across a planar interface defined by a tanh function
-    located at x=xloc for density, velocity, and pressure
+    located at x=x0 for density, velocity, and pressure
 
     .. automethod:: __init__
     .. automethod:: __call__
