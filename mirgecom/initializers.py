@@ -939,7 +939,7 @@ class Discontinuity:
             `eos.get_density`
             `eos.get_internal_energy`
         t: float
-            Time is ignored by this solution intitializer
+            Time is ignored by this solution initializer
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
