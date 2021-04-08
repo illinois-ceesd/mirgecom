@@ -1,4 +1,3 @@
-
 r""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler.
 
 Artificial viscosity for the Euler Equations:
@@ -52,7 +51,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import numpy as np
 from pytools.obj_array import (
     obj_array_vectorize,
@@ -66,17 +64,20 @@ from mirgecom.tag_cells import smoothness_indicator
 
 
 def _facial_flux_r(discr, q_tpair):
+
     actx = q_tpair.int.array_context
     flux_dis = q_tpair.avg
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_out = flux_dis * normal
-    return discr.project(q_tpair.dd, "all_faces", flux_out)
 
+    return discr.project(q_tpair.dd, "all_faces", flux_out)
+  
 
 def _facial_flux_q(discr, q_tpair):
     actx = q_tpair[0].int.array_context
     normal = thaw(actx, discr.normal(q_tpair.dd))
     flux_out = np.dot(q_tpair.avg, normal)
+
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
 
@@ -129,12 +130,12 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
 
     iff_r = obj_array_vectorize(my_facialflux_r_interior, r)
 
-
     def my_facialflux_r_partition(q):
         qin = cross_rank_trace_pairs(discr, q)
         return sum(_facial_flux_r(discr, q_tpair=part_pair) for part_pair in qin)
 
     pbf_r = obj_array_vectorize(my_facialflux_r_partition, r)
+
     dbf_r = np.zeros_like(iff_r)
     for btag in boundaries:
 
@@ -158,7 +159,6 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
     )
     dflux_q = obj_array_vectorize(discr.weak_div, q)
 
-
     def my_facialflux_q_interior(q):
         qin = interior_trace_pair(discr, q)
         iff_q = _facial_flux_q(discr, q_tpair=qin)
@@ -166,7 +166,6 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
 
     iff_q = obj_array_vectorize(my_facialflux_q_interior, q)
 
-    
     def my_facialflux_q_partition(q):
         qin = cross_rank_trace_pairs(discr, q)
         return sum(_facial_flux_q(discr, q_tpair=part_pair) for part_pair in qin)
