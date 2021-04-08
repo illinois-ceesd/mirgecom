@@ -927,7 +927,7 @@ class Discontinuity:
 
     def __call__(self, x_vec, eos, *, t=0.0):
         """
-        Create the mixture state at locations *x_vec* (t is ignored).
+        Create the mixture state at locations *x_vec*
 
         Parameters
         ----------
@@ -939,7 +939,8 @@ class Discontinuity:
             `eos.get_density`
             `eos.get_internal_energy`
         t: float
-            Time is ignored by this solution initializer
+            Time at which solution is desired. 
+            The interface is advected by to convective velocity, uc
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
