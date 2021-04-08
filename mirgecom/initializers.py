@@ -849,7 +849,7 @@ class Discontinuity:
     This initializer creates a physics-consistent flow solution
     given an initial thermal state (pressure, temperature) and an EOS.
 
-    The solution varies across a planar interface defined by a tanh fucntion
+    The solution varies across a planar interface defined by a tanh function
     located at x=xloc for density, velocity, and pressure
 
     .. automethod:: __init__
