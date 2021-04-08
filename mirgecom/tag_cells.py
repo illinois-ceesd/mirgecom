@@ -126,7 +126,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         which indicate the smoothness of a given element.
     """
     assert isinstance(u, DOFArray)
-    
+
     def get_kernel():
         return linear_operator_kernel()
 
@@ -164,7 +164,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
             vec=uhat[group.index],
             modes=actx.from_numpy(highest_mode),
         )
-        
+
     indicator = actx.np.log10(indicator + 1.0e-12)
 
     # Compute artificial viscosity percentage based on indicator and set parameters

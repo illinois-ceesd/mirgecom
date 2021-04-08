@@ -71,7 +71,7 @@ def _facial_flux_r(discr, q_tpair):
     flux_out = flux_dis * normal
 
     return discr.project(q_tpair.dd, "all_faces", flux_out)
-  
+
 
 def _facial_flux_q(discr, q_tpair):
     actx = q_tpair[0].int.array_context
