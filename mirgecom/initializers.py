@@ -11,7 +11,7 @@ Solution Initializers
 .. autoclass:: AcousticPulse
 .. automethod: make_pulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: Discontinuity
+.. autoclass:: PlanarDiscontinuity
 """
 
 __copyright__ = """
@@ -843,7 +843,7 @@ class MixtureInitializer:
                               momentum=mom, species_mass=specmass)
 
 
-class Discontinuity:
+class PlanarDiscontinuity:
     r"""Solution initializer for flow with a discontinuity.
 
     This initializer creates a physics-consistent flow solution
@@ -870,6 +870,8 @@ class Discontinuity:
         ----------
         dim: int
             specifies the number of dimensions for the solution
+        xdir: int
+            specifies the direction (plane) the discontinuity is applied in
         x0: float
            location of discontinuity
         nspeces: int
