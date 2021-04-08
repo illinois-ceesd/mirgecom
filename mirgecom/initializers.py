@@ -952,6 +952,5 @@ class Discontinuity:
         mom = mass * u
         energy = rhoe + 0.5 * mass * np.dot(u, u)
 
-
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
