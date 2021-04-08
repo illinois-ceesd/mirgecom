@@ -846,7 +846,7 @@ class MixtureInitializer:
 class Discontinuity:
     r"""Solution initializer for flow with a discontinuity.
 
-    This initializer creates a physics-consistent mixture solution
+    This initializer creates a physics-consistent flow solution
     given an initial thermal state (pressure, temperature) and a
     mixture-compatible EOS.
 
