@@ -949,25 +949,14 @@ class Discontinuity:
         actx = x_rel.array_context
         zeros = 0*x_rel
         x0 = zeros + self._uc[self._xdir]*t + self._x0
-        ones = zeros + 1
-
-        pl = self._pl*ones
-        tl = self._tl*ones
-        ul = make_obj_array([self._ul[i]*ones for i in range(self._dim)])
-        yl = make_obj_array([self._yl[i]*ones for i in range(self._nspecies)])
-
-        pr = self._pr*ones
-        tr = self._tr*ones
-        ur = make_obj_array([self._ur[i]*ones for i in range(self._dim)])
-        yr = make_obj_array([self._yr[i]*ones for i in range(self._nspecies)])
 
         sigma = self._sigma
-        xtanh = 1.0/sigma*(x0 - x_rel)
+        xtanh = 1.0/self._sigma*(x0 - x_rel)
         weight = 0.5*(1.0 - actx.np.tanh(xtanh))
-        pressure = pl + (pr - pl)*weight
-        temperature = tl + (tr - tl)*weight
-        velocity = ul + (ur - ul)*weight
-        y = yl + (yr - yl)*weight
+        pressure = self._pl + (self._pr - self._pl)*weight
+        temperature = self._tl + (self._tr - self._tl)*weight
+        velocity = self._ul + (self._ur - self._ul)*weight
+        y = self._yl + (self._yr - self._yl)*weight
 
         if self._nspecies:
             mass = eos.get_density(pressure, temperature, y)
