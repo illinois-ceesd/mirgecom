@@ -843,8 +843,8 @@ class MixtureInitializer:
                               momentum=mom, species_mass=specmass)
 
 
-class MixtureDiscontinuity:
-    r"""Solution initializer for multi-species mixture with a discontinuity.
+class Discontinuity:
+    r"""Solution initializer for flow with a discontinuity.
 
     This initializer creates a physics-consistent mixture solution
     given an initial thermal state (pressure, temperature) and a
