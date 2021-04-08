@@ -847,8 +847,7 @@ class Discontinuity:
     r"""Solution initializer for flow with a discontinuity.
 
     This initializer creates a physics-consistent flow solution
-    given an initial thermal state (pressure, temperature) and a
-    mixture-compatible EOS.
+    given an initial thermal state (pressure, temperature) and an EOS.
 
     The solution varies across a planar interface defined by a tanh fucntion
     located at x=xloc for density, velocity, and pressure
