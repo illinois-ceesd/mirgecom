@@ -137,17 +137,13 @@ jobs:
         steps:
         - uses: actions/checkout@v2
         - name: Install emirge
-          shell: bash -x {0}
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
-            # Disable selecting mirgecom branch, as the correct branch is copied below:
-            sed -i.bak 's/.*git checkout.*/echo/' install.sh
-            cp -a ../mirgecom .
-            ./install.sh
+            ./install.sh --branch=$GITHUB_SHA
 
         - name: Run simple mirgecom test
           run: |
