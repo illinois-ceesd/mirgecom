@@ -857,12 +857,12 @@ class PlanarDiscontinuity:
     """
 
     def __init__(
-            self, *, dim=3, xdir=0, x0=0, nspecies=0,
-            tl=300.0, tr=600.0,
-            pl=1.e5, pr=2.e5,
-            ul=None, ur=None,
-            yl=None, yr=None,
-            uc=None, sigma=0.5
+            self, *, dim=3, normal_dir=0, x0=0, nspecies=0,
+            temperature_left, temperature_right,
+            pressure_left, pressure_right,
+            velocity_left=None, velocity_right=None,
+            species_mass_left=None, species_mass_right=None,
+            convective_velocity=None, sigma=0.5
     ):
         r"""Initialize mixture parameters.
 
@@ -870,60 +870,60 @@ class PlanarDiscontinuity:
         ----------
         dim: int
             specifies the number of dimensions for the solution
-        xdir: int
+        normal_dir: int
             specifies the direction (plane) the discontinuity is applied in
         x0: float
            location of discontinuity
-        nspeces: int
+        nspecies: int
             specifies the number of mixture species
-        pl: float
+        pressure_left: float
             pressure to the left of the discontinuity
-        tl: float
+        temperature_left: float
             temperature to the left of the discontinuity
-        ul: numpy.ndarray
+        velocity_left: numpy.ndarray
             velocity (vector) to the left of the discontinuity
-        yl: numpy.ndarray
+        species_mass_left: numpy.ndarray
             species mass fractions to the left of the discontinuity
-        pr: float
+        pressure_right: float
             pressure to the right of the discontinuity
-        tr: float
+        temperature_right: float
             temperaure to the right of the discontinuity
-        ur: numpy.ndarray
+        velocity_right: numpy.ndarray
             velocity (vector) to the right of the discontinuity
-        yr: numpy.ndarray
+        species_mass_right: numpy.ndarray
             species mass fractions to the right of the discontinuity
         sigma: float
            sharpness parameter
         uc: numpy.ndarray
             convective velocity (discontinuity advection speed)
         """
-        if ul is None:
-            ul = np.zeros(shape=(dim,))
-        if ur is None:
-            ur = np.zeros(shape=(dim,))
+        if velocity_left is None:
+            velocity_left = np.zeros(shape=(dim,))
+        if velocity_right is None:
+            velocity_right = np.zeros(shape=(dim,))
 
-        if yl is None:
-            yl = np.zeros(shape=(nspecies,))
-        if yr is None:
-            yr = np.zeros(shape=(nspecies,))
+        if species_mass_left is None:
+            species_mass_left = np.zeros(shape=(nspecies,))
+        if species_mass_right is None:
+            species_mass_right = np.zeros(shape=(nspecies,))
 
-        if uc is None:
-            uc = np.zeros(shape=(dim,))
+        if convective_velocity is None:
+            convective_velocity = np.zeros(shape=(dim,))
 
         self._nspecies = nspecies
         self._dim = dim
         self._x0 = x0
         self._sigma = sigma
-        self._ul = ul
-        self._ur = ur
-        self._uc = uc
-        self._pl = pl
-        self._pr = pr
-        self._tl = tl
-        self._tr = tr
-        self._yl = yl
-        self._yr = yr
-        self._xdir = xdir
+        self._ul = velocity_left
+        self._ur = velocity_right
+        self._uc = convective_velocity
+        self._pl = pressure_left
+        self._pr = pressure_right
+        self._tl = temperature_left
+        self._tr = temperature_right
+        self._yl = species_mass_left
+        self._yr = species_mass_right
+        self._xdir = normal_dir
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
