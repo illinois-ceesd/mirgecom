@@ -137,6 +137,7 @@ jobs:
         steps:
         - uses: actions/checkout@v2
         - name: Install emirge
+          shell: bash -x {0}
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
