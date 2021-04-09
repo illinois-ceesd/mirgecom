@@ -43,6 +43,7 @@ from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import split_conserved, join_conserved
+from numbers import Number
 
 
 def make_pulse(amp, r0, w, r):
@@ -850,14 +851,14 @@ class PlanarDiscontinuity:
     given an initial thermal state (pressure, temperature) and an EOS.
 
     The solution varies across a planar interface defined by a tanh function
-    located at x=x0 for density, velocity, and pressure
+    located at disc_location for pressure, temperature, velocity, and mass fraction
 
     .. automethod:: __init__
     .. automethod:: __call__
     """
 
     def __init__(
-            self, *, dim=3, normal_dir=0, x0=0, nspecies=0,
+            self, *, dim=3, normal_dir=0, disc_location=0, nspecies=0,
             temperature_left, temperature_right,
             pressure_left, pressure_right,
             velocity_left=None, velocity_right=None,
@@ -872,8 +873,8 @@ class PlanarDiscontinuity:
             specifies the number of dimensions for the solution
         normal_dir: int
             specifies the direction (plane) the discontinuity is applied in
-        x0: float
-           location of discontinuity
+        disc_location: float or Function[float]
+           location of discontinuity (in time)
         nspecies: int
             specifies the number of mixture species
         pressure_left: float
@@ -894,8 +895,6 @@ class PlanarDiscontinuity:
             species mass fractions to the right of the discontinuity
         sigma: float
            sharpness parameter
-        uc: numpy.ndarray
-            convective velocity (discontinuity advection speed)
         """
         if velocity_left is None:
             velocity_left = np.zeros(shape=(dim,))
@@ -907,12 +906,9 @@ class PlanarDiscontinuity:
         if species_mass_right is None:
             species_mass_right = np.zeros(shape=(nspecies,))
 
-        if convective_velocity is None:
-            convective_velocity = np.zeros(shape=(dim,))
-
         self._nspecies = nspecies
         self._dim = dim
-        self._x0 = x0
+        self._disc_location = disc_location
         self._sigma = sigma
         self._ul = velocity_left
         self._ur = velocity_right
@@ -942,18 +938,20 @@ class PlanarDiscontinuity:
             `eos.get_internal_energy`
         t: float
             Time at which solution is desired.
-            The interface is advected by to convective velocity, uc
+            The location is (optionally) dependent on time
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
-        x_rel = x_vec[self._xdir]
-        actx = x_rel.array_context
-        zeros = 0*x_rel
-        x0 = zeros + self._uc[self._xdir]*t + self._x0
+        x = x_vec[self._xdir]
+        actx = x.array_context
+        if isinstance(self._disc_location, Number):
+            x0 = self._disc_location
+        else:
+            x0 = self._disc_location(t)
 
-        xtanh = 1.0/self._sigma*(x0 - x_rel)
+        xtanh = 1.0/self._sigma*(x0 - x)
         weight = 0.5*(1.0 - actx.np.tanh(xtanh))
         pressure = self._pl + (self._pr - self._pl)*weight
         temperature = self._tl + (self._tr - self._tl)*weight
