@@ -143,6 +143,7 @@ jobs:
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
+            sed -i.bak 's/git checkout/echo git checkout/' install.sh
             ./install.sh --branch=$GITHUB_HEAD_REF
 
         - name: Run simple mirgecom test
