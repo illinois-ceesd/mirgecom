@@ -145,7 +145,7 @@ jobs:
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
             # Disable selecting mirgecom branch, as the correct branch is copied below:
-            sed -i.bak '/git checkout/d' install.sh
+            sed -i.bak 's/.*git checkout.*/echo/' install.sh
             cp -a ../mirgecom .
             ./install.sh
 
