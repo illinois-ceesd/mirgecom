@@ -1,6 +1,7 @@
 if [ "$(uname)" = "Darwin" ]; then
 PLATFORM=MacOSX
 brew update
+brew upgrade
 brew install open-mpi
 brew install octave
 else
