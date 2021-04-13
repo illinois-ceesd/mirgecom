@@ -129,7 +129,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def q_flux_bnd(btag):
-        return boundaries[btag].q_flux(discr, btag, q)
+        return boundaries[btag].get_q_flux(discr, btag, eos, q)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     grad_q = dg_grad(discr, scalar_flux_interior, q_flux_bnd, boundaries, q)
@@ -137,7 +137,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     gas_t = eos.temperature(cv)
 
     def t_flux_bnd(btag):
-        return boundaries[btag].t_flux(discr, btag, eos=eos, time=t, q=q, t=gas_t)
+        return boundaries[btag].get_t_flux(discr, btag, eos=eos, time=t, q=q, t=gas_t)
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     grad_t = dg_grad(discr, scalar_flux_interior, t_flux_bnd, boundaries, gas_t)
@@ -147,7 +147,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
         return inviscid_facial_flux(discr, eos, q_tpair)
 
     def finv_domain_boundary(btag):
-        return boundaries[btag].inviscid_flux(discr, btag, eos=eos, t=t, q=q)
+        return boundaries[btag].get_inviscid_flux(discr, btag, eos=eos, t=t, q=q)
 
     # inviscid boundary flux
     inv_flux_bnd = element_boundary_flux(
@@ -180,8 +180,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                                              delt_part_pairs[bnd_index])
 
     # - domain boundaries (viscous bc's applied here)
-    visc_flux_bnd += sum(bnd.viscous_flux(discr, btag, eos=eos, time=t, q=q,
-                                          grad_q=grad_q, t=gas_t, grad_t=grad_t)
+    visc_flux_bnd += sum(bnd.get_viscous_flux(discr, btag, eos=eos, time=t, q=q,
+                                              grad_q=grad_q, t=gas_t, grad_t=grad_t)
                          for btag, bnd in boundaries.items())
 
     # NS RHS

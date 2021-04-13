@@ -41,10 +41,11 @@ from mirgecom.inviscid import (
     get_inviscid_timestep
 )
 from mirgecom.transport import SimpleTransport
-from mirgecom.viscous import (  # noqa
-    ns_operator,
-    get_viscous_timestep,
-)
+#from mirgecom.viscous import (  # noqa
+#    ns_operator,
+#    get_viscous_timestep,
+#)
+from mirgecom.navierstokes import ns_operator
 # from mirgecom.heat import heat_operator
 
 from mirgecom.simutil import (
@@ -167,15 +168,6 @@ def main(ctx_factory=cl.create_some_context):
 
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
-    # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
-    # generates a set of methods to calculate chemothermomechanical properties and
-    # states for this particular mechanism.
-    casename = "autoignition"
-    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism, tguess=init_temperature)
-
-    # }}}
-
     # {{{ Initialize simple transport model
     kappa = 1e-5
     spec_diffusivity = 1e-5 * np.ones(nspecies)
@@ -183,6 +175,18 @@ def main(ctx_factory=cl.create_some_context):
     transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
                                       species_diffusivity=spec_diffusivity)
     # }}}
+
+    # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
+    # generates a set of methods to calculate chemothermomechanical properties and
+    # states for this particular mechanism.
+    casename = "autoignition"
+    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    eos = PyrometheusMixture(pyrometheus_mechanism, 
+                             temperature_guess=init_temperature,
+                             transport_model=transport_model)
+
+    # }}}
+
 
     # {{{ MIRGE-Com state initialization
 
