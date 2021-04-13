@@ -7,7 +7,7 @@ brew install octave
 else
 PLATFORM=Linux
 sudo apt-get update
-sudo apt-get -y install openmpi-bin libopenmpi-dev
+sudo apt-get -y install libmpich-dev mpich
 sudo apt-get -y install octave
 fi
 MINIFORGE_INSTALL_DIR=.miniforge3
