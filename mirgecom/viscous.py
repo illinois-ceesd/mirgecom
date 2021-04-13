@@ -114,14 +114,14 @@ def diffusive_heat_flux(discr, eos, q, j):
 
     .. math::
 
-        \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{d}_{\alpha}
-        \mathbf{J}_{\alpha} = \rho{d}_{\alpha}\nabla{Y}_{\alpha},
+        \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{j}_{\alpha}
+        \mathbf{J}_{\alpha},
 
     with species diffusive flux ($\mathbf{J}_{\alpha}$) defined as:
 
     .. math::
 
-        \mathbf{J}_{\alpha} = \rho{d}_{\alpha}\nabla{Y}_{\alpha},
+        \mathbf{J}_{\alpha} = -\rho{d}_{\alpha}\nabla{Y}_{\alpha},
 
     where ${Y}_{\alpha}$ is the vector of species mass fractions.
     """
@@ -139,10 +139,12 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
 
     .. math::
 
-        \mathbf{F}_V = [0,\tau\cdot\mathbf{v},\tau_{:i},0],
+        \mathbf{F}_V = [0,\tau\cdot\mathbf{v} - \mathbf{q},
+        \tau_{:i},-\mathbf{j}_\alpha],
 
     with fluid velocity ($\mathbf{v}$), viscous stress tensor
-    ($\mathbf{\tau}$).
+    ($\mathbf{\tau}$), and diffusive flux for each species
+    ($\mathbf{j}_\alpha$).
 
     .. note::
 
@@ -160,17 +162,18 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
     cv = split_conserved(dim, q)
 
     j = diffusive_flux(discr, eos, q, grad_q)
-    q = (conductive_heat_flux(discr, eos, q, grad_t)
-         + diffusive_heat_flux(discr, eos, q, j))
+    heat_flux = conductive_heat_flux(discr, eos, q, grad_t)
+    #    heat_flux = (conductive_heat_flux(discr, eos, q, grad_t)
+    #                 + diffusive_heat_flux(discr, eos, q, j))
     vel = cv.momentum / cv.mass
     tau = viscous_stress_tensor(discr, eos, q, grad_q)
     viscous_mass_flux = 0 * cv.momentum
-    viscous_energy_flux = q - np.dot(tau, vel)
+    viscous_energy_flux = np.dot(tau, vel) - heat_flux
 
     return join_conserved(dim,
             mass=viscous_mass_flux,
             energy=viscous_energy_flux,
-            momentum=(-tau), species_mass=j)
+            momentum=tau, species_mass=-j)
 
 
 def viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
