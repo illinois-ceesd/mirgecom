@@ -177,3 +177,91 @@ def test_slipwall_flux(actx_factory, dim, order):
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < 1e-12
     )
+
+
+# Box grid generator widget lifted from @majosm's diffusion tester
+def _get_box_mesh(dim, a, b, n):
+    dim_names = ["x", "y", "z"]
+    boundary_tag_to_face = {}
+    for i in range(dim):
+        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
+        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
+        boundary_tag_to_face=boundary_tag_to_face)
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+# @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
+# def test_noslip(actx_factory, dim, order):
+def test_noslip(actx_factory, dim):
+    """Check IsothermalNoSlip viscous boundary treatment."""
+    actx = actx_factory()
+    order = 1
+
+    wall_temp = 100.0
+    kappa = 3.0
+    sigma = 5.0
+
+    from mirgecom.transport import SimpleTransport
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+
+    from mirgecom.boundary import IsothermalNoSlip
+    wall = IsothermalNoSlip(wall_temperature=wall_temp)
+    eos = IdealSingleGas(transport_model=transport_model)
+
+    # from pytools.convergence import EOCRecorder
+    # eoc = EOCRecorder()
+
+    #    for np1 in [4, 8, 12]:
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    #    boundaries = {BTAG_ALL: wall}
+    # for i in range(dim):
+    #     boundaries[DTAG_BOUNDARY("-"+str(i+1))] = 0
+    #     boundaries[DTAG_BOUNDARY("+"+str(i+1))] = 0
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    # nhat = thaw(actx, discr.normal(BTAG_ALL))
+    # h = 1.0 / np1
+
+    # utility to compare stuff on the boundary only
+    # from functools import partial
+    # bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+    # for velocities in each direction
+    # err_max = 0.0
+    for vdir in range(dim):
+        vel = np.zeros(shape=(dim,))
+
+        # for velocity directions +1, and -1
+        for parity in [1.0, -1.0]:
+            vel[vdir] = parity
+            from mirgecom.initializers import Uniform
+            initializer = Uniform(dim=dim, velocity=vel)
+            uniform_state = initializer(nodes, eos=eos)
+            cv = split_conserved(dim, uniform_state)
+
+            # here's a boundary pair for the wall(s) just in case
+            q_flux = wall.get_q_flux(discr, btag=BTAG_ALL, eos=eos, q=uniform_state)
+            t_flux = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos, q=uniform_state)
+            i_flux = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,
+                                            q=uniform_state)
+            print(f"{q_flux=}")
+            print(f"{t_flux=}")
+            print(f"{i_flux=}")
+
+            # from mirgecom.operators import dg_grad_low
+            # grad_q = dg_grad_low(discr, uniform_state, q_flux)
+
+            # grad_cv = split_conserved(dim, grad_q)
+            temperature = eos.temperature(cv)
+            print(f"{temperature=}")
+            # grad_t = dg_grad_low(discr, temperature, t_flux)
+
+            # v_flux = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,
+            #                                uniform_state, grad_uniform_state)

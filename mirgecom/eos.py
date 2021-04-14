@@ -243,6 +243,20 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
+    def get_internal_energy(self, temperature, species_fractions, **kwargs):
+        r"""Get the gas thermal energy from temperature, and species fractions (Y).
+
+        The gas internal energy $e$ is calculated from:
+
+        .. math::
+
+            e = R_s T \sum{Y_\alpha h_\alpha}
+        """
+        if "mass" not in kwargs:
+            return ValueError("Expected mass keyword argument.")
+        mass = kwargs["mass"]
+        return self._gas_const * mass * temperature / (self._gamma - 1)
+
 
 class PyrometheusMixture(GasEOS):
     r"""Ideal gas mixture ($p = \rho{R}_\mathtt{mix}{T}$).
