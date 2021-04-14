@@ -2,9 +2,10 @@ r""":mod:`mirgecom.operators` provides helper functions for composing DG operato
 
 .. autofunction:: element_local_grad
 .. autofunction:: weak_grad
+.. autofunction:: dg_grad_low
 .. autofunction:: dg_grad
-.. autofunction:: dg_div
 .. autofunction:: dg_div_low
+.. autofunction:: dg_div
 .. autofunction:: element_boundary_flux
 """
 
@@ -96,6 +97,32 @@ def weak_grad(discr, u):
         return obj_array_vectorize(discr.weak_grad, u)
     else:
         return discr.weak_grad(u)
+
+
+def dg_grad_low(discr, interior_u, bndry_flux):
+    r"""Compute a DG gradient for the input *u*.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    compute_interior_flux:
+        function taking a `grudge.sym.TracePair` and returning the numerical flux
+        for the corresponding interior boundary.
+    compute_boundary_flux:
+        function taking a boundary tag and returning the numerical flux
+        for the corresponding domain boundary.
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg gradient operator applied to *u*
+    """
+    return -discr.inverse_mass(weak_grad(discr, interior_u)
+                               - discr.face_mass(bndry_flux))
 
 
 def dg_grad(discr, compute_interior_flux, compute_boundary_flux, boundaries, u):

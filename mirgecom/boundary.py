@@ -60,7 +60,7 @@ class ViscousBC:
         """Get the flux through boundary *btag* for each scalar in *q*."""
         raise NotImplementedError()
 
-    def get_t_flux(self, discr, btag, eos, q, **kwargs):
+    def get_t_flux(self, discr, btag, eos, temperature, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
         raise NotImplementedError()
 
@@ -200,7 +200,8 @@ class IsothermalNoSlip(ViscousBC):
         velocity_plus = -cv_minus.momentum / cv_minus.mass
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
         internal_energy_plus = eos.get_internal_energy(
-            temperature=temperature_plus, species_fractions=mass_frac_plus
+            temperature=temperature_plus, species_fractions=mass_frac_plus,
+            mass=cv_minus.mass
         )
         total_energy_plus = cv_minus.mass*(internal_energy_plus
                                            + .5*np.dot(velocity_plus, velocity_plus))
@@ -227,7 +228,6 @@ class IsothermalNoSlip(ViscousBC):
         """Get the "temperature flux" through boundary *btag*."""
         q_minus = discr.project("vol", btag, q)
         cv_minus = split_conserved(discr.dim, q_minus)
-
         actx = cv_minus.mass.array_context
         nhat = thaw(actx, discr.normal(btag))
 
