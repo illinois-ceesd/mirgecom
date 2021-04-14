@@ -35,7 +35,10 @@ from mirgecom.fluid import split_conserved
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
+from grudge.eager import (
+    EagerDGDiscretization,
+    interior_trace_pair
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -199,7 +202,7 @@ def test_noslip(actx_factory, dim):
     actx = actx_factory()
     order = 1
 
-    wall_temp = 100.0
+    wall_temp = 1.0
     kappa = 3.0
     sigma = 5.0
 
@@ -208,7 +211,7 @@ def test_noslip(actx_factory, dim):
 
     from mirgecom.boundary import IsothermalNoSlip
     wall = IsothermalNoSlip(wall_temperature=wall_temp)
-    eos = IdealSingleGas(transport_model=transport_model)
+    eos = IdealSingleGas(transport_model=transport_model, gas_const=1.0)
 
     # from pytools.convergence import EOCRecorder
     # eoc = EOCRecorder()
@@ -225,8 +228,17 @@ def test_noslip(actx_factory, dim):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-    # nhat = thaw(actx, discr.normal(BTAG_ALL))
+    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    print(f"{nhat=}")
     # h = 1.0 / np1
+
+    from mirgecom.flux import central_scalar_flux
+
+    def scalar_flux_interior(int_tpair):
+        normal = thaw(actx, discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = central_scalar_flux(int_tpair, normal)
+        return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     # utility to compare stuff on the boundary only
     # from functools import partial
@@ -245,22 +257,39 @@ def test_noslip(actx_factory, dim):
             initializer = Uniform(dim=dim, velocity=vel)
             uniform_state = initializer(nodes, eos=eos)
             cv = split_conserved(dim, uniform_state)
-
-            # here's a boundary pair for the wall(s) just in case
-            q_flux = wall.get_q_flux(discr, btag=BTAG_ALL, eos=eos, q=uniform_state)
-            t_flux = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos, q=uniform_state)
-            i_flux = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,
-                                            q=uniform_state)
-            print(f"{q_flux=}")
-            print(f"{t_flux=}")
-            print(f"{i_flux=}")
-
-            # from mirgecom.operators import dg_grad_low
-            # grad_q = dg_grad_low(discr, uniform_state, q_flux)
-
-            # grad_cv = split_conserved(dim, grad_q)
+            print(f"{cv=}")
             temperature = eos.temperature(cv)
             print(f"{temperature=}")
+
+            q_int_tpair = interior_trace_pair(discr, uniform_state)
+            q_flux_bc = wall.get_q_flux(discr, btag=BTAG_ALL,
+                                        eos=eos, q=uniform_state)
+            q_flux_int = scalar_flux_interior(q_int_tpair)
+            q_flux_bnd = q_flux_bc + q_flux_int
+
+            t_int_tpair = interior_trace_pair(discr, temperature)
+            t_flux_bc = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos,
+                                        q=uniform_state)
+            t_flux_int = scalar_flux_interior(t_int_tpair)
+            t_flux_bnd = t_flux_bc + t_flux_int
+
+            from mirgecom.inviscid import inviscid_facial_flux
+            i_flux_bc = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,
+                                               q=uniform_state)
+            i_flux_int = inviscid_facial_flux(discr, eos=eos, q_tpair=q_int_tpair)
+            i_flux_bnd = i_flux_bc + i_flux_int
+
+            print(f"{q_flux_bnd=}")
+            print(f"{t_flux_bnd=}")
+            print(f"{i_flux_bnd=}")
+
+            from mirgecom.operators import dg_grad_low
+            grad_q = dg_grad_low(discr, uniform_state, q_flux_bnd)
+            grad_t = dg_grad_low(discr, temperature, t_flux_bnd)
+            print(f"{grad_q=}")
+            print(f"{grad_t=}")
+
+            # grad_cv = split_conserved(dim, grad_q)
             # grad_t = dg_grad_low(discr, temperature, t_flux)
 
             # v_flux = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,

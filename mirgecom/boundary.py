@@ -219,10 +219,17 @@ class IsothermalNoSlip(ViscousBC):
         nhat = thaw(actx, discr.normal(btag))
         from mirgecom.flux import central_scalar_flux
         flux_func = central_scalar_flux
+        
         if "numerical_flux_func" in kwargs:
             flux_func = kwargs.get("numerical_flux_func")
 
-        return flux_func(bnd_tpair, nhat)
+        flux_weak = flux_func(bnd_tpair, nhat)
+
+        if "local" in kwargs:
+            if kwargs["local"]:
+                return flux_weak
+
+        return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
 
     def get_t_flux(self, discr, btag, eos, q, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
@@ -240,7 +247,13 @@ class IsothermalNoSlip(ViscousBC):
         if "numerical_flux_func" in kwargs:
             flux_func = kwargs.get("numerical_flux_func")
 
-        return flux_func(bnd_tpair, nhat)
+        flux_weak = flux_func(bnd_tpair, nhat)
+
+        if "local" in kwargs:
+            if kwargs["local"]:
+                return flux_weak
+
+        return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
 
     def get_inviscid_flux(self, discr, btag, eos, q, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
