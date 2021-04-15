@@ -392,7 +392,7 @@ class PyrometheusMixture(GasEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_fractions)
 
-    def get_internal_energy(self, temperature, species_fractions):
+    def get_internal_energy(self, temperature, species_fractions, **kwargs):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:

@@ -172,8 +172,12 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
 
     # passes the right shape for diffusive flux when no species
     # TODO: fix single gas join_conserved for vectors at each cons eqn
-    if len(j) == 0:
-        j = cv.momentum * cv.species_mass.reshape(-1, 1)
+    j = cv.momentum * cv.species_mass.reshape(-1, 1)
+    # print(f"{j2.__repr__()=}")
+    # print(f"{j.__repr__()=}")
+    # if len(j) == 0:
+    #    print("Reshaping j")
+    #     j = j2
 
     return join_conserved(dim,
             mass=viscous_mass_flux,
