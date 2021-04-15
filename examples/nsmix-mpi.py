@@ -57,7 +57,6 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
     AdiabaticSlipBoundary,
     IsothermalNoSlip,
-    InflowOutflow,
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -240,10 +239,10 @@ def main(ctx_factory=cl.create_some_context):
         t_end = t_final
         if constant_cfl is True:
             inviscid_dt = get_inviscid_timestep(discr=discr, eos=eos,
-                                                cfl=current_cfl, state=state)
+                                                cfl=current_cfl, q=state)
             viscous_dt = get_viscous_timestep(discr=discr, eos=eos,
                                               transport_model=transport_model,
-                                              cfl=current_cfl, state=state)
+                                              cfl=current_cfl, q=state)
             next_dt = min([next_dt, inviscid_dt, viscous_dt])
         # else:
         #     inviscid_cfl = get_inviscid_cfl(discr=discr, eos=eos,
