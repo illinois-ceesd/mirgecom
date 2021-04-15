@@ -237,11 +237,13 @@ class IsothermalNoSlip(ViscousBC):
 
         return discr.project(bnd_qpair.dd, "all_faces", flux_weak)
 
-    def get_t_flux(self, discr, btag, eos, q, temperature, **kwargs):
+    def get_t_flux(self, discr, btag, eos, q, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
-        t_minus = discr.project("vol", btag, temperature)
+        q_minus = discr.project("vol", btag, q)
+        cv_minus = split_conserved(discr.dim, q_minus)
+        t_minus = eos.temperature(cv_minus)
         t_plus = 0*t_minus + self._wall_temp
-        actx = q[0].array_context
+        actx = cv_minus.mass.array_context
         nhat = thaw(actx, discr.normal(btag))
         bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 
