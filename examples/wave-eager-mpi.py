@@ -38,6 +38,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
+from leap.rk import RK4MethodBuilder
 from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
 
@@ -62,7 +63,7 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main():
+def main(use_leap=False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -126,22 +127,51 @@ def main():
     t = 0
     t_final = 3
     istep = 0
-    while t < t_final:
-        fields = rk4_step(fields, t, dt, rhs)
 
-        if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
-            vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+    # initialize Leap integrator if using one
+    if use_leap:
+        timestepper = RK4MethodBuilder("w")
+        code = timestepper.generate()
+        from dagrt.codegen import PythonCodeGenerator
+        codegen = PythonCodeGenerator(class_name="Method")
+        interp = codegen.get_class(code)(function_map={
+            "<func>" + "w": rhs,
+            })
+        interp.set_up(t_start=t, dt_start=dt, context={"w": fields})
+
+    while t < t_final:
+        if use_leap:
+            for event in interp.run(t_end=t+dt):
+                if isinstance(event, interp.StateComputed):
+                    fields = event.state_component
+                    if istep % 10 == 0:
+                        print(istep, t, discr.norm(fields[0]))
+                        vis.write_vtk_file(
+                            "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                            [
+                                ("u", fields[0]),
+                                ("v", fields[1:]),
+                                ])
+                    t += dt
+                    istep += 1
+        else:
+            fields = rk4_step(fields, t, dt, rhs)
+
+            if istep % 10 == 0:
+                print(istep, t, discr.norm(fields[0]))
+                vis.write_vtk_file(
+                    "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
                         ])
 
-        t += dt
-        istep += 1
+            t += dt
+            istep += 1
 
 
 if __name__ == "__main__":
-    main()
+    use_leap = False
+    main(use_leap=use_leap)
 
 # vim: foldmethod=marker

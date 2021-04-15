@@ -35,6 +35,7 @@ from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
 from grudge.symbolic.primitives import QTAG_NONE
 from mirgecom.integrators import rk4_step
+from leap.rk import RK4MethodBuilder
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -44,7 +45,7 @@ import pyopencl.tools as cl_tools
 
 
 @mpi_entry_point
-def main():
+def main(use_leap=False):
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
@@ -118,6 +119,17 @@ def main():
     t_final = 0.01
     istep = 0
 
+    # initialize Leap integrator if using one
+    if use_leap:
+        timestepper = RK4MethodBuilder("u")
+        code = timestepper.generate()
+        from dagrt.codegen import PythonCodeGenerator
+        codegen = PythonCodeGenerator(class_name="Method")
+        interp = codegen.get_class(code)(function_map={
+            "<func>" + "u": rhs,
+            })
+        interp.set_up(t_start=t, dt_start=dt, context={"u": u})
+
     while True:
         if istep % 10 == 0:
             print(istep, t, discr.norm(u))
@@ -129,12 +141,20 @@ def main():
         if t >= t_final:
             break
 
-        u = rk4_step(u, t, dt, rhs)
-        t += dt
-        istep += 1
+        if use_leap:
+            for event in interp.run(t_end=t+dt):
+                if isinstance(event, interp.StateComputed):
+                    u = event.state_component
+                    t += dt
+                    istep += 1
+        else:
+            u = rk4_step(u, t, dt, rhs)
+            t += dt
+            istep += 1
 
 
 if __name__ == "__main__":
-    main()
+    use_leap = False
+    main(use_leap=use_leap)
 
 # vim: foldmethod=marker

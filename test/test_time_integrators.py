@@ -32,6 +32,15 @@ from mirgecom.integrators import (euler_step,
                                   lsrk54_step,
                                   lsrk144_step,
                                   rk4_step)
+from leap.rk import (
+    ODE23MethodBuilder, ODE45MethodBuilder,
+    ForwardEulerMethodBuilder,
+    MidpointMethodBuilder, HeunsMethodBuilder,
+    RK3MethodBuilder, RK4MethodBuilder, RK5MethodBuilder,
+    LSRK4MethodBuilder,
+    SSPRK22MethodBuilder, SSPRK33MethodBuilder,
+    )
+from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -68,3 +77,60 @@ def test_integration_order(integrator, method_order):
 
     logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
     assert integrator_eoc.order_estimate() >= method_order - .01
+
+
+@pytest.mark.parametrize(("method", "method_order"), [
+    (ODE23MethodBuilder("y", use_high_order=False), 2),
+    (ODE23MethodBuilder("y", use_high_order=True), 3),
+    (ODE45MethodBuilder("y", use_high_order=False), 4),
+    (ODE45MethodBuilder("y", use_high_order=True), 5),
+    (ForwardEulerMethodBuilder("y"), 1),
+    (MidpointMethodBuilder("y"), 2),
+    (HeunsMethodBuilder("y"), 2),
+    (RK3MethodBuilder("y"), 3),
+    (RK4MethodBuilder("y"), 4),
+    (RK5MethodBuilder("y"), 5),
+    (LSRK4MethodBuilder("y"), 4),
+    (KennedyCarpenterIMEXARK4MethodBuilder("y", use_implicit=False,
+        explicit_rhs_name="y"), 4),
+    (SSPRK22MethodBuilder("y"), 2),
+    (SSPRK33MethodBuilder("y"), 3),
+    ])
+def test_leapgen_integration_order(method, method_order):
+    """Test that time integrators have correct order."""
+
+    def exact_soln(t):
+        return np.exp(-t)
+
+    def rhs(t, y):
+        return -np.exp(-t)
+
+    code = method.generate()
+    component_id = "y"
+
+    from pytools.convergence import EOCRecorder
+    integrator_eoc = EOCRecorder()
+    from dagrt.codegen import PythonCodeGenerator
+    codegen = PythonCodeGenerator(class_name="Method")
+
+    dt = 1.0
+    for refine in [1, 2, 4, 8]:
+        dt = dt / refine
+        t = 0
+        state = exact_soln(t)
+        interp = codegen.get_class(code)(function_map={
+            "<func>" + component_id: rhs,
+            })
+        interp.set_up(t_start=t, dt_start=dt, context={component_id: state})
+
+        while t < 4:
+            for event in interp.run_single_step():
+                if isinstance(event, interp.StateComputed):
+                    state = event.state_component
+                    t = t + dt
+
+        error = np.abs(state - exact_soln(t)) / exact_soln(t)
+        integrator_eoc.add_data_point(dt, error)
+
+    logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+    assert integrator_eoc.order_estimate() >= method_order - .1

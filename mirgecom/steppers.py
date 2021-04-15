@@ -93,3 +93,79 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
             logmgr.tick_after()
 
     return istep, t, state
+
+
+def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
+                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
+    """Advance state from some time (t) to some time (t_final) using
+       a Leap-generated method object for timestepping.
+
+    Parameters
+    ----------
+    rhs
+        Function that should return the time derivative of the state
+    timestepper
+        Function that advances the state from t=time to t=(time+dt), and
+        returns the advanced state - in this case, a Leap method.
+    checkpoint
+        Function is user-defined and can be used to preform simulation status
+        reporting, viz, and restart i/o.  A non-zero return code from this function
+        indicates that this function should stop gracefully.
+    get_timestep
+        Function that should return dt for the next step. This interface allows
+        user-defined adaptive timestepping. A negative return value indicated that
+        the stepper should stop gracefully.
+    state: numpy.ndarray
+        Agglomerated object array containing at least the state variables that
+        will be advanced by this stepper
+    t_final: float
+        Simulated time at which to stop
+    t: float
+        Time at which to start
+    istep: int
+        Step number from which to start
+
+    Returns
+    -------
+    istep: int
+        the current step number
+    t: float
+        the current time
+    state: numpy.ndarray
+    """
+    if t_final <= t:
+        return istep, t, state
+
+    # Generate code for Leap method.
+    dt = get_timestep(state=state)
+    code = timestepper.generate()
+    from dagrt.codegen import PythonCodeGenerator
+    codegen = PythonCodeGenerator(class_name="Method")
+    interp = codegen.get_class(code)(function_map={
+        "<func>" + "state": rhs,
+        })
+    interp.set_up(t_start=t, dt_start=dt, context={"state": state})
+
+    while t < t_final:
+
+        if logmgr:
+            logmgr.tick_before()
+
+        dt = get_timestep(state=state)
+        if dt < 0:
+            return istep, t, state
+
+        checkpoint(state=state, step=istep, t=t, dt=dt)
+
+        # Leap interface here is *a bit* different.
+        for event in interp.run(t_end=t+dt):
+            if isinstance(event, interp.StateComputed):
+                state = event.state_component
+                t += dt
+                istep += 1
+                if logmgr:
+                    set_dt(logmgr, dt)
+                    set_sim_state(logmgr, dim, state, eos)
+                    logmgr.tick_after()
+
+    return istep, t, state

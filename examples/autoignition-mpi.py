@@ -48,7 +48,8 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
+from leap.rk import RK4MethodBuilder
+from mirgecom.steppers import advance_state, advance_state_leap
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -60,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context, use_leap=False):
     """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -85,7 +86,10 @@ def main(ctx_factory=cl.create_some_context):
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = rk4_step
+    if use_leap:
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
     box_ll = -0.005
     box_ur = 0.005
     error_state = False
@@ -237,11 +241,18 @@ def main(ctx_factory=cl.create_some_context):
                               viz_fields=viz_fields)
 
     try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
+        if use_leap:
+            (current_step, current_t, current_state) = \
+                advance_state_leap(rhs=my_rhs, timestepper=timestepper,
+                              checkpoint=my_checkpoint,
+                              get_timestep=get_timestep, state=current_state,
+                              t=current_t, t_final=t_final)
+        else:
+            (current_step, current_t, current_state) = \
+                advance_state(rhs=my_rhs, timestepper=timestepper,
+                              checkpoint=my_checkpoint,
+                              get_timestep=get_timestep, state=current_state,
+                              t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = True
         current_step = ex.step
@@ -264,6 +275,7 @@ def main(ctx_factory=cl.create_some_context):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    main()
+    use_leap = False
+    main(use_leap=use_leap)
 
 # vim: foldmethod=marker
