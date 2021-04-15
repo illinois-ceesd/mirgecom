@@ -319,7 +319,7 @@ class PrescribedViscousBoundary(ViscousBC):
         if self._q_flux_func:
             flux_weak = self._q_flux_func(nodes, eos, q_minus, nhat, **kwargs)
         elif self._q_func:
-            q_plus = self._q_func(nodes, eos, q_minus, **kwargs)
+            q_plus = self._q_func(nodes, eos=eos, q=q_minus, **kwargs)
         else:
             q_plus = q_minus
 
@@ -353,7 +353,7 @@ class PrescribedViscousBoundary(ViscousBC):
             if self._t_func:
                 t_plus = self._t_func(nodes, eos, q_minus, **kwargs)
             elif self._q_func:
-                q_plus = self._q_func(nodes, eos, q_minus, **kwargs)
+                q_plus = self._q_func(nodes, eos=eos, q=q_minus, **kwargs)
                 cv_plus = split_conserved(discr.dim, q_plus)
                 t_plus = eos.temperature(cv_plus)
             else:
@@ -386,7 +386,7 @@ class PrescribedViscousBoundary(ViscousBC):
         if self._inviscid_flux_func:
             flux_weak = self._inviscid_flux_func(nodes, eos, q_minus, nhat, **kwargs)
         elif self._q_func:
-            q_plus = self._q_func(nodes, eos, q_minus, **kwargs)
+            q_plus = self._q_func(nodes, eos=eos, q=q_minus, **kwargs)
             bnd_tpair = TracePair(btag, interior=q_minus, exterior=q_plus)
             from mirgecom.inviscid import inviscid_facial_flux
             return inviscid_facial_flux(discr, eos, bnd_tpair)
@@ -420,7 +420,7 @@ class PrescribedViscousBoundary(ViscousBC):
             return discr.project(as_dofdesc(btag), "all_faces", flux_weak)
         else:
             if self._q_func:
-                q_plus = self._q_func(nodes, eos, q_minus, **kwargs)
+                q_plus = self._q_func(nodes, eos=eos, q=q_minus, **kwargs)
             else:
                 q_plus = q_minus
             cv_plus = split_conserved(discr.dim, q_plus)
