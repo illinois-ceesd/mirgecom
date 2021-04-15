@@ -170,6 +170,11 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
     viscous_mass_flux = 0 * cv.momentum
     viscous_energy_flux = np.dot(tau, vel) - heat_flux
 
+    # passes the right shape for diffusive flux when no species
+    # TODO: fix single gas join_conserved for vectors at each cons eqn
+    if len(j) == 0:
+        j = cv.momentum * cv.species_mass.reshape(-1, 1)
+
     return join_conserved(dim,
             mass=viscous_mass_flux,
             energy=viscous_energy_flux,

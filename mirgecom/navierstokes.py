@@ -137,7 +137,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     gas_t = eos.temperature(cv)
 
     def t_flux_bnd(btag):
-        return boundaries[btag].get_t_flux(discr, btag, eos=eos, time=t, q=q, t=gas_t)
+        return boundaries[btag].get_t_flux(discr, btag, eos=eos,
+                                           time=t, q=q, t=gas_t)
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     grad_t = dg_grad(discr, scalar_flux_interior, t_flux_bnd, boundaries, gas_t)

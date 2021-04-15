@@ -35,16 +35,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-
-# from mirgecom.euler import euler_operator
 from mirgecom.inviscid import (
     get_inviscid_timestep
 )
 from mirgecom.transport import SimpleTransport
-#from mirgecom.viscous import (  # noqa
-#    ns_operator,
-#    get_viscous_timestep,
-#)
+from mirgecom.viscous import get_viscous_timestep
 from mirgecom.navierstokes import ns_operator
 # from mirgecom.heat import heat_operator
 
@@ -181,12 +176,11 @@ def main(ctx_factory=cl.create_some_context):
     # states for this particular mechanism.
     casename = "autoignition"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism, 
+    eos = PyrometheusMixture(pyrometheus_mechanism,
                              temperature_guess=init_temperature,
                              transport_model=transport_model)
 
     # }}}
-
 
     # {{{ MIRGE-Com state initialization
 
