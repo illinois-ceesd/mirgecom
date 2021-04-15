@@ -216,7 +216,7 @@ def viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
     return flux_weak
 
 
-def get_viscous_timestep(discr, eos, transport, cfl, q):
+def get_viscous_timestep(discr, eos, transport_model, cfl, q):
     """Routine (will) return the (local) maximum stable viscous timestep.
 
     Currently, it's a hack waiting for the geometric_factor helpers port
