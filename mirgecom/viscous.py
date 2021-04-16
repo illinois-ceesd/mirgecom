@@ -88,7 +88,13 @@ def diffusive_flux(discr, eos, q, grad_q):
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
 
-    return -make_obj_array([cv.mass*d[i]*grad_y[i] for i in range(nspecies)])
+    # TODO: Better way?
+    obj_ary = -make_obj_array([cv.mass*d[i]*grad_y[i] for i in range(nspecies)])
+    diffusive_flux = np.empty(shape=(nspecies, discr.dim), dtype=object)
+    for idx, v in enumerate(obj_ary):
+        diffusive_flux[idx] = v
+
+    return diffusive_flux
 
 
 def conductive_heat_flux(discr, eos, q, grad_t):
@@ -170,14 +176,10 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
     viscous_mass_flux = 0 * cv.momentum
     viscous_energy_flux = np.dot(tau, vel) - heat_flux
 
-    # passes the right shape for diffusive flux when no species
+    # passes the right (empty) shape for diffusive flux when no species
     # TODO: fix single gas join_conserved for vectors at each cons eqn
-    j = cv.momentum * cv.species_mass.reshape(-1, 1)
-    # print(f"{j2.__repr__()=}")
-    # print(f"{j.__repr__()=}")
-    # if len(j) == 0:
-    #    print("Reshaping j")
-    #     j = j2
+    if len(j) == 0:
+        j = cv.momentum * cv.species_mass.reshape(-1, 1)
 
     return join_conserved(dim,
             mass=viscous_mass_flux,
