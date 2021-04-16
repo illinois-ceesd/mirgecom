@@ -97,8 +97,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
 def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
-    """Advance state from some time (t) to some time (t_final) using
-       a Leap-generated method object for timestepping.
+    """Advance state from some time (t) to some time (t_final) using Leap.
 
     Parameters
     ----------
