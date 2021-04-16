@@ -257,22 +257,9 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         cv = split_conserved(dim=dim, q=state)
-        # dv = eos.dependent_vars(cv)
-        # tv = transport_model.dependent_vars(cv, eos)
         ns_rhs = ns_operator(discr, q=state, t=t,
                              boundaries=visc_bnds, eos=eos)
-        # inviscid_rhs = euler_operator(discr, q=state, t=t,
-        #                               boundaries=inv_bnds, eos=eos)
-        # heat_rhs = 0
-        #        heat_rhs = heat_operator(discr, temperature=dv.temperature,
-        #                                 kappa=tv.kappa, boundaries=thermal_bnds)
         reaction_source = eos.get_species_source_terms(cv)
-        # viscous_rhs = 0
-        #        viscous_rhs = viscodiffusive_operator(discr, q=state, t=t,
-        #                                              boundaries=v_bound,
-        #                                              eos=eos,
-        #                                              transport_model=transport_model)
-        # return inviscid_rhs + viscous_rhs + reaction_source + heat_rhs
         return ns_rhs + reaction_source
 
     def my_checkpoint(step, t, dt, state):
