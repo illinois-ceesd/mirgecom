@@ -17,7 +17,8 @@ jobs:
         -
           uses: actions/setup-python@v1
           with:
-            python-version: '3.x'
+            # matches compat target in setup.py
+            python-version: '3.8'
         - name: Flake8 test
           run: |
             python3 -m venv myenv
@@ -143,7 +144,13 @@ jobs:
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
-            ./install.sh --branch=$GITHUB_HEAD_REF
+            if [[ -n $GITHUB_HEAD_REF ]]; then
+                echo "Testing branch '$GITHUB_HEAD_REF'"
+                ./install.sh --branch=$GITHUB_HEAD_REF
+            else
+                echo "Testing 'main' branch"
+                ./install.sh
+            fi
 
         - name: Run simple mirgecom test
           run: |
