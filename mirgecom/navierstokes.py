@@ -71,7 +71,10 @@ from mirgecom.viscous import (
 from mirgecom.flux import (
     central_scalar_flux
 )
-from mirgecom.fluid import split_conserved
+from mirgecom.fluid import (
+    split_conserved,
+    join_conserved_vectors
+)
 from mirgecom.operators import (
     dg_grad,
     element_boundary_flux
@@ -132,7 +135,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
         return boundaries[btag].get_q_flux(discr, btag, eos, q)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_q = dg_grad(discr, scalar_flux_interior, q_flux_bnd, boundaries, q)
+    gq = dg_grad(discr, scalar_flux_interior, q_flux_bnd, boundaries, q)
+    grad_q = join_conserved_vectors(dim, gq)
 
     gas_t = eos.temperature(cv)
 
