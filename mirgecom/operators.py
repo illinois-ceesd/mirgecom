@@ -7,6 +7,7 @@ r""":mod:`mirgecom.operators` provides helper functions for composing DG operato
 .. autofunction:: dg_div_low
 .. autofunction:: dg_div
 .. autofunction:: element_boundary_flux
+.. autofunction:: elbnd_flux
 """
 
 __copyright__ = """
@@ -40,13 +41,21 @@ from grudge.eager import (
 )
 
 
+def elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
+               int_tpair, xrank_pairs, boundaries):
+    """Generically compute flux across element boundaries for simple f(u) flux."""
+    return (compute_interior_flux(int_tpair)
+            + sum(compute_interior_flux(part_tpair)
+                  for part_tpair in xrank_pairs)
+            + sum(compute_boundary_flux(btag) for btag in boundaries))
+
+
 def element_boundary_flux(discr, compute_interior_flux, compute_boundary_flux,
                           boundaries, u):
     """Generically compute flux across element boundaries for simple f(u) flux."""
-    return (compute_interior_flux(interior_trace_pair(discr, u))
-            + sum(compute_interior_flux(part_tpair)
-                  for part_tpair in cross_rank_trace_pairs(discr, u))
-            + sum(compute_boundary_flux(btag) for btag in boundaries))
+    return elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
+                      interior_trace_pair(discr, u),
+                      cross_rank_trace_pairs(discr, u), boundaries)
 
 
 def element_local_grad(discr, u):
