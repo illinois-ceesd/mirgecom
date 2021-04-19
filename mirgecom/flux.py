@@ -31,6 +31,7 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
+from mirgecom.operators import jump
 
 
 def central_scalar_flux(trace_pair, normal):
@@ -71,7 +72,7 @@ def central_scalar_flux(trace_pair, normal):
     return trace_pair.avg*normal
 
 
-def lfr_flux(q_tpair, flux_func, normal, lam):
+def lfr_flux(q_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -88,13 +89,13 @@ def lfr_flux(q_tpair, flux_func, normal, lam):
 
     Parameters
     ----------
-    flux_func:
-
-        function should return ambient dim-vector fluxes given *q* values
-
     q_tpair: :class:`grudge.sym.TracePair`
 
-        Trace pair for the face upon which flux calculation is to be performed
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`grudge.sym.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
 
     normal: numpy.ndarray
 
@@ -112,6 +113,4 @@ def lfr_flux(q_tpair, flux_func, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    flux_avg = 0.5*(flux_func(q_tpair.int)
-                    + flux_func(q_tpair.ext))
-    return flux_avg @ normal - 0.5*lam*(q_tpair.ext - q_tpair.int)
+    return f_tpair.avg @ normal - lam*jump(q_tpair)/2

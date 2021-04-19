@@ -8,6 +8,7 @@ r""":mod:`mirgecom.operators` provides helper functions for composing DG operato
 .. autofunction:: dg_div
 .. autofunction:: element_boundary_flux
 .. autofunction:: elbnd_flux
+.. autofunction:: jump
 """
 
 __copyright__ = """
@@ -39,6 +40,27 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
+
+
+# placeholder awaits resolution on grudge PR #71
+def jump(trace_pair):
+    r"""Return the "jump" in the quantities represented by the *trace_pair*.
+
+    The jump in a quantity $\mathbf{q}$ is denoted $[\mathbf{q}]$ and is
+    defined by:
+    .. math:
+        [\mathbf{q}] = \mathbf{q}^+ - \mathbf{q}^-
+
+    Parameters
+    ----------
+    trace_pair: :class:`grudge.sym.TracePair`
+    Represents the quantity for which the jump is to be calculated.
+
+    Returns
+    -------
+    like(trace_pair.int)
+    """
+    return trace_pair.ext - trace_pair.int
 
 
 def elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,

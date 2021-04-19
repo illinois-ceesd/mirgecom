@@ -142,9 +142,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                             q_int_tpair, q_part_pairs, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_q = join_conserved_vectors(
-        dim, dg_grad_low(discr, q, q_flux_bnd)
-    )
+    grad_q = join_conserved_vectors(dim, dg_grad_low(discr, q, q_flux_bnd))
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
@@ -181,6 +179,12 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
     num_partition_interfaces = len(q_part_pairs)
 
+    # glob the inputs together in a tuple to use the elbnd_flux wrapper
+    visc_part_inputs = [
+        (q_part_pairs[bnd_index], s_part_pairs[bnd_index],
+         t_part_pairs[bnd_index], delt_part_pairs[bnd_index])
+        for bnd_index in range(num_partition_interfaces)]
+
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def fvisc_interior_face(tpair_tuple):
         qpair_int = tpair_tuple[0]
@@ -196,21 +200,16 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                                                  q=q, grad_q=grad_q,
                                                  grad_t=grad_t, time=t)
 
-    visc_part_inputs = [
-        (q_part_pairs[bnd_index], s_part_pairs[bnd_index],
-         t_part_pairs[bnd_index], delt_part_pairs[bnd_index])
-        for bnd_index in range(num_partition_interfaces)]
-
     # NS RHS
-    return -dg_div_low(
+    return dg_div_low(
         discr, (  # volume part
-            inviscid_flux(discr, eos, q)
-            + viscous_flux(discr, eos, q=q, grad_q=grad_q, t=gas_t, grad_t=grad_t)),
+            viscous_flux(discr, eos, q=q, grad_q=grad_q, t=gas_t, grad_t=grad_t)
+            - inviscid_flux(discr, eos, q)),
         elbnd_flux(  # viscous boundary
             discr, fvisc_interior_face, visc_bnd_flux,
             (q_int_tpair, s_int_pair, t_int_tpair, delt_int_pair),
             visc_part_inputs, boundaries)
-        + elbnd_flux(  # inviscid boundary
+        - elbnd_flux(  # inviscid boundary
             discr, finv_interior_face, finv_domain_boundary,
             q_int_tpair, q_part_pairs, boundaries)
     )

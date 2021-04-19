@@ -120,10 +120,11 @@ def diffusive_heat_flux(discr, eos, q, j):
 
     .. math::
 
-        \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{j}_{\alpha}
+        \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{h}_{\alpha}
         \mathbf{J}_{\alpha},
 
-    with species diffusive flux ($\mathbf{J}_{\alpha}$) defined as:
+    with species specific enthalpy ${h}_{\alpha} and diffusive flux
+    ($\mathbf{J}_{\alpha}$) defined as:
 
     .. math::
 

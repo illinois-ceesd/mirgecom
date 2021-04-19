@@ -198,7 +198,7 @@ def _get_box_mesh(dim, a, b, n):
 # @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
 # def test_noslip(actx_factory, dim, order):
 def test_noslip(actx_factory, dim):
-    """Check IsothermalNoSlip viscous boundary treatment."""
+    """Check IsothermalNoSlipBoundary viscous boundary treatment."""
     actx = actx_factory()
     order = 1
 
@@ -209,8 +209,8 @@ def test_noslip(actx_factory, dim):
     from mirgecom.transport import SimpleTransport
     transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
 
-    from mirgecom.boundary import IsothermalNoSlip
-    wall = IsothermalNoSlip(wall_temperature=wall_temp)
+    from mirgecom.boundary import IsothermalNoSlipBoundary
+    wall = IsothermalNoSlipBoundary(wall_temperature=wall_temp)
     eos = IdealSingleGas(transport_model=transport_model, gas_const=1.0)
 
     # from pytools.convergence import EOCRecorder
