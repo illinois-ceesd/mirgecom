@@ -10,7 +10,7 @@ Inviscid Boundary Conditions
 Viscous Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: IsothermalNoSlip
+.. autoclass:: IsothermalNoSlipBoundary
 .. autoclass:: PrescribedViscousBoundary
 """
 
@@ -181,7 +181,7 @@ class AdiabaticSlipBoundary:
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
 
-class IsothermalNoSlip(ViscousBC):
+class IsothermalNoSlipBoundary(ViscousBC):
     r"""Isothermal no-slip viscous wall boundary.
 
     This class implements an isothermal no-slip wall by:
