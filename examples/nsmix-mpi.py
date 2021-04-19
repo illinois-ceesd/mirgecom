@@ -56,7 +56,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
     AdiabaticSlipBoundary,
-    IsothermalNoSlip,
+    IsothermalNoSlipBoundary,
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -191,7 +191,7 @@ def main(ctx_factory=cl.create_some_context):
                                      massfractions=can_y, velocity=velocity)
 
     #    my_boundary = AdiabaticSlipBoundary()
-    my_boundary = IsothermalNoSlip(wall_temperature=can_t)
+    my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
     current_state = initializer(eos=eos, x_vec=nodes, t=0)
 
