@@ -199,7 +199,8 @@ class IsothermalNoSlipBoundary(ViscousBC):
         q_minus = discr.project("vol", btag, q)
         cv_minus = split_conserved(discr.dim, q_minus)
 
-        t_plus = self._wall_temp + 0*cv_minus.mass
+        # t_plus = self._wall_temp + 0*cv_minus.mass
+        t_plus = eos.temperature(cv_minus)
         velocity_plus = -cv_minus.momentum / cv_minus.mass
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
 
