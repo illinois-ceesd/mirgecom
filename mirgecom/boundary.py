@@ -201,6 +201,7 @@ class IsothermalNoSlipBoundary(ViscousBC):
 
         # t_plus = self._wall_temp + 0*cv_minus.mass
         t_plus = eos.temperature(cv_minus)
+        print(f"temp_bc {t_plus}")
         velocity_plus = -cv_minus.momentum / cv_minus.mass
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
 
@@ -208,8 +209,8 @@ class IsothermalNoSlipBoundary(ViscousBC):
             temperature=t_plus, species_fractions=mass_frac_plus,
             mass=cv_minus.mass
         )
-        total_energy_plus = cv_minus.mass*(internal_energy_plus
-                                           + .5*np.dot(velocity_plus, velocity_plus))
+        total_energy_plus = (internal_energy_plus
+                             + .5*cv_minus.mass*np.dot(velocity_plus, velocity_plus))
 
         q_plus = join_conserved(
             discr.dim, mass=cv_minus.mass, energy=total_energy_plus,
