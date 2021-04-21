@@ -65,15 +65,14 @@ logger = logging.getLogger(__name__)
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n):
+def _get_box_mesh(dim, a, b, n, t=None):
     dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
+    bttf = {}
     for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=a, b=b, n=n,
-        boundary_tag_to_face=boundary_tag_to_face)
+        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
+        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
+    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 @mpi_entry_point

@@ -243,7 +243,8 @@ class IsothermalNoSlipBoundary(ViscousBC):
         q_minus = discr.project("vol", btag, q)
         cv_minus = split_conserved(discr.dim, q_minus)
         t_minus = eos.temperature(cv_minus)
-        t_plus = 0*t_minus + self._wall_temp
+        t_plus = t_minus
+        # t_plus = 0*t_minus + self._wall_temp
         actx = cv_minus.mass.array_context
         nhat = thaw(actx, discr.normal(btag))
         bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
@@ -276,7 +277,8 @@ class IsothermalNoSlipBoundary(ViscousBC):
         grad_q_tpair = TracePair(btag, interior=grad_q_minus, exterior=grad_q_minus)
 
         t_minus = eos.temperature(cv_minus)
-        t_plus = 0*t_minus + self._wall_temp
+        # t_plus = 0*t_minus + self._wall_temp
+        t_plus = t_minus
         t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 
         grad_t_minus = discr.project("vol", btag, grad_t)
