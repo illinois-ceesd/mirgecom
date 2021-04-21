@@ -11,12 +11,12 @@ Solution Initializers
 .. autoclass:: AcousticPulse
 .. automethod: make_pulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: Discontinuity
 .. autoclass:: DoubleMachReflection
+.. autoclass:: PlanarDiscontinuity
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -44,6 +44,7 @@ from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import split_conserved, join_conserved
+from numbers import Number
 
 
 def make_pulse(amp, r0, w, r):
@@ -132,7 +133,7 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
@@ -225,7 +226,7 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -330,7 +331,7 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
@@ -500,7 +501,7 @@ class MulticomponentLump:
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
@@ -631,7 +632,7 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+    def __call__(self, x_vec, q, eos=IdealSingleGas(), **kwargs):
         """
         Create the acoustic pulse at locations *x_vec*.
 
@@ -714,7 +715,7 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create a uniform flow solution at locations *x_vec*.
 
@@ -806,7 +807,7 @@ class MixtureInitializer:
         self._temperature = temperature
         self._massfracs = massfractions
 
-    def __call__(self, x_vec, eos, *, t=0.0):
+    def __call__(self, x_vec, eos, *, t=0.0, **kwargs):
         """
         Create the mixture state at locations *x_vec* (t is ignored).
 
@@ -844,27 +845,26 @@ class MixtureInitializer:
                               momentum=mom, species_mass=specmass)
 
 
-class Discontinuity:
+class PlanarDiscontinuity:
     r"""Solution initializer for flow with a discontinuity.
 
-    This initializer creates a physics-consistent mixture solution
-    given an initial thermal state (pressure, temperature) and a
-    mixture-compatible EOS.
+    This initializer creates a physics-consistent flow solution
+    given an initial thermal state (pressure, temperature) and an EOS.
 
-    The solution varies across a planar interface defined by a tanh fucntion
-    located at x=xloc for density, velocity, and pressure
+    The solution varies across a planar interface defined by a tanh function
+    located at disc_location for pressure, temperature, velocity, and mass fraction
 
     .. automethod:: __init__
     .. automethod:: __call__
     """
 
     def __init__(
-            self, *, dim=3, xdir=0, x0=0, nspecies=0,
-            tl=300.0, tr=600.0,
-            pl=1.e5, pr=2.e5,
-            ul=None, ur=None,
-            yl=None, yr=None,
-            uc=None, sigma=0.5
+            self, *, dim=3, normal_dir=0, disc_location=0, nspecies=0,
+            temperature_left, temperature_right,
+            pressure_left, pressure_right,
+            velocity_left=None, velocity_right=None,
+            species_mass_left=None, species_mass_right=None,
+            convective_velocity=None, sigma=0.5
     ):
         r"""Initialize mixture parameters.
 
@@ -872,64 +872,61 @@ class Discontinuity:
         ----------
         dim: int
             specifies the number of dimensions for the solution
-        x0: float
-           location of discontinuity
-        nspeces: int
+        normal_dir: int
+            specifies the direction (plane) the discontinuity is applied in
+        disc_location: float or Function[float]
+           location of discontinuity (in time)
+        nspecies: int
             specifies the number of mixture species
-        pl: float
+        pressure_left: float
             pressure to the left of the discontinuity
-        tl: float
+        temperature_left: float
             temperature to the left of the discontinuity
-        ul: numpy.ndarray
+        velocity_left: numpy.ndarray
             velocity (vector) to the left of the discontinuity
-        yl: numpy.ndarray
+        species_mass_left: numpy.ndarray
             species mass fractions to the left of the discontinuity
-        pr: float
+        pressure_right: float
             pressure to the right of the discontinuity
-        tr: float
+        temperature_right: float
             temperaure to the right of the discontinuity
-        ur: numpy.ndarray
+        velocity_right: numpy.ndarray
             velocity (vector) to the right of the discontinuity
-        yr: numpy.ndarray
+        species_mass_right: numpy.ndarray
             species mass fractions to the right of the discontinuity
         sigma: float
            sharpness parameter
-        uc: numpy.ndarray
-            convective velocity (discontinuity advection speed)
         """
-        if ul is None:
-            ul = np.zeros(shape=(dim,))
-        if ur is None:
-            ur = np.zeros(shape=(dim,))
+        if velocity_left is None:
+            velocity_left = np.zeros(shape=(dim,))
+        if velocity_right is None:
+            velocity_right = np.zeros(shape=(dim,))
 
-        if yl is None:
-            yl = np.zeros(shape=(nspecies,))
-        if yr is None:
-            yr = np.zeros(shape=(nspecies,))
-
-        if uc is None:
-            uc = np.zeros(shape=(dim,))
+        if species_mass_left is None:
+            species_mass_left = np.zeros(shape=(nspecies,))
+        if species_mass_right is None:
+            species_mass_right = np.zeros(shape=(nspecies,))
 
         self._nspecies = nspecies
         self._dim = dim
-        self._x0 = x0
+        self._disc_location = disc_location
         self._sigma = sigma
-        self._ul = ul
-        self._ur = ur
-        self._uc = uc
-        self._pl = pl
-        self._pr = pr
-        self._tl = tl
-        self._tr = tr
-        self._yl = yl
-        self._yr = yr
-        self._xdir = xdir
+        self._ul = velocity_left
+        self._ur = velocity_right
+        self._uc = convective_velocity
+        self._pl = pressure_left
+        self._pr = pressure_right
+        self._tl = temperature_left
+        self._tr = temperature_right
+        self._yl = species_mass_left
+        self._yr = species_mass_right
+        self._xdir = normal_dir
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
     def __call__(self, x_vec, eos, *, t=0.0):
         """
-        Create the mixture state at locations *x_vec* (t is ignored).
+        Create the mixture state at locations *x_vec*.
 
         Parameters
         ----------
@@ -941,35 +938,26 @@ class Discontinuity:
             `eos.get_density`
             `eos.get_internal_energy`
         t: float
-            Time is ignored by this solution intitializer
+            Time at which solution is desired.
+            The location is (optionally) dependent on time
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
-        x_rel = x_vec[self._xdir]
-        actx = x_rel.array_context
-        zeros = 0*x_rel
-        x0 = zeros + self._uc[self._xdir]*t + self._x0
-        ones = zeros + 1
+        x = x_vec[self._xdir]
+        actx = x.array_context
+        if isinstance(self._disc_location, Number):
+            x0 = self._disc_location
+        else:
+            x0 = self._disc_location(t)
 
-        pl = self._pl*ones
-        tl = self._tl*ones
-        ul = make_obj_array([self._ul[i]*ones for i in range(self._dim)])
-        yl = make_obj_array([self._yl[i]*ones for i in range(self._nspecies)])
-
-        pr = self._pr*ones
-        tr = self._tr*ones
-        ur = make_obj_array([self._ur[i]*ones for i in range(self._dim)])
-        yr = make_obj_array([self._yr[i]*ones for i in range(self._nspecies)])
-
-        sigma = self._sigma
-        xtanh = 1.0/sigma*(x0 - x_rel)
+        xtanh = 1.0/self._sigma*(x0 - x)
         weight = 0.5*(1.0 - actx.np.tanh(xtanh))
-        pressure = pl + (pr - pl)*weight
-        temperature = tl + (tr - tl)*weight
-        velocity = ul + (ur - ul)*weight
-        y = yl + (yr - yl)*weight
+        pressure = self._pl + (self._pr - self._pl)*weight
+        temperature = self._tl + (self._tr - self._tl)*weight
+        velocity = self._ul + (self._ur - self._ul)*weight
+        y = self._yl + (self._yr - self._yl)*weight
 
         if self._nspecies:
             mass = eos.get_density(pressure, temperature, y)
