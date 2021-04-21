@@ -96,7 +96,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
 
 
 def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
+                  state, t_final, component_id="state", t=0.0, istep=0,
+                  logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final) using Leap.
 
     Parameters
@@ -141,9 +142,9 @@ def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
     from dagrt.codegen import PythonCodeGenerator
     codegen = PythonCodeGenerator(class_name="Method")
     interp = codegen.get_class(code)(function_map={
-        "<func>" + "state": rhs,
+        "<func>" + component_id: rhs,
         })
-    interp.set_up(t_start=t, dt_start=dt, context={"state": state})
+    interp.set_up(t_start=t, dt_start=dt, context={component_id: state})
 
     while t < t_final:
 

@@ -35,7 +35,6 @@ from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
 from grudge.symbolic.primitives import QTAG_NONE
 from mirgecom.integrators import rk4_step
-from leap.rk import RK4MethodBuilder
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -121,14 +120,9 @@ def main(use_leap=False):
 
     # initialize Leap integrator if using one
     if use_leap:
-        timestepper = RK4MethodBuilder("u")
-        code = timestepper.generate()
-        from dagrt.codegen import PythonCodeGenerator
-        codegen = PythonCodeGenerator(class_name="Method")
-        interp = codegen.get_class(code)(function_map={
-            "<func>" + "u": rhs,
-            })
-        interp.set_up(t_start=t, dt_start=dt, context={"u": u})
+        from leap.rk import RK4MethodBuilder
+        from utils import leap_setup
+        interp = leap_setup(RK4MethodBuilder, "u", rhs, t, dt, u)
 
     while True:
         if istep % 10 == 0:
@@ -154,7 +148,6 @@ def main(use_leap=False):
 
 
 if __name__ == "__main__":
-    use_leap = False
-    main(use_leap=use_leap)
+    main(use_leap=False)
 
 # vim: foldmethod=marker

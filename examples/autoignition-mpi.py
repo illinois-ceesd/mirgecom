@@ -48,8 +48,7 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
-from leap.rk import RK4MethodBuilder
-from mirgecom.steppers import advance_state, advance_state_leap
+from utils import advance_example
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -87,6 +86,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     checkpoint_t = current_t
     current_step = 0
     if use_leap:
+        from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
@@ -241,18 +241,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               viz_fields=viz_fields)
 
     try:
-        if use_leap:
-            (current_step, current_t, current_state) = \
-                advance_state_leap(rhs=my_rhs, timestepper=timestepper,
-                              checkpoint=my_checkpoint,
-                              get_timestep=get_timestep, state=current_state,
-                              t=current_t, t_final=t_final)
-        else:
-            (current_step, current_t, current_state) = \
-                advance_state(rhs=my_rhs, timestepper=timestepper,
-                              checkpoint=my_checkpoint,
-                              get_timestep=get_timestep, state=current_state,
-                              t=current_t, t_final=t_final)
+        (current_step, current_t, current_state) = \
+            advance_example(rhs=my_rhs, timestepper=timestepper,
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = True
         current_step = ex.step
@@ -275,7 +268,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    use_leap = False
-    main(use_leap=use_leap)
+    main(use_leap=False)
 
 # vim: foldmethod=marker

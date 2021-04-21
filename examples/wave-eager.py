@@ -31,7 +31,6 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from leap.rk import RK4MethodBuilder
 from meshmode.dof_array import thaw
 from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
@@ -111,14 +110,9 @@ def main(use_profiling=False, use_leap=False):
 
     # initialize Leap integrator if using one
     if use_leap:
-        timestepper = RK4MethodBuilder("w")
-        code = timestepper.generate()
-        from dagrt.codegen import PythonCodeGenerator
-        codegen = PythonCodeGenerator(class_name="Method")
-        interp = codegen.get_class(code)(function_map={
-            "<func>" + "w": rhs,
-            })
-        interp.set_up(t_start=t, dt_start=dt, context={"w": fields})
+        from leap.rk import RK4MethodBuilder
+        from utils import leap_setup
+        interp = leap_setup(RK4MethodBuilder, "w", rhs, t, dt, fields)
 
     while t < t_final:
         if use_leap:
@@ -160,7 +154,6 @@ if __name__ == "__main__":
         help="enable kernel profiling")
     args = parser.parse_args()
 
-    use_leap = False
-    main(use_profiling=args.profile, use_leap=use_leap)
+    main(use_profiling=args.profile, use_leap=False)
 
 # vim: foldmethod=marker

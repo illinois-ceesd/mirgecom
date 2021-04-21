@@ -48,8 +48,7 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
-from leap.rk import RK4MethodBuilder
-from mirgecom.steppers import advance_state, advance_state_leap
+from utils import advance_example
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
@@ -109,6 +108,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     checkpoint_t = current_t
     current_step = 0
     if use_leap:
+        from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
@@ -184,20 +184,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               vis_timer=vis_timer)
 
     try:
-        if use_leap:
-            (current_step, current_t, current_state) = \
-                advance_state_leap(rhs=my_rhs, timestepper=timestepper,
-                              checkpoint=my_checkpoint,
-                              get_timestep=get_timestep, state=current_state,
-                              t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
-                              dim=dim)
-        else:
-            (current_step, current_t, current_state) = \
-                advance_state(rhs=my_rhs, timestepper=timestepper,
-                              checkpoint=my_checkpoint,
-                              get_timestep=get_timestep, state=current_state,
-                              t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
-                              dim=dim)
+        (current_step, current_t, current_state) = \
+            advance_example(rhs=my_rhs, timestepper=timestepper,
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final, logmgr=logmgr,
+                eos=eos, dim=dim)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
