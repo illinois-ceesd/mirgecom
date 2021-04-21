@@ -391,8 +391,11 @@ class PrescribedViscousBoundary(ViscousBC):
         flux_weak = 0
         if self._inviscid_flux_func:
             flux_weak = self._inviscid_flux_func(nodes, eos, q_minus, nhat, **kwargs)
-        elif self._q_func:
-            q_plus = self._q_func(nodes, eos=eos, q=q_minus, **kwargs)
+        else:
+            if self._q_func:
+                q_plus = self._q_func(nodes, eos=eos, q=q_minus, **kwargs)
+            else:
+                q_plus = q_minus
             bnd_tpair = TracePair(btag, interior=q_minus, exterior=q_plus)
             from mirgecom.inviscid import inviscid_facial_flux
             return inviscid_facial_flux(discr, eos, bnd_tpair)
