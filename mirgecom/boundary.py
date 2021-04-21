@@ -102,13 +102,22 @@ class PrescribedBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
+        ext_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        int_soln = discr.project("vol", btag, q)
+        return TracePair(btag, interior=int_soln, exterior=ext_soln)
+
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
         actx = q[0].array_context
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
         ext_soln = self._userfunc(nodes, **kwargs)
-        int_soln = discr.project("vol", btag, q)
-        return TracePair(btag, interior=int_soln, exterior=ext_soln)
+        return ext_soln
+
+    def av(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
+        return discr.project("vol", btag, q)
 
 
 class DummyBoundary:
@@ -119,8 +128,17 @@ class DummyBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = discr.project("vol", btag, q)
+        dir_soln = self.exterior_soln(discr, q, btag, **kwargs)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
+
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
+        dir_soln = discr.project("vol", btag, q)
+        return dir_soln
+
+    def av(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
+        return discr.project("vol", btag, q)
 
 
 class AdiabaticSlipBoundary:
@@ -142,7 +160,14 @@ class AdiabaticSlipBoundary:
     """
 
     def boundary_pair(self, discr, q, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary.
+        """Get the interior and exterior solution on the boundary."""
+        bndry_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        int_soln = discr.project("vol", btag, q)
+
+        return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
         flux through the boundary, preserving mass, momentum (magnitude) and
@@ -175,10 +200,45 @@ class AdiabaticSlipBoundary:
         # Form the external boundary solution with the new momentum
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
                                     energy=int_cv.energy,
-                                    momentum=ext_mom,
-                                    species_mass=int_cv.species_mass)
+                                    momentum=ext_mom)
 
-        return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+        return bndry_soln
+
+
+    def av(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
+        # Grab some boundary-relevant data
+        dim = discr.dim
+        cv = split_conserved(dim, q)
+        actx = cv.mass[0].array_context
+
+        # Grab a unit normal to the boundary
+        normal = thaw(actx, discr.normal(btag))
+
+        # Get the interior soln
+        int_soln = discr.project("vol", btag, q)
+        bndry_q = split_conserved(dim, int_soln)
+
+        # create result array to fill
+        result = np.zeros(2+dim, dtype=object)
+
+        # flip signs on mass and energy
+        # to apply a neumann condition on q
+        result[0] = -1.0*bndry_q.mass
+        result[1] = -1.0*bndry_q.energy
+
+        # Subtract 2*wall-normal component of q
+        # to enforce q=0 on the wall
+        # flip remaining components to set a neumann condition
+        from pytools.obj_array import make_obj_array
+        q_mom_normcomp = make_obj_array(
+            [np.outer(normal, np.dot(bndry_q.momentum, normal))[i]
+            for i in range(dim)]
+        )
+        result[2:] = -1*(bndry_q.momentum-2.0*q_mom_normcomp)
+
+        return(result)
+
 
 
 class IsothermalNoSlipBoundary(ViscousBC):
@@ -457,3 +517,4 @@ class PrescribedViscousBoundary(ViscousBC):
             from mirgecom.viscous import viscous_facial_flux
             return viscous_facial_flux(discr, eos, q_tpair, s_tpair,
                                        t_tpair, grad_t_tpair)
+

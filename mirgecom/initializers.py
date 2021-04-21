@@ -5,6 +5,7 @@ Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
+.. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
@@ -262,6 +263,100 @@ class SodShock1D:
 
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
+
+
+class DoubleMachReflection:
+    r"""Implement the double shock reflection problem.
+
+        - Woodward and Collela
+
+    The inital condition is defined
+
+    .. math::
+
+        (\rho,u,v,P) =
+
+    This function only serves as an initial condition
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, dim=2, shock_location=1.0/6.0, shock_speed=4.0
+    ):
+        """Initialize initial condition options.
+
+        Parameters
+        ----------
+        dim: int
+           dimension of domain, must be 2
+        shock_location: float
+           location of shock
+        shock_speed: float
+           shock speed, Mach number
+        """
+        self._shock_location = shock_location
+        self._dim = dim
+        self._shock_speed = shock_speed
+
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+        """
+        Create the 1D Sod's shock solution at locations *x_vec*.
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired (unused)
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
+        assert self._dim == 2, "only defined for dim=2"
+
+        gm1 = eos.gamma() - 1.0
+        gp1 = eos.gamma() + 1.0
+        gmn1 = 1.0 / gm1
+        x_rel = x_vec[0]
+        y_rel = x_vec[1]
+        actx = x_rel.array_context
+
+        zeros = 0*x_rel
+
+        shock_location = zeros + self._shock_location
+        shock_speed = zeros + self._shock_speed
+        t = zeros + t
+
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
+
+        rhol = zeros + eos.gamma() * rho_jump
+        rhor = zeros + eos.gamma()
+        ul = zeros + up * np.cos(np.pi/6.0)
+        ur = zeros + 0.0
+        vl = zeros - up * np.sin(np.pi/6.0)
+        vr = zeros + 0.0
+        rhoel = zeros + gmn1 * p_jump
+        rhoer = zeros + gmn1 * 1.0
+
+        xinter = (shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*shock_speed*t/np.sqrt(3.0))
+        sigma = 0.05
+        xtanh = 1.0/sigma*(x_rel-xinter)
+        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
+                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
+        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
+        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
+        vel = make_obj_array([u, v])
+        mom = mass * vel
+        energy = rhoe + .5*mass*np.dot(vel, vel)
+
+        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
 
 
 class Lump:
