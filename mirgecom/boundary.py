@@ -66,11 +66,11 @@ class PrescribedBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        ext_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        ext_soln = self.exterior_q(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
-    def exterior_soln(self, discr, q, btag, **kwargs):
+    def exterior_q(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
         actx = q[0].array_context
 
@@ -79,7 +79,7 @@ class PrescribedBoundary:
         ext_soln = self._userfunc(nodes, **kwargs)
         return ext_soln
 
-    def grad_q_exterior(self, discr, grad_q, btag, **kwargs):
+    def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
         return discr.project("vol", btag, grad_q)
 
@@ -92,15 +92,15 @@ class DummyBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        dir_soln = self.exterior_q(discr, q, btag, **kwargs)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
-    def exterior_soln(self, discr, q, btag, **kwargs):
+    def exterior_q(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
 
-    def grad_q_exterior(self, discr, grad_q, btag, **kwargs):
+    def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
         """Get the grad_q on the exterior of the boundary."""
         return discr.project("vol", btag, grad_q)
 
@@ -125,12 +125,12 @@ class AdiabaticSlipBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        bndry_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        bndry_soln = self.exterior_q(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
-    def exterior_soln(self, discr, q, btag, **kwargs):
+    def exterior_q(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing

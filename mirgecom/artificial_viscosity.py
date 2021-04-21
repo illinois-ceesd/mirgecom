@@ -104,13 +104,14 @@ from mirgecom.fluid import (
 )
 
 
-# def _facial_flux_r(discr, q_tpair):
 def _facial_flux_q(discr, q_tpair):
 
     q_int = q_tpair.int
     actx = q_int[0].array_context
 
     flux_dis = q_tpair.avg
+    if isinstance(flux_dis, np.ndarray):
+        flux_dis = flux_dis.reshape(-1, 1)
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
@@ -119,14 +120,12 @@ def _facial_flux_q(discr, q_tpair):
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
 
-# def _facial_flux_q(discr, q_tpair):
 def _facial_flux_r(discr, r_tpair):
     r_int = r_tpair.int
-    actx = r_int[0].array_context
+    actx = r_int[0][0].array_context
 
     normal = thaw(actx, discr.normal(r_tpair.dd))
 
-    # flux_out = np.dot(r_tpair.avg, normal)
     flux_out = r_tpair.avg @ normal
 
     return discr.project(r_tpair.dd, "all_faces", flux_out)
@@ -186,8 +185,8 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
         q_tpair = TracePair(
             btag,
             interior=discr.project("vol", btag, q),
-            exterior=boundaries[btag].exterior_soln(discr, btag=btag,
-                                                    t=t, q=q, eos=eos))
+            exterior=boundaries[btag].exterior_q(discr, btag=btag, t=t,
+                                                 q=q, eos=eos))
         q_flux_db = q_flux_db + _facial_flux_q(discr, q_tpair=q_tpair)
     q_bnd_flux = q_flux_int + q_flux_pb + q_flux_db
 
@@ -205,12 +204,12 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
         r_tpair = TracePair(
             btag,
             interior=discr.project("vol", btag, r),
-            exterior=boundaries[btag].exterior_grad_q(discr, btag, t=t,
+            exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, t=t,
                                                       grad_q=r, eos=eos))
         r_flux_db = r_flux_db + _facial_flux_r(discr, r_tpair=r_tpair)
     r_flux_bnd = r_flux_int + r_flux_pb + r_flux_db
 
-    # Return the rhs contribution
+    # Return the AV RHS term
     return discr.inverse_mass(-div_r_vol + discr.face_mass(r_flux_bnd))
 
 

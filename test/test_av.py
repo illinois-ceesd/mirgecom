@@ -29,10 +29,7 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pytest
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array
-)
+from pytools.obj_array import make_obj_array
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
@@ -190,22 +187,24 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     energy = zeros + 1.0
     momentum = make_obj_array([zeros + 0 for _ in range(dim)])
     q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
-    # fields = flat_obj_array(zeros+1.0)
     rhs = artificial_viscosity(discr, t=0, eos=None, boundaries=boundaries,
                                q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
-    # Linar field return 0 rhs
-    fields = flat_obj_array(nodes[0])
+    # Linear field return 0 rhs
+    mass = nodes[0]
+    energy = 2.5 + zeros
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
     rhs = artificial_viscosity(discr, t=0, eos=None, boundaries=boundaries,
-                               q=fields, alpha=1.0, s0=-np.inf)
+                               q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
-    fields = flat_obj_array(np.dot(nodes, nodes))
+    mass = np.dot(nodes, nodes)
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
     rhs = artificial_viscosity(discr, t=0, eos=None, boundaries=boundaries,
-                               q=fields, alpha=1.0, s0=-np.inf)
-    err = discr.norm(2.*dim-rhs, np.inf)
+                               q=q, alpha=1.0, s0=-np.inf)
+    err = discr.norm(2.*dim-rhs[0], np.inf)
     assert err < tolerance
