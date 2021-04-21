@@ -144,13 +144,8 @@ jobs:
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
-            if [[ -n $GITHUB_HEAD_REF ]]; then
-                echo "Testing branch '$GITHUB_HEAD_REF'"
-                ./install.sh --branch=$GITHUB_HEAD_REF
-            else
-                echo "Testing 'main' branch"
-                ./install.sh
-            fi
+            cp -a ../mirgecom .
+            ./install.sh --skip-clone
 
         - name: Run simple mirgecom test
           run: |
