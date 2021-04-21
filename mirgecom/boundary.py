@@ -37,7 +37,11 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
-from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.fluid import (
+    split_conserved,
+    join_conserved,
+    join_conserved_vectors
+)
 
 
 class PrescribedBoundary:
@@ -75,9 +79,9 @@ class PrescribedBoundary:
         ext_soln = self._userfunc(nodes, **kwargs)
         return ext_soln
 
-    def av(self, discr, q, btag, **kwargs):
+    def grad_q_exterior(self, discr, grad_q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
-        return discr.project("vol", btag, q)
+        return discr.project("vol", btag, grad_q)
 
 
 class DummyBoundary:
@@ -96,9 +100,9 @@ class DummyBoundary:
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
 
-    def av(self, discr, q, btag, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return discr.project("vol", btag, q)
+    def grad_q_exterior(self, discr, grad_q, btag, **kwargs):
+        """Get the grad_q on the exterior of the boundary."""
+        return discr.project("vol", btag, grad_q)
 
 
 class AdiabaticSlipBoundary:
@@ -164,36 +168,33 @@ class AdiabaticSlipBoundary:
 
         return bndry_soln
 
-    def av(self, discr, q, btag, **kwargs):
+    def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
-        dim = discr.dim
-        cv = split_conserved(dim, q)
+        num_equations, dim = grad_q.shape
+        cv = split_conserved(dim, grad_q)
         actx = cv.mass[0].array_context
-
         # Grab a unit normal to the boundary
         normal = thaw(actx, discr.normal(btag))
 
         # Get the interior soln
-        int_soln = discr.project("vol", btag, q)
-        bndry_q = split_conserved(dim, int_soln)
+        int_soln = discr.project("vol", btag, grad_q)
+        int_cv = split_conserved(dim, int_soln)
 
         # create result array to fill
-        result = np.zeros(2+dim, dtype=object)
+        result = np.empty(shape=grad_q.shape, dtype=object)
 
         # flip signs on mass and energy
         # to apply a neumann condition on q
-        result[0] = -1.0*bndry_q.mass
-        result[1] = -1.0*bndry_q.energy
+        result[0] = -int_cv.mass
+        result[1] = -int_cv.energy
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
         # flip remaining components to set a neumann condition
-        from pytools.obj_array import make_obj_array
-        q_mom_normcomp = make_obj_array(
-            [np.outer(normal, np.dot(bndry_q.momentum, normal))[i]
-            for i in range(dim)]
-        )
-        result[2:] = -1*(bndry_q.momentum-2.0*q_mom_normcomp)
+        s_mom_normcomp = np.outer(normal, np.dot(int_cv.momentum, normal))
+        s_mom_flux = 2*s_mom_normcomp - int_cv.momentum
+        for idim in range(dim):
+            result[2+idim] = s_mom_flux[idim]
 
-        return(result)
+        return join_conserved_vectors(dim, result)
