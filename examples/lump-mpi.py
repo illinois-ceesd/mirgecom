@@ -95,7 +95,7 @@ def main(ctx_factory=cl.create_some_context):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-        b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
+                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
     local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
