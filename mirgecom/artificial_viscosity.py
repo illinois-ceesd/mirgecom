@@ -4,13 +4,13 @@ Euler Equations with artificial viscosity term:
 
 .. math::
 
-    \partial_t \mathbf{Q} = \nabla\cdot\mathbf{F}^I +
+    \partial_t \mathbf{Q} = -\nabla\cdot\mathbf{F}^I +
     \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
 
 where:
 
 -  fluid state: $\mathbf{Q} = [\rho, \rho{E}, \rho\mathbf{V}, \rho\mathbf{Y}]$
--  inviscid fluxes: $\mathbf{F}^I
+-  inviscid fluxes: $\mathbf{F}^I$
 -  artifical viscosity coefficient: $\varepsilon$
 
 To evalutate the second order derivative the problem is recast as a set of first
@@ -18,8 +18,8 @@ To evalutate the second order derivative the problem is recast as a set of first
 
 .. math::
 
-    \partial_t{\mathbf{Q}} = \nabla\cdot\mathbf{F}^I + \nabla\cdot\mathbf{R}
-    \mathbf{R} = \varepsilon\nabla\mathbf{Q}
+    \partial_t{\mathbf{Q}} &= \nabla\cdot\mathbf{R} -\nabla\cdot\mathbf{F}^I \\
+    \mathbf{R} &= \varepsilon\nabla\mathbf{Q}
 
 where $\mathbf{R}$ is an intermediate variable.
 
@@ -32,7 +32,7 @@ Evalutes the smoothness indicator of [Persson_2012]_:
 
 where:
 - $S_e$ is the smoothness indicator
-- $u_{N_p}$ is the modal solution at the current polynomial order
+- $u_{N_p}$ is the solution in modal basis at the current polynomial order
 - $u_{N_{p-1}}$ is the truncated modal represention to the polynomial order $p-1$
 - The $L_2$ inner product on an element is denoted $\langle \cdot,\cdot \rangle_e$
 
