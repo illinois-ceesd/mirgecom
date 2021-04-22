@@ -164,7 +164,8 @@ class AdiabaticSlipBoundary:
         # Form the external boundary solution with the new momentum
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
                                     energy=int_cv.energy,
-                                    momentum=ext_mom)
+                                    momentum=ext_mom,
+                                    species_mass=int_cv.species_mass)
 
         return bndry_soln
 
