@@ -37,7 +37,7 @@ from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import inviscid_operator, split_conserved
 from mirgecom.artificial_viscosity import (
-    artificial_viscosity,
+    av_operator,
     smoothness_indicator
 )
 from mirgecom.simutil import (
@@ -197,7 +197,7 @@ def main(ctx_factory=cl.create_some_context):
     def my_rhs(t, state):
         return inviscid_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
-        ) + artificial_viscosity(
+        ) + av_operator(
             discr, t=t, q=state, boundaries=boundaries, alpha=alpha, eos=eos,
             s0=s0, kappa=kappa
         )
