@@ -39,8 +39,10 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.initializers import MulticomponentLump
 
-from mirgecom.euler import split_conserved
-from mirgecom.euler import get_num_species
+from mirgecom.fluid import (
+    split_conserved,
+    get_num_species
+)
 
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas

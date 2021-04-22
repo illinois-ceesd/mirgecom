@@ -31,7 +31,7 @@ import pytest
 
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import split_conserved
+from mirgecom.fluid import split_conserved
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
@@ -126,17 +126,17 @@ def test_slipwall_flux(actx_factory, dim, order):
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
 
-    for np1 in [4, 8, 12]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
 
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, n=(np1,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
         nhat = thaw(actx, discr.normal(BTAG_ALL))
-        h = 1.0 / np1
+        h = 1.0 / nel_1d
 
         from functools import partial
         bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
