@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler.
+r""":mod:`mirgecom.artificial_viscosity` Artificial viscocity for Euler.
 
 Euler Equations with artificial viscosity term:
 
@@ -23,7 +23,7 @@ To evalutate the second order derivative the problem is recast as a set of first
 
 where $\mathbf{R}$ is an intermediate variable.
 
-Evalutes the smoothness indicator of Persson:
+Evalutes the smoothness indicator of [Persson_2012]_:
 
 .. math::
 
@@ -32,8 +32,7 @@ Evalutes the smoothness indicator of Persson:
 
 where:
 - $S_e$ is the smoothness indicator
-- $u_{N_p}$ is the modal representation of the solution at the current polynomial
-  order
+- $u_{N_p}$ is the modal solution at the current polynomial order
 - $u_{N_{p-1}}$ is the truncated modal represention to the polynomial order $p-1$
 - The $L_2$ inner product on an element is denoted $\langle \cdot,\cdot \rangle_e$
 
@@ -63,7 +62,7 @@ Smoothness Indicator Evaluation
 AV RHS Evaluation
 ^^^^^^^^^^^^^^^^^
 
-.. autofunction:: artificial_viscosity
+.. autofunction:: av_operator
 """
 
 __copyright__ = """
@@ -131,17 +130,14 @@ def _facial_flux_r(discr, r_tpair):
     return discr.project(r_tpair.dd, "all_faces", flux_out)
 
 
-def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
+def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     r"""Compute artifical viscosity for the euler equations.
 
-    Calculates
-    ----------
-    numpy.ndarray
-        The right-hand-side term for artificial viscosity.
+    Computes the the right-hand-side term for artificial viscosity.
 
-        .. math::
+    .. math::
 
-            \dot{\nabla\cdot{\varepsilon\nabla\mathbf{Q}}}
+        \dot{\nabla\cdot{\varepsilon\nabla\mathbf{Q}}}
 
     Parameters
     ----------
@@ -211,6 +207,15 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
 
     # Return the AV RHS term
     return discr.inverse_mass(-div_r_vol + discr.face_mass(r_flux_bnd))
+
+
+def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
+    """Interface :function:`av_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call artificial_viscosity; it is now called av_operator. This"
+         "function will disappear in 2021", DeprecationWarning, stacklevel=2)
+    return av_operator(discr=discr, eos=eos, boundaries=boundaries,
+                       q=q, alpha=alpha, t=t)
 
 
 def linear_operator_kernel():
