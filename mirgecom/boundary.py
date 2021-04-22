@@ -170,9 +170,10 @@ class AdiabaticSlipBoundary:
         return bndry_soln
 
     def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
-        """Get the exterior solution on the boundary."""
+        """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
         num_equations, dim = grad_q.shape
+        num_species = num_equations - dim - 2
         cv = split_conserved(dim, grad_q)
         actx = cv.mass[0].array_context
         # Grab a unit normal to the boundary
@@ -197,5 +198,8 @@ class AdiabaticSlipBoundary:
         s_mom_flux = 2*s_mom_normcomp - int_cv.momentum
         for idim in range(dim):
             result[2+idim] = s_mom_flux[idim]
+
+        for ispec in range(num_species):
+            result[dim+2+ispec] = -int_cv.species_mass[ispec]
 
         return join_conserved_vectors(dim, result)
