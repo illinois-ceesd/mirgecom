@@ -139,7 +139,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
 
     .. math::
 
-        \mbox{RHS}_av = \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
+        \mbox{RHS}_{\mbox{av}} = \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
 
     Parameters
     ----------
