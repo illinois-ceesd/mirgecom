@@ -21,9 +21,9 @@ To evalutate the second order derivative the problem is recast as a set of first
     \partial_t{\mathbf{Q}} &= \nabla\cdot\mathbf{R} -\nabla\cdot\mathbf{F}^I \\
     \mathbf{R} &= \varepsilon\nabla\mathbf{Q}
 
-where $\mathbf{R}$ is an intermediate variable.
-
-Evalutes the smoothness indicator of [Persson_2012]_:
+where $\mathbf{R}$ is an intermediate variable, and the artitifial viscosity
+coefficient, $\varepsilon$, is spatially dependent and calculated using the
+smoothness indicator of [Persson_2012]_:
 
 .. math::
 
@@ -31,6 +31,7 @@ Evalutes the smoothness indicator of [Persson_2012]_:
         u_{N_{p-1}}\rangle_e}{\langle u_{N_p}, u_{N_p} \rangle_e}
 
 where:
+
 - $S_e$ is the smoothness indicator
 - $u_{N_p}$ is the solution in modal basis at the current polynomial order
 - $u_{N_{p-1}}$ is the truncated modal represention to the polynomial order $p-1$
@@ -49,6 +50,7 @@ The elementwise viscoisty is then calculated:
         \end{cases}
 
 where:
+
 - $\varepsilon_e$ is the element viscosity
 - $s_e = \log_{10}{S_e} \sim 1/p^4$ is the smoothness indicator
 - $s_0$ is a reference smoothness value
@@ -137,7 +139,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
 
     .. math::
 
-        \dot{\nabla\cdot{\varepsilon\nabla\mathbf{Q}}}
+        \mbox{RHS}_av = \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
 
     Parameters
     ----------
