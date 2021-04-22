@@ -37,7 +37,7 @@ from mirgecom.fluid import (
     join_conserved,
 )
 from mirgecom.artificial_viscosity import (
-    artificial_viscosity,
+    av_operator,
     smoothness_indicator
 )
 from mirgecom.boundary import DummyBoundary
@@ -187,8 +187,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     energy = zeros + 1.0
     momentum = make_obj_array([zeros + 0 for _ in range(dim)])
     q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
-    rhs = artificial_viscosity(discr, t=0, eos=None, boundaries=boundaries,
-                               q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
+                      q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
@@ -196,15 +196,15 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     mass = nodes[0]
     energy = 2.5 + zeros
     q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
-    rhs = artificial_viscosity(discr, t=0, eos=None, boundaries=boundaries,
-                               q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
+                      q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
     mass = np.dot(nodes, nodes)
     q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
-    rhs = artificial_viscosity(discr, t=0, eos=None, boundaries=boundaries,
-                               q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
+                      q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs[0], np.inf)
     assert err < tolerance
