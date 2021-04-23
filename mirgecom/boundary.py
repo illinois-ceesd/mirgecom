@@ -168,21 +168,6 @@ class AdiabaticSlipBoundary:
         """Get the interior and exterior solution on the boundary."""
         bndry_soln = self.exterior_q(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
-        int_cv = split_conserved(dim, int_soln)
-
-        # Subtract out the 2*wall-normal component
-        # of velocity from the velocity at the wall to
-        # induce an equal but opposite wall-normal (reflected) wave
-        # preserving the tangential component
-        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
-        wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
-        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
-
-        # Form the external boundary solution with the new momentum
-        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
-                                    energy=int_cv.energy,
-                                    momentum=ext_mom,
-                                    species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
@@ -254,6 +239,11 @@ class AdiabaticSlipBoundary:
         s_mom_flux = 2*s_mom_normcomp - int_cv.momentum
         for idim in range(dim):
             result[2+idim] = s_mom_flux[idim]
+
+        for ispec in range(num_species):
+            result[dim+2+ispec] = -int_cv.species_mass[ispec]
+
+        return join_conserved_vectors(dim, result)
 
 
 class IsothermalNoSlipBoundary(ViscousBC):
