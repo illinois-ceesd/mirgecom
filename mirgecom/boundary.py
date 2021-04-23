@@ -46,7 +46,11 @@ from grudge.symbolic.primitives import (
     TracePair,
     as_dofdesc
 )
-from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.fluid import (
+    split_conserved,
+    join_conserved,
+    join_conserved_vectors
+)
 
 
 class ViscousBC:
@@ -102,11 +106,11 @@ class PrescribedBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        ext_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        ext_soln = self.exterior_q(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
-    def exterior_soln(self, discr, q, btag, **kwargs):
+    def exterior_q(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
         actx = q[0].array_context
 
@@ -115,9 +119,9 @@ class PrescribedBoundary:
         ext_soln = self._userfunc(nodes, **kwargs)
         return ext_soln
 
-    def av(self, discr, q, btag, **kwargs):
+    def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
-        return discr.project("vol", btag, q)
+        return discr.project("vol", btag, grad_q)
 
 
 class DummyBoundary:
@@ -128,17 +132,17 @@ class DummyBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        dir_soln = self.exterior_q(discr, q, btag, **kwargs)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
-    def exterior_soln(self, discr, q, btag, **kwargs):
+    def exterior_q(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return dir_soln
 
-    def av(self, discr, q, btag, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return discr.project("vol", btag, q)
+    def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
+        """Get the grad_q on the exterior of the boundary."""
+        return discr.project("vol", btag, grad_q)
 
 
 class AdiabaticSlipBoundary:
@@ -161,12 +165,12 @@ class AdiabaticSlipBoundary:
 
     def boundary_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        bndry_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        bndry_soln = self.exterior_q(discr, q, btag, **kwargs)
         int_soln = discr.project("vol", btag, q)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
-    def exterior_soln(self, discr, q, btag, **kwargs):
+    def exterior_q(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -200,45 +204,45 @@ class AdiabaticSlipBoundary:
         # Form the external boundary solution with the new momentum
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
                                     energy=int_cv.energy,
-                                    momentum=ext_mom)
+                                    momentum=ext_mom,
+                                    species_mass=int_cv.species_mass)
 
         return bndry_soln
 
-
-    def av(self, discr, q, btag, **kwargs):
-        """Get the exterior solution on the boundary."""
+    def exterior_grad_q(self, discr, grad_q, btag, **kwargs):
+        """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
-        dim = discr.dim
-        cv = split_conserved(dim, q)
+        num_equations, dim = grad_q.shape
+        num_species = num_equations - dim - 2
+        cv = split_conserved(dim, grad_q)
         actx = cv.mass[0].array_context
-
         # Grab a unit normal to the boundary
         normal = thaw(actx, discr.normal(btag))
 
         # Get the interior soln
-        int_soln = discr.project("vol", btag, q)
-        bndry_q = split_conserved(dim, int_soln)
+        int_soln = discr.project("vol", btag, grad_q)
+        int_cv = split_conserved(dim, int_soln)
 
         # create result array to fill
-        result = np.zeros(2+dim, dtype=object)
+        result = np.empty(shape=grad_q.shape, dtype=object)
 
         # flip signs on mass and energy
         # to apply a neumann condition on q
-        result[0] = -1.0*bndry_q.mass
-        result[1] = -1.0*bndry_q.energy
+        result[0] = -int_cv.mass
+        result[1] = -int_cv.energy
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
         # flip remaining components to set a neumann condition
-        from pytools.obj_array import make_obj_array
-        q_mom_normcomp = make_obj_array(
-            [np.outer(normal, np.dot(bndry_q.momentum, normal))[i]
-            for i in range(dim)]
-        )
-        result[2:] = -1*(bndry_q.momentum-2.0*q_mom_normcomp)
+        s_mom_normcomp = np.outer(normal, np.dot(int_cv.momentum, normal))
+        s_mom_flux = 2*s_mom_normcomp - int_cv.momentum
+        for idim in range(dim):
+            result[2+idim] = s_mom_flux[idim]
 
-        return(result)
+        for ispec in range(num_species):
+            result[dim+2+ispec] = -int_cv.species_mass[ispec]
 
+        return join_conserved_vectors(dim, result)
 
 
 class IsothermalNoSlipBoundary(ViscousBC):
@@ -517,4 +521,3 @@ class PrescribedViscousBoundary(ViscousBC):
             from mirgecom.viscous import viscous_facial_flux
             return viscous_facial_flux(discr, eos, q_tpair, s_tpair,
                                        t_tpair, grad_t_tpair)
-

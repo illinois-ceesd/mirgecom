@@ -1,30 +1,70 @@
-r""":mod:`mirgecom.artificial viscosity` Artificial viscocity for Euler.
+r""":mod:`mirgecom.artificial_viscosity` Artificial viscocity for Euler.
 
-Artificial viscosity for the Euler Equations:
+Euler Equations with artificial viscosity term:
 
 .. math::
 
-    \partial_t \mathbf{R} = \nabla\cdot{\varepsilon\nabla\mathbf{R}}
+    \partial_t \mathbf{Q} = -\nabla\cdot\mathbf{F}^I +
+    \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
 
 where:
 
--  state $\mathbf{R} = [\rho, \rho{E}, \rho\vec{V}, \rho{Y}_\alpha]$
--  artifical viscosity coefficient $\varepsilon$
+-  fluid state: $\mathbf{Q} = [\rho, \rho{E}, \rho\mathbf{V}, \rho\mathbf{Y}]$
+-  inviscid fluxes: $\mathbf{F}^I$
+-  artifical viscosity coefficient: $\varepsilon$
 
 To evalutate the second order derivative the problem is recast as a set of first
  order problems:
 
 .. math::
 
-    \partial_t \mathbf{R} = \nabla\cdot{\mathbf{Q}}
-    \mathbf{Q} = \varepsilon\nabla\mathbf{R}
+    \partial_t{\mathbf{Q}} &= \nabla\cdot\mathbf{R} -\nabla\cdot\mathbf{F}^I \\
+    \mathbf{R} &= \varepsilon\nabla\mathbf{Q}
 
-where $\mathbf{Q}$ is an intermediate variable.
+where $\mathbf{R}$ is an intermediate variable, and the artitifial viscosity
+coefficient, $\varepsilon$, is spatially dependent and calculated using the
+smoothness indicator of [Persson_2012]_:
 
-RHS Evaluation
-^^^^^^^^^^^^^^
+.. math::
 
-.. autofunction:: artificial_viscosity
+    S_e = \frac{\langle u_{N_p} - u_{N_{p-1}}, u_{N_p} -
+        u_{N_{p-1}}\rangle_e}{\langle u_{N_p}, u_{N_p} \rangle_e}
+
+where:
+
+- $S_e$ is the smoothness indicator
+- $u_{N_p}$ is the solution in modal basis at the current polynomial order
+- $u_{N_{p-1}}$ is the truncated modal represention to the polynomial order $p-1$
+- The $L_2$ inner product on an element is denoted $\langle \cdot,\cdot \rangle_e$
+
+The elementwise viscoisty is then calculated:
+
+.. math::
+
+    \varepsilon_e =
+        \begin{cases}
+            0, & s_e < s_0 - \kappa \\
+            \frac{1}{2}\left( 1 + \sin \frac{\pi(s_e - s_0)}{2 \kappa} \right ),
+            & s_0-\kappa \le s_e \le s_0+\kappa \\
+            1, & s_e > s_0+\kappa
+        \end{cases}
+
+where:
+
+- $\varepsilon_e$ is the element viscosity
+- $s_e = \log_{10}{S_e} \sim 1/p^4$ is the smoothness indicator
+- $s_0$ is a reference smoothness value
+- $\kappa$ controls the width of the transition between 0 to 1
+
+Smoothness Indicator Evaluation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: smoothness_indicator
+
+AV RHS Evaluation
+^^^^^^^^^^^^^^^^^
+
+.. autofunction:: av_operator
 """
 
 __copyright__ = """
@@ -52,22 +92,27 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import (
-    obj_array_vectorize,
-    obj_array_vectorize_n_args,
-)
-from meshmode.dof_array import thaw
+import loopy as lp
+from modepy import vandermonde
+from pytools.obj_array import obj_array_vectorize
+from meshmode.dof_array import thaw, DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.symbolic.primitives import TracePair
-from mirgecom.tag_cells import smoothness_indicator
+from mirgecom.fluid import (
+    split_conserved,
+    join_conserved_vectors
+)
 
 
-def _facial_flux_r(discr, q_tpair):
+def _facial_flux_q(discr, q_tpair):
 
-    actx = q_tpair.int.array_context
+    q_int = q_tpair.int
+    actx = q_int[0].array_context
 
     flux_dis = q_tpair.avg
+    if isinstance(flux_dis, np.ndarray):
+        flux_dis = flux_dis.reshape(-1, 1)
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
@@ -76,32 +121,29 @@ def _facial_flux_r(discr, q_tpair):
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
 
-def _facial_flux_q(discr, q_tpair):
+def _facial_flux_r(discr, r_tpair):
+    r_int = r_tpair.int
+    actx = r_int[0][0].array_context
 
-    actx = q_tpair[0].int.array_context
+    normal = thaw(actx, discr.normal(r_tpair.dd))
 
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+    flux_out = r_tpair.avg @ normal
 
-    flux_out = np.dot(q_tpair.avg, normal)
-
-    return discr.project(q_tpair.dd, "all_faces", flux_out)
+    return discr.project(r_tpair.dd, "all_faces", flux_out)
 
 
-def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
+def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     r"""Compute artifical viscosity for the euler equations.
 
-    Calculates
-    ----------
-    numpy.ndarray
-        The right-hand-side for artificial viscosity for the euler equations.
+    Computes the the right-hand-side term for artificial viscosity.
 
-        .. math::
+    .. math::
 
-            \dot{\nabla\cdot{\varepsilon\nabla\mathbf{R}}}
+        \mbox{RHS}_{\mbox{av}} = \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
 
     Parameters
     ----------
-    r
+    q
         State array which expects the quantity to be limited on to be listed
         first in the array. For the Euler equations this could be the canonical
         conserved variables (mass, energy, mometum) for the fluid along with a
@@ -125,72 +167,165 @@ def artificial_viscosity(discr, t, eos, boundaries, r, alpha, **kwargs):
         Agglomerated object array of DOF Arrays representing the RHS associated
         with the artificial viscosity application.
     """
-    # Get smoothness indicator
-    indicator = smoothness_indicator(discr, r[0], **kwargs)
+    dim = discr.dim
+    cv = split_conserved(dim, q)
 
-    dflux_r = obj_array_vectorize(discr.weak_grad, r)
+    # Get smoothness indicator based on fluid mass density
+    indicator = smoothness_indicator(discr, cv.mass, **kwargs)
 
-    def my_facialflux_r_interior(q):
-        qin = interior_trace_pair(discr, q)
-        return _facial_flux_r(discr, q_tpair=qin)
+    grad_q_vol = join_conserved_vectors(dim, obj_array_vectorize(discr.weak_grad, q))
 
-    iff_r = obj_array_vectorize(my_facialflux_r_interior, r)
-
-    def my_facialflux_r_partition(q):
-        qin = cross_rank_trace_pairs(discr, q)
-        return sum(_facial_flux_r(discr, q_tpair=part_pair) for part_pair in qin)
-
-    pbf_r = obj_array_vectorize(my_facialflux_r_partition, r)
-
-    dbf_r = np.zeros_like(iff_r)
+    q_flux_int = _facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
+    q_flux_pb = sum(_facial_flux_q(discr, q_tpair=pb_tpair)
+                    for pb_tpair in cross_rank_trace_pairs(discr, q))
+    q_flux_db = 0
     for btag in boundaries:
+        q_tpair = TracePair(
+            btag,
+            interior=discr.project("vol", btag, q),
+            exterior=boundaries[btag].exterior_q(discr, btag=btag, t=t,
+                                                 q=q, eos=eos))
+        q_flux_db = q_flux_db + _facial_flux_q(discr, q_tpair=q_tpair)
+    q_bnd_flux = q_flux_int + q_flux_pb + q_flux_db
 
-        def my_facialflux_r_boundary(sol_ext, sol_int):
-            q_tpair = TracePair(
-                btag,
-                interior=sol_int,
-                exterior=sol_ext,
-            )
-            return _facial_flux_r(discr, q_tpair=q_tpair)
-
-        r_ext = boundaries[btag].exterior_soln(discr, btag=btag, t=t, q=r, eos=eos)
-        r_int = discr.project("vol", btag, r)
-        dbf_r = dbf_r + obj_array_vectorize_n_args(
-            my_facialflux_r_boundary, r_ext, r_int
-        )
-
-    # Compute q, half way done!
-    q = discr.inverse_mass(
-        -alpha * indicator * (dflux_r - discr.face_mass(iff_r + pbf_r + dbf_r))
+    # Compute R
+    r = discr.inverse_mass(
+        -alpha * indicator * (grad_q_vol - discr.face_mass(q_bnd_flux))
     )
 
-    dflux_q = obj_array_vectorize(discr.weak_div, q)
-
-    def my_facialflux_q_interior(q):
-        qin = interior_trace_pair(discr, q)
-        iff_q = _facial_flux_q(discr, q_tpair=qin)
-        return iff_q
-
-    iff_q = obj_array_vectorize(my_facialflux_q_interior, q)
-
-    def my_facialflux_q_partition(q):
-        qin = cross_rank_trace_pairs(discr, q)
-        return sum(_facial_flux_q(discr, q_tpair=part_pair) for part_pair in qin)
-
-    pbf_q = obj_array_vectorize(my_facialflux_q_partition, q)
-
-    dbf_q = np.zeros_like(iff_q)
+    div_r_vol = discr.weak_div(r)
+    r_flux_int = _facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
+    r_flux_pb = sum(_facial_flux_r(discr, r_tpair=pb_tpair)
+                    for pb_tpair in cross_rank_trace_pairs(discr, r))
+    r_flux_db = 0
     for btag in boundaries:
+        r_tpair = TracePair(
+            btag,
+            interior=discr.project("vol", btag, r),
+            exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, t=t,
+                                                      grad_q=r, eos=eos))
+        r_flux_db = r_flux_db + _facial_flux_r(discr, r_tpair=r_tpair)
+    r_flux_bnd = r_flux_int + r_flux_pb + r_flux_db
 
-        def my_facialflux_q_boundary(sol_ext, sol_int):
-            q_tpair = TracePair(btag, interior=sol_int, exterior=sol_ext)
-            return _facial_flux_q(discr, q_tpair=q_tpair)
+    # Return the AV RHS term
+    return discr.inverse_mass(-div_r_vol + discr.face_mass(r_flux_bnd))
 
-        q_ext = boundaries[btag].av(discr, btag=btag, t=t, q=q, eos=eos)
-        q_int = discr.project("vol", btag, q)
-        dbf_q = dbf_q + obj_array_vectorize_n_args(
-            my_facialflux_q_boundary, q_ext, q_int
+
+def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
+    """Interface :function:`av_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call artificial_viscosity; it is now called av_operator. This"
+         "function will disappear in 2021", DeprecationWarning, stacklevel=2)
+    return av_operator(discr=discr, eos=eos, boundaries=boundaries,
+                       q=q, alpha=alpha, t=t)
+
+
+def linear_operator_kernel():
+    """Apply linear operator to all elements."""
+    from meshmode.array_context import make_loopy_program
+
+    knl = make_loopy_program(
+        """{[iel,idof,j]:
+        0<=iel<nelements and
+        0<=idof<ndiscr_nodes_out and
+        0<=j<ndiscr_nodes_in}""",
+        "result[iel,idof] = sum(j, mat[idof, j] * vec[iel, j])",
+        name="modal_decomp",
+    )
+    knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
+    return knl
+
+
+def compute_smoothness_indicator():
+    """Compute the smoothness indicator for all elements."""
+    from meshmode.array_context import make_loopy_program
+
+    knl = make_loopy_program(
+        """{[iel,idof,j,k]:
+        0<=iel<nelements and
+        0<=idof<ndiscr_nodes_out and
+        0<=j<ndiscr_nodes_in and
+        0<=k<ndiscr_nodes_in}""",
+        "result[iel,idof] = "
+        "sum(k,vec[iel,k]*vec[iel,k]*modes[k])/sum(j,"
+        " vec[iel,j]*vec[iel,j]+1.0e-12/ndiscr_nodes_in)",
+        name="smooth_comp",
+    )
+    return knl
+
+
+def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
+    """Calculate the smoothness indicator.
+
+    Parameters
+    ----------
+    u
+        A DOF Array of the field that is used to calculate the
+        smoothness indicator.
+
+    kappa
+        A optional argument that sets the controls the width of the
+        transition between 0 to 1.
+    s0
+        A optional argument that sets the smoothness level to limit
+        on. Logical values are [0,-infinity) where -infinity results in
+        all cells being tagged and 0 results in none.
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray
+        A DOF Array containing elementwise constant values between 0 and 1
+        which indicate the smoothness of a given element.
+    """
+    assert isinstance(u, DOFArray)
+
+    def get_kernel():
+        return linear_operator_kernel()
+
+    def get_indicator():
+        return compute_smoothness_indicator()
+
+    # Convert to modal solution representation
+    actx = u.array_context
+    uhat = discr.empty(actx, dtype=u.entry_dtype)
+    for group in discr.discr_from_dd("vol").groups:
+        vander = vandermonde(group.basis(), group.unit_nodes)
+        vanderm1 = np.linalg.inv(vander)
+        actx.call_loopy(
+            get_kernel(),
+            mat=actx.from_numpy(vanderm1),
+            result=uhat[group.index],
+            vec=u[group.index],
         )
 
-    # Return the rhs contribution
-    return discr.inverse_mass(-dflux_q + discr.face_mass(iff_q + pbf_q + dbf_q))
+    # Compute smoothness indicator value
+    indicator = discr.empty(actx, dtype=u.entry_dtype)
+    for group in discr.discr_from_dd("vol").groups:
+        mode_ids = group.mode_ids()
+        modes = len(mode_ids)
+        order = group.order
+        highest_mode = np.ones(modes)
+        for mode_index, mode_id in enumerate(mode_ids):
+            highest_mode[mode_index] = highest_mode[mode_index] * (
+                sum(mode_id) == order
+            )
+
+        actx.call_loopy(
+            get_indicator(),
+            result=indicator[group.index],
+            vec=uhat[group.index],
+            modes=actx.from_numpy(highest_mode),
+        )
+    indicator = actx.np.log10(indicator + 1.0e-12)
+
+    # Compute artificial viscosity percentage based on indicator and set parameters
+    yesnol = indicator > (s0 - kappa)
+    yesnou = indicator > (s0 + kappa)
+    sin_indicator = actx.np.where(
+        yesnol,
+        0.5 * (1.0 + actx.np.sin(np.pi * (indicator - s0) / (2.0 * kappa))),
+        0.0 * indicator,
+    )
+    indicator = actx.np.where(yesnou, 1.0 + 0.0 * indicator, sin_indicator)
+
+    return indicator
