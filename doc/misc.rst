@@ -71,3 +71,5 @@ References
     `(DOI) <https://doi.org/10.1007/978-3-642-59721-3_14>`__
 .. [Ihme_2014] Yu Lv and Matthias Ihme (2014) Journal of Computationsl Physics 270 105 \
     `(PDF) <https://web.stanford.edu/group/ihmegroup/cgi-bin/MatthiasIhme/wp-content/papercite-data/pdf/lv2014.pdf>`__
+.. [Persson_2012] P. Persson and J. Peraire, AIAA 44 \
+    `(DOI) <https://doi.org/10.2514/6.2006-112>`__

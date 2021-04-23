@@ -6,6 +6,7 @@ State Vector Handling
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
+.. autofunction:: join_conserved_vectors
 
 Helper Functions
 ^^^^^^^^^^^^^^^^

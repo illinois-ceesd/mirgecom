@@ -10,4 +10,5 @@ Gas Dynamics
 .. automodule:: mirgecom.viscous
 .. automodule:: mirgecom.navierstokes
 .. automodule:: mirgecom.boundary
-.. automodule:: mirgecom.flux
+.. automodule:: mirgecom.euler
+.. automodule:: mirgecom.artificial_viscosity
