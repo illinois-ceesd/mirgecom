@@ -161,7 +161,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
         Time
 
     alpha
-       The maximum artifical viscosity coeffiecent to be applied
+       The maximum artificial viscosity coefficient to be applied
 
     eos: mirgecom.eos.GasEOS
        Only used as a pass through to the boundary conditions.
