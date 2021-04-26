@@ -124,7 +124,7 @@ def _facial_flux_q(discr, q_tpair):
 
 
 def _facial_flux_r(discr, r_tpair):
-    """Compute facial flux for vector compontnent of grad(Q)."""
+    """Compute facial flux for vector component of grad(Q)."""
     r_int = r_tpair.int
     actx = r_int[0][0].array_context
 
