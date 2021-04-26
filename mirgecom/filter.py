@@ -5,8 +5,7 @@ JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
 
 .. automethod: exponential_mode_response_function
 .. automethod: make_spectral_filter
-.. automethod: linear_operator_kernel
-.. automethod: create_group_filter_operator
+.. automethod: apply_filter_matrix
 .. automethod: filter_modally
 """
 
@@ -35,8 +34,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import loopy as lp
-from grudge import sym
+import grudge.dof_desc as dof_desc
+
 from meshmode.dof_array import DOFArray
 from pytools import memoize_in
 from pytools.obj_array import obj_array_vectorized_n_args
@@ -48,7 +47,7 @@ def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order)
                   ** (2*filter_order))
 
 
-def make_spectral_filter(group, cutoff, mode_response_function):
+def make_spectral_filter(actx, group, cutoff, mode_response_function):
     r"""
     Create a spectral filter with the provided *mode_response_function*.
 
@@ -58,7 +57,10 @@ def make_spectral_filter(group, cutoff, mode_response_function):
 
     Parameters
     ----------
-    element_group: :class:`meshmode.mesh.MeshElementGroup`
+    actx: :class:`meshmode.array_context.ArrayContext`
+        A :class:`meshmode.array_context.ArrayContext` associated with
+        an array of degrees of freedom
+    group: :class:`meshmode.mesh.MeshElementGroup`
         A :class:`meshmode.mesh.MeshElementGroup` from which the mode ids,
         element order, and dimension may be retrieved.
     cutoff: integer
@@ -77,7 +79,7 @@ def make_spectral_filter(group, cutoff, mode_response_function):
     dim = group.dim
 
     nmodes = len(mode_ids)
-    filter = np.identity(nmodes)
+    filter_mat = np.identity(nmodes)
     nfilt = order - cutoff
     if nfilt <= 0:
         return filter
@@ -85,52 +87,65 @@ def make_spectral_filter(group, cutoff, mode_response_function):
     for mode_index, mode_id in enumerate(mode_ids):
         mode = sum(mode_id)
         if mode >= cutoff:
-            filter[mode_index, mode_index] = \
+            filter_mat[mode_index, mode_index] = \
                 mode_response_function(mode,
                                        cutoff=cutoff,
                                        nfilt=nfilt)
-    return filter
+
+    return actx.freeze(actx.from_numpy(filter_mat))
 
 
-def linear_operator_kernel():
-    """Apply linear operator to all elements."""
-    from meshmode.array_context import make_loopy_program
-    knl = make_loopy_program(
-        """{[iel,idof,j]:
-        0<=iel<nelements and
-        0<=idof<ndiscr_nodes_out and
-        0<=j<ndiscr_nodes_in}""",
-        "result[iel,idof] = sum(j, mat[idof, j] * vec[iel, j])",
-        name="spectral_filter")
-    knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
-    return knl
+def apply_filter_matrix(actx, modal_field, discr, cutoff,
+                        mode_response_function):
+    r"""
+    Applies the filter matrix, defined by the *mode_response_function*.
 
-
-def create_group_filter_operator(group, cutoff, response_func):
-    """Create spectral filter operator for *group*.
+    This routine returns filtered data in the modal basis, which has
+    been applied using a user-provided *mode_response_function*
+    to dampen modes beyond the user-provided *cutoff*.
 
     Parameters
     ----------
-    group: :class:`meshmode.mesh.MeshElementGroup`
-        A :class:`meshmode.mesh.MeshElementGroup` from which the mode ids,
-        element order, and dimension may be retrieved.
+    actx: :class:`meshmode.array_context.ArrayContext`
+        A :class:`meshmode.array_context.ArrayContext` associated with
+        an array of degrees of freedom
+    modal_field: numpy.ndarray
+        DOFArray or object array of DOFArrays denoting the modal data
+    discr: :class:`meshmode.discretization.Discretization`
+        A :class:`meshmode.discretization.Discretization` describing
+        the volume discretization the *modal_field* comes from.
     cutoff: integer
         Mode cutoff beyond which the filter will be applied, and below which
         the filter will preserve.
-    response_func:
+    mode_response_function:
         A function that returns a filter weight for for each mode id.
+
+    Returns
+    -------
+    modal_field: DOFArray
+        DOFArray or object array of DOFArrays
+
     """
-    filter_mat = make_spectral_filter(group, cutoff,
-                                      mode_response_function=response_func)
-    from modepy import vandermonde
-    vander = vandermonde(group.basis(), group.unit_nodes)
-    vanderm1 = np.linalg.inv(vander)
-    filter_operator = vander @ filter_mat @ vanderm1
-    return filter_operator
+    from meshmode.array_context import FirstAxisIsElementsTag
+    return DOFArray(
+        actx,
+        tuple(actx.einsum("ij,ej->ei",
+                          make_spectral_filter(
+                              actx,
+                              group=grp,
+                              cutoff=cutoff,
+                              mode_response_function=mode_response_function
+                          ),
+                          vec_i,
+                          arg_names=("filter_mat", "vec"),
+                          tagged=(FirstAxisIsElementsTag(),))
+              for grp, vec_i in zip(discr.groups, modal_field)
+        )
+    )
 
 
 @obj_array_vectorized_n_args
-def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
+def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     """Stand-alone procedural interface to spectral filtering.
 
     For each element group in the discretization, and restriction,
@@ -146,9 +161,10 @@ def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
 
     Parameters
     ----------
-    discrwb: :class:`grudge.DGDiscretizationWithBoundaries`
+    dcoll: :class:`grudge.DiscretizationCollection`
         Grudge discretization with boundaries object
-    dd: :class:`grudge.sym.DOFDesc` or as accepted by :func:`grudge.sym.as_dof_desc`
+    dd: :class:`grudge.dof_desc.DOFDesc` or as accepted by
+        :func:`grudge.dof_desc.as_dof_desc`
         Describe the type of DOF vector on which to operate.
     cutoff: integer
         Mode below which *field* will not be filtered
@@ -162,26 +178,16 @@ def filter_modally(discrwb, dd, cutoff, mode_resp_func, field):
     result: numpy.ndarray
         Filtered version of *field*.
     """
-    dd = sym.as_dofdesc(dd)
-    discr = discrwb.discr_from_dd(dd)
+    dd = dof_desc.as_dofdesc(dd)
+    dd_modal = dof_desc.as_dofdesc("modal")
+    discr = dcoll.discr_from_dd(dd)
 
     assert isinstance(field, DOFArray)
-
-    @memoize_in(field.array_context, (filter_modally, "get_kernel"))
-    def get_kernel():
-        return linear_operator_kernel()
-
-    @memoize_in(discrwb, (filter_modally, "get_matrix"))
-    def get_matrix(group):
-        return create_group_filter_operator(group, cutoff, mode_resp_func)
-
     actx = field.array_context
-    result = discr.empty(actx, dtype=field.entry_dtype)
-    for group in discr.groups:
-        operator = get_matrix(group)
-        actx.call_loopy(
-            get_kernel(),
-            mat=actx.from_numpy(operator),
-            result=result[group.index],
-            vec=field[group.index])
-    return result
+
+    modal_map = dcoll.connection_from_dds(dd, dd_modal)
+    nodal_map = dcoll.connection_from_dds(dd_modal, dd)
+    field = modal_map(field)
+    field = apply_filter_matrix(actx, field, discr, cutoff,
+                                mode_resp_func)
+    return nodal_map(field)
