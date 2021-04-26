@@ -286,8 +286,8 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     Returns
     -------
     meshmode.dof_array.DOFArray
-        A DOF Array containing elementwise constant values between 0 and 1
-        which indicate the smoothness of a given element.
+        The elementwise constant values between 0 and 1 which indicate the smoothness
+        of a given element.
     """
     assert isinstance(u, DOFArray)
 
