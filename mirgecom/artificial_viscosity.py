@@ -106,7 +106,7 @@ from mirgecom.fluid import (
 
 
 def _facial_flux_q(discr, q_tpair):
-
+    """Compute facial flux for each scalar component of Q."""
     q_int = q_tpair.int
     actx = q_int[0].array_context
 
@@ -116,17 +116,22 @@ def _facial_flux_q(discr, q_tpair):
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
+    # This uses a central scalar flux along nhat:
+    # flux = 1/2 * (Q- + Q+) * nhat
     flux_out = flux_dis * normal
 
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
 
 def _facial_flux_r(discr, r_tpair):
+    """Compute facial flux for vector compontnent of grad(Q)."""
     r_int = r_tpair.int
     actx = r_int[0][0].array_context
 
     normal = thaw(actx, discr.normal(r_tpair.dd))
 
+    # This uses a central vector flux along nhat:
+    # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
     flux_out = r_tpair.avg @ normal
 
     return discr.project(r_tpair.dd, "all_faces", flux_out)
@@ -173,11 +178,15 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     # Get smoothness indicator based on fluid mass density
     indicator = smoothness_indicator(discr, cv.mass, **kwargs)
 
+    # R=Grad(Q) volume part
     grad_q_vol = join_conserved_vectors(dim, obj_array_vectorize(discr.weak_grad, q))
 
+    # R=Grad(Q) Q flux over interior faces
     q_flux_int = _facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
+    # R=Grad(Q) Q flux interior faces on partition boundaries
     q_flux_pb = sum(_facial_flux_q(discr, q_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, q))
+    # R=Grad(Q) Q flux domain boundary part (i.e. BCs)
     q_flux_db = 0
     for btag in boundaries:
         q_tpair = TracePair(
@@ -186,6 +195,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
             exterior=boundaries[btag].exterior_q(discr, btag=btag, t=t,
                                                  q=q, eos=eos))
         q_flux_db = q_flux_db + _facial_flux_q(discr, q_tpair=q_tpair)
+    # Total Q flux across element boundaries
     q_bnd_flux = q_flux_int + q_flux_pb + q_flux_db
 
     # Compute R
@@ -193,10 +203,14 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
         -alpha * indicator * (grad_q_vol - discr.face_mass(q_bnd_flux))
     )
 
+    # RHS_av = div(R) volume part
     div_r_vol = discr.weak_div(r)
+    # RHS_av = div(R): grad(Q) flux interior faces part
     r_flux_int = _facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
+    # RHS_av = div(R): grad(Q) flux interior faces on the partition boundaries
     r_flux_pb = sum(_facial_flux_r(discr, r_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, r))
+    # RHS_av = div(R): grad(Q) flux domain boundary part (BCs)
     r_flux_db = 0
     for btag in boundaries:
         r_tpair = TracePair(
@@ -205,6 +219,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
             exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, t=t,
                                                       grad_q=r, eos=eos))
         r_flux_db = r_flux_db + _facial_flux_r(discr, r_tpair=r_tpair)
+    # Total grad(Q) flux element boundaries
     r_flux_bnd = r_flux_int + r_flux_pb + r_flux_db
 
     # Return the AV RHS term
