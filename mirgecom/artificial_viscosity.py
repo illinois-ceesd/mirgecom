@@ -273,9 +273,8 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
 
     Parameters
     ----------
-    u
-        A DOF Array of the field that is used to calculate the
-        smoothness indicator.
+    u: meshmode.dof_array.DOFArray
+        The field that is used to calculate the smoothness indicator.
 
     kappa
         A optional argument that sets the controls the width of the
