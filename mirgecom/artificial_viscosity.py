@@ -169,8 +169,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     Returns
     -------
     numpy.ndarray
-        Agglomerated object array of DOF Arrays representing the RHS associated
-        with the artificial viscosity application.
+        The artificial viscosity operator applied to *q*.
     """
     dim = discr.dim
     cv = split_conserved(dim, q)
