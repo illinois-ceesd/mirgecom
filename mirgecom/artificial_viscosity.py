@@ -282,7 +282,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         transition between 0 to 1.
     s0
         An optional argument that sets the smoothness level to limit
-        on. Logical values are [0,-infinity) where -infinity results in
+        on. Values in the range $(-\infty,0]$ are allowed, where $-\infty$ results in
         all cells being tagged and 0 results in none.
 
     Returns
