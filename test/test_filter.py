@@ -210,12 +210,12 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     # First test a uniform field, which should pass through
     # the filter unharmed.
     from mirgecom.initializers import Uniform
-    initr = Uniform(numdim=dim)
+    initr = Uniform(dim=dim)
     uniform_soln = initr(t=0, x_vec=nodes)
 
     from mirgecom.filter import filter_modally
-    filtered_soln = filter_modally(discr, "vol", cutoff=cutoff,
-                                   mode_resp_func=frfunc, field=uniform_soln)
+    filtered_soln = filter_modally(discr, "vol", cutoff,
+                                   frfunc, uniform_soln)
     soln_resid = uniform_soln - filtered_soln
     max_errors = [discr.norm(v, np.inf) for v in soln_resid]
 
@@ -239,8 +239,8 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     field_order = int(cutoff)
     coeff = [1.0 / (i + 1) for i in range(field_order + 1)]
     field = polyfn(coeff=coeff)
-    filtered_field = filter_modally(discr, "vol", cutoff=cutoff,
-                                    mode_resp_func=frfunc, field=field)
+    filtered_field = filter_modally(discr, "vol", cutoff,
+                                    frfunc, field)
     soln_resid = field - filtered_field
     max_errors = [discr.norm(v, np.inf) for v in soln_resid]
     logger.info(f"Field = {field}")
@@ -259,8 +259,8 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     for field_order in range(cutoff+1, cutoff+4):
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]
         field = polyfn(coeff=coeff)
-        filtered_field = filter_modally(discr, "vol", cutoff=cutoff,
-                                        mode_resp_func=frfunc, field=field)
+        filtered_field = filter_modally(discr, "vol", cutoff,
+                                        frfunc, field)
         for group in vol_discr.groups:
             vander = vandermonde(group.basis(), group.unit_nodes)
             vanderm1 = np.linalg.inv(vander)
