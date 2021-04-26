@@ -130,8 +130,12 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
         mode_ids = group.mode_ids()
         vander = vandermonde(group.basis(), group.unit_nodes)
         vanderm1 = np.linalg.inv(vander)
-        filter_coeff = make_spectral_filter(group, cutoff=cutoff,
-                                            mode_response_function=frfunc)
+        filter_coeff = actx.thaw(
+            make_spectral_filter(
+                actx, group, cutoff=cutoff,
+                mode_response_function=frfunc
+            )
+        )
         assert(filter_coeff.shape == vanderm1.shape)
         for mode_index, mode_id in enumerate(mode_ids):
             mode = mode_id
@@ -150,8 +154,20 @@ def _apply_linear_operator(discr, operator, fields):
     This is a utility used in testing only. It assumes
     a one-group discretization.
     """
+    import loopy as lp
+
+    def linear_operator_kernel():
+        from meshmode.array_context import make_loopy_program
+        knl = make_loopy_program(
+            """{[iel,idof,j]:
+            0<=iel<nelements and
+            0<=idof<ndiscr_nodes_out and
+            0<=j<ndiscr_nodes_in}""",
+            "result[iel,idof] = sum(j, mat[idof, j] * vec[iel, j])",
+            name="spectral_filter")
+        return lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
+
     assert(len(discr.groups) == 1)
-    from mirgecom.filter import linear_operator_kernel
     actx = fields.array_context
     result = discr.empty(actx, dtype=fields.entry_dtype)
     for group in discr.groups:
