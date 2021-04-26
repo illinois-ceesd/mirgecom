@@ -155,7 +155,7 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
         vector of species masses for multi-component fluids.
 
     boundaries
-        Dicitionary of boundary functions, one for each valid boundary tag
+        Dictionary of boundary functions, one for each valid boundary tag
 
     t
         Time
