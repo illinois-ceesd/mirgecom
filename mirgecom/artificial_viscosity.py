@@ -277,8 +277,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         The field that is used to calculate the smoothness indicator.
 
     kappa
-        A optional argument that sets the controls the width of the
-        transition between 0 to 1.
+        An optional argument that controls the width of the transition from 0 to 1.
     s0
         An optional argument that sets the smoothness level to limit
         on. Values in the range $(-\infty,0]$ are allowed, where $-\infty$ results in
