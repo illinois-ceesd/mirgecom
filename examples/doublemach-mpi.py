@@ -74,7 +74,7 @@ def get_doublemach_mesh():
     )
     import os
     meshfile = "doubleMach.msh"
-    if os.path.exists(meshfile) is False:
+    if not os.path.exists(meshfile):
         mesh = generate_gmsh(
             ScriptSource("""
                 x0=1.0/6.0;
