@@ -147,7 +147,7 @@ def main(ctx_factory=cl.create_some_context):
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
-    rank = comm.Get_rank
+    rank = comm.Get_rank()
 
     gen_grid = partial(get_doublemach_mesh)
 
