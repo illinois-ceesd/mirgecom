@@ -268,7 +268,7 @@ class DoubleMachReflection:
 
         - Woodward and Collela
 
-    The inital condition is defined
+    The initial condition is defined
 
     .. math::
 
