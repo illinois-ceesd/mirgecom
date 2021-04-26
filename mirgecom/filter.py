@@ -11,7 +11,7 @@ JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -83,13 +83,12 @@ def make_spectral_filter(group, cutoff, mode_response_function):
         return filter
 
     for mode_index, mode_id in enumerate(mode_ids):
-        mode = mode_id
-        if dim > 1:
-            mode = sum(mode_id)
+        mode = sum(mode_id)
         if mode >= cutoff:
-            filter[mode_index, mode_index] = mode_response_function(mode,
-                                                                    cutoff=cutoff,
-                                                                    nfilt=nfilt)
+            filter[mode_index, mode_index] = \
+                mode_response_function(mode,
+                                       cutoff=cutoff,
+                                       nfilt=nfilt)
     return filter
 
 
