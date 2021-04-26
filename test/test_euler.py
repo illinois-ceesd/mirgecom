@@ -723,7 +723,10 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
 
 def _euler_flow_stepper(actx, parameters):
-    """Implement a generic time stepping loop for testing an inviscid flow."""
+    """
+    Implements a generic time stepping loop for testing an inviscid flow
+    using a spectral filter.
+    """
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     mesh = parameters["mesh"]
@@ -824,8 +827,8 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
-        fields = filter_modally(discr, "vol", cutoff=cutoff,
-                                       mode_resp_func=frfunc, field=fields)
+        fields = filter_modally(discr, "vol", cutoff,
+                                frfunc, fields)
 
         t += dt
         istep += 1
