@@ -92,13 +92,12 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import loopy as lp
-from modepy import vandermonde
 from pytools.obj_array import obj_array_vectorize
 from meshmode.dof_array import thaw, DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.symbolic.primitives import TracePair
+from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
 from mirgecom.fluid import (
     split_conserved,
     join_conserved_vectors
@@ -230,22 +229,6 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
                        q=q, alpha=alpha, t=t)
 
 
-def linear_operator_kernel():
-    """Apply linear operator to all elements."""
-    from meshmode.array_context import make_loopy_program
-
-    knl = make_loopy_program(
-        """{[iel,idof,j]:
-        0<=iel<nelements and
-        0<=idof<ndiscr_nodes_out and
-        0<=j<ndiscr_nodes_in}""",
-        "result[iel,idof] = sum(j, mat[idof, j] * vec[iel, j])",
-        name="modal_decomp",
-    )
-    knl = lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
-    return knl
-
-
 def compute_smoothness_indicator():
     """Compute the smoothness indicator for all elements."""
     from meshmode.array_context import make_loopy_program
@@ -287,26 +270,15 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     """
     assert isinstance(u, DOFArray)
 
-    def get_kernel():
-        return linear_operator_kernel()
-
     def get_indicator():
         return compute_smoothness_indicator()
 
     # Convert to modal solution representation
-    actx = u.array_context
-    uhat = discr.empty(actx, dtype=u.entry_dtype)
-    for group in discr.discr_from_dd("vol").groups:
-        vander = vandermonde(group.basis(), group.unit_nodes)
-        vanderm1 = np.linalg.inv(vander)
-        actx.call_loopy(
-            get_kernel(),
-            mat=actx.from_numpy(vanderm1),
-            result=uhat[group.index],
-            vec=u[group.index],
-        )
+    modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    uhat = modal_map(u)
 
     # Compute smoothness indicator value
+    actx = u.array_context
     indicator = discr.empty(actx, dtype=u.entry_dtype)
     for group in discr.discr_from_dd("vol").groups:
         mode_ids = group.mode_ids()
