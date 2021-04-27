@@ -110,15 +110,11 @@ def _facial_flux_q(discr, q_tpair):
     q_int = q_tpair.int
     actx = q_int[0].array_context
 
-    flux_dis = q_tpair.avg
-    if isinstance(flux_dis, np.ndarray):
-        flux_dis = flux_dis.reshape(-1, 1)
-
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # This uses a central scalar flux along nhat:
     # flux = 1/2 * (Q- + Q+) * nhat
-    flux_out = flux_dis * normal
+    flux_out = np.outer(q_tpair.avg, normal)
 
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
