@@ -179,7 +179,7 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
         Filtered version of *field*.
     """
     dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.as_dofdesc("modal")
+    dd_modal = dof_desc.DD_VOLUME_MODAL
     discr = dcoll.discr_from_dd(dd)
 
     assert isinstance(field, DOFArray)
