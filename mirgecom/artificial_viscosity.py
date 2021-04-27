@@ -144,10 +144,9 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     Parameters
     ----------
     q
-        State array which expects the quantity to be limited on to be listed
-        first in the array. For the Euler equations this could be the canonical
-        conserved variables (mass, energy, mometum) for the fluid along with a
-        vector of species masses for multi-component fluids.
+        State array of the canonical conserved variables (mass, energy, momentum)
+        for the fluid along with a vector of species masses for multi-component
+        fluids.
 
     boundaries
         Dictionary of boundary functions, one for each valid boundary tag
