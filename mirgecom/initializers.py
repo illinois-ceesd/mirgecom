@@ -317,7 +317,13 @@ class DoubleMachReflection:
 
     def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         r"""
-        Create double Mach reflection solution at locations *x_vec*, and time *t*.
+        Create double mach reflection solution at locations *x_vec*.
+
+        At times $t > 0$, calls to this routine create an advanced solution
+        under the assumption of constant normal shock speed *shock_speed*.
+        The advanced solution *is not* the exact solution, but is appropriate
+        for use as an exact boundary solution on the top and upstream (left)
+        side of the domain.
 
         Parameters
         ----------
