@@ -106,8 +106,7 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
 
 def apply_filter_matrix(actx, modal_field, discr, cutoff,
                         mode_response_function):
-    r"""
-    Applies the filter matrix, defined by the *mode_response_function*.
+    r"""Apply the filter matrix, defined by the *mode_response_function*.
 
     This routine returns filtered data in the modal basis, which has
     been applied using a user-provided *mode_response_function*
