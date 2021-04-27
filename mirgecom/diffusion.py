@@ -236,9 +236,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
     -------
     diff_u: meshmode.dof_array.DOFArray or numpy.ndarray
         the diffusion operator applied to *u*
-    q: numpy.ndarray
-        the auxiliary variable $\mathbf{q} = \sqrt{\alpha} \nabla u$; only returned
-        if *return_q* is True
+    grad_u: numpy.ndarray
+        the gradient of *u*; only returned if *return_grad_u* is True
     """
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
