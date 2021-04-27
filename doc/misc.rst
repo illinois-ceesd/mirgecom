@@ -65,4 +65,5 @@ References
     `(DOI) <https://www.sciencedirect.com/science/article/pii/S0021999196955722?via%3Dihub>`__
 .. [Persson_2012] P. Persson and J. Peraire, AIAA 44 \
     `(DOI) <https://doi.org/10.2514/6.2006-112>`__
-
+.. [Woodward_1984] Woodward and Colella, Journal of Computational Physics, 54 \
+    `(DOI) <https://doi.org/10.1016/0021-9991(84)90142-6>`__
