@@ -122,7 +122,7 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = 1.0e-4
     current_t = 0
     eos = IdealSingleGas()
-    initializer = DoubleMachReflection(dim)
+    initializer = DoubleMachReflection()
     casename = "doubleMach"
     from grudge import sym
 

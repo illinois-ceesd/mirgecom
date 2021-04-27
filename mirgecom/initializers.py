@@ -272,46 +272,70 @@ class DoubleMachReflection:
 
     .. math::
 
-        (\rho,u,v,P) =
+        {\rho}(x < x_s(y,t)) &= \gamma \rho_j\\
+        {\rho}(x > x_s(y,t)) &= \gamma\\
+        {\rho}{V_x}(x < x_s(y,t)) &= u_p \cos(\pi/6)\\
+        {\rho}{V_x}(x > x_s(y,t)) &= 0\\
+        {\rho}{V_y}(x > x_s(y,t)) &= u_p \sin(\pi/6)\\
+        {\rho}{V_y}(x > x_s(y,t)) &= 0\\
+        {\rho}E(x < x_s(y,t)) &= (\gamma-1)p_j\\
+        {\rho}E(x > x_s(y,t)) &= (\gamma-1)
 
-    This function only serves as an initial condition
+    where the shock position is given,
+
+    .. math::
+
+        x_s = x_0 + y/\sqrt{3} + 2 u_s t/\sqrt{3}
+
+    and the normal shock jump relations are
+
+    .. math::
+
+        \rho_j &= \frac{(\gamma + 1) u_s^2}{(\gamma-1) u_s^2 + 2} \\
+        p_j &= \frac{2 \gamma u_s^2 - (\gamma - 1)}{\gamma+1} \\
+        u_p &= 2 \frac{u_s^2-1}{(\gamma+1) u_s}
+
+    The initial shock location is given by $x_0$ and $u_s$ is the shock speed.
+    This function serves as an initial condition as well as boundary conditions
+    for $t>0$
 
     .. automethod:: __init__
     .. automethod:: __call__
     """
 
     def __init__(
-            self, dim=2, shock_location=1.0/6.0, shock_speed=4.0
+            self, shock_location=1.0/6.0, shock_speed=4.0
     ):
         """Initialize initial condition options.
 
         Parameters
         ----------
-        dim: int
-           dimension of domain, must be 2
         shock_location: float
-           location of shock
+           initial location of shock
         shock_speed: float
            shock speed, Mach number
         """
         self._shock_location = shock_location
-        self._dim = dim
         self._shock_speed = shock_speed
 
     def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
-        """
-        Create the 1D Sod's shock solution at locations *x_vec*.
+        r"""
+        Create the initial condition for the double Mach reflection case at
+        locations *x_vec*. Also provides boundary conditions for solution at
+        times $t>0$.
 
         Parameters
         ----------
         t: float
-            Current time at which the solution is desired (unused)
+            Current time of solution when called as a boundary condition
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        assert self._dim == 2, "only defined for dim=2"
+        # Fail if numdim is other than 2
+        if(len(x_vec)) != 2:
+            raise ValueError("Case only defined for 2 dimensions")
 
         gm1 = eos.gamma() - 1.0
         gp1 = eos.gamma() + 1.0
@@ -354,7 +378,7 @@ class DoubleMachReflection:
         mom = mass * vel
         energy = rhoe + .5*mass*np.dot(vel, vel)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
+        return join_conserved(dim=2, mass=mass, energy=energy, momentum=mom)
 
 
 class Lump:
