@@ -37,7 +37,7 @@ import numpy as np
 import grudge.dof_desc as dof_desc
 
 from meshmode.dof_array import DOFArray
-from pytools import memoize_in
+from pytools import keyed_memoize_in
 from pytools.obj_array import obj_array_vectorized_n_args
 
 
@@ -74,25 +74,34 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
     filter: np.ndarray
         filter operator in the modal basis
     """
-    mode_ids = group.mode_ids()
-    order = group.order
-    dim = group.dim
 
-    nmodes = len(mode_ids)
-    filter_mat = np.identity(nmodes)
-    nfilt = order - cutoff
-    if nfilt <= 0:
-        return filter
+    @keyed_memoize_in(
+        actx, (make_spectral_filter,
+               mode_response_function,
+               "_spectral_filter_matrix"),
+        lambda grp: grp.discretization_key()
+    )
+    def _spectral_filter_matrix(group):
+        mode_ids = group.mode_ids()
+        order = group.order
 
-    for mode_index, mode_id in enumerate(mode_ids):
-        mode = sum(mode_id)
-        if mode >= cutoff:
-            filter_mat[mode_index, mode_index] = \
-                mode_response_function(mode,
-                                       cutoff=cutoff,
-                                       nfilt=nfilt)
+        nmodes = len(mode_ids)
+        filter_mat = np.identity(nmodes)
+        nfilt = order - cutoff
+        if nfilt <= 0:
+            return filter
 
-    return actx.freeze(actx.from_numpy(filter_mat))
+        for mode_index, mode_id in enumerate(mode_ids):
+            mode = sum(mode_id)
+            if mode >= cutoff:
+                filter_mat[mode_index, mode_index] = \
+                    mode_response_function(mode,
+                                           cutoff=cutoff,
+                                           nfilt=nfilt)
+
+        return actx.freeze(actx.from_numpy(filter_mat))
+
+    return _spectral_filter_matrix(group)
 
 
 def apply_filter_matrix(actx, modal_field, discr, cutoff,
@@ -139,8 +148,7 @@ def apply_filter_matrix(actx, modal_field, discr, cutoff,
                           vec_i,
                           arg_names=("filter_mat", "vec"),
                           tagged=(FirstAxisIsElementsTag(),))
-              for grp, vec_i in zip(discr.groups, modal_field)
-        )
+              for grp, vec_i in zip(discr.groups, modal_field))
     )
 
 
