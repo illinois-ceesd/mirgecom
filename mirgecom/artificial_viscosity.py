@@ -269,7 +269,7 @@ def compute_smoothness_indicator():
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
-    """Calculate the smoothness indicator.
+    r"""Calculate the smoothness indicator.
 
     Parameters
     ----------
