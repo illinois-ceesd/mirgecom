@@ -266,9 +266,8 @@ class SodShock1D:
 class DoubleMachReflection:
     r"""Implement the double shock reflection problem.
 
-        - Woodward and Collela
-
-    The initial condition is defined
+    The double shock reflection solution is crafted after [Woodward_1984]_
+    and is defined by:
 
     .. math::
 
@@ -279,7 +278,7 @@ class DoubleMachReflection:
         {\rho}{V_y}(x > x_s(y,t)) &= u_p \sin(\pi/6)\\
         {\rho}{V_y}(x > x_s(y,t)) &= 0\\
         {\rho}E(x < x_s(y,t)) &= (\gamma-1)p_j\\
-        {\rho}E(x > x_s(y,t)) &= (\gamma-1)
+        {\rho}E(x > x_s(y,t)) &= (\gamma-1),
 
     where the shock position is given,
 
@@ -296,8 +295,6 @@ class DoubleMachReflection:
         u_p &= 2 \frac{u_s^2-1}{(\gamma+1) u_s}
 
     The initial shock location is given by $x_0$ and $u_s$ is the shock speed.
-    This function serves as an initial condition as well as boundary conditions
-    for $t>0$
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -306,7 +303,7 @@ class DoubleMachReflection:
     def __init__(
             self, shock_location=1.0/6.0, shock_speed=4.0
     ):
-        """Initialize initial condition options.
+        """Initialize double shock reflection parameters.
 
         Parameters
         ----------
@@ -320,14 +317,12 @@ class DoubleMachReflection:
 
     def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
         r"""
-        Create the initial condition for the double Mach reflection case at
-        locations *x_vec*. Also provides boundary conditions for solution at
-        times $t>0$.
+        Create double Mach reflection solution at locations *x_vec*, and time *t*.
 
         Parameters
         ----------
         t: float
-            Current time of solution when called as a boundary condition
+            Time at which to compute the solution
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
@@ -344,29 +339,23 @@ class DoubleMachReflection:
         y_rel = x_vec[1]
         actx = x_rel.array_context
 
-        zeros = 0*x_rel
-
-        shock_location = zeros + self._shock_location
-        shock_speed = zeros + self._shock_speed
-        t = zeros + t
-
         # Normal Shock Relations
         shock_speed_2 = self._shock_speed * self._shock_speed
         rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
         p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
         up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
 
-        rhol = zeros + eos.gamma() * rho_jump
-        rhor = zeros + eos.gamma()
-        ul = zeros + up * np.cos(np.pi/6.0)
-        ur = zeros + 0.0
-        vl = zeros - up * np.sin(np.pi/6.0)
-        vr = zeros + 0.0
-        rhoel = zeros + gmn1 * p_jump
-        rhoer = zeros + gmn1 * 1.0
+        rhol = eos.gamma() * rho_jump
+        rhor = eos.gamma()
+        ul = up * np.cos(np.pi/6.0)
+        ur = 0.0
+        vl = up * np.sin(np.pi/6.0)
+        vr = 0.0
+        rhoel = gmn1 * p_jump
+        rhoer = gmn1 * 1.0
 
-        xinter = (shock_location + y_rel/np.sqrt(3.0)
-                  + 2.0*shock_speed*t/np.sqrt(3.0))
+        xinter = (self._shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*self._shock_speed*t/np.sqrt(3.0))
         sigma = 0.05
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
@@ -374,6 +363,7 @@ class DoubleMachReflection:
                 + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
         u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
         v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
+
         vel = make_obj_array([u, v])
         mom = mass * vel
         energy = rhoe + .5*mass*np.dot(vel, vel)
