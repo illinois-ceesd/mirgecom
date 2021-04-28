@@ -128,12 +128,20 @@ class ConservedVars:
             fluid_momentum_density = fluid_cv.momentum  # ndim-vector obj array
             fluid_species_mass_density = fluid_cv.species_mass  # nspecies-vector
 
+        Examples of using `ConservedVars` as in this example in:
+
+        - :mod:`~mirgecom.boundary`
+        - :mod:`~mirgecom.euler`
+        - :mod:`~mirgecom.initializers`
+        - :mod:`~mirgecom.simutil`
+
     :example::
 
         Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
         fluid conserved quantities (CV).
 
-        See the first example for details about CV, and $\mathbf{Q}$.
+        See the first example for the definition of CV, $\mathbf{Q}$, ndim,
+        nspecies, and $N_\mbox{eq}$.
 
         Often, a user starts with the fluid conserved quantities like mass and
         energy densities, and it is desired to glom those quantities together into
@@ -155,6 +163,55 @@ class ConservedVars:
 
         after which *q* will be an obj array of $N_\mbox{eq}$ DOFArrays containing
         the fluid conserved state data.
+
+        Examples of this sort of use for `join_conserved` can be found in:
+
+        - :mod:`~mirgecom.initializers`
+
+    :example::
+
+        Use `ConservedVars` to access a vector quantity for each fluid equation.
+
+        See the first example for the definition of CV, $\mathbf{Q}$, ndim,
+        nspecies, and $N_\mbox{eq}$.
+
+        Suppose the user wants to access the gradient of the fluid state,
+        $\nabla\mathbf{Q}$, in a fluid-specific way. For a fluid $\mathbf{Q}$,
+        such an object would be:
+
+        .. math::
+
+            \nabla\mathbf{Q} &=
+            \begin{bmatrix}(\nabla\rho)_j\\(\nabla\rho{E})_j\\(\nabla\rho{v}_{i})_j
+            \\(\nabla\rho{Y}_{\alpha})_j\end{bmatrix},
+
+        where $1 \le j \le \mbox{ndim}$, such that the first component of
+        $\mathbf{Q}$ is an `ndim`-vector corresponding to the gradient of the fluid
+        density, i.e. obj_array of `ndim` DOFArrays. Similarly for the energy term.
+        The momentum part of $\nabla\mathbf{Q}$ is a 2D array with shape
+        ``(ndim, ndim)`` with each row corresponding to the gradient of a component
+        of the `ndim`-vector of fluid momentum.  The species portion of
+        $\nabla\mathbf{Q}$ is a 2D array with shape ``(nspecies, ndim)`` with each
+        row being the gradient of a component of the `nspecies`-vector corresponding
+        to the species mass.
+
+        Presuming that `grad_q` is the agglomerated *MIRGE* data structure with the
+        gradient data, this dataclass can be used to get a fluid CV-specific view on
+        the content of $\nabla\mathbf{Q}$. One can call :func:`split_conserved` to
+        get a `ConservedVars` dataclass object that resolves the vector quantity
+        associated with each conservation equation::
+
+            grad_cv = split_conserved(ndim, grad_q),
+
+        after which::
+
+            grad_mass = grad_cv.mass  # an `ndim`-vector grad(fluid density)
+            grad_momentum = grad_cv.momentum  # 2D array shape=(ndim, ndim)
+            grad_spec = grad_cv.species_mass  # 2D (nspecies, ndim)
+
+        Examples of this type of use for `ConservedVars` can be found in:
+
+        - :func:`~mirgecom.inviscid.inviscid_flux`
 
     .. automethod:: join
     .. automethod:: replace
