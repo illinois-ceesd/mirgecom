@@ -265,11 +265,11 @@ def get_num_species(dim, q):
 
 
 def split_conserved(dim, q):
-    """Get the canonical conserved quantities.
+    """Get quantities corresponding to fluid conservation equations.
 
-    Return a :class:`ConservedVars` that is the canonical conserved quantities,
-    mass, energy, momentum, and any species' masses, from the agglomerated
-    object array extracted from the state vector *q*. For single component gases,
+    Return a :class:`ConservedVars` with quantities corresponding to the
+    canonical conserved quantities, mass, energy, momentum, and any species'
+    masses, from an agglomerated object array, *q*. For single component gases,
     i.e. for those state vectors *q* that do not contain multi-species mixtures, the
     returned dataclass :attr:`ConservedVars.species_mass` will be set to an empty
     array.
@@ -282,7 +282,7 @@ def split_conserved(dim, q):
 def join_conserved(dim, mass, energy, momentum,
         # empty: immutable
         species_mass=np.empty((0,), dtype=object)):
-    """Create an agglomerated solution array from the conserved quantities."""
+    """Create agglomerated array from quantities for each conservation eqn."""
     nspec = len(species_mass)
     aux_shapes = [
         _aux_shape(mass, ()),
