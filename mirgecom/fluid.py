@@ -46,7 +46,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ConservedVars:
-    r"""Store and resolve quantities according to the fluid conserveration equations.
+    r"""Store and resolve quantities according to the fluid conservation equations.
 
     Store and resolve quantities that correspond to the fluid conservation equations
     for the canonical conserved quantities (mass, energy, momentum,
@@ -107,13 +107,13 @@ class ConservedVars:
 
         with the `ndim`-vector components of fluid velocity ($v_i$), and the
         `nspecies`-vector of species mass fractions ($Y_\alpha$). In total, the
-        fluid system of equations has a number of equations $Neq$ =
+        fluid system of equations has a number of equations $N_\mbox{eq}$ =
         (`ndim` + 2 + `nspecies`).
 
         Internally to `MIRGE-Com`, $\mathbf{Q}$ is stored as an object array
         (:class:`numpy.ndarray`) of :class:`~meshmode.dof_array.DOFArray`, one for
-        each component of the fluid $\mathbf{Q}$, i.e. a flat object array of $Neq$
-        :class:`~meshmode.dof_array.DOFArray`.
+        each component of the fluid $\mathbf{Q}$, i.e. a flat object array of
+        $N\mbox{eq}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
         $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
