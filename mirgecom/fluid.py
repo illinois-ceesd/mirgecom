@@ -46,35 +46,87 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ConservedVars:
-    r"""Resolve the canonical conserved quantities.
+    r"""Store and resolve quantities according to the fluid conserveration equations.
 
-    Get the canonical conserved quantities (mass, energy, momentum,
-    and species masses) per unit volume = $(\rho,\rho{E},\rho\vec{V},
-    \rho{Y_s})$ from an agglomerated object array.
+    Store and resolve quantities that correspond to the fluid conservation equations
+    for the canonical conserved quantities (mass, energy, momentum,
+    and species masses) per unit volume: $(\rho,\rho{E},\rho\vec{V},
+    \rho{Y_s})$ from an agglomerated object array.  This data structure is intimately
+    related to helper functions :func:`join_conserved` and :func:`split_conserved`,
+    which pack and unpack (respectively) quantities to-and-from flat object
+    array representations of the data.
+
+    .. note::
+
+        The use of the terms pack and unpack here are misleading. In reality, there
+        is no data movement when using this dataclass to view your data. This
+        dataclass is entirely about the representation of the data.
 
     .. attribute:: dim
 
-        Integer indicating spatial dimension of the state
+        Integer indicating spatial dimension of the simulation
 
     .. attribute:: mass
 
-        :class:`~meshmode.dof_array.DOFArray` for the fluid mass per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for scalars or object array of
+        :class:`~meshmode.dof_array.DOFArray` for vector quantities corresponding
+        to the mass continuity equation.
 
     .. attribute:: energy
 
-        :class:`~meshmode.dof_array.DOFArray` for total energy per unit volume
+        :class:`~meshmode.dof_array.DOFArray` for scalars or object array of
+        :class:`~meshmode.dof_array.DOFArray` for vector quantities corresponding
+        to the energy conservation equation.
 
     .. attribute:: momentum
 
         Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
-        of :class:`~meshmode.dof_array.DOFArray` for momentum per unit volume.
+        of :class:`~meshmode.dof_array.DOFArray` , or an object array with shape
+        ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
+        to the ndim equations of momentum conservation.
 
     .. attribute:: species_mass
 
         Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
-        of :class:`~meshmode.dof_array.DOFArray` for species mass per unit volume.
-        The species mass vector has components, $\rho~Y_\alpha$, where $Y_\alpha$
-        is the vector of species mass fractions.
+        of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
+        ``(nspecies, ndim)`` respectively for scalar or vector quantities
+        correpsonding to the numspecies species mass conservation equations.
+
+    :example::
+
+        Use `ConservedVars` to store and access the fluid conserved variables (CV).
+
+        The vector of fluid CV is commonly denoted as $\mathbf{Q}$, and for a
+        fluid mixture with `nspecies` species and in `ndim` spatial dimenions takes
+        the form:
+
+        .. math::
+
+            \mathbf{Q} &=
+            \begin{bmatrix}\rho\\\rho{E}\\\rho{v}_{i}\\\rho{Y}_{\alpha}\end{bmatrix},
+
+        with the `ndim`-vector components of fluid velocity ($v_i$), and the
+        `nspecies`-vector of species mass fractions ($Y_\alpha$). In total, the
+        fluid system of equations has a number of equations $Neq$ =
+        (`ndim` + 2 + `nspecies`).
+
+        Internally to `MIRGE-Com`, $\mathbf{Q}$ is stored as an object array
+        (:class:`numpy.ndarray`) of :class:`~meshmode.dof_array.DOFArray`, one for
+        each component of the fluid $\mathbf{Q}$, i.e. a flat object array of $Neq$
+        :class:`~meshmode.dof_array.DOFArray`.
+
+        To use this dataclass for a fluid CV-specific view on the content of
+        $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
+        dataclass object that resolves the fluid CV associated with each conservation
+        equation::
+
+            fluid_cv = split_conserved(ndim, Q),
+
+        after which::
+
+            fluid_mass_density = fluid_cv.mass  # a DOFArray with fluid density
+            fluid_momentum_density = fluid_cv.momentum  # ndim-vector obj array
+            fluid_species_mass_density = fluid_cv.species_mass  # nspecies-vector
 
     .. automethod:: join
     .. automethod:: replace
