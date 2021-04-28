@@ -94,7 +94,7 @@ class ConservedVars:
 
     :example::
 
-        Use `ConservedVars` to store and access the fluid conserved variables (CV).
+        Use `ConservedVars` to access the fluid conserved variables (CV).
 
         The vector of fluid CV is commonly denoted as $\mathbf{Q}$, and for a
         fluid mixture with `nspecies` species and in `ndim` spatial dimenions takes
@@ -127,6 +127,34 @@ class ConservedVars:
             fluid_mass_density = fluid_cv.mass  # a DOFArray with fluid density
             fluid_momentum_density = fluid_cv.momentum  # ndim-vector obj array
             fluid_species_mass_density = fluid_cv.species_mass  # nspecies-vector
+
+    :example::
+
+        Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
+        fluid conserved quantities (CV).
+
+        See the first example for details about CV, and $\mathbf{Q}$.
+
+        Often, a user starts with the fluid conserved quantities like mass and
+        energy densities, and it is desired to glom those quantities together into
+        a *MIRGE*-compatible $\mathbf{Q}$ data structure.
+
+        For example, a solution initialization routine may set the fluid
+        quantities::
+
+            den = rho  # rho is a DOFArray with fluid density
+            velo = v  # v is an obj array of ndim DOFArrays.
+            ener = e  # e is a DOFArray with fluid energy
+            mom_dens = den*velo
+            ener_dens = den*ener
+
+        An agglomerated array of fluid independent variables can then be
+        created with::
+
+            q = join_conserved(ndim, mass=den, energy=ener_dens, momentum=mom_dens)
+
+        after which *q* will be an obj array of $N_\mbox{eq}$ DOFArrays containing
+        the fluid conserved state data.
 
     .. automethod:: join
     .. automethod:: replace
