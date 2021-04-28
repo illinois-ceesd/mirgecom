@@ -1,4 +1,4 @@
-"""Demonstrate simple mass lump advection."""
+"""Demonstrate simple scalar lump advection."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -28,6 +28,7 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
+from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -49,7 +50,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import Lump
+from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
 
 
@@ -70,15 +71,8 @@ def main(ctx_factory=cl.create_some_context):
     exittol = .09
     t_final = 0.01
     current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
     current_dt = .001
     current_t = 0
-    eos = IdealSingleGas()
-    initializer = Lump(dim=dim, center=orig, velocity=vel)
-    casename = "lump"
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
     nstatus = 1
     nviz = 1
@@ -92,6 +86,22 @@ def main(ctx_factory=cl.create_some_context):
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+
+    nspecies = 4
+    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+    spec_y0s = np.ones(shape=(nspecies,))
+    spec_amplitudes = np.ones(shape=(nspecies,))
+    eos = IdealSingleGas()
+
+    velocity = np.ones(shape=(dim,))
+
+    initializer = MulticomponentLump(dim=dim, nspecies=nspecies,
+                                     spec_centers=centers, velocity=velocity,
+                                     spec_y0s=spec_y0s,
+                                     spec_amplitudes=spec_amplitudes)
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+
+    casename = "mixture-lump"
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,

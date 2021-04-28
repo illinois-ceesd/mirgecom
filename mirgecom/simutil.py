@@ -4,7 +4,7 @@
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
 .. autofunction:: sim_checkpoint
-.. autofunction:: create_parallel_grid
+.. autofunction:: generate_and_distribute_mesh
 """
 
 __copyright__ = """
@@ -36,9 +36,7 @@ import logging
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
-from mirgecom.euler import (
-    get_inviscid_timestep,
-)
+from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 
 logger = logging.getLogger(__name__)
 
@@ -93,15 +91,15 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, overwrite=False):
+                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
+                   vis_timer=None):
     """Check simulation health, status, viz dumps, and restart."""
-    # TODO: Add restart
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
     if do_viz is False and do_status is False:
         return 0
 
-    from mirgecom.euler import split_conserved
+    from mirgecom.fluid import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 
@@ -113,7 +111,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if exact_soln is not None:
         actx = cv.mass.array_context
         nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(t=t, x_vec=nodes, eos=eos)
+        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
         exp_resid = q - expected_state
         err_norms = [discr.norm(v, np.inf) for v in exp_resid]
         maxerr = max(err_norms)
@@ -128,12 +126,23 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                 ("exact_soln", expected_state),
             ]
             io_fields.extend(exact_list)
+        if viz_fields is not None:
+            io_fields.extend(viz_fields)
 
         from mirgecom.io import make_rank_fname, make_par_fname
         rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
-        visualizer.write_parallel_vtk_file(
-            comm, rank_fn, io_fields, overwrite=overwrite,
-            par_manifest_filename=make_par_fname(basename=vizname, step=step, t=t))
+
+        from contextlib import nullcontext
+
+        if vis_timer:
+            ctm = vis_timer.start_sub_timer()
+        else:
+            ctm = nullcontext()
+
+        with ctm:
+            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
+                overwrite=overwrite, par_manifest_filename=make_par_fname(
+                    basename=vizname, step=step, t=t))
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -153,27 +162,27 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         raise ExactSolutionMismatch(step, t=t, state=q)
 
 
-def create_parallel_grid(comm, generate_grid):
-    """Create and partition a grid.
+def generate_and_distribute_mesh(comm, generate_mesh):
+    """Generate a mesh and distribute it among all ranks in *comm*.
 
-    Create a grid with the user-supplied grid generation function
-    *generate_grid*, partition the grid, and distribute it to every
+    Generate the mesh with the user-supplied mesh generation function
+    *generate_mesh*, partition the mesh, and distribute it to every
     rank in the provided MPI communicator *comm*.
 
     Parameters
     ----------
     comm:
-        MPI communicator over which to partition the grid
-    generate_grid:
+        MPI communicator over which to partition the mesh
+    generate_mesh:
         Callable of zero arguments returning a :class:`meshmode.mesh.Mesh`.
         Will only be called on one (undetermined) rank.
 
     Returns
     -------
     local_mesh : :class:`meshmode.mesh.Mesh`
-        The local partition of the the mesh returned by *generate_grid*.
+        The local partition of the the mesh returned by *generate_mesh*.
     global_nelements : :class:`int`
-        The number of elements in the serial grid
+        The number of elements in the serial mesh
     """
     from meshmode.distributed import (
         MPIMeshDistributor,
@@ -185,7 +194,7 @@ def create_parallel_grid(comm, generate_grid):
 
     if mesh_dist.is_mananger_rank():
 
-        mesh = generate_grid()
+        mesh = generate_mesh()
 
         global_nelements = mesh.nelements
 
@@ -197,3 +206,12 @@ def create_parallel_grid(comm, generate_grid):
         local_mesh = mesh_dist.receive_mesh_part()
 
     return local_mesh, global_nelements
+
+
+def create_parallel_grid(comm, generate_grid):
+    """Generate and distribute mesh compatibility interface."""
+    from warnings import warn
+    warn("Do not call create_parallel_grid; use generate_and_distribute_mesh "
+         "instead. This function will disappear August 1, 2021",
+         DeprecationWarning, stacklevel=2)
+    return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)

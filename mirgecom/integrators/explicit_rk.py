@@ -1,17 +1,10 @@
-"""Functions for time integration.
+"""Timestepping routines for standard explicit Runge-Kutta methods.
 
-Time integrators
-^^^^^^^^^^^^^^^^
 .. autofunction:: rk4_step
 """
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
-"""
-
-__author__ = """
-Center for Exascale-Enabled Scramjet Design
-University of Illinois, Urbana, IL 61801
 """
 
 __license__ = """
@@ -36,9 +29,10 @@ THE SOFTWARE.
 
 
 def rk4_step(state, t, dt, rhs):
-    """Implement a generic RK4 time step state/rhs pair."""
+    """Take one step using the fourth-order Classical Runge-Kutta method."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)
     k3 = rhs(t+dt/2, state + dt/2*k2)
     k4 = rhs(t+dt, state + dt*k3)
+
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)

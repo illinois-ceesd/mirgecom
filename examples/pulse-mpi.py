@@ -29,6 +29,7 @@ from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 import pyopencl as cl
+import pyopencl.tools as cl_tools
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
@@ -36,13 +37,10 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.euler import (
-    inviscid_operator,
-    #    split_conserved
-)
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     sim_checkpoint,
     ExactSolutionMismatch,
 )
@@ -67,7 +65,8 @@ def main(ctx_factory=cl.create_some_context):
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ def main(ctx_factory=cl.create_some_context):
     current_dt = .01
     current_t = 0
     eos = IdealSingleGas()
-    initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
+    initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
     casename = "pulse"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
@@ -107,9 +106,10 @@ def main(ctx_factory=cl.create_some_context):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     if num_parts > 1:
-        generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                                 b=(box_ur,) * dim, n=(nel_1d,) * dim)
-        local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    generate_mesh)
     else:
         local_mesh = generate_regular_rect_mesh(
             a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
@@ -121,13 +121,13 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    uniform_state = initializer(0, nodes)
-    acoustic_pulse = AcousticPulse(numdim=dim, amplitude=1.0, width=.1,
+    uniform_state = initializer(nodes)
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
     current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
 
-    visualizer = make_visualizer(discr, discr.order + 3
-                                 if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+
     initname = "pulse"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -145,8 +145,8 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos)
+        return euler_operator(discr, q=state, t=t,
+                              boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
         return sim_checkpoint(discr, visualizer, eos, q=state,

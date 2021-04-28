@@ -35,12 +35,13 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
@@ -52,17 +53,37 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
+from logpyle import IntervalTimer
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
+
+from mirgecom.logging_quantities import (initialize_logmgr,
+    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
+    logmgr_add_device_memory_usage)
+
 
 logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
     """Drive the example."""
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="vortex.sqlite", mode="wu", mpi_comm=comm)
+
     cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
@@ -89,24 +110,44 @@ def main(ctx_factory=cl.create_some_context):
     box_ll = -5.0
     box_ur = 5.0
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
     if dim != 2:
         raise ValueError("This example must be run with dim = 2.")
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_grid = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
+    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, n=(nel_1d,) * dim)
-    local_mesh, global_nelements = create_parallel_grid(comm, generate_grid)
+    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(0, nodes)
+    current_state = initializer(nodes)
+
+    vis_timer = None
+
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                             extract_vars_for_logging, units_for_logging)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
+                            "min_temperature", "L2_norm_momentum1"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
 
     visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
 
@@ -127,21 +168,23 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return inviscid_operator(discr, q=state, t=t,
-                                 boundaries=boundaries, eos=eos)
+        return euler_operator(discr, q=state, t=t,
+                              boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+                              exittol=exittol, constant_cfl=constant_cfl, comm=comm,
+                              vis_timer=vis_timer)
 
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
                           get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
+                          t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
+                          dim=dim)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -157,9 +200,17 @@ def main(ctx_factory=cl.create_some_context):
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
 
+    if logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
+
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    main()
+    use_profiling = True
+    use_logging = True
+
+    main(use_profiling=use_profiling, use_logmgr=use_logging)
 
 # vim: foldmethod=marker

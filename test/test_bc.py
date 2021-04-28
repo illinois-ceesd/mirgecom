@@ -31,7 +31,7 @@ import pytest
 
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import split_conserved
+from mirgecom.fluid import split_conserved
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
@@ -81,10 +81,10 @@ def test_slipwall_identity(actx_factory, dim):
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity  # Check incoming normal
-            initializer = Lump(center=orig, velocity=vel, rhoamp=0.0)
+            initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
             wall = AdiabaticSlipBoundary()
 
-            uniform_state = initializer(0, nodes)
+            uniform_state = initializer(nodes)
             from functools import partial
             bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
@@ -151,8 +151,8 @@ def test_slipwall_flux(actx_factory, dim, order):
             for parity in [1.0, -1.0]:
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
-                initializer = Uniform(numdim=dim, velocity=vel)
-                uniform_state = initializer(0, nodes)
+                initializer = Uniform(dim=dim, velocity=vel)
+                uniform_state = initializer(nodes)
                 bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
                                               btag=BTAG_ALL, eos=eos)
 
