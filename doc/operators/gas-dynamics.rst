@@ -8,4 +8,3 @@ Gas Dynamics
 .. automodule:: mirgecom.flux
 .. automodule:: mirgecom.boundary
 .. automodule:: mirgecom.euler
-.. automodule:: mirgecom.artificial_viscosity

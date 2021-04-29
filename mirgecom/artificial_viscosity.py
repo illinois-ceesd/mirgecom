@@ -1,27 +1,30 @@
-r""":mod:`mirgecom.artificial_viscosity` Artificial viscocity for Euler.
+r""":mod:`mirgecom.artificial_viscosity` Artificial viscosity for hyperbolic systems.
 
-Euler Equations with artificial viscosity term:
-
-.. math::
-
-    \partial_t \mathbf{Q} = -\nabla\cdot\mathbf{F}^I +
-    \nabla\cdot{\varepsilon\nabla\mathbf{Q}}
-
-where:
-
--  fluid state: $\mathbf{Q} = [\rho, \rho{E}, \rho\mathbf{V}, \rho\mathbf{Y}]$
--  inviscid fluxes: $\mathbf{F}^I$
--  artifical viscosity coefficient: $\varepsilon$
-
-To evalutate the second order derivative the problem is recast as a set of first
- order problems:
+Consider the following system of conservation laws of the form:
 
 .. math::
 
-    \partial_t{\mathbf{Q}} &= \nabla\cdot\mathbf{R} -\nabla\cdot\mathbf{F}^I \\
+    \partial_t \mathbf{Q} + \nabla\cdot\mathbf{F} = 0,
+
+where $\mathbf{Q}$ is the state vector and $\mathbf{F}$ is the vector of
+fluxes. This module applies an artificial viscosity term by augmenting
+the governing equations in the following way:
+
+.. math::
+
+    \partial_t \mathbf{Q} + \nabla\cdot\mathbf{F} =
+    \nabla\cdot{\varepsilon\nabla\mathbf{Q}},
+
+where $\varepsilon$ is the artificial viscosity coefficient.
+To evalutate the second order derivative numerically, the problem
+is recast as a set of first order problems:
+
+.. math::
+
+    \partial_t{\mathbf{Q}} + \nabla\cdot\mathbf{F} &= \nabla\cdot\mathbf{R} \\
     \mathbf{R} &= \varepsilon\nabla\mathbf{Q}
 
-where $\mathbf{R}$ is an intermediate variable, and the artitifial viscosity
+where $\mathbf{R}$ is an auxiliary variable, and the artitifial viscosity
 coefficient, $\varepsilon$, is spatially dependent and calculated using the
 smoothness indicator of [Persson_2012]_:
 
