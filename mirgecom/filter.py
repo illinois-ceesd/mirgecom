@@ -3,10 +3,22 @@
 Discussion of the spectral filter design can be found in:
 JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
 
-.. automethod: exponential_mode_response_function
-.. automethod: make_spectral_filter
-.. automethod: apply_spectral_filter
-.. automethod: filter_modally
+Mode Response Functions
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: exponential_mode_response_function
+
+Helper Functions
+^^^^^^^^^^^^^^^^
+
+.. autofunction:: make_spectral_filter
+.. autofunction:: apply_spectral_filter
+
+Applying Filters
+^^^^^^^^^^^^^^^^
+
+.. autofunction:: filter_modally
+
 """
 
 __copyright__ = """
@@ -63,7 +75,7 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
     group: :class:`meshmode.mesh.MeshElementGroup`
         A :class:`meshmode.mesh.MeshElementGroup` from which the mode ids,
         element order, and dimension may be retrieved.
-    cutoff: integer
+    cutoff: int
         Mode cutoff beyond which the filter will be applied, and below which
         the filter will preserve.
     mode_response_function:
@@ -71,7 +83,7 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
 
     Returns
     -------
-    filter: np.ndarray
+    filter: :class:`numpy.ndarray`
         filter operator in the modal basis
     """
 
@@ -122,7 +134,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     discr: :class:`meshmode.discretization.Discretization`
         A :class:`meshmode.discretization.Discretization` describing
         the volume discretization the *modal_field* comes from.
-    cutoff: integer
+    cutoff: int
         Mode cutoff beyond which the filter will be applied, and below which
         the filter will preserve.
     mode_response_function:
@@ -130,7 +142,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
 
     Returns
     -------
-    modal_field: DOFArray
+    modal_field: :class:`meshmode.dof_array.DOFArray`
         DOFArray or object array of DOFArrays
 
     """
@@ -157,27 +169,27 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
 
     For each element group in the discretization, and restriction,
     This routine generates:
+
     * a filter operator:
         - *cutoff* filters only modes above this mode id
         - *mode_resp_func* function returns a filter coefficient
-        for a given mode
-        - memoized into the discretization
-    * a kernel to apply the operator
+            for a given mode
         - memoized into the array context
+
     * a filtered solution wherein the filter is applied to *field*.
 
     Parameters
     ----------
-    dcoll: :class:`grudge.DiscretizationCollection`
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
     dd: :class:`grudge.dof_desc.DOFDesc` or as accepted by
-        :func:`grudge.dof_desc.as_dof_desc`
+        :func:`grudge.dof_desc.as_dofdesc`
         Describe the type of DOF vector on which to operate.
-    cutoff: integer
+    cutoff: int
         Mode below which *field* will not be filtered
     mode_resp_func:
         Modal response function returns a filter coefficient for input mode id
-    field: numpy.ndarray
+    field: :class:`numpy.ndarray`
         DOFArray or object array of DOFArrays
 
     Returns
