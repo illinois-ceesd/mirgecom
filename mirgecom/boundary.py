@@ -184,7 +184,7 @@ class AdiabaticSlipBoundary:
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
         s_mom_normcomp = np.outer(normal, np.dot(gradq_comp.momentum, normal))
-        s_mom_flux = gradq_int.momentum - 2*s_mom_normcomp
+        s_mom_flux = gradq_comp.momentum - 2*s_mom_normcomp
 
         # flip components to set a neumann condition
         return join_conserved(dim, mass=-gradq_comp.mass, energy=-gradq_comp.energy,
