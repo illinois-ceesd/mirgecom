@@ -24,7 +24,7 @@ is recast as a set of first order problems:
     \partial_t{\mathbf{Q}} + \nabla\cdot\mathbf{F} &= \nabla\cdot\mathbf{R} \\
     \mathbf{R} &= \varepsilon\nabla\mathbf{Q}
 
-where $\mathbf{R}$ is an auxiliary variable, and the artitifial viscosity
+where $\mathbf{R}$ is an auxiliary variable, and the artificial viscosity
 coefficient, $\varepsilon$, is spatially dependent and calculated using the
 smoothness indicator of [Persson_2012]_:
 
@@ -40,7 +40,7 @@ where:
 - $u_{N_{p-1}}$ is the truncated modal represention to the polynomial order $p-1$
 - The $L_2$ inner product on an element is denoted $\langle \cdot,\cdot \rangle_e$
 
-The elementwise viscoisty is then calculated:
+The elementwise viscosity is then calculated:
 
 .. math::
 
