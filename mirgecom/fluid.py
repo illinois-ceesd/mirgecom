@@ -184,7 +184,7 @@ class ConservedVars:
 
         where $1 \le j \le \mbox{ndim}$, such that the first component of
         $\mathbf{Q}$ is an `ndim`-vector corresponding to the gradient of the fluid
-        density, i.e. obj_array of `ndim` `DOFArray`\s. Similarly for the energy
+        density, i.e. obj_array of `ndim` `DOFArray`. Similarly for the energy
         term. The momentum part of $\nabla\mathbf{Q}$ is a 2D array with shape
         ``(ndim, ndim)`` with each row corresponding to the gradient of a component
         of the `ndim`-vector of fluid momentum.  The species portion of
