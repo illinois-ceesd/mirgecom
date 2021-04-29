@@ -146,26 +146,37 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
 
     Parameters
     ----------
-    q
-        State array of the canonical conserved variables (mass, energy, momentum)
+    q: :class:`~meshmode.dof_array.DOFArray` or :class:`~numpy.ndarray`
+
+        Single :class:`~meshmode.dof_array.DOFArray` for a scalar or an object array
+        (:class:`~numpy.ndarray`) for a vector of
+        :class:`~meshmode.dof_array.DOFArray` on which to operate.
+
+        When used with fluid solvers, *q* is expected to be the fluid state array
+        of the canonical conserved variables (mass, energy, momentum)
         for the fluid along with a vector of species masses for multi-component
         fluids.
 
-    boundaries
+    boundaries: float
+
         Dictionary of boundary functions, one for each valid boundary tag
 
-    t
+    t: float
+
         Time
 
-    alpha
+    alpha: float
+
        The maximum artificial viscosity coefficient to be applied
 
-    eos: mirgecom.eos.GasEOS
+    eos: :class:`~mirgecom.eos.GasEOS`
+
        Only used as a pass through to the boundary conditions.
 
     Returns
     -------
     numpy.ndarray
+
         The artificial viscosity operator applied to *q*.
     """
     # Get smoothness indicator based on first component
