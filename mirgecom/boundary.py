@@ -171,9 +171,9 @@ class AdiabaticSlipBoundary:
         """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
         num_equations, dim = grad_q.shape
-        num_species = num_equations - dim - 2
         cv = split_conserved(dim, grad_q)
         actx = cv.mass[0].array_context
+
         # Grab a unit normal to the boundary
         normal = thaw(actx, discr.normal(btag))
 
@@ -181,23 +181,12 @@ class AdiabaticSlipBoundary:
         int_soln = discr.project("vol", btag, grad_q)
         int_cv = split_conserved(dim, int_soln)
 
-        # create result array to fill
-        result = np.empty(shape=grad_q.shape, dtype=object)
-
-        # flip signs on mass and energy
-        # to apply a neumann condition on q
-        result[0] = -int_cv.mass
-        result[1] = -int_cv.energy
-
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
-        # flip remaining components to set a neumann condition
         s_mom_normcomp = np.outer(normal, np.dot(int_cv.momentum, normal))
         s_mom_flux = 2*s_mom_normcomp - int_cv.momentum
-        for idim in range(dim):
-            result[2+idim] = s_mom_flux[idim]
 
-        for ispec in range(num_species):
-            result[dim+2+ispec] = -int_cv.species_mass[ispec]
-
-        return np.stack(result, axis=0)
+        # flip remaining components to set a neumann condition
+        return join_conserved(dim, mass=-int_cv.mass, energy=-int_cv.energy,
+                              momentum=s_mom_flux,
+                              species_mass=-int_cv.species_mass)
