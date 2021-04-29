@@ -151,7 +151,7 @@ class ConservedVars:
         quantities::
 
             den = rho  # rho is a DOFArray with fluid density
-            velo = v  # v is an obj array of ndim DOFArrays denoting the components of velocity.
+            velo = v  # v an ndim-vector of DOFArray representing velocity components
             ener = e  # e is a DOFArray with fluid energy
             mom_dens = den*velo
             ener_dens = den*ener
