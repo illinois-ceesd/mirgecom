@@ -29,13 +29,9 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pytest
-from pytools.obj_array import make_obj_array
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
-from mirgecom.fluid import (
-    join_conserved,
-)
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -183,28 +179,22 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     boundaries = {BTAG_ALL: DummyBoundary()}
 
     # Uniform field return 0 rhs
-    mass = zeros + 1.0
-    energy = zeros + 1.0
-    momentum = make_obj_array([zeros + 0 for _ in range(dim)])
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
+    q = zeros + 1.0
     rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
                       q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Linear field return 0 rhs
-    mass = nodes[0]
-    energy = 2.5 + zeros
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
+    q = nodes[0]
     rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
                       q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
-    mass = np.dot(nodes, nodes)
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=momentum)
+    q = np.dot(nodes, nodes)
     rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
                       q=q, alpha=1.0, s0=-np.inf)
-    err = discr.norm(2.*dim-rhs[0], np.inf)
+    err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
