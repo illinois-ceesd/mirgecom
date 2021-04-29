@@ -355,7 +355,7 @@ class DoubleMachReflection:
         rhor = eos.gamma()
         ul = up * np.cos(np.pi/6.0)
         ur = 0.0
-        vl = up * np.sin(np.pi/6.0)
+        vl = - up * np.sin(np.pi/6.0)
         vr = 0.0
         rhoel = gmn1 * p_jump
         rhoer = gmn1 * 1.0
