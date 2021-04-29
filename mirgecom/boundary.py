@@ -178,15 +178,15 @@ class AdiabaticSlipBoundary:
         normal = thaw(actx, discr.normal(btag))
 
         # Get the interior soln
-        int_soln = discr.project("vol", btag, grad_q)
-        int_cv = split_conserved(dim, int_soln)
+        gradq_int = discr.project("vol", btag, grad_q)
+        gradq_comp = split_conserved(dim, gradq_int)
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
-        s_mom_normcomp = np.outer(normal, np.dot(int_cv.momentum, normal))
-        s_mom_flux = int_cv.momentum - 2*s_mom_normcomp
+        s_mom_normcomp = np.outer(normal, np.dot(gradq_comp.momentum, normal))
+        s_mom_flux = gradq_int.momentum - 2*s_mom_normcomp
 
         # flip components to set a neumann condition
-        return join_conserved(dim, mass=-int_cv.mass, energy=-int_cv.energy,
+        return join_conserved(dim, mass=-gradq_comp.mass, energy=-gradq_comp.energy,
                               momentum=-s_mom_flux,
-                              species_mass=-int_cv.species_mass)
+                              species_mass=-gradq_comp.species_mass)
