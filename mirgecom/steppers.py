@@ -169,3 +169,39 @@ def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
                     logmgr.tick_after()
 
     return istep, t, state
+
+
+def advance(rhs, timestepper, checkpoint, get_timestep, state, t_final,
+                    component_id="state", t=0.0, istep=0, logmgr=None,
+                    eos=None, dim=None):
+
+    from mirgecom.integrators import (rk4_step, euler_step,
+                                      lsrk54_step, lsrk144_step)
+    if timestepper in (rk4_step, euler_step, lsrk54_step, lsrk144_step):
+        (current_step, current_t, current_state) = \
+            advance_state(rhs=rhs, timestepper=timestepper,
+                        checkpoint=checkpoint,
+                        get_timestep=get_timestep, state=state,
+                        t=t, t_final=t_final, istep=istep,
+                        logmgr=logmgr, eos=eos, dim=dim)
+    else:
+        # The timestepper should either be a Leap
+        # method object, or something is broken.
+        import importlib
+        leap_spec = importlib.util.find_spec("leap")
+        found = leap_spec is not None
+        if found:
+            from leap import MethodBuilder
+            if isinstance(timestepper, MethodBuilder):
+                (current_step, current_t, current_state) = \
+                    advance_state_leap(rhs=rhs, timestepper=timestepper,
+                                checkpoint=checkpoint,
+                                get_timestep=get_timestep, state=state,
+                                t=t, t_final=t_final, component_id=component_id,
+                                istep=istep, logmgr=logmgr, eos=eos, dim=dim)
+            else:
+                raise ValueError("Timestepper unrecognizable")
+        else:
+            raise ValueError("Leap and/or Dagrt not installed")
+
+    return current_step, current_t, current_state

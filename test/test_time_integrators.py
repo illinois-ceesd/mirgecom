@@ -27,21 +27,12 @@ THE SOFTWARE.
 import numpy as np
 import logging
 import pytest
+import importlib
 
 from mirgecom.integrators import (euler_step,
                                   lsrk54_step,
                                   lsrk144_step,
                                   rk4_step)
-from leap.rk import (
-    ODE23MethodBuilder, ODE45MethodBuilder,
-    ForwardEulerMethodBuilder,
-    MidpointMethodBuilder, HeunsMethodBuilder,
-    RK3MethodBuilder, RK4MethodBuilder, RK5MethodBuilder,
-    LSRK4MethodBuilder,
-    SSPRK22MethodBuilder, SSPRK33MethodBuilder,
-    )
-from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
-from mirgecom.steppers import advance_state_leap
 
 logger = logging.getLogger(__name__)
 
@@ -80,59 +71,73 @@ def test_integration_order(integrator, method_order):
     assert integrator_eoc.order_estimate() >= method_order - .01
 
 
-@pytest.mark.parametrize(("method", "method_order"), [
-    (ODE23MethodBuilder("y", use_high_order=False), 2),
-    (ODE23MethodBuilder("y", use_high_order=True), 3),
-    (ODE45MethodBuilder("y", use_high_order=False), 4),
-    (ODE45MethodBuilder("y", use_high_order=True), 5),
-    (ForwardEulerMethodBuilder("y"), 1),
-    (MidpointMethodBuilder("y"), 2),
-    (HeunsMethodBuilder("y"), 2),
-    (RK3MethodBuilder("y"), 3),
-    (RK4MethodBuilder("y"), 4),
-    (RK5MethodBuilder("y"), 5),
-    (LSRK4MethodBuilder("y"), 4),
-    (KennedyCarpenterIMEXARK4MethodBuilder("y", use_implicit=False,
-        explicit_rhs_name="y"), 4),
-    (SSPRK22MethodBuilder("y"), 2),
-    (SSPRK33MethodBuilder("y"), 3),
-    ])
-def test_leapgen_integration_order(method, method_order):
-    """Test that time integrators have correct order."""
+leap_spec = importlib.util.find_spec("leap")
+found = leap_spec is not None
+if found:
+    from leap.rk import (
+        ODE23MethodBuilder, ODE45MethodBuilder,
+        ForwardEulerMethodBuilder,
+        MidpointMethodBuilder, HeunsMethodBuilder,
+        RK3MethodBuilder, RK4MethodBuilder, RK5MethodBuilder,
+        LSRK4MethodBuilder,
+        SSPRK22MethodBuilder, SSPRK33MethodBuilder,
+        )
+    from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
+    from mirgecom.steppers import advance_state_leap
 
-    def exact_soln(t):
-        return np.exp(-t)
+    @pytest.mark.parametrize(("method", "method_order"), [
+        (ODE23MethodBuilder("y", use_high_order=False), 2),
+        (ODE23MethodBuilder("y", use_high_order=True), 3),
+        (ODE45MethodBuilder("y", use_high_order=False), 4),
+        (ODE45MethodBuilder("y", use_high_order=True), 5),
+        (ForwardEulerMethodBuilder("y"), 1),
+        (MidpointMethodBuilder("y"), 2),
+        (HeunsMethodBuilder("y"), 2),
+        (RK3MethodBuilder("y"), 3),
+        (RK4MethodBuilder("y"), 4),
+        (RK5MethodBuilder("y"), 5),
+        (LSRK4MethodBuilder("y"), 4),
+        (KennedyCarpenterIMEXARK4MethodBuilder("y", use_implicit=False,
+            explicit_rhs_name="y"), 4),
+        (SSPRK22MethodBuilder("y"), 2),
+        (SSPRK33MethodBuilder("y"), 3),
+        ])
+    def test_leapgen_integration_order(method, method_order):
+        """Test that time integrators have correct order."""
 
-    def rhs(t, y):
-        return -np.exp(-t)
+        def exact_soln(t):
+            return np.exp(-t)
 
-    from pytools.convergence import EOCRecorder
-    integrator_eoc = EOCRecorder()
+        def rhs(t, y):
+            return -np.exp(-t)
 
-    dt = 1.0
-    for refine in [1, 2, 4, 8]:
-        dt = dt / refine
-        t = 0
-        state = exact_soln(t)
+        from pytools.convergence import EOCRecorder
+        integrator_eoc = EOCRecorder()
 
-        t_final = 4
-        step = 0
+        dt = 1.0
+        for refine in [1, 2, 4, 8]:
+            dt = dt / refine
+            t = 0
+            state = exact_soln(t)
 
-        # Callables needed for advance_state and advance_state_leap
-        def get_timestep(state):
-            return dt
+            t_final = 4
+            step = 0
 
-        def my_checkpoint(state, step, t, dt):
-            return 0
+            # Callables needed for advance_state and advance_state_leap
+            def get_timestep(state):
+                return dt
 
-        (step, t, state) = \
-            advance_state_leap(rhs=rhs, timestepper=method,
-                        checkpoint=my_checkpoint,
-                        get_timestep=get_timestep, state=state,
-                        t=t, t_final=t_final, component_id="y")
+            def my_checkpoint(state, step, t, dt):
+                return 0
 
-        error = np.abs(state - exact_soln(t)) / exact_soln(t)
-        integrator_eoc.add_data_point(dt, error)
+            (step, t, state) = \
+                advance_state_leap(rhs=rhs, timestepper=method,
+                            checkpoint=my_checkpoint,
+                            get_timestep=get_timestep, state=state,
+                            t=t, t_final=t_final, component_id="y")
 
-    logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
-    assert integrator_eoc.order_estimate() >= method_order - .1
+            error = np.abs(state - exact_soln(t)) / exact_soln(t)
+            integrator_eoc.add_data_point(dt, error)
+
+        logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+        assert integrator_eoc.order_estimate() >= method_order - .1

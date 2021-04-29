@@ -128,6 +128,11 @@ def main(use_leap=False):
     istep = 0
 
     # initialize Leap integrator if using one
+    import importlib
+    leap_spec = importlib.util.find_spec("leap")
+    not_found = leap_spec is None
+    if not_found:
+        raise ValueError("Leap uninstalled")
     if use_leap:
         from leap.rk import RK4MethodBuilder
         from utils import leap_setup

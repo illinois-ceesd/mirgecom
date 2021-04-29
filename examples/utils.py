@@ -24,9 +24,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state, advance_state_leap
-
 
 def leap_setup(method, component_id, rhs, t, dt, state):
     timestepper = method(component_id)
@@ -39,33 +36,5 @@ def leap_setup(method, component_id, rhs, t, dt, state):
     interp.set_up(t_start=t, dt_start=dt, context={component_id: state})
 
     return interp
-
-
-def advance_example(rhs, timestepper, checkpoint, get_timestep, state, t_final,
-                    component_id="state", t=0.0, istep=0, logmgr=None,
-                    eos=None, dim=None):
-
-    if timestepper is rk4_step:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=rhs, timestepper=timestepper,
-                        checkpoint=checkpoint,
-                        get_timestep=get_timestep, state=state,
-                        t=t, t_final=t_final, istep=istep,
-                        logmgr=logmgr, eos=eos, dim=dim)
-    else:
-        # The timestepper should either be a Leap
-        # method object, or something is broken.
-        from leap import MethodBuilder
-        if isinstance(timestepper, MethodBuilder):
-            (current_step, current_t, current_state) = \
-                advance_state_leap(rhs=rhs, timestepper=timestepper,
-                              checkpoint=checkpoint,
-                              get_timestep=get_timestep, state=state,
-                              t=t, t_final=t_final, component_id=component_id,
-                              istep=istep, logmgr=logmgr, eos=eos, dim=dim)
-        else:
-            raise ValueError("Timestepper unrecognizable")
-
-    return current_step, current_t, current_state
 
 # vim: foldmethod=marker

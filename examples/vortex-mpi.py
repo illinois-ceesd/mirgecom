@@ -48,7 +48,7 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
-from utils import advance_example
+from mirgecom.steppers import advance
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
@@ -86,6 +86,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    import importlib
+    leap_spec = importlib.util.find_spec("leap")
+    not_found = leap_spec is None
+    if not_found:
+        raise ValueError("Leap uninstalled")
+    
     dim = 2
     nel_1d = 16
     order = 3
@@ -185,7 +191,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     try:
         (current_step, current_t, current_state) = \
-            advance_example(rhs=my_rhs, timestepper=timestepper,
+            advance(rhs=my_rhs, timestepper=timestepper,
                 checkpoint=my_checkpoint,
                 get_timestep=get_timestep, state=current_state,
                 t=current_t, t_final=t_final, logmgr=logmgr,

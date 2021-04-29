@@ -46,7 +46,7 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
-from utils import advance_example
+from mirgecom.steppers import advance
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
@@ -89,6 +89,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
+    
+    import importlib
+    leap_spec = importlib.util.find_spec("leap")
+    not_found = leap_spec is None
+    if not_found:
+        raise ValueError("Leap uninstalled")
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -137,7 +143,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     try:
         (current_step, current_t, current_state) = \
-            advance_example(rhs=my_rhs, timestepper=timestepper,
+            advance(rhs=my_rhs, timestepper=timestepper,
                 checkpoint=my_checkpoint,
                 get_timestep=get_timestep, state=current_state,
                 t=current_t, t_final=t_final)
