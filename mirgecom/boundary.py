@@ -38,8 +38,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import (
     split_conserved,
-    join_conserved,
-    join_conserved_vectors
+    join_conserved
 )
 
 
@@ -201,4 +200,4 @@ class AdiabaticSlipBoundary:
         for ispec in range(num_species):
             result[dim+2+ispec] = -int_cv.species_mass[ispec]
 
-        return join_conserved_vectors(dim, result)
+        return np.stack(result, axis=0)

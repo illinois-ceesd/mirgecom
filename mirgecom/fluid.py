@@ -6,7 +6,6 @@ State Vector Handling
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
-.. autofunction:: join_conserved_vectors
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
@@ -164,21 +163,6 @@ def join_conserved(dim, mass, energy, momentum,
     result[dim+2:] = species_mass
 
     return result
-
-
-def join_conserved_vectors(dim, ary):
-    r"""Create a 2D array of shape(len(ary), dim)."""
-    neq = len(ary)
-    nspecies = neq - (dim+2)
-    retval = np.empty(shape=(neq, dim), dtype=object)
-    cv = split_conserved(dim, ary)
-    retval[0] = cv.mass
-    retval[1] = cv.energy
-    for i in range(dim):
-        retval[2+i] = ary[2+i]
-    for i in range(nspecies):
-        retval[dim+2+i] = ary[dim+2+i]
-    return retval
 
 
 def velocity_gradient(discr, cv, grad_cv):
