@@ -78,15 +78,15 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
     @keyed_memoize_in(
         actx, (make_spectral_filter,
                mode_response_function,
-               "_spectral_filter_matrix"),
+               "_spectral_filter_scaling"),
         lambda grp: grp.discretization_key()
     )
-    def _spectral_filter_matrix(group):
+    def _spectral_filter_scaling(group):
         mode_ids = group.mode_ids()
         order = group.order
 
         nmodes = len(mode_ids)
-        filter_mat = np.identity(nmodes)
+        filter_scaling = np.ones(nmodes)
         nfilt = order - cutoff
         if nfilt <= 0:
             return filter
@@ -94,19 +94,19 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
         for mode_index, mode_id in enumerate(mode_ids):
             mode = sum(mode_id)
             if mode >= cutoff:
-                filter_mat[mode_index, mode_index] = \
+                filter_scaling[mode_index] = \
                     mode_response_function(mode,
                                            cutoff=cutoff,
                                            nfilt=nfilt)
 
-        return actx.freeze(actx.from_numpy(filter_mat))
+        return actx.freeze(actx.from_numpy(filter_scaling))
 
-    return _spectral_filter_matrix(group)
+    return _spectral_filter_scaling(group)
 
 
-def apply_filter_matrix(actx, modal_field, discr, cutoff,
-                        mode_response_function):
-    r"""Apply the filter matrix, defined by the *mode_response_function*.
+def apply_spectral_filter(actx, modal_field, discr, cutoff,
+                          mode_response_function):
+    r"""Apply the spectral filter, defined by the *mode_response_function*.
 
     This routine returns filtered data in the modal basis, which has
     been applied using a user-provided *mode_response_function*
@@ -137,7 +137,7 @@ def apply_filter_matrix(actx, modal_field, discr, cutoff,
     from meshmode.array_context import FirstAxisIsElementsTag
     return DOFArray(
         actx,
-        tuple(actx.einsum("ij,ej->ei",
+        tuple(actx.einsum("j,ej->ej",
                           make_spectral_filter(
                               actx,
                               group=grp,
@@ -145,7 +145,7 @@ def apply_filter_matrix(actx, modal_field, discr, cutoff,
                               mode_response_function=mode_response_function
                           ),
                           vec_i,
-                          arg_names=("filter_mat", "vec"),
+                          arg_names=("filter", "vec"),
                           tagged=(FirstAxisIsElementsTag(),))
               for grp, vec_i in zip(discr.groups, modal_field))
     )
@@ -195,6 +195,6 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     modal_map = dcoll.connection_from_dds(dd, dd_modal)
     nodal_map = dcoll.connection_from_dds(dd_modal, dd)
     field = modal_map(field)
-    field = apply_filter_matrix(actx, field, discr, cutoff,
-                                mode_resp_func)
+    field = apply_spectral_filter(actx, field, discr, cutoff,
+                                  mode_resp_func)
     return nodal_map(field)
