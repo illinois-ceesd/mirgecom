@@ -40,7 +40,6 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import make_spectral_filter
-from pytools.obj_array import obj_array_vectorized_n_args
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
