@@ -102,28 +102,35 @@ from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
 
 def _facial_flux_q(discr, q_tpair):
     """Compute facial flux for each scalar component of Q."""
-    q_int = q_tpair.int
-    actx = q_int[0].array_context
+    flux_dis = q_tpair.avg
+    if isinstance(flux_dis, np.ndarray):
+        actx = flux_dis[0].array_context
+        flux_dis = flux_dis.reshape(-1, 1)
+    else:
+        actx = flux_dis.array_context
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # This uses a central scalar flux along nhat:
     # flux = 1/2 * (Q- + Q+) * nhat
-    flux_out = np.outer(q_tpair.avg, normal)
+    flux_out = flux_dis * normal
 
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
 
 def _facial_flux_r(discr, r_tpair):
     """Compute facial flux for vector component of grad(Q)."""
-    r_int = r_tpair.int
-    actx = r_int[0][0].array_context
+    flux_dis = r_tpair.avg
+    if isinstance(flux_dis[0], np.ndarray):
+        actx = flux_dis[0][0].array_context
+    else:
+        actx = flux_dis[0].array_context
 
     normal = thaw(actx, discr.normal(r_tpair.dd))
 
     # This uses a central vector flux along nhat:
     # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-    flux_out = r_tpair.avg @ normal
+    flux_out = flux_dis @ normal
 
     return discr.project(r_tpair.dd, "all_faces", flux_out)
 
@@ -166,7 +173,10 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     indicator = smoothness_indicator(discr, indicator_field, **kwargs)
 
     # R=Grad(Q) volume part
-    grad_q_vol = np.stack(obj_array_vectorize(discr.weak_grad, q), axis=0)
+    if isinstance(q, np.ndarray):
+        grad_q_vol = np.stack(obj_array_vectorize(discr.weak_grad, q), axis=0)
+    else:
+        grad_q_vol = discr.weak_grad(q)
 
     # R=Grad(Q) Q flux over interior faces
     q_flux_int = _facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
