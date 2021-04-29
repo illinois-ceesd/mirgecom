@@ -78,8 +78,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
 
-    from mirgecom.fluid import join_conserved_vectors
-    grad_q = join_conserved_vectors(dim, obj_array_vectorize(discr.grad, q))
+    grad_q = np.stack(obj_array_vectorize(discr.grad, q), axis=0)
     grad_cv = split_conserved(dim, grad_q)
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
@@ -125,8 +124,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
         cv = split_conserved(dim, q)
 
-        from mirgecom.fluid import join_conserved_vectors
-        grad_q = join_conserved_vectors(dim, obj_array_vectorize(discr.grad, q))
+        grad_q = np.stack(obj_array_vectorize(discr.grad, q), axis=0)
         grad_cv = split_conserved(dim, grad_q)
 
         grad_v = velocity_gradient(discr, cv, grad_cv)

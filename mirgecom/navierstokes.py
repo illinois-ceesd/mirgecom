@@ -72,10 +72,7 @@ from mirgecom.viscous import (
 from mirgecom.flux import (
     central_scalar_flux
 )
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved_vectors
-)
+from mirgecom.fluid import split_conserved
 from mirgecom.operators import (
     elbnd_flux,
     dg_div_low,
@@ -142,7 +139,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
                             q_int_tpair, q_part_pairs, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_q = join_conserved_vectors(dim, dg_grad_low(discr, q, q_flux_bnd))
+    grad_q = np.stack(dg_grad_low(discr, q, q_flux_bnd), axis=0)
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
