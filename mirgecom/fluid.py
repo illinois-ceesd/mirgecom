@@ -59,7 +59,7 @@ class ConservedVars:
 
     .. note::
 
-        The use of the terms pack and unpack here are misleading. In reality, there
+        The use of the terms pack and unpack here is misleading. In reality, there
         is no data movement when using this dataclass to view your data. This
         dataclass is entirely about the representation of the data.
 
@@ -91,14 +91,14 @@ class ConservedVars:
         Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
         of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
         ``(nspecies, ndim)`` respectively for scalar or vector quantities
-        correpsonding to the numspecies species mass conservation equations.
+        corresponding to the `nspecies` species mass conservation equations.
 
     :example::
 
         Use `ConservedVars` to access the fluid conserved variables (CV).
 
         The vector of fluid CV is commonly denoted as $\mathbf{Q}$, and for a
-        fluid mixture with `nspecies` species and in `ndim` spatial dimenions takes
+        fluid mixture with `nspecies` species and in `ndim` spatial dimensions takes
         the form:
 
         .. math::
@@ -108,13 +108,12 @@ class ConservedVars:
 
         with the `ndim`-vector components of fluid velocity ($v_i$), and the
         `nspecies`-vector of species mass fractions ($Y_\alpha$). In total, the
-        fluid system of equations has a number of equations $N_\mbox{eq}$ =
-        (`ndim` + 2 + `nspecies`).
+        fluid system has $N_\mbox{eq}$ = (`ndim + 2 + nspecies`) equations.
 
         Internally to `MIRGE-Com`, $\mathbf{Q}$ is stored as an object array
         (:class:`numpy.ndarray`) of :class:`~meshmode.dof_array.DOFArray`, one for
         each component of the fluid $\mathbf{Q}$, i.e. a flat object array of
-        $N\mbox{eq}$ :class:`~meshmode.dof_array.DOFArray`.
+        $N_\mbox{eq}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
         $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
@@ -129,7 +128,7 @@ class ConservedVars:
             fluid_momentum_density = fluid_cv.momentum  # ndim-vector obj array
             fluid_species_mass_density = fluid_cv.species_mass  # nspecies-vector
 
-        Examples of using `ConservedVars` as in this example in:
+        Examples of using `ConservedVars` as in this example can be found in:
 
         - :mod:`~mirgecom.boundary`
         - :mod:`~mirgecom.euler`
@@ -141,8 +140,8 @@ class ConservedVars:
         Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
         fluid conserved quantities (CV).
 
-        See the first example for the definition of CV, $\mathbf{Q}$, ndim,
-        nspecies, and $N_\mbox{eq}$.
+        See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
+        `nspecies`, and $N_\mbox{eq}$.
 
         Often, a user starts with the fluid conserved quantities like mass and
         energy densities, and it is desired to glom those quantities together into
@@ -151,16 +150,14 @@ class ConservedVars:
         For example, a solution initialization routine may set the fluid
         quantities::
 
-            den = rho  # rho is a DOFArray with fluid density
-            velo = v  # v is an ndim-vector of DOFArray with components of velocity
-            ener = e  # e is a DOFArray with fluid energy
-            mom_dens = den*velo
-            ener_dens = den*ener
+            rho = ... # rho is a DOFArray with fluid density
+            v = ... # v is an ndim-vector of DOFArray with components of velocity
+            e = ... # e is a DOFArray with fluid energy
 
         An agglomerated array of fluid independent variables can then be
         created with::
 
-            q = join_conserved(ndim, mass=den, energy=ener_dens, momentum=mom_dens)
+            q = join_conserved(ndim, mass=rho, energy=rho*e, momentum=rho*v)
 
         after which *q* will be an obj array of $N_\mbox{eq}$ DOFArrays containing
         the fluid conserved state data.
@@ -173,8 +170,8 @@ class ConservedVars:
 
         Use `ConservedVars` to access a vector quantity for each fluid equation.
 
-        See the first example for the definition of CV, $\mathbf{Q}$, ndim,
-        nspecies, and $N_\mbox{eq}$.
+        See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
+        `nspecies`, and $N_\mbox{eq}$.
 
         Suppose the user wants to access the gradient of the fluid state,
         $\nabla\mathbf{Q}$, in a fluid-specific way. For a fluid $\mathbf{Q}$,
@@ -188,8 +185,8 @@ class ConservedVars:
 
         where $1 \le j \le \mbox{ndim}$, such that the first component of
         $\mathbf{Q}$ is an `ndim`-vector corresponding to the gradient of the fluid
-        density, i.e. obj_array of `ndim` DOFArrays. Similarly for the energy term.
-        The momentum part of $\nabla\mathbf{Q}$ is a 2D array with shape
+        density, i.e. object array of `ndim` `DOFArray`. Similarly for the energy
+        term. The momentum part of $\nabla\mathbf{Q}$ is a 2D array with shape
         ``(ndim, ndim)`` with each row corresponding to the gradient of a component
         of the `ndim`-vector of fluid momentum.  The species portion of
         $\nabla\mathbf{Q}$ is a 2D array with shape ``(nspecies, ndim)`` with each
