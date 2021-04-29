@@ -32,8 +32,7 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from meshmode.dof_array import thaw, DOFArray
-from grudge.symbolic import DTAG_BOUNDARY
-from grudge.symbolic.primitives import QTAG_NONE
+from grudge.dof_desc import DTAG_BOUNDARY, QTAG_NONE
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
