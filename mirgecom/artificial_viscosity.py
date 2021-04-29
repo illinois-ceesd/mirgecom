@@ -136,7 +136,7 @@ def _facial_flux_r(discr, r_tpair):
 
 
 def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
-    r"""Compute artificial viscosity for the Euler equations.
+    r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
 
