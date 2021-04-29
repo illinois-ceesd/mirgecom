@@ -125,58 +125,22 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     from mirgecom.filter import exponential_mode_response_function as xmrfunc
     frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
 
-    from modepy import vandermonde
     for group in vol_discr.groups:
         mode_ids = group.mode_ids()
-        vander = vandermonde(group.basis(), group.unit_nodes)
-        vanderm1 = np.linalg.inv(vander)
         filter_coeff = actx.thaw(
             make_spectral_filter(
                 actx, group, cutoff=cutoff,
                 mode_response_function=frfunc
             )
         )
-        assert(filter_coeff.shape == vanderm1.shape)
         for mode_index, mode_id in enumerate(mode_ids):
             mode = mode_id
             if dim > 1:
                 mode = sum(mode_id)
             if mode == cutoff:
-                assert(filter_coeff[mode_index][mode_index] == expected_cutoff_coeff)
+                assert(filter_coeff[mode_index] == expected_cutoff_coeff)
             if mode == order:
-                assert(filter_coeff[mode_index][mode_index] == expected_high_coeff)
-
-
-@obj_array_vectorized_n_args
-def _apply_linear_operator(discr, operator, fields):
-    """Apply *operator* matrix to *fields*.
-
-    This is a utility used in testing only. It assumes
-    a one-group discretization.
-    """
-    import loopy as lp
-
-    def linear_operator_kernel():
-        from meshmode.array_context import make_loopy_program
-        knl = make_loopy_program(
-            """{[iel,idof,j]:
-            0<=iel<nelements and
-            0<=idof<ndiscr_nodes_out and
-            0<=j<ndiscr_nodes_in}""",
-            "result[iel,idof] = sum(j, mat[idof, j] * vec[iel, j])",
-            name="spectral_filter")
-        return lp.tag_array_axes(knl, "mat", "stride:auto,stride:auto")
-
-    assert(len(discr.groups) == 1)
-    actx = fields.array_context
-    result = discr.empty(actx, dtype=fields.entry_dtype)
-    for group in discr.groups:
-        actx.call_loopy(
-            linear_operator_kernel(),
-            mat=actx.from_numpy(operator),
-            result=result[group.index],
-            vec=fields[group.index])
-    return result
+                assert(filter_coeff[mode_index] == expected_high_coeff)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -271,18 +235,18 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         from grudge.shortcuts import make_visualizer
         vis = make_visualizer(discr, discr.order)
 
-    from modepy import vandermonde
+    from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
+
+    modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+
     for field_order in range(cutoff+1, cutoff+4):
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]
         field = polyfn(coeff=coeff)
         filtered_field = filter_modally(discr, "vol", cutoff,
                                         frfunc, field)
         for group in vol_discr.groups:
-            vander = vandermonde(group.basis(), group.unit_nodes)
-            vanderm1 = np.linalg.inv(vander)
-            unfiltered_spectrum = _apply_linear_operator(vol_discr, vanderm1, field)
-            filtered_spectrum = _apply_linear_operator(vol_discr, vanderm1,
-                                                      filtered_field)
+            unfiltered_spectrum = modal_map(field)
+            filtered_spectrum = modal_map(filtered_field)
             if do_viz is True:
                 spectrum_resid = unfiltered_spectrum - filtered_spectrum
                 io_fields = [
