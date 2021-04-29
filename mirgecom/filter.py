@@ -5,7 +5,7 @@ JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
 
 .. automethod: exponential_mode_response_function
 .. automethod: make_spectral_filter
-.. automethod: apply_filter_matrix
+.. automethod: apply_spectral_filter
 .. automethod: filter_modally
 """
 
