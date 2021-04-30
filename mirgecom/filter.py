@@ -1,7 +1,7 @@
 """:mod:`mirgecom.filter` is for filters and filter-related constructs.
 
 Discussion of the spectral filter design can be found in:
-JSH/TW Nodal DG Methods (DOI: 10.1007/978-0-387-72067-8), Section 5.3
+[Hesthaven_2008]_, Section 5.3
 
 Mode Response Functions
 ^^^^^^^^^^^^^^^^^^^^^^^
