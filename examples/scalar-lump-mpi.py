@@ -64,7 +64,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-    
+
     import importlib
     leap_spec = importlib.util.find_spec("leap")
     not_found = leap_spec is None

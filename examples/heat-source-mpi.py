@@ -59,7 +59,7 @@ def main(use_leap=False):
 
     dim = 2
     nel_1d = 16
-    
+
     import importlib
     leap_spec = importlib.util.find_spec("leap")
     not_found = leap_spec is None

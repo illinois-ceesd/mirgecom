@@ -63,6 +63,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    import importlib
+    leap_spec = importlib.util.find_spec("leap")
+    not_found = leap_spec is None
+    if not_found:
+        raise ValueError("Leap uninstalled")
+
     dim = 1
     nel_1d = 24
     order = 1
@@ -89,12 +95,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
-    
-    import importlib
-    leap_spec = importlib.util.find_spec("leap")
-    not_found = leap_spec is None
-    if not_found:
-        raise ValueError("Leap uninstalled")
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD

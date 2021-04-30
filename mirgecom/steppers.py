@@ -120,6 +120,8 @@ def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         will be advanced by this stepper
     t_final: float
         Simulated time at which to stop
+    component_id
+        State id (required input for leap method generation)
     t: float
         Time at which to start
     istep: int
@@ -174,6 +176,44 @@ def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
 def advance(rhs, timestepper, checkpoint, get_timestep, state, t_final,
                     component_id="state", t=0.0, istep=0, logmgr=None,
                     eos=None, dim=None):
+    """Wrapper function for advance_state and advance_state_leap.
+
+    Parameters
+    ----------
+    rhs
+        Function that should return the time derivative of the state
+    timestepper
+        Function that advances the state from t=time to t=(time+dt), and
+        returns the advanced state. This function checks if `timestepper`
+        is a leap method or not, and calls the corresponding advancer.
+    checkpoint
+        Function is user-defined and can be used to preform simulation status
+        reporting, viz, and restart i/o.  A non-zero return code from this function
+        indicates that this function should stop gracefully.
+    component_id
+        State id (required input for leap method generation)
+    get_timestep
+        Function that should return dt for the next step. This interface allows
+        user-defined adaptive timestepping. A negative return value indicated that
+        the stepper should stop gracefully.
+    state: numpy.ndarray
+        Agglomerated object array containing at least the state variables that
+        will be advanced by this stepper
+    t_final: float
+        Simulated time at which to stop
+    t: float
+        Time at which to start
+    istep: int
+        Step number from which to start
+
+    Returns
+    -------
+    istep: int
+        the current step number
+    t: float
+        the current time
+    state: numpy.ndarray
+    """
 
     from mirgecom.integrators import (rk4_step, euler_step,
                                       lsrk54_step, lsrk144_step)

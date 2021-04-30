@@ -91,7 +91,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     not_found = leap_spec is None
     if not_found:
         raise ValueError("Leap uninstalled")
-    
+
     dim = 2
     nel_1d = 16
     order = 3
