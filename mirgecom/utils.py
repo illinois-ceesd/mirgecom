@@ -113,3 +113,18 @@ class StatisticsAccumulator:
             return None
 
         return self._min * self.scale_factor
+
+
+def outer(a, b):
+    """
+    Compute the outer product of *a* and *b*.
+
+    Tweaks the behavior of :function:`numpy.outer` to return a lower-dimensional
+    object if either/both of *a* and *b* are scalars (whereas
+    :function:`numpy.outer` always returns a matrix).
+    """
+    import numpy as np
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+        return np.outer(a, b)
+    else:
+        return a*b
