@@ -113,3 +113,35 @@ class StatisticsAccumulator:
             return None
 
         return self._min * self.scale_factor
+
+
+def get_actx(obj):
+    """
+    Retrieve an array context from an object.
+
+    Parameters
+    ----------
+    obj:
+        The object that has an associated array context. Must be either a
+        :class:`~meshmode.dof_array.DOFArray` or an object that contains one.
+        Supported containing types are:
+            1) :class:`~numpy.ndarray`
+            2) :class:`~grudge.symbolic.primitives.TracePair`.
+
+    Returns
+    -------
+    array_context:
+        The associated array context.
+    """
+    import numpy as np
+    from meshmode.dof_array import DOFArray
+    from grudge.symbolic.primitives import TracePair
+
+    if isinstance(obj, TracePair):
+        return get_actx(obj.int)
+    if isinstance(obj, np.ndarray):
+        return get_actx(obj[0])
+    elif isinstance(obj, DOFArray):
+        return obj.array_context
+    else:
+        raise ValueError("Unrecognized type; can't retrieve array context.")

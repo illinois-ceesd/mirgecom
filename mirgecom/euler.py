@@ -68,6 +68,7 @@ from mirgecom.inviscid import (
 )
 from functools import partial
 from mirgecom.flux import lfr_flux
+from mirgecom.utils import get_actx
 
 
 def _facial_flux(discr, eos, q_tpair, local=False):
@@ -88,7 +89,7 @@ def _facial_flux(discr, eos, q_tpair, local=False):
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
     """
-    actx = q_tpair[0].int.array_context
+    actx = get_actx(q_tpair)
     dim = discr.dim
 
     euler_flux = partial(inviscid_flux, discr, eos)

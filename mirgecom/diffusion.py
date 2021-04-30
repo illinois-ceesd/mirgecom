@@ -41,11 +41,12 @@ from meshmode.dof_array import thaw
 from grudge.dof_desc import DOFDesc, as_dofdesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.symbolic.primitives import TracePair
+from mirgecom.utils import get_actx
 
 
 def gradient_flux(discr, quad_tag, u_tpair):
     r"""Compute the numerical flux for $\nabla u$."""
-    actx = u_tpair.int.array_context
+    actx = get_actx(u_tpair)
 
     dd = u_tpair.dd
     dd_quad = dd.with_qtag(quad_tag)
@@ -65,7 +66,7 @@ def gradient_flux(discr, quad_tag, u_tpair):
 
 def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
     r"""Compute the numerical flux for $\nabla \cdot (\alpha \nabla u)$."""
-    actx = grad_u_tpair.int[0].array_context
+    actx = get_actx(grad_u_tpair)
 
     dd = grad_u_tpair.dd
     dd_quad = dd.with_qtag(quad_tag)
