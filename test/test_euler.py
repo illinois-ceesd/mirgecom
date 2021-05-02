@@ -1,3 +1,5 @@
+"""Test the Euler gas dynamics module."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -28,6 +30,8 @@ import numpy.linalg as la  # noqa
 import pyopencl.clmath  # noqa
 import logging
 import pytest
+import math
+from functools import partial
 
 from pytools.obj_array import (
     flat_obj_array,
@@ -143,7 +147,7 @@ class MyDiscr:
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux_components(actx_factory, dim):
-    """Uniform pressure test
+    """Test uniform pressure case.
 
     Checks that the Euler-internal inviscid flux routine
     :func:`mirgecom.inviscid.inviscid_flux` returns exactly the expected result
@@ -720,7 +724,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
 def _euler_flow_stepper(actx, parameters):
     """
-    Implements a generic time stepping loop for testing an inviscid flow.
+    Implements a generic time stepping loop for testing an inviscid flow
+    using a spectral filter.
     """
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
@@ -795,6 +800,21 @@ def _euler_flow_stepper(actx, parameters):
     def rhs(t, q):
         return euler_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
 
+    filter_order = 8
+    eta = .5
+    alpha = -1.0*np.log(np.finfo(float).eps)
+    nummodes = int(1)
+    for i in range(dim):
+        nummodes *= int(order + dim + 1)
+    nummodes /= math.factorial(int(dim))
+    cutoff = int(eta * order)
+
+    from mirgecom.filter import (
+        exponential_mode_response_function as xmrfunc,
+        filter_modally
+    )
+    frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
+
     while t < t_final:
 
         if constantcfl is True:
@@ -807,6 +827,9 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
+        fields = filter_modally(discr, "vol", cutoff,
+                                frfunc, fields)
+
         t += dt
         istep += 1
 
@@ -826,7 +849,7 @@ def _euler_flow_stepper(actx, parameters):
     return(maxerr)
 
 
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [2, 3, 4])
 def test_isentropic_vortex(actx_factory, order):
     """Advance the 2D isentropic vortex case in time with non-zero velocities
     using an RK4 timestepping scheme. Check the advanced field values against
