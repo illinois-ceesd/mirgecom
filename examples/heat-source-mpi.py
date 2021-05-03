@@ -33,7 +33,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
-from grudge.symbolic.primitives import QTAG_NONE
+from grudge.dof_desc import QTAG_NONE
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,

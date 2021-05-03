@@ -38,9 +38,9 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
-from grudge.symbolic.primitives import DOFDesc
+from grudge.dof_desc import DOFDesc, as_dofdesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
-from grudge.symbolic.primitives import TracePair, as_dofdesc
+from grudge.symbolic.primitives import TracePair
 
 
 def gradient_flux(discr, quad_tag, u_tpair):
@@ -236,9 +236,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
     -------
     diff_u: meshmode.dof_array.DOFArray or numpy.ndarray
         the diffusion operator applied to *u*
-    q: numpy.ndarray
-        the auxiliary variable $\mathbf{q} = \sqrt{\alpha} \nabla u$; only returned
-        if *return_q* is True
+    grad_u: numpy.ndarray
+        the gradient of *u*; only returned if *return_grad_u* is True
     """
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
