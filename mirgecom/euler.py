@@ -29,7 +29,7 @@ Logging Helpers
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -53,15 +53,16 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
 from mirgecom.fluid import split_conserved
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
 )
+from grudge.eager import (
+    interior_trace_pair,
+    cross_rank_trace_pairs
+)
+from mirgecom.operators import dg_div_low as dg_div
 
 
 def euler_operator(discr, eos, boundaries, q, t=0.0):
@@ -102,28 +103,16 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    vol_flux = inviscid_flux(discr, eos, q)
-    dflux = discr.weak_div(vol_flux)
-
-    interior_face_flux = inviscid_facial_flux(
-        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
-
-    # Flux across partition boundaries
-    partition_boundary_flux = sum(
-        inviscid_facial_flux(discr, eos=eos, q_tpair=part_pair)
-        for part_pair in cross_rank_trace_pairs(discr, q)
+    inviscid_flux_vol = inviscid_flux(discr, eos, q)
+    inviscid_flux_bnd = (
+        inviscid_facial_flux(discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
+        + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=part_tpair)
+              for part_tpair in cross_rank_trace_pairs(discr, q))
+        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag, eos=eos, q=q)
+              for btag in boundaries)
     )
 
-    # Domain boundaries
-    domain_boundary_flux = sum(
-        boundaries[btag].inviscid_boundary_flux(discr, btag, eos=eos, q=q)
-        for btag in boundaries
-    )
-
-    return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux)
-    )
+    return -dg_div(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):

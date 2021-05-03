@@ -347,7 +347,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        from mirgecom.euler import inviscid_facial_flux
+        from mirgecom.inviscid import inviscid_facial_flux
 
         interior_face_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
