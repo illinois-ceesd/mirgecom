@@ -48,6 +48,39 @@ from functools import partial
 from mirgecom.flux import lfr_flux
 
 
+def inviscid_flux(discr, eos, q):
+    r"""Compute the inviscid flux vectors from flow solution *q*.
+
+    The inviscid fluxes are
+    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
+    +p\mathbf{I}, \rho{Y_s}\vec{V})$
+
+    .. note::
+
+        The fluxes are returned as a 2D object array with shape:
+        ``(num_equations, ndim)``.  Each entry in the
+        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
+        form and shape for the flux data is required by the built-in
+        state data handling mechanism in :mod:`mirgecom.fluid`. That
+        mechanism is used by at least
+        :class:`mirgecom.fluid.ConservedVars`, and
+        :func:`mirgecom.fluid.join_conserved`, and
+        :func:`mirgecom.fluid.split_conserved`.
+    """
+    dim = discr.dim
+    cv = split_conserved(dim, q)
+    p = eos.pressure(cv)
+
+    mom = cv.momentum
+
+    return join_conserved(dim,
+            mass=mom,
+            energy=mom * (cv.energy + p) / cv.mass,
+            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+            species_mass=(  # reshaped: (nspecies, dim)
+                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+
+
 def inviscid_facial_flux(discr, eos, q_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
@@ -82,39 +115,6 @@ def inviscid_facial_flux(discr, eos, q_tpair, local=False):
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)
     return flux_weak
-
-
-def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*.
-
-    The inviscid fluxes are
-    $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
-    +p\mathbf{I}, \rho{Y_s}\vec{V})$
-
-    .. note::
-
-        The fluxes are returned as a 2D object array with shape:
-        ``(num_equations, ndim)``.  Each entry in the
-        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-        form and shape for the flux data is required by the built-in
-        state data handling mechanism in :mod:`mirgecom.fluid`. That
-        mechanism is used by at least
-        :class:`mirgecom.fluid.ConservedVars`, and
-        :func:`mirgecom.fluid.join_conserved`, and
-        :func:`mirgecom.fluid.split_conserved`.
-    """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
-    p = eos.pressure(cv)
-
-    mom = cv.momentum
-
-    return join_conserved(dim,
-            mass=mom,
-            energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            species_mass=(  # reshaped: (nspecies, dim)
-                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):
