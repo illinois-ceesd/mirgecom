@@ -3,7 +3,8 @@
 Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: PrescribedBoundary
+.. autoclass:: FluidBoundary
+.. autoclass:: PrescribedInviscidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
 """
@@ -35,17 +36,72 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-# from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.inviscid import inviscid_facial_flux
 
 
-class PrescribedBoundary:
-    """Boundary condition prescribes boundary soln with user-specified function.
+class FluidBoundary:
+    r"""Abstract interface to fluid boundary treatment.
+
+    .. automethod:: inviscid_boundary_flux
+    """
+
+    def inviscid_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+        raise NotImplementedError()
+
+
+class PrescribedInviscidBoundary(FluidBoundary):
+    r"""Abstract interface to a prescribed fluid boundary treatment.
 
     .. automethod:: __init__
     .. automethod:: boundary_pair
+    .. automethod:: inviscid_boundary_flux
+    """
+
+    def __init__(self, inviscid_boundary_flux_func=None, boundary_pair_func=None,
+                 inviscid_facial_flux_func=None, fluid_solution_func=None):
+        """Initialize the PrescribedInviscidBoundary and methods."""
+        self._bnd_pair_func = boundary_pair_func
+        self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
+        self._inviscid_facial_flux_func = inviscid_facial_flux_func
+        if not self._inviscid_facial_flux_func:
+            self._inviscid_facial_flux_func = inviscid_facial_flux
+        self._fluid_soln_func = fluid_solution_func
+
+    def boundary_pair(self, discr, q, btag, **kwargs):
+        """Get the interior and exterior solution on the boundary."""
+        if self._bnd_pair_func:
+            return self._bnd_pair_func(discr, q=q, btag=btag, **kwargs)
+        if not self._fluid_soln_func:
+            raise NotImplementedError()
+        actx = q[0].array_context
+        boundary_discr = discr.discr_from_dd(btag)
+        nodes = thaw(actx, boundary_discr.nodes())
+        nhat = thaw(actx, discr.normal(btag))
+        int_soln = discr.project("vol", btag, q)
+        ext_soln = self._fluid_soln_func(nodes, q=int_soln, normal=nhat, **kwargs)
+        return TracePair(btag, interior=int_soln, exterior=ext_soln)
+
+    def inviscid_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+        if self._inviscid_bnd_flux_func:
+            actx = q[0].array_context
+            boundary_discr = discr.discr_from_dd(btag)
+            nodes = thaw(actx, boundary_discr.nodes())
+            nhat = thaw(actx, discr.normal(btag))
+            int_soln = discr.project("vol", btag, q)
+            return self._inviscid_bnd_flux_func(nodes, normal=nhat,
+                                                q=int_soln, eos=eos, **kwargs)
+        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
+        return self._inviscid_facial_flux_func(discr, eos=eos, q_tpair=bnd_tpair)
+
+
+class PrescribedBoundary(PrescribedInviscidBoundary):
+    """Boundary condition prescribes boundary soln with user-specified function.
+
+    .. automethod:: __init__
     """
 
     def __init__(self, userfunc):
@@ -59,42 +115,26 @@ class PrescribedBoundary:
             least one parameter that specifies the coordinates at which to prescribe
             the solution.
         """
-        self._userfunc = userfunc
-
-    def boundary_pair(self, discr, q, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
-        actx = q[0].array_context
-
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        ext_soln = self._userfunc(nodes, **kwargs)
-        int_soln = discr.project("vol", btag, q)
-        return TracePair(btag, interior=int_soln, exterior=ext_soln)
-
-    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
-        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
-        return inviscid_facial_flux(discr, eos=eos, q_tpair=bnd_tpair)
+        PrescribedInviscidBoundary.__init__(self, fluid_solution_func=userfunc)
 
 
-class DummyBoundary:
+class DummyBoundary(PrescribedInviscidBoundary):
     """Boundary condition that assigns boundary-adjacent soln as the boundary solution.
 
-    .. automethod:: boundary_pair
+    .. automethod:: dummy_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def __init__(self):
+        """Initialize the DummyBoundary boundary type."""
+        PrescribedInviscidBoundary.__init__(self, boundary_pair_func=self.dummy_pair)
+
+    def dummy_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
-    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
-        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
-        return inviscid_facial_flux(discr, eos=eos, q_tpair=bnd_tpair)
 
-
-class AdiabaticSlipBoundary:
+class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
@@ -109,10 +149,15 @@ class AdiabaticSlipBoundary:
     [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
     boundary conditions described in detail in [Poinsot_1992]_.
 
-    .. automethod:: boundary_pair
+    .. automethod:: adiabatic_slip_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def __init__(self):
+        """Initialize AdiabaticSlipBoundary."""
+        PrescribedInviscidBoundary.__init__(
+            self, boundary_pair_func=self.adiabatic_slip_pair)
+
+    def adiabatic_slip_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -150,8 +195,3 @@ class AdiabaticSlipBoundary:
                                     species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
-
-    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
-        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
-        return inviscid_facial_flux(discr, eos=eos, q_tpair=bnd_tpair)

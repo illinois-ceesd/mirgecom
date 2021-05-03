@@ -163,9 +163,9 @@ def test_slipwall_flux(actx_factory, dim, order):
                 acv = split_conserved(dim, avg_state)
                 err_max = max(err_max, bnd_norm(np.dot(acv.momentum, nhat)))
 
-                from mirgecom.euler import _facial_flux
-                bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
-                                                             bnd_pair, local=True))
+                from mirgecom.euler import inviscid_facial_flux
+                bnd_flux = split_conserved(dim, inviscid_facial_flux(
+                    discr, eos, bnd_pair, local=True))
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 

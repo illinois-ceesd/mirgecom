@@ -116,7 +116,7 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
 
     # Domain boundaries
     domain_boundary_flux = sum(
-        boundaries[btag].get_inviscid_flux(discr, btag, eos=eos, q=q)
+        boundaries[btag].inviscid_boundary_flux(discr, btag, eos=eos, q=q)
         for btag in boundaries
     )
 
