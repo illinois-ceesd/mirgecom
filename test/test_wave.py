@@ -161,7 +161,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for n in [8, 10, 12] if p.dim == 3 else [4, 8, 16]:
+    for n in [8, 10, 12] if p.dim == 3 else [8, 12, 16]:
         mesh = p.mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
