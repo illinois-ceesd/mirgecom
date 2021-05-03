@@ -126,8 +126,7 @@ def main(ctx_factory=cl.create_some_context):
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(x_vec=nodes, eos=eos)
 
-    visualizer = make_visualizer(discr, order + 3
-                                 if discr.dim == 2 else order)
+    visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,

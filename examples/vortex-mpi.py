@@ -149,7 +149,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+    visualizer = make_visualizer(discr)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__

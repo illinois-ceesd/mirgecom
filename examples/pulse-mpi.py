@@ -126,7 +126,7 @@ def main(ctx_factory=cl.create_some_context):
                                    center=orig)
     current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+    visualizer = make_visualizer(discr)
 
     initname = "pulse"
     eosname = eos.__class__.__name__

@@ -105,7 +105,7 @@ def main():
 
     u = discr.zeros(actx)
 
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+    vis = make_visualizer(discr)
 
     def rhs(t, u):
         return (diffusion_operator(
