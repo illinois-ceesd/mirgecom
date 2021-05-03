@@ -47,7 +47,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
@@ -75,7 +75,9 @@ def main(ctx_factory=cl.create_some_context):
     eos = IdealSingleGas()
     initializer = SodShock1D(dim=dim)
     casename = "sod1d"
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    boundaries = {
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+    }
     constant_cfl = False
     nstatus = 10
     nviz = 10

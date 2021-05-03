@@ -45,7 +45,10 @@ from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
-from mirgecom.boundary import PrescribedBoundary, DummyBoundary
+from mirgecom.boundary import (
+    PrescribedInviscidBoundary,
+    DummyBoundary
+)
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
@@ -575,7 +578,9 @@ def test_vortex_rhs(actx_factory, order):
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=vortex)
+        }
 
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
@@ -630,7 +635,9 @@ def test_lump_rhs(actx_factory, dim, order):
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+        }
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
@@ -697,7 +704,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+        }
 
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
@@ -884,7 +893,9 @@ def test_isentropic_vortex(actx_factory, order):
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
-        boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        }
         eos = IdealSingleGas()
         t = 0
         flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,

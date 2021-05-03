@@ -49,7 +49,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
 
@@ -99,7 +99,9 @@ def main(ctx_factory=cl.create_some_context):
                                      spec_centers=centers, velocity=velocity,
                                      spec_y0s=spec_y0s,
                                      spec_amplitudes=spec_amplitudes)
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    boundaries = {
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+    }
 
     casename = "mixture-lump"
 
