@@ -4,6 +4,7 @@ Flux Calculation
 ^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
+.. autofunction:: inviscid_facial_flux
 
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -41,6 +42,46 @@ from mirgecom.fluid import (
     split_conserved,
     join_conserved
 )
+from meshmode.dof_array import thaw
+from mirgecom.fluid import compute_wavespeed
+from functools import partial
+from mirgecom.flux import lfr_flux
+
+
+def inviscid_facial_flux(discr, eos, q_tpair, local=False):
+    """Return the flux across a face given the solution on both sides *q_tpair*.
+
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    q_tpair: :class:`grudge.sym.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+
+    local: bool
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
+    """
+    actx = q_tpair[0].int.array_context
+    dim = discr.dim
+
+    euler_flux = partial(inviscid_flux, discr, eos)
+    lam = actx.np.maximum(
+        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
+        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+    )
+    normal = thaw(actx, discr.normal(q_tpair.dd))
+
+    # todo: user-supplied flux routine
+    flux_weak = lfr_flux(q_tpair, flux_func=euler_flux, normal=normal, lam=lam)
+
+    if local is False:
+        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+    return flux_weak
 
 
 def inviscid_flux(discr, eos, q):

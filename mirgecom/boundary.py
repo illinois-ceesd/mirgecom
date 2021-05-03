@@ -38,6 +38,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 # from mirgecom.eos import IdealSingleGas
 from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.inviscid import inviscid_facial_flux
 
 
 class PrescribedBoundary:
@@ -70,6 +71,11 @@ class PrescribedBoundary:
         int_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
+    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
+        return inviscid_facial_flux(discr, eos=eos, q_tpair=bnd_tpair)
+
 
 class DummyBoundary:
     """Boundary condition that assigns boundary-adjacent soln as the boundary solution.
@@ -81,6 +87,11 @@ class DummyBoundary:
         """Get the interior and exterior solution on the boundary."""
         dir_soln = discr.project("vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
+
+    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
+        return inviscid_facial_flux(discr, eos=eos, q_tpair=bnd_tpair)
 
 
 class AdiabaticSlipBoundary:
@@ -139,3 +150,8 @@ class AdiabaticSlipBoundary:
                                     species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+
+    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+        bnd_tpair = self.boundary_pair(discr, q, btag, eos=eos, **kwargs)
+        return inviscid_facial_flux(discr, eos=eos, q_tpair=bnd_tpair)
