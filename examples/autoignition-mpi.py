@@ -36,7 +36,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
@@ -191,8 +191,8 @@ def main(ctx_factory=cl.create_some_context):
 
     # }}}
 
-    visualizer = make_visualizer(discr, discr.order + 3
-                                 if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order + 3
+                                 if discr.dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -222,8 +222,8 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         cv = split_conserved(dim=dim, q=state)
-        return (inviscid_operator(discr, q=state, t=t,
-                                  boundaries=boundaries, eos=eos)
+        return (euler_operator(discr, q=state, t=t,
+                               boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(cv))
 
     def my_checkpoint(step, t, dt, state):
