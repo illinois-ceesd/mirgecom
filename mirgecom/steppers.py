@@ -176,7 +176,7 @@ def advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
 def advance(rhs, timestepper, checkpoint, get_timestep, state, t_final,
                     component_id="state", t=0.0, istep=0, logmgr=None,
                     eos=None, dim=None):
-    """Wrapper function for advance_state and advance_state_leap.
+    """Wrap function for advance_state and advance_state_leap.
 
     Parameters
     ----------
@@ -214,7 +214,6 @@ def advance(rhs, timestepper, checkpoint, get_timestep, state, t_final,
         the current time
     state: numpy.ndarray
     """
-
     from mirgecom.integrators import (rk4_step, euler_step,
                                       lsrk54_step, lsrk144_step)
     if timestepper in (rk4_step, euler_step, lsrk54_step, lsrk144_step):

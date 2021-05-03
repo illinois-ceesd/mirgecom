@@ -69,7 +69,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
-    
+
     import importlib
     leap_spec = importlib.util.find_spec("leap")
     not_found = leap_spec is None
