@@ -79,7 +79,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 4
@@ -183,7 +183,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 4
@@ -279,7 +279,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 4
@@ -384,7 +384,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -437,7 +437,7 @@ def test_idealsingle_vortex(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3

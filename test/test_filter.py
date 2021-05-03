@@ -62,7 +62,7 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -154,7 +154,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
 
     logger = logging.getLogger(__name__)
     filter_order = 1
-    nel_1d = 2
+    nel_1d = 1
     eta = .5   # filter half the modes
     # Alpha value suggested by:
     # JSH/TW Nodal DG Methods, Seciton 5.3
@@ -164,7 +164,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(0.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
+        a=(0.0,) * dim, b=(1.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
