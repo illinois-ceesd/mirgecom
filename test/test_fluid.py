@@ -57,7 +57,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -101,15 +101,15 @@ def test_velocity_gradient_eoc(actx_factory, dim):
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
 
-    nel_1d_0 = 5
+    nel_1d_0 = 4
     for hn1 in [1, 2, 3, 4]:
 
-        nel_1d = hn1 * (nel_1d_0 - 1) + 1
-        h = 1/(nel_1d-1)
+        nel_1d = hn1 * nel_1d_0
+        h = 1/nel_1d
 
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
-            a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+            a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
