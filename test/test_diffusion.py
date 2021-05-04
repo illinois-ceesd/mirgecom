@@ -30,7 +30,8 @@ import mirgecom.symbolic as sym
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
+    NeumannDiffusionBoundary,
+    AggregateDiffusionBoundary)
 from meshmode.dof_array import thaw, DOFArray
 from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, DISCR_TAG_QUAD
 
@@ -499,7 +500,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     """
     actx = actx_factory()
 
-    p = get_decaying_trig(1, 2.)
+    p = get_decaying_trig(2, 2.)
 
     assert isinstance(p.sym_alpha, Number)
 
@@ -541,24 +542,74 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         / discr.norm(expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
 
-    boundaries_vector = [boundaries, boundaries]
-    u_vector = make_obj_array([u1, u2])
+    boundaries_combined = {
+        key: AggregateDiffusionBoundary([value, value])
+        for key, value in boundaries.items()
+        }
+    u_combined = make_obj_array([u1, u2])
 
-    diffusion_u_vector = diffusion_operator(
+    diffusion_u_combined = diffusion_operator(
         discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
-        boundaries=boundaries_vector, u=u_vector
+        boundaries=boundaries_combined, u=u_combined
     )
 
-    assert isinstance(diffusion_u_vector, np.ndarray)
-    assert diffusion_u_vector.shape == (2,)
+    assert isinstance(diffusion_u_combined, np.ndarray)
+    assert diffusion_u_combined.shape == (2,)
 
-    expected_diffusion_u_vector = make_obj_array([
+    expected_diffusion_u_combined = make_obj_array([
         sym_eval(sym_diffusion_u1),
         sym_eval(sym_diffusion_u2)
     ])
     rel_linf_err = (
-        discr.norm(diffusion_u_vector - expected_diffusion_u_vector, np.inf)
-        / discr.norm(expected_diffusion_u_vector, np.inf))
+        discr.norm(diffusion_u_combined - expected_diffusion_u_combined, np.inf)
+        / discr.norm(expected_diffusion_u_combined, np.inf))
+    assert rel_linf_err < 1.e-5
+
+
+def test_diffusion_fluid(actx_factory):
+    """
+    Checks that the diffusion operator can be called on a fluid state vector.
+    """
+    actx = actx_factory()
+
+    dim = 2
+    n = 8
+
+    mesh = get_box_mesh(dim, -0.5, 0.5, n)
+
+    from grudge.eager import EagerDGDiscretization
+    discr = EagerDGDiscretization(actx, mesh, order=4)
+
+    from mirgecom.eos import IdealSingleGas
+    eos = IdealSingleGas()
+
+    from mirgecom.boundary import DummyBoundary, AdiabaticSlipBoundary
+    boundaries = {}
+    for i in range(dim-1):
+        boundaries[DTAG_BOUNDARY("-"+str(i))] = DummyBoundary()
+        boundaries[DTAG_BOUNDARY("+"+str(i))] = DummyBoundary()
+    boundaries[DTAG_BOUNDARY("-"+str(dim-1))] = AdiabaticSlipBoundary()
+    boundaries[DTAG_BOUNDARY("+"+str(dim-1))] = AdiabaticSlipBoundary()
+
+    zeros = discr.zeros(actx)
+    ones = zeros + 1
+
+    from mirgecom.fluid import join_conserved
+    q = join_conserved(
+        dim=dim,
+        mass=ones,
+        energy=ones,
+        momentum=make_obj_array([zeros, zeros])
+    )
+
+    diffusion_q = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=1,
+        boundaries=boundaries, boundary_kwargs={"t": 0, "eos": eos}, u=q)
+
+    assert isinstance(diffusion_q, np.ndarray)
+    assert diffusion_q.shape == q.shape
+
+    # Should be 0
+    rel_linf_err = discr.norm(diffusion_q, np.inf)
     assert rel_linf_err < 1.e-5
 
 
