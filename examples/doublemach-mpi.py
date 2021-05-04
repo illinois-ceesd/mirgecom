@@ -198,7 +198,8 @@ def main(ctx_factory=cl.create_some_context):
         return inviscid_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
-            discr, t=t, q=state, boundaries=boundaries, alpha=alpha, eos=eos,
+            discr, q=state, boundaries=boundaries,
+            boundary_kwargs={"t": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa
         )
 

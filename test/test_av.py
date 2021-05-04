@@ -180,21 +180,18 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     # Uniform field return 0 rhs
     q = zeros + 1.0
-    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
-                      q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Linear field return 0 rhs
     q = nodes[0]
-    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
-                      q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
     q = np.dot(nodes, nodes)
-    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
-                      q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
