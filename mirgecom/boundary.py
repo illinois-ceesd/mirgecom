@@ -1,9 +1,14 @@
 """:mod:`mirgecom.boundary` provides methods and constructs for boundary treatments.
 
+Boundary Treatment Interface
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass FluidBoundary
+.. autoclass FluidBC
+
 Inviscid Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: FluidBoundary
 .. autoclass:: PrescribedInviscidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
@@ -82,11 +87,12 @@ class FluidBoundary(metaclass=ABCMeta):
         r"""Get temperature flux across the boundary faces."""
 
 
-class ViscousBC(FluidBoundary):
+class FluidBC(FluidBoundary):
     r"""Abstract interface to viscous boundary conditions.
 
     .. automethod:: q_boundary_flux
     .. automethod:: t_boundary_flux
+    .. automethod:: s_boundary_flux
     .. automethod:: inviscid_boundary_flux
     .. automethod:: viscous_boundary_flux
     .. automethod:: boundary_pair
@@ -117,7 +123,7 @@ class ViscousBC(FluidBoundary):
         raise NotImplementedError()
 
 
-class PrescribedInviscidBoundary(ViscousBC):
+class PrescribedInviscidBoundary(FluidBC):
     r"""Abstract interface to a prescribed fluid boundary treatment.
 
     .. automethod:: __init__
@@ -265,7 +271,7 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
 
-class IsothermalNoSlipBoundary(ViscousBC):
+class IsothermalNoSlipBoundary(FluidBC):
     r"""Isothermal no-slip viscous wall boundary.
 
     This class implements an isothermal no-slip wall by:
@@ -373,7 +379,7 @@ class IsothermalNoSlipBoundary(ViscousBC):
                                    t_tpair, grad_t_tpair)
 
 
-class PrescribedViscousBoundary(ViscousBC):
+class PrescribedViscousBoundary(FluidBC):
     r"""Fully prescribed boundary for viscous flows.
 
     This class implements an inflow/outflow by:
