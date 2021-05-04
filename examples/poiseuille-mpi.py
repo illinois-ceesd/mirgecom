@@ -90,7 +90,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     dim = 2
     order = 1
     exittol = 1.0
-    t_final = 1e-5
+    t_final = 1e-7
     current_cfl = 1.0
     current_dt = 1e-8
     current_t = 0
