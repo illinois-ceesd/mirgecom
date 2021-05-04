@@ -169,7 +169,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim,  b=(1.0, )*dim,  n=(nel_1d, ) * dim
+        a=(-1.0, )*dim, b=(1.0, )*dim, nelements_per_axis=(nel_1d, )*dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
