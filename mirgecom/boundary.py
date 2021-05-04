@@ -41,15 +41,18 @@ from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.inviscid import inviscid_facial_flux
 
 
-class FluidBoundary:
+from abc import ABCMeta, abstractmethod
+
+
+class FluidBoundary(metaclass=ABCMeta):
     r"""Abstract interface to fluid boundary treatment.
 
     .. automethod:: inviscid_boundary_flux
     """
 
+    @abstractmethod
     def inviscid_boundary_flux(self, discr, btag, q, eos, **kwargs):
         """Get the inviscid flux across the boundary faces."""
-        raise NotImplementedError()
 
 
 class PrescribedInviscidBoundary(FluidBoundary):
