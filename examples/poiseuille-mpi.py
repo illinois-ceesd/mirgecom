@@ -36,7 +36,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.symbolic import DTAG_BOUNDARY
+from grudge.dof_desc import DTAG_BOUNDARY
 
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (

@@ -193,9 +193,9 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # viscous part of bcs applied here
     def visc_bnd_flux(btag):
-        return boundaries[btag].get_viscous_flux(discr, btag, eos=eos,
-                                                 q=q, grad_q=grad_q,
-                                                 grad_t=grad_t, time=t)
+        return boundaries[btag].viscous_boundary_flux(discr, btag, eos=eos,
+                                                      q=q, grad_q=grad_q,
+                                                      grad_t=grad_t, time=t)
 
     # NS RHS
     return dg_div_low(
