@@ -97,59 +97,9 @@ THE SOFTWARE.
 import numpy as np
 
 from pytools import memoize_in, keyed_memoize_in
-from pytools.obj_array import obj_array_vectorize
-from meshmode.dof_array import thaw, DOFArray
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
-from grudge.symbolic.primitives import TracePair
-from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
-
-
-# FIXME: Remove when get_array_container_context is added to meshmode
-def _get_actx(obj):
-    if isinstance(obj, TracePair):
-        return _get_actx(obj.int)
-    if isinstance(obj, np.ndarray):
-        return _get_actx(obj[0])
-    elif isinstance(obj, DOFArray):
-        return obj.array_context
-    else:
-        raise ValueError("Unknown type; can't retrieve array context.")
-
-
-# Tweak the behavior of np.outer to return a lower-dimensional object if either/both
-# of the arguments are scalars (np.outer always returns a matrix)
-def _outer(a, b):
-    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
-        return np.outer(a, b)
-    else:
-        return a*b
-
-
-def _facial_flux_q(discr, q_tpair):
-    """Compute facial flux for each scalar component of Q."""
-    actx = _get_actx(q_tpair)
-
-    normal = thaw(actx, discr.normal(q_tpair.dd))
-
-    # This uses a central scalar flux along nhat:
-    # flux = 1/2 * (Q- + Q+) * nhat
-    flux_out = _outer(q_tpair.avg, normal)
-
-    return discr.project(q_tpair.dd, "all_faces", flux_out)
-
-
-def _facial_flux_r(discr, r_tpair):
-    """Compute facial flux for vector component of grad(Q)."""
-    actx = _get_actx(r_tpair)
-
-    normal = thaw(actx, discr.normal(r_tpair.dd))
-
-    # This uses a central vector flux along nhat:
-    # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-    flux_out = r_tpair.avg @ normal
-
-    return discr.project(r_tpair.dd, "all_faces", flux_out)
+from meshmode.dof_array import DOFArray
+from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME, DISCR_TAG_BASE
+from mirgecom.diffusion import diffusion_operator
 
 
 def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
@@ -199,55 +149,9 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     indicator_field = q[0] if isinstance(q, np.ndarray) else q
     indicator = smoothness_indicator(discr, indicator_field, **kwargs)
 
-    # R=Grad(Q) volume part
-    if isinstance(q, np.ndarray):
-        grad_q_vol = np.stack(obj_array_vectorize(discr.weak_grad, q), axis=0)
-    else:
-        grad_q_vol = discr.weak_grad(q)
-
-    # R=Grad(Q) Q flux over interior faces
-    q_flux_int = _facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
-    # R=Grad(Q) Q flux interior faces on partition boundaries
-    q_flux_pb = sum(_facial_flux_q(discr, q_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, q))
-    # R=Grad(Q) Q flux domain boundary part (i.e. BCs)
-    q_flux_db = 0
-    for btag in boundaries:
-        q_tpair = TracePair(
-            btag,
-            interior=discr.project("vol", btag, q),
-            exterior=boundaries[btag].exterior_q(discr, btag=btag, q=q,
-                **boundary_kwargs))
-        q_flux_db = q_flux_db + _facial_flux_q(discr, q_tpair=q_tpair)
-    # Total Q flux across element boundaries
-    q_bnd_flux = q_flux_int + q_flux_pb + q_flux_db
-
-    # Compute R
-    r = discr.inverse_mass(
-        -alpha * indicator * (grad_q_vol - discr.face_mass(q_bnd_flux))
-    )
-
-    # RHS_av = div(R) volume part
-    div_r_vol = discr.weak_div(r)
-    # RHS_av = div(R): grad(Q) flux interior faces part
-    r_flux_int = _facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
-    # RHS_av = div(R): grad(Q) flux interior faces on the partition boundaries
-    r_flux_pb = sum(_facial_flux_r(discr, r_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, r))
-    # RHS_av = div(R): grad(Q) flux domain boundary part (BCs)
-    r_flux_db = 0
-    for btag in boundaries:
-        r_tpair = TracePair(
-            btag,
-            interior=discr.project("vol", btag, r),
-            exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, grad_q=r,
-                **boundary_kwargs))
-        r_flux_db = r_flux_db + _facial_flux_r(discr, r_tpair=r_tpair)
-    # Total grad(Q) flux element boundaries
-    r_flux_bnd = r_flux_int + r_flux_pb + r_flux_db
-
-    # Return the AV RHS term
-    return discr.inverse_mass(-div_r_vol + discr.face_mass(r_flux_bnd))
+    return diffusion_operator(discr, quad_tag=DISCR_TAG_BASE,
+        alpha=alpha*indicator, boundaries=boundaries,
+        boundary_kwargs=boundary_kwargs, u=q)
 
 
 def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):

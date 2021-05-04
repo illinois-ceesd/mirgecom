@@ -342,7 +342,7 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, boundary_kwargs=No
                         TracePair(as_dofdesc(btag),
                             interior=alpha_int,
                             exterior=alpha_int)
-                        )(discr.project("vol", as_dofdesc(btag), alpha)),
+                     )(discr.project("vol", as_dofdesc(btag), alpha)),
                     TracePair(as_dofdesc(btag),
                         interior=discr.project("vol", as_dofdesc(btag), grad_u),
                         exterior=bdry.exterior_grad_q(discr, grad_u,
