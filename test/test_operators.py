@@ -35,8 +35,10 @@ from pytools.obj_array import make_obj_array, obj_array_vectorize  # noqa
 from meshmode.dof_array import thaw
 from mirgecom.fluid import split_conserved, join_conserved  # noqa
 from grudge.eager import EagerDGDiscretization
-from grudge.symbolic import DTAG_BOUNDARY
-from grudge.symbolic.primitives import DOFDesc
+from grudge.dof_desc import (
+    DTAG_BOUNDARY,
+    DOFDesc
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
