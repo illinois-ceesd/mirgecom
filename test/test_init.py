@@ -71,7 +71,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -127,7 +127,7 @@ def test_lump_init(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -169,7 +169,7 @@ def test_vortex_init(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -208,7 +208,7 @@ def test_shock_init(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], n=(nel_1d,) * dim
+        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -246,7 +246,7 @@ def test_uniform(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -290,7 +290,7 @@ def test_pulse(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -350,7 +350,7 @@ def test_multilump(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-1.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
+        a=(-1.0,) * dim, b=(1.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3

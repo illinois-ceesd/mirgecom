@@ -65,7 +65,7 @@ def main(use_leap=False):
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*dim,
             b=(0.5,)*dim,
-            n=(nel_1d,)*dim,
+            nelements_per_axis=(nel_1d,)*dim,
             boundary_tag_to_face={
                 "dirichlet": ["+x", "-x"],
                 "neumann": ["+y", "-y"]
@@ -105,7 +105,7 @@ def main(use_leap=False):
 
     u = discr.zeros(actx)
 
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
+    vis = make_visualizer(discr)
 
     def rhs(t, u):
         return (diffusion_operator(
