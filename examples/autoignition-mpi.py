@@ -48,7 +48,7 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance
+from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -70,12 +70,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     dim = 2
     nel_1d = 8
     order = 1
-
-    import importlib
-    leap_spec = importlib.util.find_spec("leap")
-    not_found = leap_spec is None
-    if not_found:
-        raise ValueError("Leap uninstalled")
 
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
@@ -248,7 +242,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     try:
         (current_step, current_t, current_state) = \
-            advance(rhs=my_rhs, timestepper=timestepper,
+            advance_state(rhs=my_rhs, timestepper=timestepper,
                 checkpoint=my_checkpoint,
                 get_timestep=get_timestep, state=current_state,
                 t=current_t, t_final=t_final)

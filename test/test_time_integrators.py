@@ -83,7 +83,7 @@ if found:
         SSPRK22MethodBuilder, SSPRK33MethodBuilder,
         )
     from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
-    from mirgecom.steppers import advance_state_leap
+    from mirgecom.steppers import advance_state
 
     @pytest.mark.parametrize(("method", "method_order"), [
         (ODE23MethodBuilder("y", use_high_order=False), 2),
@@ -131,7 +131,7 @@ if found:
                 return 0
 
             (step, t, state) = \
-                advance_state_leap(rhs=rhs, timestepper=method,
+                advance_state(rhs=rhs, timestepper=method,
                             checkpoint=my_checkpoint,
                             get_timestep=get_timestep, state=state,
                             t=t, t_final=t_final, component_id="y")

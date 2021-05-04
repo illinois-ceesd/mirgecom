@@ -48,7 +48,7 @@ from mirgecom.simutil import (
 from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance
+from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedBoundary,
     AdiabaticSlipBoundary
@@ -69,12 +69,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     logger = logging.getLogger(__name__)
-
-    import importlib
-    leap_spec = importlib.util.find_spec("leap")
-    not_found = leap_spec is None
-    if not_found:
-        raise ValueError("Leap uninstalled")
 
     dim = 2
     nel_1d = 16
@@ -166,7 +160,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     try:
         (current_step, current_t, current_state) = \
-            advance(rhs=my_rhs, timestepper=timestepper,
+            advance_state(rhs=my_rhs, timestepper=timestepper,
                 checkpoint=my_checkpoint,
                 get_timestep=get_timestep, state=current_state,
                 t=current_t, t_final=t_final)

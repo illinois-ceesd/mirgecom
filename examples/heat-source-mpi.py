@@ -60,12 +60,6 @@ def main(use_leap=False):
     dim = 2
     nel_1d = 16
 
-    import importlib
-    leap_spec = importlib.util.find_spec("leap")
-    not_found = leap_spec is None
-    if not_found:
-        raise ValueError("Leap uninstalled")
-
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(

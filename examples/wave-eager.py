@@ -109,20 +109,15 @@ def main(use_profiling=False, use_leap=False):
     istep = 0
 
     # initialize Leap integrator if using one
-    import importlib
-    leap_spec = importlib.util.find_spec("leap")
-    not_found = leap_spec is None
-    if not_found:
-        raise ValueError("Leap uninstalled")
     if use_leap:
         from leap.rk import RK4MethodBuilder
         from utils import leap_setup
-        interp = leap_setup(RK4MethodBuilder, "w", rhs, t, dt, fields)
+        stepper_cls = leap_setup(RK4MethodBuilder, "w", rhs, t, dt, fields)
 
     while t < t_final:
         if use_leap:
-            for event in interp.run(t_end=t+dt):
-                if isinstance(event, interp.StateComputed):
+            for event in stepper_cls.run(t_end=t+dt):
+                if isinstance(event, stepper_cls.StateComputed):
                     fields = event.state_component
                     if istep % 10 == 0:
                         if use_profiling:
