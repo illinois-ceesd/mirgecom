@@ -48,7 +48,7 @@ def gradient_flux(discr, quad_tag, u_tpair):
     actx = u_tpair.int.array_context
 
     dd = u_tpair.dd
-    dd_quad = dd.with_qtag(quad_tag)
+    dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
     normal_quad = thaw(actx, discr.normal(dd_quad))
@@ -68,7 +68,7 @@ def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
     actx = grad_u_tpair.int[0].array_context
 
     dd = grad_u_tpair.dd
-    dd_quad = dd.with_qtag(quad_tag)
+    dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
     normal_quad = thaw(actx, discr.normal(dd_quad))
@@ -191,7 +191,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return gradient_flux(discr, quad_tag, u_tpair)
 
     def get_diffusion_flux(self, discr, quad_tag, dd, alpha, grad_u):  # noqa: D102
-        dd_quad = dd.with_qtag(quad_tag)
+        dd_quad = dd.with_discr_tag(quad_tag)
         dd_allfaces_quad = dd_quad.with_dtag("all_faces")
         # Compute the flux directly instead of constructing an external grad_u value
         # (and the associated TracePair); this approach is simpler in the
