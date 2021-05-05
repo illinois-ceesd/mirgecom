@@ -544,8 +544,10 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
-    diffusion_u_vector = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
-        boundaries=boundaries_vector, u=u_vector)
+    diffusion_u_vector = diffusion_operator(
+        discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
+        boundaries=boundaries_vector, u=u_vector
+    )
 
     assert isinstance(diffusion_u_vector, np.ndarray)
     assert diffusion_u_vector.shape == (2,)

@@ -107,10 +107,11 @@ def main():
     vis = make_visualizer(discr)
 
     def rhs(t, u):
-        return (diffusion_operator(
-            discr, quad_tag=DISCR_TAG_BASE,
-            alpha=1, boundaries=boundaries, u=u)
-                + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
+        return (
+            diffusion_operator(
+                discr, quad_tag=DISCR_TAG_BASE,
+                alpha=1, boundaries=boundaries, u=u)
+            + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()
 
