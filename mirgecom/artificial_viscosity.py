@@ -105,37 +105,49 @@ from grudge.symbolic.primitives import TracePair
 from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
 
 
+# FIXME: Remove when get_array_container_context is added to meshmode
+def _get_actx(obj):
+    if isinstance(obj, TracePair):
+        return _get_actx(obj.int)
+    if isinstance(obj, np.ndarray):
+        return _get_actx(obj[0])
+    elif isinstance(obj, DOFArray):
+        return obj.array_context
+    else:
+        raise ValueError("Unknown type; can't retrieve array context.")
+
+
+# Tweak the behavior of np.outer to return a lower-dimensional object if either/both
+# of the arguments are scalars (np.outer always returns a matrix)
+def _outer(a, b):
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+        return np.outer(a, b)
+    else:
+        return a*b
+
+
 def _facial_flux_q(discr, q_tpair):
     """Compute facial flux for each scalar component of Q."""
-    flux_dis = q_tpair.avg
-    if isinstance(flux_dis, np.ndarray):
-        actx = flux_dis[0].array_context
-        flux_dis = flux_dis.reshape(-1, 1)
-    else:
-        actx = flux_dis.array_context
+    actx = _get_actx(q_tpair)
 
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # This uses a central scalar flux along nhat:
     # flux = 1/2 * (Q- + Q+) * nhat
-    flux_out = flux_dis * normal
+    flux_out = _outer(q_tpair.avg, normal)
 
     return discr.project(q_tpair.dd, "all_faces", flux_out)
 
 
 def _facial_flux_r(discr, r_tpair):
     """Compute facial flux for vector component of grad(Q)."""
-    flux_dis = r_tpair.avg
-    if isinstance(flux_dis[0], np.ndarray):
-        actx = flux_dis[0][0].array_context
-    else:
-        actx = flux_dis[0].array_context
+    actx = _get_actx(r_tpair)
 
     normal = thaw(actx, discr.normal(r_tpair.dd))
 
     # This uses a central vector flux along nhat:
     # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-    flux_out = flux_dis @ normal
+    flux_out = r_tpair.avg @ normal
 
     return discr.project(r_tpair.dd, "all_faces", flux_out)
 
