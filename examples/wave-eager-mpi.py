@@ -62,7 +62,7 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(use_leap=False):
+def main():
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -127,44 +127,23 @@ def main(use_leap=False):
     t_final = 3
     istep = 0
 
-    # initialize Leap integrator if using one
-    if use_leap:
-        from leap.rk import RK4MethodBuilder
-        from utils import leap_setup
-        stepper_cls = leap_setup(RK4MethodBuilder, "w", rhs, t, dt, fields)
-
     while t < t_final:
-        if use_leap:
-            for event in stepper_cls.run(t_end=t+dt):
-                if isinstance(event, stepper_cls.StateComputed):
-                    fields = event.state_component
-                    if istep % 10 == 0:
-                        print(istep, t, discr.norm(fields[0]))
-                        vis.write_vtk_file(
-                            "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
-                            [
-                                ("u", fields[0]),
-                                ("v", fields[1:]),
-                                ])
-                    t += dt
-                    istep += 1
-        else:
-            fields = rk4_step(fields, t, dt, rhs)
+        fields = rk4_step(fields, t, dt, rhs)
 
-            if istep % 10 == 0:
-                print(istep, t, discr.norm(fields[0]))
-                vis.write_vtk_file(
-                    "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
+        if istep % 10 == 0:
+            print(istep, t, discr.norm(fields[0]))
+            vis.write_vtk_file(
+                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                    ])
 
-            t += dt
-            istep += 1
+        t += dt
+        istep += 1
 
 
 if __name__ == "__main__":
-    main(use_leap=False)
+    main()
 
 # vim: foldmethod=marker

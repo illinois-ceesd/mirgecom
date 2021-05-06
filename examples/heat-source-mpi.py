@@ -43,7 +43,7 @@ import pyopencl.tools as cl_tools
 
 
 @mpi_entry_point
-def main(use_leap=False):
+def main():
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
@@ -117,12 +117,6 @@ def main(use_leap=False):
     t_final = 0.01
     istep = 0
 
-    # initialize Leap integrator if using one
-    if use_leap:
-        from leap.rk import RK4MethodBuilder
-        from utils import leap_setup
-        interp = leap_setup(RK4MethodBuilder, "u", rhs, t, dt, u)
-
     while True:
         if istep % 10 == 0:
             print(istep, t, discr.norm(u))
@@ -134,19 +128,12 @@ def main(use_leap=False):
         if t >= t_final:
             break
 
-        if use_leap:
-            for event in interp.run(t_end=t+dt):
-                if isinstance(event, interp.StateComputed):
-                    u = event.state_component
-                    t += dt
-                    istep += 1
-        else:
-            u = rk4_step(u, t, dt, rhs)
-            t += dt
-            istep += 1
+        u = rk4_step(u, t, dt, rhs)
+        t += dt
+        istep += 1
 
 
 if __name__ == "__main__":
-    main(use_leap=False)
+    main()
 
 # vim: foldmethod=marker
