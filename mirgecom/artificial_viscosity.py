@@ -95,6 +95,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
+
+from pytools import memoize_in, keyed_memoize_in
 from pytools.obj_array import obj_array_vectorize
 from meshmode.dof_array import thaw, DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -246,24 +248,6 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
                        q=q, alpha=alpha, t=t)
 
 
-def compute_smoothness_indicator():
-    """Compute the smoothness indicator for all elements."""
-    from meshmode.array_context import make_loopy_program
-
-    knl = make_loopy_program(
-        """{[iel,idof,j,k]:
-        0<=iel<nelements and
-        0<=idof<ndiscr_nodes_out and
-        0<=j<ndiscr_nodes_in and
-        0<=k<ndiscr_nodes_in}""",
-        "result[iel,idof] = "
-        "sum(k,vec[iel,k]*vec[iel,k]*modes[k])/sum(j,"
-        " vec[iel,j]*vec[iel,j]+1.0e-12/ndiscr_nodes_in)",
-        name="smooth_comp",
-    )
-    return knl
-
-
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     r"""Calculate the smoothness indicator.
 
@@ -287,32 +271,54 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     """
     assert isinstance(u, DOFArray)
 
-    def get_indicator():
-        return compute_smoothness_indicator()
+    actx = u.array_context
+
+    @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl"))
+    def indicator_prg():
+        """Compute the smoothness indicator for all elements."""
+        from meshmode.array_context import make_loopy_program
+        return make_loopy_program([
+            "{[iel]: 0 <= iel < nelements}",
+            "{[idof]: 0 <= idof < ndiscr_nodes_in}",
+            "{[jdof]: 0 <= jdof < ndiscr_nodes_in}",
+            "{[kdof]: 0 <= kdof < ndiscr_nodes_in}"
+            ],
+            """
+                result[iel,idof] = sum(kdof, vec[iel, kdof]     \
+                                             * vec[iel, kdof]   \
+                                             * modes[kdof]) /   \
+                                   sum(jdof, vec[iel, jdof]     \
+                                             * vec[iel, jdof]   \
+                                             + 1.0e-12 / ndiscr_nodes_in)
+            """,
+            name="smooth_comp",
+        )
+
+    @keyed_memoize_in(actx, (smoothness_indicator,
+                             "highest_mode"),
+                      lambda grp: grp.discretization_key())
+    def highest_mode(grp):
+        return actx.from_numpy(
+            np.asarray([1 if sum(mode_id) == grp.order
+                        else 0
+                        for mode_id in grp.mode_ids()])
+        )
 
     # Convert to modal solution representation
     modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
     uhat = modal_map(u)
 
     # Compute smoothness indicator value
-    actx = u.array_context
-    indicator = discr.empty(actx, dtype=u.entry_dtype)
-    for group in discr.discr_from_dd("vol").groups:
-        mode_ids = group.mode_ids()
-        modes = len(mode_ids)
-        order = group.order
-        highest_mode = np.ones(modes)
-        for mode_index, mode_id in enumerate(mode_ids):
-            highest_mode[mode_index] = highest_mode[mode_index] * (
-                sum(mode_id) == order
-            )
-
-        actx.call_loopy(
-            get_indicator(),
-            result=indicator[group.index],
-            vec=uhat[group.index],
-            modes=actx.from_numpy(highest_mode),
+    indicator = DOFArray(
+        actx,
+        data=tuple(
+            actx.call_loopy(
+                indicator_prg(),
+                vec=uhat[grp.index],
+                modes=highest_mode(grp))["result"]
+            for grp in discr.discr_from_dd("vol").groups
         )
+    )
     indicator = actx.np.log10(indicator + 1.0e-12)
 
     # Compute artificial viscosity percentage based on indicator and set parameters
