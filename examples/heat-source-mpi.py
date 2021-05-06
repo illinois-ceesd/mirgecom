@@ -32,7 +32,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import QTAG_NONE, DTAG_BOUNDARY
+from grudge.dof_desc import DISCR_TAG_BASE, DTAG_BOUNDARY
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -107,8 +107,10 @@ def main():
     vis = make_visualizer(discr)
 
     def rhs(t, u):
-        return (diffusion_operator(
-            discr, quad_tag=QTAG_NONE, alpha=1, boundaries=boundaries, u=u)
+        return (
+            diffusion_operator(
+                discr, quad_tag=DISCR_TAG_BASE,
+                alpha=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     rank = comm.Get_rank()
