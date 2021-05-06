@@ -126,7 +126,6 @@ def main():
     t = 0
     t_final = 3
     istep = 0
-
     while t < t_final:
         fields = rk4_step(fields, t, dt, rhs)
 
