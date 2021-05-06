@@ -1,4 +1,4 @@
-"""Demonstrate doublemach reflection."""
+"""Demonstrate double mach reflection."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -31,6 +31,7 @@ from functools import partial
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
@@ -124,14 +125,13 @@ def main(ctx_factory=cl.create_some_context):
     eos = IdealSingleGas()
     initializer = DoubleMachReflection()
     casename = "doubleMach"
-    from grudge import sym
 
     boundaries = {
-        sym.DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
-        sym.DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
-        sym.DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
-        sym.DTAG_BOUNDARY("wall"): AdiabaticSlipBoundary(),
-        sym.DTAG_BOUNDARY("out"): AdiabaticSlipBoundary(),
+        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("wall"): AdiabaticSlipBoundary(),
+        DTAG_BOUNDARY("out"): AdiabaticSlipBoundary(),
     }
     constant_cfl = False
     nstatus = 10
