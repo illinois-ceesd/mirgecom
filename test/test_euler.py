@@ -804,7 +804,7 @@ def _euler_flow_stepper(actx, parameters):
     eta = .5
     alpha = -1.0*np.log(np.finfo(float).eps)
     nummodes = int(1)
-    for i in range(dim):
+    for _ in range(dim):
         nummodes *= int(order + dim + 1)
     nummodes /= math.factorial(int(dim))
     cutoff = int(eta * order)
