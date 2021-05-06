@@ -107,7 +107,6 @@ def main(use_profiling=False):
     t = 0
     t_final = 3
     istep = 0
-
     while t < t_final:
         fields = rk4_step(fields, t, dt, rhs)
 
@@ -121,8 +120,8 @@ def main(use_profiling=False):
                         ("v", fields[1:]),
                         ])
 
-            t += dt
-            istep += 1
+        t += dt
+        istep += 1
 
 
 if __name__ == "__main__":

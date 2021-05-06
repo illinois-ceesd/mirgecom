@@ -132,12 +132,11 @@ def main():
 
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))
-            vis.write_vtk_file(
-                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
-                [
-                    ("u", fields[0]),
-                    ("v", fields[1:]),
-                    ])
+            vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                    [
+                        ("u", fields[0]),
+                        ("v", fields[1:]),
+                        ])
 
         t += dt
         istep += 1
