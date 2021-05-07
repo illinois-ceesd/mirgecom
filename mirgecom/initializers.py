@@ -319,7 +319,7 @@ class DoubleMachReflection:
         self._shock_location = shock_location
         self._shock_speed = shock_speed
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         r"""
         Create double mach reflection solution at locations *x_vec*.
 
@@ -341,6 +341,8 @@ class DoubleMachReflection:
         # Fail if numdim is other than 2
         if(len(x_vec)) != 2:
             raise ValueError("Case only defined for 2 dimensions")
+        if eos is None:
+            eos=IdealSingleGas()
 
         gm1 = eos.gamma() - 1.0
         gp1 = eos.gamma() + 1.0
