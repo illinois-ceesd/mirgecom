@@ -321,7 +321,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     reactor = cantera.IdealGasConstPressureReactor(cantera_soln)
     sim = cantera.ReactorNet([reactor])
     time = 0.0
-    for step in range(50):
+    for _ in range(50):
         time += 1.0e-6
         sim.advance(time)
 
@@ -351,12 +351,11 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
         print(f"pyro_r = {pyro_r}")
         abs_diff = discr.norm(pyro_r - can_r, np.inf)
         if abs_diff > 1e-14:
-            for i, rate in enumerate(can_r):
-                min_r = (np.abs(can_r)).min()
-                if min_r > 0:
-                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
-                else:
-                    assert discr.norm(pyro_r, np.inf) < rate_tol
+            min_r = (np.abs(can_r)).min()
+            if min_r > 0:
+                assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
+            else:
+                assert discr.norm(pyro_r, np.inf) < rate_tol
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")

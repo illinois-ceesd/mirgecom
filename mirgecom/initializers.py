@@ -113,7 +113,7 @@ class Vortex2D:
     """
 
     def __init__(
-        self, *, beta=5, center=[0, 0], velocity=[0, 0],
+        self, *, beta=5, center=(0, 0), velocity=(0, 0),
     ):
         """Initialize vortex parameters.
 
@@ -130,7 +130,7 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
@@ -147,6 +147,8 @@ class Vortex2D:
         eos: mirgecom.eos.IdealSingleGas
             Equation of state class to supply method for gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
@@ -223,7 +225,7 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -236,6 +238,8 @@ class SodShock1D:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
@@ -328,7 +332,7 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
@@ -344,6 +348,8 @@ class Lump:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
@@ -498,7 +504,7 @@ class MulticomponentLump:
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
@@ -515,6 +521,8 @@ class MulticomponentLump:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             print(f"len(x_vec) = {len(x_vec)}")
             print(f"self._dim = {self._dim}")
@@ -629,7 +637,7 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, q, eos=IdealSingleGas(), **kwargs):
+    def __call__(self, x_vec, q, eos=None, **kwargs):
         """
         Create the acoustic pulse at locations *x_vec*.
 
@@ -642,6 +650,8 @@ class AcousticPulse:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
+        if eos is None:
+            eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
@@ -712,7 +722,7 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create a uniform flow solution at locations *x_vec*.
 
@@ -725,6 +735,9 @@ class Uniform:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
+
         gamma = eos.gamma()
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass

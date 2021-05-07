@@ -278,8 +278,11 @@ def split_conserved(dim, q):
 
 def join_conserved(dim, mass, energy, momentum,
         # empty: immutable
-        species_mass=np.empty((0,), dtype=object)):
+        species_mass=None):
     """Create agglomerated array from quantities for each conservation eqn."""
+    if species_mass is None:
+        species_mass = np.empty((0,), dtype=object)
+
     nspec = len(species_mass)
     aux_shapes = [
         _aux_shape(mass, ()),
