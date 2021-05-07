@@ -295,7 +295,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         from mirgecom.integrators import rk4_step
 
-        for istep in range(nsteps):
+        for _ in range(nsteps):
             u = rk4_step(u, t, dt, get_rhs)
             t += dt
 
@@ -403,7 +403,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     from mirgecom.integrators import rk4_step
 
-    for istep in range(50):
+    for _ in range(50):
         u = rk4_step(u, t, dt, get_rhs)
         t += dt
 
