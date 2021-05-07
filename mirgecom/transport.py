@@ -101,8 +101,10 @@ class SimpleTransport(TransportModel):
 
     def __init__(self, bulk_viscosity=0, viscosity=0,
                  thermal_conductivity=0,
-                 species_diffusivity=np.empty((0,), dtype=object)):
+                 species_diffusivity=None):
         """Initialize uniform, constant transport properties."""
+        if species_diffusivity is None:
+            species_diffusivity = np.empty((0,), dtype=object)
         self._mu_bulk = bulk_viscosity
         self._mu = viscosity
         self._kappa = thermal_conductivity
