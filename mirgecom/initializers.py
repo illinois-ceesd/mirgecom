@@ -342,7 +342,7 @@ class DoubleMachReflection:
         if(len(x_vec)) != 2:
             raise ValueError("Case only defined for 2 dimensions")
         if eos is None:
-            eos=IdealSingleGas()
+            eos = IdealSingleGas()
 
         gm1 = eos.gamma() - 1.0
         gp1 = eos.gamma() + 1.0
