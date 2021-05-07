@@ -280,7 +280,8 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         The elementwise constant values between 0 and 1 which indicate the smoothness
         of a given element.
     """
-    assert isinstance(u, DOFArray)
+    if not isinstance(u, DOFArray):
+        raise ValueError("u argument must be a DOFArray.")
 
     actx = u.array_context
 
