@@ -24,7 +24,7 @@ jobs:
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
-            python -m pip install flake8 pep8-naming flake8-quotes
+            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py && echo "Flake8 found no errors."
 
     pylint:

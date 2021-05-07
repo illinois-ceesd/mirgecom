@@ -174,17 +174,13 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
     nummodes = int(1)
-    for i in range(dim):
+    for _ in range(dim):
         nummodes *= int(order + dim + 1)
     nummodes /= math.factorial(int(dim))
     cutoff = int(eta * order)
 
     from mirgecom.filter import exponential_mode_response_function as xmrfunc
     frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
-
-    vol_discr = discr.discr_from_dd("vol")
-    groups = vol_discr.groups
-    group = groups[0]
 
     # First test a uniform field, which should pass through
     # the filter unharmed.
@@ -243,20 +239,20 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         field = polyfn(coeff=coeff)
         filtered_field = filter_modally(discr, "vol", cutoff,
                                         frfunc, field)
-        for group in vol_discr.groups:
-            unfiltered_spectrum = modal_map(field)
-            filtered_spectrum = modal_map(filtered_field)
-            if do_viz is True:
-                spectrum_resid = unfiltered_spectrum - filtered_spectrum
-                io_fields = [
-                    ("unfiltered", field),
-                    ("filtered", filtered_field),
-                    ("unfiltered_spectrum", unfiltered_spectrum),
-                    ("filtered_spectrum", filtered_spectrum),
-                    ("residual", spectrum_resid)
-                ]
-                vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
-            field_resid = unfiltered_spectrum - filtered_spectrum
-            max_errors = [discr.norm(v, np.inf) for v in field_resid]
-            # fields should be different, but not too different
-            assert(tol > np.max(max_errors) > threshold)
+
+        unfiltered_spectrum = modal_map(field)
+        filtered_spectrum = modal_map(filtered_field)
+        if do_viz is True:
+            spectrum_resid = unfiltered_spectrum - filtered_spectrum
+            io_fields = [
+                ("unfiltered", field),
+                ("filtered", filtered_field),
+                ("unfiltered_spectrum", unfiltered_spectrum),
+                ("filtered_spectrum", filtered_spectrum),
+                ("residual", spectrum_resid)
+            ]
+            vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
+        field_resid = unfiltered_spectrum - filtered_spectrum
+        max_errors = [discr.norm(v, np.inf) for v in field_resid]
+        # fields should be different, but not too different
+        assert(tol > np.max(max_errors) > threshold)
