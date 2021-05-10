@@ -29,9 +29,50 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import numpy as np  # noqa
+from pytools.obj_array import make_obj_array
+from mirgecom.operators import jump
 
 
-def lfr_flux(q_tpair, flux_func, normal, lam):
+def central_scalar_flux(trace_pair, normal):
+    r"""Compute a central scalar flux.
+
+    The central scalar flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
+
+    where $\mathbf{u}^-, \matbhf{u}^+$, are the vector of independent scalar
+    components and scalar solution components on the interior and exterior of the
+    face on which the central flux is to be calculated, and $\hat{n}$ is the normal
+    vector.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.sym.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    tp_avg = trace_pair.avg
+    ncomp = 1
+    if isinstance(tp_avg, np.ndarray):
+        ncomp = len(tp_avg)
+    if ncomp > 1:
+        return make_obj_array([tp_avg[i]*normal for i in range(ncomp)])
+    return trace_pair.avg*normal
+
+
+def lfr_flux(q_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -48,13 +89,13 @@ def lfr_flux(q_tpair, flux_func, normal, lam):
 
     Parameters
     ----------
-    flux_func:
-
-        function should return ambient dim-vector fluxes given *q* values
-
     q_tpair: :class:`grudge.sym.TracePair`
 
-        Trace pair for the face upon which flux calculation is to be performed
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`grudge.sym.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
 
     normal: numpy.ndarray
 
@@ -72,6 +113,4 @@ def lfr_flux(q_tpair, flux_func, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    flux_avg = 0.5*(flux_func(q_tpair.int)
-                    + flux_func(q_tpair.ext))
-    return flux_avg @ normal - 0.5*lam*(q_tpair.ext - q_tpair.int)
+    return f_tpair.avg @ normal - lam*jump(q_tpair)/2

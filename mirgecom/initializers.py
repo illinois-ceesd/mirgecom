@@ -15,7 +15,7 @@ Solution Initializers
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -131,7 +131,7 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, x_vec, *, t=0, eos=None):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
@@ -226,7 +226,7 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, *, t=0, eos=None):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -449,7 +449,7 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
 
-    def __call__(self, x_vec, *, t=0, eos=None):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
@@ -621,7 +621,7 @@ class MulticomponentLump:
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
-    def __call__(self, x_vec, *, t=0, eos=None):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
@@ -754,7 +754,7 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, q, eos=None):
+    def __call__(self, x_vec, q, eos=None, **kwargs):
         """
         Create the acoustic pulse at locations *x_vec*.
 
@@ -839,7 +839,7 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, x_vec, *, t=0, eos=None):
+    def __call__(self, x_vec, *, t=0, eos=None, **kwargs):
         """
         Create a uniform flow solution at locations *x_vec*.
 
@@ -934,7 +934,7 @@ class MixtureInitializer:
         self._temperature = temperature
         self._massfracs = massfractions
 
-    def __call__(self, x_vec, eos, *, t=0.0):
+    def __call__(self, x_vec, eos, *, t=0.0, **kwargs):
         """
         Create the mixture state at locations *x_vec* (t is ignored).
 

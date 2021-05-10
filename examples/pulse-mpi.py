@@ -49,10 +49,7 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    PrescribedBoundary,
-    AdiabaticSlipBoundary
-)
+from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
     Lump,
     AcousticPulse
@@ -85,7 +82,6 @@ def main(ctx_factory=cl.create_some_context):
     eos = IdealSingleGas()
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
     casename = "pulse"
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
     constant_cfl = False
