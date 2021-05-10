@@ -108,7 +108,7 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         inviscid_facial_flux(discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
         + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=part_tpair)
               for part_tpair in cross_rank_trace_pairs(discr, q))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag, eos=eos, q=q)
+        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, q=q, eos=eos)
               for btag in boundaries)
     )
 

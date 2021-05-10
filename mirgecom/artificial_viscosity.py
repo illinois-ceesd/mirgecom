@@ -206,22 +206,15 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
     else:
         grad_q_vol = discr.weak_grad(q)
 
-    # R=Grad(Q) Q flux over interior faces
-    q_flux_int = _facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
-    # R=Grad(Q) Q flux interior faces on partition boundaries
-    q_flux_pb = sum(_facial_flux_q(discr, q_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, q))
-    # R=Grad(Q) Q flux domain boundary part (i.e. BCs)
-    q_flux_db = 0
-    for btag in boundaries:
-        q_tpair = TracePair(
-            btag,
-            interior=discr.project("vol", btag, q),
-            exterior=boundaries[btag].exterior_q(discr, btag=btag, t=t,
-                                                 q=q, eos=eos))
-        q_flux_db = q_flux_db + _facial_flux_q(discr, q_tpair=q_tpair)
-    # Total Q flux across element boundaries
-    q_bnd_flux = q_flux_int + q_flux_pb + q_flux_db
+    # Total flux of fluid soln Q across element boundaries
+    q_bnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
+                  + sum(_facial_flux_q(discr, q_tpair=pb_tpair)
+                    for pb_tpair in cross_rank_trace_pairs(discr, q)))
+    q_bnd_flux2 = sum(bnd.q_boundary_flux(discr, btag, q=q, eos=eos, **kwargs)
+                      for btag, bnd in boundaries.items())
+    if isinstance(q, np.ndarray):
+        q_bnd_flux2 = np.stack(q_bnd_flux2)
+    q_bnd_flux = q_bnd_flux + q_bnd_flux2
 
     # Compute R
     r = discr.inverse_mass(
@@ -230,25 +223,16 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
 
     # RHS_av = div(R) volume part
     div_r_vol = discr.weak_div(r)
-    # RHS_av = div(R): grad(Q) flux interior faces part
-    r_flux_int = _facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
-    # RHS_av = div(R): grad(Q) flux interior faces on the partition boundaries
-    r_flux_pb = sum(_facial_flux_r(discr, r_tpair=pb_tpair)
+    # Total flux of grad(Q) across element boundaries
+    r_bnd_flux = (_facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
+                  + sum(_facial_flux_r(discr, r_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, r))
-    # RHS_av = div(R): grad(Q) flux domain boundary part (BCs)
-    r_flux_db = 0
-    for btag in boundaries:
-        r_tpair = TracePair(
-            btag,
-            interior=discr.project("vol", btag, r),
-            exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, t=t,
-                                                      grad_q=r, eos=eos))
-        r_flux_db = r_flux_db + _facial_flux_r(discr, r_tpair=r_tpair)
-    # Total grad(Q) flux element boundaries
-    r_flux_bnd = r_flux_int + r_flux_pb + r_flux_db
+                  + sum(bnd.s_boundary_flux(discr, btag, grad_q=r, eos=eos,
+                                            **kwargs)
+                        for btag, bnd in boundaries.items()))
 
     # Return the AV RHS term
-    return discr.inverse_mass(-div_r_vol + discr.face_mass(r_flux_bnd))
+    return discr.inverse_mass(-div_r_vol + discr.face_mass(r_bnd_flux))
 
 
 def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
