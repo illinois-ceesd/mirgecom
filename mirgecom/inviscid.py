@@ -44,7 +44,7 @@ from mirgecom.fluid import (
 )
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
-from functools import partial
+from grudge.symbolic.primitives import TracePair
 from mirgecom.flux import lfr_flux
 
 
@@ -101,8 +101,10 @@ def inviscid_facial_flux(discr, eos, q_tpair, local=False):
     """
     actx = q_tpair[0].int.array_context
     dim = discr.dim
+    flux_tpair = TracePair(q_tpair.dd,
+                           interior=inviscid_flux(discr, eos, q_tpair.int),
+                           exterior=inviscid_flux(discr, eos, q_tpair.ext))
 
-    euler_flux = partial(inviscid_flux, discr, eos)
     lam = actx.np.maximum(
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
@@ -110,7 +112,7 @@ def inviscid_facial_flux(discr, eos, q_tpair, local=False):
     normal = thaw(actx, discr.normal(q_tpair.dd))
 
     # todo: user-supplied flux routine
-    flux_weak = lfr_flux(q_tpair, flux_func=euler_flux, normal=normal, lam=lam)
+    flux_weak = lfr_flux(q_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
         return discr.project(q_tpair.dd, "all_faces", flux_weak)

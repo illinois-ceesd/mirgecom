@@ -7,5 +7,7 @@ pudb
 pytest-pudb
 pyprof2calltree
 pyinstrument
+pylint
+pyyaml
 
 git+https://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64" 
