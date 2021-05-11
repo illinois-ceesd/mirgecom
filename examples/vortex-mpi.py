@@ -178,7 +178,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
-                              vis_timer=vis_timer)
+                              vis_timer=vis_timer, overwrite=True)
 
     try:
         (current_step, current_t, current_state) = \
