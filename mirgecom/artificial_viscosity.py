@@ -152,7 +152,7 @@ def _facial_flux_r(discr, r_tpair):
     return discr.project(r_tpair.dd, "all_faces", flux_out)
 
 
-def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
+def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -178,17 +178,13 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
 
         Dictionary of boundary functions, one for each valid boundary tag
 
-    t: float
-
-        Time
-
     alpha: float
 
-       The maximum artificial viscosity coefficient to be applied
+        The maximum artificial viscosity coefficient to be applied
 
-    eos: :class:`~mirgecom.eos.GasEOS`
+    boundary_kwargs: :class:`dict`
 
-       Only used as a pass through to the boundary conditions.
+        dictionary of extra arguments to pass through to the boundary conditions
 
     Returns
     -------
@@ -196,6 +192,9 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
 
         The artificial viscosity operator applied to *q*.
     """
+    if boundary_kwargs is None:
+        boundary_kwargs = dict()
+
     # Get smoothness indicator based on first component
     indicator_field = q[0] if isinstance(q, np.ndarray) else q
     indicator = smoothness_indicator(discr, indicator_field, **kwargs)
@@ -217,8 +216,8 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
         q_tpair = TracePair(
             btag,
             interior=discr.project("vol", btag, q),
-            exterior=boundaries[btag].exterior_q(discr, btag=btag, t=t,
-                                                 q=q, eos=eos))
+            exterior=boundaries[btag].exterior_q(discr, btag=btag, q=q,
+                **boundary_kwargs))
         q_flux_db = q_flux_db + _facial_flux_q(discr, q_tpair=q_tpair)
     # Total Q flux across element boundaries
     q_bnd_flux = q_flux_int + q_flux_pb + q_flux_db
@@ -241,8 +240,8 @@ def av_operator(discr, t, eos, boundaries, q, alpha, **kwargs):
         r_tpair = TracePair(
             btag,
             interior=discr.project("vol", btag, r),
-            exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, t=t,
-                                                      grad_q=r, eos=eos))
+            exterior=boundaries[btag].exterior_grad_q(discr, btag=btag, grad_q=r,
+                **boundary_kwargs))
         r_flux_db = r_flux_db + _facial_flux_r(discr, r_tpair=r_tpair)
     # Total grad(Q) flux element boundaries
     r_flux_bnd = r_flux_int + r_flux_pb + r_flux_db
@@ -256,8 +255,8 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
     from warnings import warn
     warn("Do not call artificial_viscosity; it is now called av_operator. This"
          "function will disappear in 2021", DeprecationWarning, stacklevel=2)
-    return av_operator(discr=discr, eos=eos, boundaries=boundaries,
-                       q=q, alpha=alpha, t=t)
+    return av_operator(discr=discr, boundaries=boundaries,
+        boundary_kwargs={"t": t, "eos": eos}, q=q, alpha=alpha, **kwargs)
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
@@ -281,7 +280,8 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         The elementwise constant values between 0 and 1 which indicate the smoothness
         of a given element.
     """
-    assert isinstance(u, DOFArray)
+    if not isinstance(u, DOFArray):
+        raise ValueError("u argument must be a DOFArray.")
 
     actx = u.array_context
 

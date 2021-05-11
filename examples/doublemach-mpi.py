@@ -44,7 +44,7 @@ from mirgecom.artificial_viscosity import (
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    create_parallel_grid,
+    generate_and_distribute_mesh,
     ExactSolutionMismatch,
 )
 from mirgecom.io import make_init_message
@@ -151,7 +151,7 @@ def main(ctx_factory=cl.create_some_context):
 
     gen_grid = partial(get_doublemach_mesh)
 
-    local_mesh, global_nelements = create_parallel_grid(comm, gen_grid)
+    local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
 
     local_nelements = local_mesh.nelements
 
@@ -198,7 +198,8 @@ def main(ctx_factory=cl.create_some_context):
         return inviscid_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
-            discr, t=t, q=state, boundaries=boundaries, alpha=alpha, eos=eos,
+            discr, q=state, boundaries=boundaries,
+            boundary_kwargs={"t": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa
         )
 
