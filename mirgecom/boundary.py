@@ -135,7 +135,8 @@ class PrescribedInviscidBoundary(FluidBC):
                  inviscid_facial_flux_func=None, fluid_solution_func=None,
                  fluid_solution_flux_func=None, scalar_numerical_flux_func=None,
                  fluid_solution_gradient_func=None,
-                 fluid_solution_gradient_flux_func=None):
+                 fluid_solution_gradient_flux_func=None,
+                 fluid_temperature_func=None):
         """Initialize the PrescribedInviscidBoundary and methods."""
         self._bnd_pair_func = boundary_pair_func
         self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
@@ -153,6 +154,7 @@ class PrescribedInviscidBoundary(FluidBC):
         from mirgecom.flux import central_vector_flux
         if not self._fluid_soln_grad_flux_func:
             self._fluid_soln_grad_flux_func = central_vector_flux
+        self._fluid_temperature_func = fluid_temperature_func
 
     def _boundary_quantity(self, discr, btag, quantity, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
@@ -231,6 +233,57 @@ class PrescribedInviscidBoundary(FluidBC):
             discr, btag, self._fluid_soln_grad_flux_func(bnd_grad_pair, nhat),
             **kwargs
         )
+
+    def t_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the "temperature flux" through boundary *btag*."""
+        q_minus = discr.project("vol", btag, q)
+        cv_minus = split_conserved(discr.dim, q_minus)
+        t_minus = eos.temperature(cv_minus)
+        if self._fluid_temperature_func:
+            actx = q[0].array_context
+            boundary_discr = discr.discr_from_dd(btag)
+            nodes = thaw(actx, boundary_discr.nodes())
+            t_plus = self._fluid_temperature_func(nodes, q=q_minus,
+                                                  temperature=t_minus, eos=eos,
+                                                  **kwargs)
+        else:
+            t_plus = -t_minus
+        # t_plus = 0*t_minus + self._wall_temp
+        actx = cv_minus.mass.array_context
+        nhat = thaw(actx, discr.normal(btag))
+        bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
+
+        return self._boundary_quantity(discr, btag,
+                                       self._scalar_num_flux_func(bnd_tpair, nhat),
+                                       **kwargs)
+
+    def viscous_boundary_flux(self, discr, btag, eos, q, grad_q, grad_t, **kwargs):
+        """Get the viscous part of the physical flux across the boundary *btag*."""
+        q_tpair = self.boundary_pair(discr, btag=btag, q=q, eos=eos, **kwargs)
+        cv_minus = split_conserved(discr.dim, q_tpair.int)
+
+        grad_q_minus = discr.project("vol", btag, grad_q)
+        grad_q_tpair = TracePair(btag, interior=grad_q_minus, exterior=grad_q_minus)
+
+        t_minus = eos.temperature(cv_minus)
+        if self._fluid_temperature_func:
+            actx = q[0].array_context
+            boundary_discr = discr.discr_from_dd(btag)
+            nodes = thaw(actx, boundary_discr.nodes())
+            t_plus = self._fluid_temperature_func(nodes, q=q_tpair.exterior,
+                                                  temperature=t_minus, eos=eos,
+                                                  **kwargs)
+        else:
+            t_plus = -t_minus
+
+        t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
+
+        grad_t_minus = discr.project("vol", btag, grad_t)
+        grad_t_tpair = TracePair(btag, interior=grad_t_minus, exterior=grad_t_minus)
+
+        from mirgecom.viscous import viscous_facial_flux
+        return viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
+                                   t_tpair, grad_t_tpair)
 
 
 class PrescribedBoundary(PrescribedInviscidBoundary):

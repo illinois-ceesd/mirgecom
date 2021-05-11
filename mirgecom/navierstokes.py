@@ -131,7 +131,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def get_q_flux_bnd(btag):
-        return boundaries[btag].q_boundary_flux(discr, btag, eos, q, time=t)
+        return boundaries[btag].q_boundary_flux(discr, btag=btag, q=q, eos=eos,
+                                                time=t)
 
     q_int_tpair = interior_trace_pair(discr, q)
     q_part_pairs = cross_rank_trace_pairs(discr, q)
@@ -144,7 +145,9 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
     def get_t_flux_bnd(btag):
-        return boundaries[btag].t_boundary_flux(discr, btag, eos, q, time=t)
+        return boundaries[btag].t_boundary_flux(discr, btag=btag, q=q, eos=eos,
+                                                time=t)
+
     gas_t = eos.temperature(cv)
     t_int_tpair = TracePair("int_faces",
                             interior=eos.temperature(
@@ -162,12 +165,12 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # inviscid parts
     def finv_interior_face(q_tpair):
-        return inviscid_facial_flux(discr, eos, q_tpair)
+        return inviscid_facial_flux(discr, eos=eos, q_tpair=q_tpair)
 
     # inviscid part of bcs applied here
     def finv_domain_boundary(btag):
-        return boundaries[btag].inviscid_boundary_flux(discr, btag, eos=eos, q=q,
-                                                       time=t)
+        return boundaries[btag].inviscid_boundary_flux(discr, btag=btag, eos=eos,
+                                                       q=q, time=t)
 
     # viscous parts
     s_int_pair = interior_trace_pair(discr, grad_q)
@@ -200,8 +203,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     # NS RHS
     return dg_div_low(
         discr, (  # volume part
-            viscous_flux(discr, eos, q=q, grad_q=grad_q, t=gas_t, grad_t=grad_t)
-            - inviscid_flux(discr, eos, q)),
+            viscous_flux(discr, eos=eos, q=q, grad_q=grad_q, t=gas_t, grad_t=grad_t)
+            - inviscid_flux(discr, eos=eos, q=q)),
         elbnd_flux(  # viscous boundary
             discr, fvisc_interior_face, visc_bnd_flux,
             (q_int_tpair, s_int_pair, t_int_tpair, delt_int_pair),

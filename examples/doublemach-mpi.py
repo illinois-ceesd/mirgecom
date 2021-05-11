@@ -23,6 +23,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
 import logging
 import pyopencl as cl
 import pyopencl.tools as cl_tools
@@ -36,7 +37,8 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import inviscid_operator, split_conserved
+from mirgecom.navierstokes import ns_operator
+from mirgecom.fluid import split_conserved
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -55,6 +57,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary, PrescribedBoundary
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
+from mirgecom.transport import SimpleTransport
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +125,12 @@ def main(ctx_factory=cl.create_some_context):
     current_cfl = 0.1
     current_dt = 1.0e-4
     current_t = 0
-    eos = IdealSingleGas()
+    # {{{ Initialize simple transport model
+    kappa = 1e-5
+    sigma = 1e-5
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+    # }}}
+    eos = IdealSingleGas(transport_model=transport_model)
     initializer = DoubleMachReflection()
     casename = "doubleMach"
 
@@ -195,7 +203,7 @@ def main(ctx_factory=cl.create_some_context):
     )
 
     def my_rhs(t, state):
-        return inviscid_operator(
+        return ns_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
             discr, t=t, q=state, boundaries=boundaries, alpha=alpha, eos=eos,

@@ -81,10 +81,10 @@ def diffusive_flux(discr, eos, q, grad_q):
     fractions ${Y}_{\alpha}$.
     """
     cv = split_conserved(discr.dim, q)
-    grad_cv = split_conserved(discr.dim, grad_q)
     nspecies = len(cv.species_mass)
-    transport = eos.transport_model()
 
+    grad_cv = split_conserved(discr.dim, grad_q)
+    transport = eos.transport_model()
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
 
