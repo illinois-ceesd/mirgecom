@@ -218,7 +218,7 @@ def test_shock_init(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     initr = SodShock1D()
-    initsoln = initr(t=0.0, x_vec=nodes)
+    initsoln = initr(time=0.0, x_vec=nodes)
     print("Sod Soln:", initsoln)
     xpl = 1.0
     xpr = 0.1
@@ -259,7 +259,7 @@ def test_uniform(ctx_factory, dim):
 
     from mirgecom.initializers import Uniform
     initr = Uniform(dim=dim)
-    initsoln = initr(t=0.0, x_vec=nodes)
+    initsoln = initr(time=0.0, x_vec=nodes)
     tol = 1e-15
     ssoln = split_conserved(dim, initsoln)
 

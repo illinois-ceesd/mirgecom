@@ -848,7 +848,7 @@ def _euler_flow_stepper(actx, parameters):
         logger.info("Writing final dump.")
         maxerr = max(write_soln(False))
     else:
-        expected_result = initializer(nodes, t=t)
+        expected_result = initializer(nodes, time=t)
         maxerr = discr.norm(fields - expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")

@@ -4,6 +4,9 @@ Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: lfr_flux
+.. autofunction:: central_scalar_flux
+.. autofunction:: central_vector_flux
+
 """
 
 __copyright__ = """
@@ -70,6 +73,37 @@ def central_scalar_flux(trace_pair, normal):
     if ncomp > 1:
         return make_obj_array([tp_avg[i]*normal for i in range(ncomp)])
     return trace_pair.avg*normal
+
+
+def central_vector_flux(trace_pair, normal):
+    r"""Compute a central vector flux.
+
+    The central vector flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{v}^{+}+\mathbf{v}^{-}\right) \cdot \hat{n}
+
+    where $\mathbf{v}^-, \matbhf{v}^+$, are the vectors on the interior and exterior
+    of the face across which the central flux is to be calculated, and $\hat{n}$ is
+    the unit normal to the face.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.sym.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    return trace_pair.avg@normal
 
 
 def lfr_flux(q_tpair, f_tpair, normal, lam):
