@@ -296,11 +296,11 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
             "{[kdof]: 0 <= kdof < ndiscr_nodes_in}"
             ],
             """
-                result[iel,idof] = sum(kdof, vec[iel, kdof]     \
-                                             * vec[iel, kdof]   \
-                                             * modes[kdof]) /   \
-                                   sum(jdof, vec[iel, jdof]     \
-                                             * vec[iel, jdof]   \
+                result[iel,idof] = sum(kdof, vec[iel, kdof]               \
+                                             * vec[iel, kdof]             \
+                                             * modes_active_flag[kdof]) / \
+                                   sum(jdof, vec[iel, jdof]               \
+                                             * vec[iel, jdof]             \
                                              + 1.0e-12 / ndiscr_nodes_in)
             """,
             name="smooth_comp",
@@ -327,7 +327,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
             actx.call_loopy(
                 indicator_prg(),
                 vec=uhat[grp.index],
-                modes=highest_mode(grp))["result"]
+                modes_active_flag=highest_mode(grp))["result"]
             for grp in discr.discr_from_dd("vol").groups
         )
     )
