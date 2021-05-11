@@ -91,8 +91,8 @@ def test_slipwall_identity(actx_factory, dim):
             from functools import partial
             bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
-            bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                          btag=BTAG_ALL, eos=eos)
+            bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL, q=uniform_state,
+                                          eos=eos, t=0.0)
             bnd_cv_int = split_conserved(dim, bnd_pair.int)
             bnd_cv_ext = split_conserved(dim, bnd_pair.ext)
 
@@ -156,8 +156,8 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                              btag=BTAG_ALL, eos=eos)
+                bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL, q=uniform_state,
+                                              eos=eos, t=0.0)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
