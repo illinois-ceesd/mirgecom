@@ -65,7 +65,7 @@ def jump(trace_pair):
 
 def elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                int_tpair, xrank_pairs, boundaries):
-    """Generically compute flux across element boundaries for simple f(u) flux."""
+    """Generically compute flux across element boundaries."""
     return (compute_interior_flux(int_tpair)
             + sum(compute_interior_flux(part_tpair)
                   for part_tpair in xrank_pairs)
