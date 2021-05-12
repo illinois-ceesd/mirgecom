@@ -39,7 +39,9 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
     Parameters
     ----------
     rhs
-        Function that should return the time derivative of the state
+        Function that should return the time derivative of the state.
+        This function should take time and state as arguments, with
+        a call looking like rhs(t, state).
     timestepper
         Function that advances the state from t=time to t=(time+dt), and
         returns the advanced state.
@@ -50,7 +52,7 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
     get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully.
+        the stepper should stop gracefully. Takes only state as an argument.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -104,7 +106,9 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
     Parameters
     ----------
     rhs
-        Function that should return the time derivative of the state
+        Function that should return the time derivative of the state.
+        This function should take time and state as arguments, with
+        a call looking like rhs(t, state).
     timestepper
         Leap method descriptor containing instructions for timestepping.
         When passed to a code generator, this provides a Python class
@@ -171,7 +175,7 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
 
 def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
                                       state):
-    """Set up leap advancer for problems not using advance_state.
+    """Generate single-rate Leap code to be used to advance state.
 
     Parameters
     ----------
@@ -181,7 +185,9 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     component_id
         State id (required input for leap method generation)
     rhs
-        Function that should return the time derivative of the state
+        Function that should return the time derivative of the state.
+        This function should take time and state as arguments, with
+        a call looking like rhs(t, state).
     t: float
         Time at which to start
     dt: float
@@ -209,16 +215,19 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
                     component_id="state", t=0.0, istep=0, logmgr=None,
                     eos=None, dim=None):
-    """Wrap function for advance_state and advance_state_leap.
+    """Determine what stepper we're using and call the appropriate advancer.
 
     Parameters
     ----------
     rhs
-        Function that should return the time derivative of the state
+        Function that should return the time derivative of the state.
+        This function should take time and state as arguments, with
+        a call looking like rhs(t, state).
     timestepper
-        Function that advances the state from t=time to t=(time+dt), and
-        returns the advanced state. This function checks if `timestepper`
-        is a leap method or not, and calls the corresponding advancer.
+        This is either a user-defined function that advances the state
+        from t=time to t=(time+dt) and returns the advanced state, or
+        a leap method generator. If it's the latter, we are responsible
+        for generating a timestepper before using it.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
@@ -228,7 +237,7 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
     get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully.
+        the stepper should stop gracefully. Takes only state as an argument.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -247,33 +256,33 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
         the current time
     state: numpy.ndarray
     """
-    from mirgecom.integrators import (rk4_step, euler_step,
-                                      lsrk54_step, lsrk144_step)
-    if timestepper in (rk4_step, euler_step, lsrk54_step, lsrk144_step):
+    # The timestepper should either be a Leap
+    # method object, or a user-passed function.
+    # First, check if we have leap.
+    import importlib
+    leap_spec = importlib.util.find_spec("leap")
+    found = leap_spec is not None
+    leap_timestepper = False
+    if found:
+        # The timestepper can still either be a leap method generator
+        # or a user-passed function.
+        from leap import MethodBuilder
+        if isinstance(timestepper, MethodBuilder):
+            leap_timestepper = True
+
+    if leap_timestepper:
+        (current_step, current_t, current_state) = \
+            _advance_state_leap(rhs=rhs, timestepper=timestepper,
+                        checkpoint=checkpoint,
+                        get_timestep=get_timestep, state=state,
+                        t=t, t_final=t_final, component_id=component_id,
+                        istep=istep, logmgr=logmgr, eos=eos, dim=dim)
+    else:
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(rhs=rhs, timestepper=timestepper,
                         checkpoint=checkpoint,
                         get_timestep=get_timestep, state=state,
                         t=t, t_final=t_final, istep=istep,
                         logmgr=logmgr, eos=eos, dim=dim)
-    else:
-        # The timestepper should either be a Leap
-        # method object, or something is broken.
-        import importlib
-        leap_spec = importlib.util.find_spec("leap")
-        found = leap_spec is not None
-        if found:
-            from leap import MethodBuilder
-            if isinstance(timestepper, MethodBuilder):
-                (current_step, current_t, current_state) = \
-                    _advance_state_leap(rhs=rhs, timestepper=timestepper,
-                                checkpoint=checkpoint,
-                                get_timestep=get_timestep, state=state,
-                                t=t, t_final=t_final, component_id=component_id,
-                                istep=istep, logmgr=logmgr, eos=eos, dim=dim)
-            else:
-                raise ValueError("Timestepper unrecognizable")
-        else:
-            raise ValueError("Leap and/or Dagrt not installed")
 
     return current_step, current_t, current_state
