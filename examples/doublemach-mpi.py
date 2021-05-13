@@ -54,7 +54,10 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary, PrescribedBoundary
+from mirgecom.boundary import (
+    AdiabaticSlipBoundary,
+    PrescribedFluidBoundary
+)
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -135,9 +138,12 @@ def main(ctx_factory=cl.create_some_context):
     casename = "doubleMach"
 
     boundaries = {
-        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic1"):
+        PrescribedFluidBoundary(fluid_solution_func=initializer),
+        DTAG_BOUNDARY("ic2"):
+        PrescribedFluidBoundary(fluid_solution_func=initializer),
+        DTAG_BOUNDARY("ic3"):
+        PrescribedFluidBoundary(fluid_solution_func=initializer),
         DTAG_BOUNDARY("wall"): AdiabaticSlipBoundary(),
         DTAG_BOUNDARY("out"): AdiabaticSlipBoundary(),
     }

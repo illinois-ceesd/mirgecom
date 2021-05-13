@@ -48,7 +48,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedInviscidBoundary
+from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
@@ -79,7 +79,7 @@ def main(ctx_factory=cl.create_some_context):
     initializer = Lump(dim=dim, center=orig, velocity=vel)
     casename = "lump"
     boundaries = {
-        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        BTAG_ALL: PrescribedFluidBoundary(fluid_solution_func=initializer)
     }
     constant_cfl = False
     nstatus = 1
