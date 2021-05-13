@@ -46,7 +46,7 @@ from mirgecom.euler import euler_operator
 from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import (
-    PrescribedInviscidBoundary,
+    PrescribedFluidBoundary,
     DummyBoundary
 )
 from mirgecom.eos import IdealSingleGas
@@ -579,7 +579,7 @@ def test_vortex_rhs(actx_factory, order):
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=vortex)
+            BTAG_ALL: PrescribedFluidBoundary(fluid_solution_func=vortex)
         }
 
         inviscid_rhs = euler_operator(
@@ -636,7 +636,7 @@ def test_lump_rhs(actx_factory, dim, order):
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(fluid_solution_func=lump)
         }
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
@@ -705,7 +705,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         lump_soln = lump(nodes)
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(fluid_solution_func=lump)
         }
 
         inviscid_rhs = euler_operator(
@@ -894,7 +894,7 @@ def test_isentropic_vortex(actx_factory, order):
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+            BTAG_ALL: PrescribedFluidBoundary(fluid_solution_func=initializer)
         }
         eos = IdealSingleGas()
         t = 0

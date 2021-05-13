@@ -10,7 +10,7 @@ State Vector Handling
 Boundary Treatment Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: FluidBoundary
+.. autoclass:: FluidBoundaryInterface
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
@@ -308,14 +308,13 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-class FluidBoundary(metaclass=ABCMeta):
+class FluidBoundaryInterface(metaclass=ABCMeta):
     r"""Abstract interface to fluid boundary treatment.
 
     .. automethod:: inviscid_boundary_flux
     .. automethod:: viscous_boundary_flux
     .. automethod:: q_boundary_flux
     .. automethod:: t_boundary_flux
-    .. automethod:: s_boundary_flux
     """
 
     @abstractmethod
@@ -329,10 +328,6 @@ class FluidBoundary(metaclass=ABCMeta):
     @abstractmethod
     def q_boundary_flux(self, discr, btag, q, eos, **kwargs):
         """Get the scalar conserved quantity flux across the boundary faces."""
-
-    @abstractmethod
-    def s_boundary_flux(self, discr, btag, grad_q, eos, **kwargs):
-        r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
 
     @abstractmethod
     def t_boundary_flux(self, discr, btag, q, eos, **kwargs):

@@ -9,7 +9,7 @@ Boundary Treatment Interface
 Inviscid Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: PrescribedInviscidBoundary
+.. autoclass:: PrescribedFluidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
 
@@ -52,70 +52,62 @@ from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import (
     split_conserved,
     join_conserved,
-    FluidBoundary
+    FluidBoundaryInterface
 )
 from mirgecom.inviscid import inviscid_facial_flux
 from mirgecom.viscous import viscous_facial_flux
-from mirgecom.artificial_viscosity import AVBoundary
+from mirgecom.artificial_viscosity import AVBoundaryInterface
 
 
-class AVEulerBC(FluidBoundary, AVBoundary):
+class AVEulerBoundaryInterface(FluidBoundaryInterface, AVBoundaryInterface):
     r"""Base interface to insviscid+ArtVisc boundary treatments."""
 
     pass
 
 
-class AVNSBC(FluidBoundary, AVBoundary):
+class AVNSBoundaryInterface(FluidBoundaryInterface, AVBoundaryInterface):
     r"""Base interface to Navier-Stokes+ArtVisc boundary treatments."""
 
     pass
 
 
-class FluidBC(AVNSBC):
-    r"""Base interface to fluid boundary conditions.
+class FluidBoundary(AVNSBoundaryInterface):
+    r"""Base interface to general fluid + artvisc boundary treatments.
 
-    .. automethod:: q_boundary_flux
-    .. automethod:: t_boundary_flux
-    .. automethod:: s_boundary_flux
-    .. automethod:: inviscid_boundary_flux
-    .. automethod:: viscous_boundary_flux
     .. automethod:: boundary_pair
     """
 
-    def get_scalar_flux(self, discr, btag, u, **kwargs):
-        """Get scalar flux for AV boundary type."""
+    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
+        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        if "local" in kwargs:
+            if kwargs["local"]:
+                return quantity
+        return discr.project(btag, "all_faces", quantity)
+
+    def get_scalar_flux(self, discr, btag, u, **kwargs):  # noqa: D102
         return self.q_boundary_flux(discr, btag=btag, q=u, **kwargs)
 
-    def get_diffusion_flux(self, discr, btag, r, **kwargs):
-        """Get diffusion flux for AV boundary type."""
-        return self.s_boundary_flux(discr, btag=btag, grad_q=r, **kwargs)
-
-    def q_boundary_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the flux through boundary *btag* for each scalar in *q*."""
+    def get_diffusion_flux(self, discr, btag, r, **kwargs):  # noqa: D102
         raise NotImplementedError()
 
-    def s_boundary_flux(self, discr, btag, grad_q, eos, **kwargs):
-        r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
+    def q_boundary_flux(self, discr, btag, q, eos, **kwargs):  # noqa: D102
         raise NotImplementedError()
 
-    def t_boundary_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the "temperature flux" through boundary *btag*."""
+    def t_boundary_flux(self, discr, btag, q, eos, **kwargs):  # noqa: D102
         raise NotImplementedError()
 
-    def inviscid_boundary_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the inviscid part of the physical flux across the boundary *btag*."""
+    def inviscid_boundary_flux(self, discr, btag, q, eos, **kwargs):  # noqa: D102
         raise NotImplementedError()
 
-    def viscous_boundary_flux(self, discr, btag, q, grad_q, grad_t, eos, **kwargs):
-        """Get the viscous part of the physical flux across the boundary *btag*."""
+    def viscous_boundary_flux(self, discr, btag, q, grad_q, grad_t,  # noqa: D102
+                              eos, **kwargs):
         raise NotImplementedError()
 
-    def boundary_pair(self, discr, btag, u, eos, **kwargs):
-        """Get the interior and exterior solution (*u*) on the boundary."""
+    def boundary_pair(self, discr, btag, u, eos, **kwargs):  # noqa: D102
         raise NotImplementedError()
 
 
-class PrescribedInviscidBoundary(FluidBC):
+class PrescribedFluidBoundary(FluidBoundary):
     r"""Abstract interface to a prescribed fluid boundary treatment.
 
     .. automethod:: __init__
@@ -129,7 +121,7 @@ class PrescribedInviscidBoundary(FluidBC):
                  fluid_solution_gradient_func=None,
                  fluid_solution_gradient_flux_func=None,
                  fluid_temperature_func=None):
-        """Initialize the PrescribedInviscidBoundary and methods."""
+        """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_pair_func = boundary_pair_func
         self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
         self._inviscid_facial_flux_func = inviscid_facial_flux_func
@@ -147,13 +139,6 @@ class PrescribedInviscidBoundary(FluidBC):
         if not self._fluid_soln_grad_flux_func:
             self._fluid_soln_grad_flux_func = central_vector_flux
         self._fluid_temperature_func = fluid_temperature_func
-
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
 
     def boundary_pair(self, discr, btag, q, **kwargs):
         """Get the interior and exterior solution on the boundary."""
@@ -202,8 +187,9 @@ class PrescribedInviscidBoundary(FluidBC):
         return self._boundary_quantity(discr, btag=btag, quantity=flux_weak,
                                        **kwargs)
 
-    def s_boundary_flux(self, discr, btag, grad_q, **kwargs):
+    def get_diffusion_flux(self, discr, btag, r, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
+        grad_q = r
         grad_shape = grad_q.shape
         if len(grad_shape) > 1:
             actx = grad_q[0][0].array_context
@@ -277,7 +263,7 @@ class PrescribedInviscidBoundary(FluidBC):
                                    t_tpair, grad_t_tpair)
 
 
-class PrescribedBoundary(PrescribedInviscidBoundary):
+class PrescribedBoundary(PrescribedFluidBoundary):
     """Boundary condition prescribes boundary soln with user-specified function.
 
     .. automethod:: __init__
@@ -297,10 +283,10 @@ class PrescribedBoundary(PrescribedInviscidBoundary):
         from warnings import warn
         warn("Do not use PrescribedBoundary; use PrescribedInvscidBoundary. This"
              "boundary type  will disappear soon.", DeprecationWarning, stacklevel=2)
-        PrescribedInviscidBoundary.__init__(self, fluid_solution_func=userfunc)
+        PrescribedFluidBoundary.__init__(self, fluid_solution_func=userfunc)
 
 
-class DummyBoundary(PrescribedInviscidBoundary):
+class DummyBoundary(PrescribedFluidBoundary):
     """Boundary condition that assigns boundary-adjacent soln as the boundary solution.
 
     .. automethod:: dummy_pair
@@ -308,7 +294,7 @@ class DummyBoundary(PrescribedInviscidBoundary):
 
     def __init__(self):
         """Initialize the DummyBoundary boundary type."""
-        PrescribedInviscidBoundary.__init__(self, boundary_pair_func=self.dummy_pair)
+        PrescribedFluidBoundary.__init__(self, boundary_pair_func=self.dummy_pair)
 
     def dummy_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
@@ -321,7 +307,7 @@ class DummyBoundary(PrescribedInviscidBoundary):
         return dir_soln
 
 
-class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
+class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
@@ -337,11 +323,12 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     boundary conditions described in detail in [Poinsot_1992]_.
 
     .. automethod:: adiabatic_slip_pair
+    .. automethod:: exterior_grad_q
     """
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
-        PrescribedInviscidBoundary.__init__(
+        PrescribedFluidBoundary.__init__(
             self, boundary_pair_func=self.adiabatic_slip_pair,
             fluid_solution_gradient_func=self.exterior_grad_q
         )
@@ -404,7 +391,7 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
                               species_mass=-gradq_comp.species_mass)
 
 
-class IsothermalNoSlipBoundary(FluidBC):
+class IsothermalNoSlipBoundary(FluidBoundary):
     r"""Isothermal no-slip viscous wall boundary.
 
     This class implements an isothermal no-slip wall by:
@@ -512,7 +499,7 @@ class IsothermalNoSlipBoundary(FluidBC):
                                    t_tpair, grad_t_tpair)
 
 
-class PrescribedViscousBoundary(FluidBC):
+class PrescribedViscousBoundary(FluidBoundary):
     r"""Fully prescribed boundary for viscous flows.
 
     This class implements an inflow/outflow by:

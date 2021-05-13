@@ -68,6 +68,11 @@ AV RHS Evaluation
 ^^^^^^^^^^^^^^^^^
 
 .. autofunction:: av_operator
+
+AV Boundary Interface
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: AVBoundaryInterface
 """
 
 __copyright__ = """
@@ -154,7 +159,7 @@ def _facial_flux_r(discr, r_tpair):
     return discr.project(r_tpair.dd, "all_faces", flux_out)
 
 
-class AVBoundary(metaclass=ABCMeta):
+class AVBoundaryInterface(metaclass=ABCMeta):
     r"""Abstract interface to AV boundary ."""
 
     @abstractmethod
