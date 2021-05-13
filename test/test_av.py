@@ -169,7 +169,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim,  b=(1.0, )*dim,  n=(nel_1d, ) * dim
+        a=(-1.0, )*dim, b=(1.0, )*dim, nelements_per_axis=(nel_1d, )*dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -180,21 +180,18 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     # Uniform field return 0 rhs
     q = zeros + 1.0
-    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
-                      q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Linear field return 0 rhs
     q = nodes[0]
-    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
-                      q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
     q = np.dot(nodes, nodes)
-    rhs = av_operator(discr, t=0, eos=None, boundaries=boundaries,
-                      q=q, alpha=1.0, s0=-np.inf)
+    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
