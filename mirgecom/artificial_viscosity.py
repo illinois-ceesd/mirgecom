@@ -104,6 +104,8 @@ from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.symbolic.primitives import TracePair
 from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
 
+from abc import ABCMeta, abstractmethod
+
 
 # FIXME: Remove when get_array_container_context is added to meshmode
 def _get_actx(obj):
@@ -150,6 +152,18 @@ def _facial_flux_r(discr, r_tpair):
     flux_out = r_tpair.avg @ normal
 
     return discr.project(r_tpair.dd, "all_faces", flux_out)
+
+
+class AVBoundary(metaclass=ABCMeta):
+    r"""Abstract interface to AV boundary ."""
+
+    @abstractmethod
+    def get_scalar_flux(self, discr, btag, u, **kwargs):
+        """Get the flux of *u* through boundary faces in *btag*."""
+
+    @abstractmethod
+    def get_diffusion_flux(self, discr, btag, r, **kwargs):
+        """Get the flux of *r*=D(u)grad(u) through faces in *btag*."""
 
 
 def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
@@ -206,14 +220,14 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
         grad_q_vol = discr.weak_grad(q)
 
     # Total flux of fluid soln Q across element boundaries
-    q_bnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
+    q_ibnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
                   + sum(_facial_flux_q(discr, q_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, q)))
-    q_bnd_flux2 = sum(bnd.q_boundary_flux(discr, btag, q=q, **boundary_kwargs)
+    q_dbnd_flux = sum(bnd.get_scalar_flux(discr, btag, u=q, **boundary_kwargs)
                       for btag, bnd in boundaries.items())
     if isinstance(q, np.ndarray):
-        q_bnd_flux2 = np.stack(q_bnd_flux2)
-    q_bnd_flux = q_bnd_flux + q_bnd_flux2
+        q_dbnd_flux = np.stack(q_dbnd_flux)
+    q_bnd_flux = q_ibnd_flux + q_dbnd_flux
 
     # Compute R
     r = discr.inverse_mass(
@@ -226,7 +240,8 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     r_bnd_flux = (_facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
                   + sum(_facial_flux_r(discr, r_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, r))
-                  + sum(bnd.s_boundary_flux(discr, btag, grad_q=r, **boundary_kwargs)
+                  + sum(bnd.get_diffusion_flux(discr, btag, r=r,
+                                               **boundary_kwargs)
                         for btag, bnd in boundaries.items()))
 
     # Return the AV RHS term

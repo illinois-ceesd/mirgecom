@@ -7,6 +7,11 @@ State Vector Handling
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
 
+Boundary Treatment Interface
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: FluidBoundary
+
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
@@ -42,6 +47,7 @@ import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
+from abc import ABCMeta, abstractmethod
 
 
 @dataclass(frozen=True)
@@ -300,6 +306,37 @@ def join_conserved(dim, mass, energy, momentum,
     result[dim+2:] = species_mass
 
     return result
+
+
+class FluidBoundary(metaclass=ABCMeta):
+    r"""Abstract interface to fluid boundary treatment.
+
+    .. automethod:: inviscid_boundary_flux
+    .. automethod:: viscous_boundary_flux
+    .. automethod:: q_boundary_flux
+    .. automethod:: t_boundary_flux
+    .. automethod:: s_boundary_flux
+    """
+
+    @abstractmethod
+    def inviscid_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+
+    @abstractmethod
+    def viscous_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+
+    @abstractmethod
+    def q_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the scalar conserved quantity flux across the boundary faces."""
+
+    @abstractmethod
+    def s_boundary_flux(self, discr, btag, grad_q, eos, **kwargs):
+        r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
+
+    @abstractmethod
+    def t_boundary_flux(self, discr, btag, q, eos, **kwargs):
+        r"""Get temperature flux across the boundary faces."""
 
 
 def velocity_gradient(discr, cv, grad_cv):
