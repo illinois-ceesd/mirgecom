@@ -94,10 +94,11 @@ class FluidBoundary(AVNSBoundaryInterface):
         raise NotImplementedError()
 
     def get_viscous_flux(self, discr, btag, q, grad_q, grad_t,  # noqa: D102
-                              eos, **kwargs):
+                              eos, **kwargs):  # noqa: D102
         raise NotImplementedError()
 
-    def boundary_pair(self, discr, btag, u, eos, **kwargs):  # noqa: D102
+    def boundary_pair(self, discr, btag, u, eos, **kwargs):
+        """Get a fluid solution on the interior and exterior of faces on *btag*."""
         raise NotImplementedError()
 
 
@@ -105,8 +106,6 @@ class PrescribedFluidBoundary(FluidBoundary):
     r"""Abstract interface to a prescribed fluid boundary treatment.
 
     .. automethod:: __init__
-    .. automethod:: boundary_pair
-    .. automethod:: get_inviscid_flux
     """
 
     def __init__(self, inviscid_boundary_flux_func=None, boundary_pair_func=None,

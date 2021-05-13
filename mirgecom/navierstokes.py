@@ -33,7 +33,7 @@ RHS Evaluation
 Operator Boundary Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: NSBoundary
+.. autoclass:: NSBoundaryInterface
 """
 
 __copyright__ = """
