@@ -263,19 +263,19 @@ def test_noslip(actx_factory, dim):
 
             q_int_tpair = interior_trace_pair(discr, uniform_state)
             q_flux_int = scalar_flux_interior(q_int_tpair)
-            q_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
-                                             eos=eos, q=uniform_state)
+            q_flux_bc = wall.get_q_flux(discr, btag=BTAG_ALL,
+                                        eos=eos, q=uniform_state)
             q_flux_bnd = q_flux_bc + q_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                             q=uniform_state, temperature=temper)
+            t_flux_bc = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos,
+                                        q=uniform_state, temperature=temper)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
-            i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                    q=uniform_state)
+            i_flux_bc = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,
+                                               q=uniform_state)
             i_flux_int = inviscid_facial_flux(discr, eos=eos, q_tpair=q_int_tpair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -289,9 +289,9 @@ def test_noslip(actx_factory, dim):
             print(f"{grad_q=}")
             print(f"{grad_t=}")
 
-            v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                   q=uniform_state, grad_q=grad_q,
-                                                   t=temper, grad_t=grad_t)
+            v_flux_bc = wall.get_viscous_flux(discr, btag=BTAG_ALL, eos=eos,
+                                              q=uniform_state, grad_q=grad_q,
+                                              t=temper, grad_t=grad_t)
             print(f"{v_flux_bc=}")
 
 
@@ -380,19 +380,19 @@ def test_prescribedviscous(actx_factory, dim):
 
             q_int_tpair = interior_trace_pair(discr, uniform_state)
             q_flux_int = scalar_flux_interior(q_int_tpair)
-            q_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
-                                             eos=eos, q=uniform_state)
+            q_flux_bc = wall.get_q_flux(discr, btag=BTAG_ALL,
+                                        eos=eos, q=uniform_state)
             q_flux_bnd = q_flux_bc + q_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                             q=uniform_state, temperature=temper)
+            t_flux_bc = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos,
+                                        q=uniform_state, temperature=temper)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
-            i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                    q=uniform_state)
+            i_flux_bc = wall.get_inviscid_flux(discr, btag=BTAG_ALL, eos=eos,
+                                               q=uniform_state)
             i_flux_int = inviscid_facial_flux(discr, eos=eos, q_tpair=q_int_tpair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -406,7 +406,7 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{grad_q=}")
             print(f"{grad_t=}")
 
-            v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                   q=uniform_state, grad_q=grad_q,
-                                                   t=temper, grad_t=grad_t)
+            v_flux_bc = wall.get_viscous_flux(discr, btag=BTAG_ALL, eos=eos,
+                                              q=uniform_state, grad_q=grad_q,
+                                              t=temper, grad_t=grad_t)
             print(f"{v_flux_bc=}")

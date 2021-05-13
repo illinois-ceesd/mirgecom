@@ -21,6 +21,11 @@ RHS Evaluation
 
 .. autofunction:: euler_operator
 
+Operator Boundary Interface
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: EulerBoundaryInterface
+
 Logging Helpers
 ^^^^^^^^^^^^^^^
 
@@ -56,13 +61,20 @@ import numpy as np
 from mirgecom.fluid import split_conserved
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_flux,
+    InviscidBoundaryInterface
 )
 from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
 from mirgecom.operators import dg_div_low as dg_div
+
+
+class EulerBoundaryInterface(InviscidBoundaryInterface):
+    """Interface for boundary treatment of the Euler operator."""
+
+    pass
 
 
 def euler_operator(discr, eos, boundaries, q, t=0.0):
@@ -108,7 +120,7 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         inviscid_facial_flux(discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
         + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=part_tpair)
               for part_tpair in cross_rank_trace_pairs(discr, q))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, q=q, eos=eos)
+        + sum(boundaries[btag].get_inviscid_flux(discr, btag=btag, q=q, eos=eos)
               for btag in boundaries)
     )
 

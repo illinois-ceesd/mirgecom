@@ -6,6 +6,11 @@ Flux Calculation
 .. autofunction:: inviscid_flux
 .. autofunction:: inviscid_facial_flux
 
+Boundary Interface
+^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: InviscidBoundaryInterface
+
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -46,6 +51,15 @@ from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.symbolic.primitives import TracePair
 from mirgecom.flux import lfr_flux
+from abc import ABCMeta, abstractmethod
+
+
+class InviscidBoundaryInterface(metaclass=ABCMeta):
+    """Interface for an inviscid boundary treatment."""
+
+    @abstractmethod
+    def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces on *btag*."""
 
 
 def inviscid_flux(discr, eos, q):

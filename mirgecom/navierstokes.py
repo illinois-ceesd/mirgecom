@@ -29,6 +29,11 @@ RHS Evaluation
 ^^^^^^^^^^^^^^
 
 .. autofunction:: ns_operator
+
+Operator Boundary Interface
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: NSBoundary
 """
 
 __copyright__ = """
@@ -63,15 +68,15 @@ from grudge.eager import (
 )
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_flux,
+    InviscidBoundaryInterface
 )
 from mirgecom.viscous import (
     viscous_flux,
-    viscous_facial_flux
+    viscous_facial_flux,
+    ViscousBoundaryInterface
 )
-from mirgecom.flux import (
-    central_scalar_flux
-)
+from mirgecom.flux import central_scalar_flux
 from mirgecom.fluid import split_conserved
 from mirgecom.operators import (
     elbnd_flux,
@@ -79,6 +84,13 @@ from mirgecom.operators import (
     dg_grad_low
 )
 from meshmode.dof_array import thaw
+
+
+class NSBoundaryInterface(InviscidBoundaryInterface,
+                          ViscousBoundaryInterface):
+    """Abstract interface to boundary device for Navier-Stokes operator."""
+
+    pass
 
 
 def ns_operator(discr, eos, boundaries, q, t=0.0):
@@ -131,8 +143,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def get_q_flux_bnd(btag):
-        return boundaries[btag].q_boundary_flux(discr, btag=btag, q=q, eos=eos,
-                                                time=t)
+        return boundaries[btag].get_q_flux(discr, btag=btag, q=q, eos=eos, time=t)
 
     q_int_tpair = interior_trace_pair(discr, q)
     q_part_pairs = cross_rank_trace_pairs(discr, q)
@@ -145,8 +156,7 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
     def get_t_flux_bnd(btag):
-        return boundaries[btag].t_boundary_flux(discr, btag=btag, q=q, eos=eos,
-                                                time=t)
+        return boundaries[btag].get_t_flux(discr, btag=btag, q=q, eos=eos, time=t)
 
     gas_t = eos.temperature(cv)
     t_int_tpair = TracePair("int_faces",
@@ -169,8 +179,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # inviscid part of bcs applied here
     def finv_domain_boundary(btag):
-        return boundaries[btag].inviscid_boundary_flux(discr, btag=btag, eos=eos,
-                                                       q=q, time=t)
+        return boundaries[btag].get_inviscid_flux(discr, btag=btag, eos=eos,
+                                                  q=q, time=t)
 
     # viscous parts
     s_int_pair = interior_trace_pair(discr, grad_q)
@@ -196,9 +206,9 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
 
     # viscous part of bcs applied here
     def visc_bnd_flux(btag):
-        return boundaries[btag].viscous_boundary_flux(discr, btag, eos=eos,
-                                                      q=q, grad_q=grad_q,
-                                                      grad_t=grad_t, time=t)
+        return boundaries[btag].get_viscous_flux(discr, btag, eos=eos,
+                                                 q=q, grad_q=grad_q,
+                                                 grad_t=grad_t, time=t)
 
     # NS RHS
     return dg_div_low(

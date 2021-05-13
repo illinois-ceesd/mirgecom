@@ -10,6 +10,11 @@ Flux Calculation
 .. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux
 
+Boundary Interface
+^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ViscousBoundaryInterface
+
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -49,6 +54,23 @@ from mirgecom.fluid import (
     species_mass_fraction_gradient
 )
 from meshmode.dof_array import thaw
+from abc import ABCMeta, abstractmethod
+
+
+class ViscousBoundaryInterface(metaclass=ABCMeta):
+    """Interface for viscous boundary device."""
+
+    @abstractmethod
+    def get_viscous_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the viscous flux across the boundary faces."""
+
+    @abstractmethod
+    def get_q_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the flux of each component of *q* across the boundary faces."""
+
+    @abstractmethod
+    def get_t_flux(self, discr, btag, q, eos, **kwargs):
+        r"""Get temperature flux across the boundary faces."""
 
 
 def viscous_stress_tensor(discr, eos, q, grad_q):

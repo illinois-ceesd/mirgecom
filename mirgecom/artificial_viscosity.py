@@ -160,11 +160,18 @@ def _facial_flux_r(discr, r_tpair):
 
 
 class AVBoundaryInterface(metaclass=ABCMeta):
-    r"""Abstract interface to AV boundary ."""
+    r"""Abstract interface to boundary treatments used by artificial viscosity.
+
+    This is the interface that must be implemented by any boundary treatment
+    device used by the artificial viscosity operator (:func:`av_operator`).
+
+    .. automethod:: get_scalar_flux
+    .. automethod:: get_diffusion_flux
+    """
 
     @abstractmethod
     def get_scalar_flux(self, discr, btag, u, **kwargs):
-        """Get the flux of *u* through boundary faces in *btag*."""
+        """Get the scalar flux of *u* components through boundary faces in *btag*."""
 
     @abstractmethod
     def get_diffusion_flux(self, discr, btag, r, **kwargs):
@@ -193,9 +200,10 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
         for the fluid along with a vector of species masses for multi-component
         fluids.
 
-    boundaries: float
+    boundaries:
 
-        Dictionary of boundary functions, one for each valid boundary tag
+        Dictionary of boundary functions keyed by btag (type here), each of which
+        must implement the interface as defined by :class:`AVBoundaryInterface`.
 
     alpha: float
 
@@ -203,7 +211,7 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
 
     boundary_kwargs: :class:`dict`
 
-        dictionary of extra arguments to pass through to the boundary conditions
+        dictionary of extra arguments to pass through to the boundary functions
 
     Returns
     -------
