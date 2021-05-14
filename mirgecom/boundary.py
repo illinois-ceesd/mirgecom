@@ -195,7 +195,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         s_minus = discr.project("vol", btag, grad_q)
         if self._fluid_soln_grad_func:
             s_plus = self._fluid_soln_grad_func(nodes, nhat=nhat,
-                                                     s=s_minus, **kwargs)
+                                                grad_q=s_minus, **kwargs)
         else:
             s_plus = s_minus
         bnd_grad_pair = TracePair(btag, interior=s_minus, exterior=s_plus)
