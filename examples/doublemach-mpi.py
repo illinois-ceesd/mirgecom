@@ -213,7 +213,7 @@ def main(ctx_factory=cl.create_some_context):
             discr, q=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
             discr, q=state, boundaries=boundaries,
-            boundary_kwargs={"t": t, "eos": eos}, alpha=alpha,
+            boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa
         )
 
