@@ -46,6 +46,7 @@ def main():
               "pytest>=2.3",
               "pytools>=2018.5.2",
               "modepy>=2013.3",
+              "arraycontext>=2021.1",
               "meshmode>=2013.3",
               "pyopencl>=2013.1",
               "pymbolic>=2013.2",
