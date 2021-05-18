@@ -417,14 +417,22 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
 class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
     r"""Boundary condition implementing a noslip moving boundary.
 
-    .. automethod:: boundary_pair
+    .. automethod:: adiabatic_noslip_pair
+    .. automethod:: exterior_soln
+    .. automethod:: exterior_grad_q
     """
-    def __init__(self, Vw=0.0):
+
+    def __init__(self, wall_velocity=None, dim=2):
         PrescribedInviscidBoundary.__init__(
             self, boundary_pair_func=self.adiabatic_noslip_pair,
             fluid_solution_gradient_func=self.exterior_grad_q
         )
-        self._Vw = Vw
+        # Check wall_velocity (assumes dim is correct)
+        if wall_velocity is None:
+            wall_velocity = np.zeros(shape=(dim,))
+        if len(wall_velocity) != dim:
+            raise ValueError(f"Specified wall velocity must be {dim}-vector.")
+        self._wall_velocity = wall_velocity
 
     def adiabatic_noslip_pair(self, discr, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
@@ -434,9 +442,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
         return TracePair(btag, interior=int_soln, exterior=bndry_soln)
 
     def exterior_soln(self, discr, q, btag, **kwargs):
-        """Get the exterior solution on the boundary.
-
-        """
+        """Get the exterior solution on the boundary."""
         # Grab some boundary-relevant data
         dim = discr.dim
         cv = split_conserved(dim, q)
@@ -450,7 +456,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
         int_cv = split_conserved(dim, int_soln)
 
         # Compute momentum solution
-        wall_pen = 2.0*self._Vw*int_cv.mass
+        wall_pen = 2.0 * self._wall_velocity * int_cv.mass
         ext_mom = wall_pen - int_cv.momentum # no-slip
 
         # Form the external boundary solution with the new momentum
