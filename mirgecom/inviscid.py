@@ -55,7 +55,10 @@ from abc import ABCMeta, abstractmethod
 
 
 class InviscidBoundaryInterface(metaclass=ABCMeta):
-    """Interface for an inviscid boundary treatment."""
+    """Interface for an inviscid boundary treatment.
+
+    .. automethod:: get_inviscid_flux
+    """
 
     @abstractmethod
     def get_inviscid_flux(self, discr, btag, q, eos, **kwargs):

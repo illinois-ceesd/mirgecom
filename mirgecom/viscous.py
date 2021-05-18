@@ -58,19 +58,24 @@ from abc import ABCMeta, abstractmethod
 
 
 class ViscousBoundaryInterface(metaclass=ABCMeta):
-    """Interface for viscous boundary device."""
+    """Interface for viscous boundary device.
+
+    .. automethod:: get_viscous_flux
+    .. automethod:: get_q_gradient_flux
+    .. automethod:: get_temperature_gradient_flux
+    """
 
     @abstractmethod
     def get_viscous_flux(self, discr, btag, q, eos, **kwargs):
         """Get the viscous flux across the boundary faces."""
 
     @abstractmethod
-    def get_q_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the flux of each component of *q* across the boundary faces."""
+    def get_q_gradient_flux(self, discr, btag, q, eos, **kwargs):
+        """Get the flux for grad(q) computation."""
 
     @abstractmethod
-    def get_t_flux(self, discr, btag, q, eos, **kwargs):
-        r"""Get temperature flux across the boundary faces."""
+    def get_temperature_gradient_flux(self, discr, btag, q, eos, **kwargs):
+        r"""Get flux for grad(temperature) computation."""
 
 
 def viscous_stress_tensor(discr, eos, q, grad_q):

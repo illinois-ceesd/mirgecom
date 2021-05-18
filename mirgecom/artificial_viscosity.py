@@ -165,13 +165,13 @@ class AVBoundaryInterface(metaclass=ABCMeta):
     This is the interface that must be implemented by any boundary treatment
     device used by the artificial viscosity operator (:func:`av_operator`).
 
-    .. automethod:: get_scalar_flux
+    .. automethod:: get_gradient_flux
     .. automethod:: get_diffusion_flux
     """
 
     @abstractmethod
-    def get_scalar_flux(self, discr, btag, u, **kwargs):
-        """Get the scalar flux of *u* components through boundary faces in *btag*."""
+    def get_gradient_flux(self, discr, btag, u, **kwargs):
+        """Get the fluxes for the grad(u) computation."""
 
     @abstractmethod
     def get_diffusion_flux(self, discr, btag, r, **kwargs):
@@ -236,7 +236,7 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     q_ibnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
                   + sum(_facial_flux_q(discr, q_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, q)))
-    q_dbnd_flux = sum(bnd.get_scalar_flux(discr, btag, u=q, **boundary_kwargs)
+    q_dbnd_flux = sum(bnd.get_gradient_flux(discr, btag, u=q, **boundary_kwargs)
                       for btag, bnd in boundaries.items())
     if isinstance(q, np.ndarray):
         q_dbnd_flux = np.stack(q_dbnd_flux)

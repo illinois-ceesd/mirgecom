@@ -29,11 +29,6 @@ RHS Evaluation
 ^^^^^^^^^^^^^^
 
 .. autofunction:: ns_operator
-
-Operator Boundary Interface
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. autoclass:: NSBoundaryInterface
 """
 
 __copyright__ = """
@@ -69,12 +64,10 @@ from grudge.eager import (
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
-    InviscidBoundaryInterface
 )
 from mirgecom.viscous import (
     viscous_flux,
     viscous_facial_flux,
-    ViscousBoundaryInterface
 )
 from mirgecom.flux import central_scalar_flux
 from mirgecom.fluid import split_conserved
@@ -84,13 +77,6 @@ from mirgecom.operators import (
     dg_grad_low
 )
 from meshmode.dof_array import thaw
-
-
-class NSBoundaryInterface(InviscidBoundaryInterface,
-                          ViscousBoundaryInterface):
-    """Abstract interface to boundary device for Navier-Stokes operator."""
-
-    pass
 
 
 def ns_operator(discr, eos, boundaries, q, t=0.0):
@@ -143,7 +129,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def get_q_flux_bnd(btag):
-        return boundaries[btag].get_q_flux(discr, btag=btag, q=q, eos=eos, time=t)
+        return boundaries[btag].get_q_gradient_flux(
+            discr, btag=btag, q=q, eos=eos, time=t)
 
     q_int_tpair = interior_trace_pair(discr, q)
     q_part_pairs = cross_rank_trace_pairs(discr, q)
@@ -156,7 +143,8 @@ def ns_operator(discr, eos, boundaries, q, t=0.0):
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
     def get_t_flux_bnd(btag):
-        return boundaries[btag].get_t_flux(discr, btag=btag, q=q, eos=eos, time=t)
+        return boundaries[btag].get_temperature_gradient_flux(
+            discr, btag=btag, q=q, eos=eos, time=t)
 
     gas_t = eos.temperature(cv)
     t_int_tpair = TracePair("int_faces",

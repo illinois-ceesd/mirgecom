@@ -263,14 +263,14 @@ def test_noslip(actx_factory, dim):
 
             q_int_tpair = interior_trace_pair(discr, uniform_state)
             q_flux_int = scalar_flux_interior(q_int_tpair)
-            q_flux_bc = wall.get_q_flux(discr, btag=BTAG_ALL,
-                                        eos=eos, q=uniform_state)
+            q_flux_bc = wall.get_q_gradient_flux(discr, btag=BTAG_ALL,
+                                                 eos=eos, q=uniform_state)
             q_flux_bnd = q_flux_bc + q_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos,
-                                        q=uniform_state, temperature=temper)
+            t_flux_bc = wall.get_temperature_gradient_flux(
+                discr, btag=BTAG_ALL, eos=eos, q=uniform_state, temperature=temper)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
@@ -380,14 +380,14 @@ def test_prescribedviscous(actx_factory, dim):
 
             q_int_tpair = interior_trace_pair(discr, uniform_state)
             q_flux_int = scalar_flux_interior(q_int_tpair)
-            q_flux_bc = wall.get_q_flux(discr, btag=BTAG_ALL,
-                                        eos=eos, q=uniform_state)
+            q_flux_bc = wall.get_q_gradient_flux(discr, btag=BTAG_ALL,
+                                                 eos=eos, q=uniform_state)
             q_flux_bnd = q_flux_bc + q_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.get_t_flux(discr, btag=BTAG_ALL, eos=eos,
-                                        q=uniform_state, temperature=temper)
+            t_flux_bc = wall.get_temperature_gradient_flux(
+                discr, btag=BTAG_ALL, eos=eos, q=uniform_state, temperature=temper)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
