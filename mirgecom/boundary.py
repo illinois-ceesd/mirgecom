@@ -413,7 +413,6 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
                               species_mass=-gradq_comp.species_mass)
 
 
-
 class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
     r"""Boundary condition implementing a noslip moving boundary.
 
@@ -443,13 +442,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
 
     def exterior_soln(self, discr, q, btag, **kwargs):
         """Get the exterior solution on the boundary."""
-        # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
-        actx = cv.mass.array_context
-
-        # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
 
         # Get the interior/exterior solns
         int_soln = discr.project("vol", btag, q)
@@ -457,7 +450,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
 
         # Compute momentum solution
         wall_pen = 2.0 * self._wall_velocity * int_cv.mass
-        ext_mom = wall_pen - int_cv.momentum # no-slip
+        ext_mom = wall_pen - int_cv.momentum  # no-slip
 
         # Form the external boundary solution with the new momentum
         bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
@@ -469,6 +462,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
     def exterior_grad_q(self, nodes, nhat, grad_q, **kwargs):
         """Get the exterior solution on the boundary."""
         return(-grad_q)
+
 
 class IsothermalNoSlipBoundary(FluidBC):
     r"""Isothermal no-slip viscous wall boundary.
