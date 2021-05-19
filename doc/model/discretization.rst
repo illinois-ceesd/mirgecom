@@ -104,7 +104,7 @@ In DG, numerical fluxes are not only responsible for handling the flow of inform
 
 We denote the **boundary fluxes** as $\mathbf{h}^*_e(\mathbf{Q}_{bc})$, $\mathbf{h}^*_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc})$, and $\mathbf{H}^*_s(\mathbf{Q}_{bc})$, where $\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc}$ denote boundary conditions imposed on the state, and the gradient of the state respectively.
 
-For all $\partial E \cap \partial\Omega$ there is no $+$ side to consider; just the interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc}, \mathbf{S}_{bc}$.
+For all $\partial E \cap \partial\Omega$ there is no $+$ side to consider; just the interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc}$.
 
 * At solid walls:
 
