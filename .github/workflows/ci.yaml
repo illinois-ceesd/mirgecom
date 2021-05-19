@@ -123,7 +123,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
-            sudo apt-get install texlive
+            sudo apt-get install texlive latexmk
             conda install sphinx graphviz
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
