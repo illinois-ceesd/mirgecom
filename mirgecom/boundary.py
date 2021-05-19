@@ -419,6 +419,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
 
     .. automethod:: adiabatic_noslip_pair
     .. automethod:: exterior_soln
+    .. automethod:: exterior_grad_q
     """
 
     def __init__(self, wall_velocity=None, dim=2):
@@ -459,6 +460,10 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
                                     momentum=ext_mom)
 
         return bndry_soln
+
+    def exterior_grad_q(self, nodes, nhat, grad_q, **kwargs):
+        """Get the exterior solution on the boundary."""
+        return(-grad_q)
 
 
 class IsothermalNoSlipBoundary(FluidBC):
