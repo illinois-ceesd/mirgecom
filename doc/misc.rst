@@ -1,21 +1,21 @@
 User-Visible Changes
 ====================
-
+                    
 Version 2020.1
 --------------
 
 .. note::
 
     This version is currently under development. You can get snapshots from
-    mirgecom's `git repository <https://github.com/illinois-ceesd/mirgecom>`__.
+    |mirgecom|'s `git repository <https://github.com/illinois-ceesd/mirgecom>`__.
 
 License
 =======
 
 .. include:: ../LICENSE
 
-Citing MirgeCOM
-===============
+Citing |mirgecom|
+=================
 
 (TBD)
 

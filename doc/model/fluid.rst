@@ -4,21 +4,21 @@ Fluid
 
 .. note::
 
-   This model document has been updated to be *MIRGE-Com* specific, and to include
+   This model document has been updated to be |mirgecom| specific, and to include
    multi-component mixtures with chemical reactions.
 
 .. important::
 
-   *MIRGE-Com* main repo branch currently provides fluid simulation operators and
+   |mirgecom| main repo branch currently provides fluid simulation operators and
    utilities for inviscid flow (i.e. the :ref:`Euler equations<euler-eqns>`).
    Viscous flow simulation capabilities are forthcoming.
 
 
 .. _ns-eqns:
 
-*MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for
+|mirgecom| provides capabilities for solving the compressible Navier-Stokes equations for
 viscous flows and the :ref:`Euler equations<euler-eqns>` equations for inviscid flows of
-reactive fluid mixtures. *MIRGE-Com* supports reactive fluid mixtures with a number of
+reactive fluid mixtures. |mirgecom| supports reactive fluid mixtures with a number of
 mixture species $N_s$ on unstructured meshes of 1, 2, and 3-dimensional domains $\Omega$,
 and :ref:`discretizes the equations in a Discontinuous Galerkin setting<disc-strat>`.
 
@@ -77,7 +77,7 @@ conservation equations.
 
 The Euler equations for inviscid flows are recovered from the Navier-Stokes system
 above when the viscous fluxes vanish. That is, when $\mathbf{F}^V=0$, we are left with a
-system of nonlinear equations for a completely inviscid fluid. *MIRGE-Com* provides an
+system of nonlinear equations for a completely inviscid fluid. |mirgecom| provides an
 Euler operator, with associated utilities functions, for solving flows of this type.
 Inviscid fluxes and utilities are found in :mod:`mirgecom.inviscid`, and the Euler
 operator for the RHS in :mod:`mirgecom.euler`.
@@ -179,11 +179,11 @@ Equations of State and Material properties
 
 Equations of state (EOS) provide functions that relate the fluid state $Q$, and the
 thermodynamic properties such as pressure $p$, temperature $T$, specific enthalpies
-$h_{\alpha}$, and total energy $E$.  The EOS provided by *MIRGE-Com* are documented in
+$h_{\alpha}$, and total energy $E$.  The EOS provided by |mirgecom| are documented in
 :mod:`mirgecom.eos`.
 
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity
 $\mu_B$, thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$ depend on
 the state of the fluid $\mathbf{Q}$, in general, and are provided by transport models.
-Transport models provided by *MIRGE-Com* ~~are~~ (will be) documented in the forthcoming
+Transport models provided by |mirgecom| ~~are~~ (will be) documented in the forthcoming
 transport module.
