@@ -58,16 +58,16 @@ References
 .. [Zhou_2003] Y.C. Zhou, G.W. Wei (2003), Journal of Computational Physics 189 159 \
     `(DOI) <https://doi.org/10.1016/S0021-9991(03)00206-7>`__
 .. [Poinsot_1992] Poinsot and Lele (1992), Journal of Computational Physics 101 \
-    `(PDF) <https://doi.org/10.1016/0021-9991(92)90046-2>`__
+    `(DOI) <https://doi.org/10.1016/0021-9991(92)90046-2>`__
 .. [Niegemann_2012] J. Niegemann, R. Diehl, K. Busch (2012), Journal of Computational Physics 231 \
     `(DOI) <https://doi.org/10.1016/j.jcp.2011.09.003>`__
 .. [Cook_2009] A. Cook, (2009), Physics of Fluids 21 055109 \
-    `(PDF) <https://aip.scitation.org/doi/pdf/10.1063/1.3139305>`__
+    `(DOI) <https://doi.org/10.1063/1.3139305>`__
 .. [Ayuso_2009] B. Ayuso and D. Marini (2009), Siam Journal of Numerical Analysis 47 2 1391 \
-    `(PDF) <https://epubs.siam.org/doi/pdf/10.1137/080719583>`__
+    `(DOI) <https://doi.org/10.1137/080719583>`__
 .. [Bassi_1997] F. Bassi and S. Rebay (1997), Journal of Computational Physics 131 \
-    `(DOI) <https://www.sciencedirect.com/science/article/pii/S0021999196955722?via%3Dihub>`__
+    `(DOI) <https://doi.org/10.1006/jcph.1996.5572>`__
 .. [Bassi_2000] F. Bassi and S. Rebay (2000), DG Methods: Theory, Computation, and Applications, Springer \
     `(DOI) <https://doi.org/10.1007/978-3-642-59721-3_14>`__
 .. [Ihme_2014] Yu Lv and Matthias Ihme (2014) Journal of Computationsl Physics 270 105 \
-    `(PDF) <https://web.stanford.edu/group/ihmegroup/cgi-bin/MatthiasIhme/wp-content/papercite-data/pdf/lv2014.pdf>`__
+    `(DOI) <http://dx.doi.org/10.1016/j.jcp.2014.03.029>`__
