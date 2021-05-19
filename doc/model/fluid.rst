@@ -157,12 +157,12 @@ Chemical reactions introduce source terms in the energy and species conservation
 The species source term is the amount of mass produced for each species:
 
 $$
-W^{\mathtt{chem}}_{\alpha} = w_{(\alpha)}\dot{\omega}_{\alpha},
+W^{\mathtt{chem}}_{\alpha} = w_{(\alpha)}\partial_t{\omega}_{\alpha},
 $$
 
-where ${w}_{\alpha}$ is the molecular weight of each species, and $\dot{\omega}_{\alpha}$
-is the net chemical production rate for each species. Here, the parens $(\alpha)$ indicates
-no sum is to be performed over repeated indices. 
+where ${w}_{\alpha}$ is the molecular weight of each species, and
+$\partial_t{\omega}_{\alpha}$ is the net chemical production rate for each species. Here,
+the parens $(\alpha)$ indicates no sum is to be performed over repeated indices. 
 
 The energy source term is the amount of thermal energy used to create each species:
 
