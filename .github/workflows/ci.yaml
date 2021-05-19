@@ -123,7 +123,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
-            sudo aptitude install texlive
+            sudo apt-get install texlive
             conda install sphinx graphviz
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
@@ -155,4 +155,3 @@ jobs:
             source emirge/config/activate_env.sh
             cd mirgecom/examples
             python -m mpi4py ./wave-eager-mpi.py
-
