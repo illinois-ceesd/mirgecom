@@ -12,6 +12,7 @@ Inviscid Boundary Conditions
 .. autoclass:: PrescribedInviscidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
+.. autoclass:: AdiabaticNoslipMovingBoundary
 
 Viscous Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -418,10 +419,10 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
 
     .. automethod:: adiabatic_noslip_pair
     .. automethod:: exterior_soln
-    .. automethod:: exterior_grad_q
     """
 
     def __init__(self, wall_velocity=None, dim=2):
+        """Initialize boundary device."""
         PrescribedInviscidBoundary.__init__(
             self, boundary_pair_func=self.adiabatic_noslip_pair,
             fluid_solution_gradient_func=self.exterior_grad_q
@@ -458,10 +459,6 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
                                     momentum=ext_mom)
 
         return bndry_soln
-
-    def exterior_grad_q(self, nodes, nhat, grad_q, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return(-grad_q)
 
 
 class IsothermalNoSlipBoundary(FluidBC):
