@@ -14,7 +14,7 @@ Fluid
    Viscous flow simulation capabilities are forthcoming.
 
 
-.. _NS-eqns:
+.. _ns-eqns:
 
 *MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for
 viscous flows and the :ref:`Euler equations<euler-eqns>` equations for inviscid flows of
@@ -148,7 +148,7 @@ $$
 with the species specific enthalpy ${h}_{\alpha}$, and the species
 diffusive flux vector $\mathbf{J}_{\alpha}$.
 
-.. _Chemistry:
+.. _chemistry:
 
 Chemistry
 ---------
@@ -179,7 +179,7 @@ Equations of State and Material properties
 
 Equations of state (EOS) provide functions that relate the fluid state $Q$, and the
 thermodynamic properties such as pressure $p$, temperature $T$, specific enthalpies
-$h_{\alpha}$, and total energy $E$.  The EOS provided *MIRGE-Com* are documented in
+$h_{\alpha}$, and total energy $E$.  The EOS provided by *MIRGE-Com* are documented in
 :mod:`mirgecom.eos`.
 
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity

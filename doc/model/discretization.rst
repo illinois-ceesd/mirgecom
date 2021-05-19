@@ -146,7 +146,7 @@ What happens when $\partial E \cap \partial\Omega \neq \emptyset$?
 In DG, numerical fluxes are not only responsible for handling the flow of information
 between adjacent cells, but they also enforce information at the boundaries.
 
-We denote the **boundary fluxes** as $\mathbf{h}^*_e(\mathbf{Q}_{bc})$,
+We denote the *boundary fluxes* as $\mathbf{h}^*_e(\mathbf{Q}_{bc})$,
 $\mathbf{h}^*_v(\mathbf{Q}_{bc}$, $\mathbf{\Sigma}_{bc})$, and
 $\mathbf{H}^*_s(\mathbf{Q}_{bc})$, where $\mathbf{Q}_{bc}$, $\mathbf{\Sigma}_{bc}$ denote
 boundary conditions imposed on the state, and the gradient of the state respectively.
