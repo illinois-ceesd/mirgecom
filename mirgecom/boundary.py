@@ -352,8 +352,7 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
         PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_slip_pair,
-            fluid_solution_gradient_func=self.exterior_grad_q
+            self, boundary_pair_func=self.adiabatic_slip_pair
         )
 
     def adiabatic_slip_pair(self, discr, q, btag, **kwargs):
