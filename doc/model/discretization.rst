@@ -36,19 +36,34 @@ $$
 \mathbf{\Sigma})} &= \mathbf{S} \quad \text{primary eqn}
 $$
 
-Let $\Omega_h$ denote a collection of disjoint elements $E$. Then the DG formulation is
-obtained by multiplying by ''test functions'' $\mathbf{v}_h$, $\mathbf{w}_h$ (one for each
-equation repsectively) and integrating over each element:
+Let $\Omega_h$ denote a collection of disjoint elements $E$. The DG method constructs
+approximations $\mathbf{Q}_h$ and $\mathbf{\Sigma}_h$ to $\mathbf{Q}$ and $\mathbf{\Sigma}$,
+respectively, in discontinuous finite element spaces. For any integer $k$, we define
+the following discontinuous spaces of piecewise (vector-valued) polynomial functions:
+$$
+\begin{align}
+\mathbf{V}^k_h &= \left\lbrace \mathbf{v} \in L^2(\Omega_h)^N \text{ such that }
+\mathbf{v}|_E \in \lbrack P^k(E) \rbrack^N, \text{ for all } E \in \Omega_h \right\rbrace, \\
+\mathbf{W}^k_h &= \left\lbrace \mathbf{w} \in L^2(\Omega_h)^{N\times d} \text{ such that }
+\mathbf{w}|_E \in \lbrack P^k(E) \rbrack^{N\times d}, \text{ for all } E \in \Omega_h \right\rbrace,
+\end{align}
+$$
+where $N = d + 2 + N_s$, $d$ is the spatial dimension, and $N_s$ is the total number of mixture species.
+Here, $P^k(E)$ denotes a polynomial space on $E$ of degree $\leq k$.
+The DG formulation is obtained by multiplying by ''test functions'' $\mathbf{v}_h \in \mathbf{V}^k_h$,
+$\mathbf{w}_h \in \mathbf{W}^k_h$ (one for each equation repsectively) and integrating over each element.
+The resulting DG problem reads as follows.
+Find $(\mathbf{Q}_h, \mathbf{\Sigma}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$
+such that, for all $(\mathbf{v}_h, \mathbf{w}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$, we have:
 
 $$
 \sum_{E\in\Omega_h} \left\lbrack \int_E \mathbf{v}_h\cdot\frac{\partial \mathbf{Q}_h}
 {\partial t} d\Omega + \oint_{\partial E} \mathbf{v}_h\mathbf{h} d\sigma - \int_E \nabla
 \mathbf{v}_h\cdot\mathbf{F}(\mathbf{Q}_h, \mathbf{\Sigma}_h)d\Omega\right\rbrack &=
-\sum_{E\in\Omega_h} \int_E \mathbf{v}_h\cdot\mathbf{S}_h d\Omega, &\quad \forall
-\mathbf{v}_h \\
+\sum_{E\in\Omega_h} \int_E \mathbf{v}_h\cdot\mathbf{S}_h d\Omega, \\
 \sum_{E\in\Omega_h}\left\lbrack \int_E \mathbf{w}_h\cdot \mathbf{\Sigma}_h d\Omega -
 \oint_{\partial E} \mathbf{w}_h\cdot\mathbf{H}_s d\sigma + \int_E \nabla\mathbf{w}_h\cdot
-\mathbf{Q}_h d\Omega\right\rbrack &= 0, &\quad \forall \mathbf{w}_h,
+\mathbf{Q}_h d\Omega\right\rbrack &= 0,
 $$
 
 where $\mathbf{h} = \mathbf{h}_e - \mathbf{h}_v$ is a *numerical flux* consisting of a
@@ -64,7 +79,8 @@ element $E^\pm$ which share a face: $\partial E^+ \cap \partial E^- \neq \emptys
 Similarly for $\mathbf{F}^V(\mathbf{Q}_h, \mathbf{\Sigma}_h)\cdot\mathbf{n}$ and
 $\mathbf{Q}_h\mathbf{n}$.
 
-Expanding out the trial and test functions in terms of the local element basis in each element:
+Expanding out the trial and test functions (component-wise) in terms of the local
+element basis in each element:
 $$
 \mathbf{Q}(\mathbf{x}, t)_h|_E = \sum_{i=1}^n \mathbf{Q}_i(t)\phi_i^k(\mathbf{x}), \quad
 \mathbf{\Sigma}(\mathbf{x})_h|_E = \sum_{i=1}^n \mathbf{\Sigma}_i\phi_i^k(\mathbf{x}), \\
