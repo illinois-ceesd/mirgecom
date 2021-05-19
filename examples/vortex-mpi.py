@@ -88,7 +88,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     dim = 2
     nel_1d = 16
     order = 3
-    exittol = .09
+    exittol = .1
     t_final = 0.1
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
@@ -117,7 +117,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
     local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
@@ -149,7 +149,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+    visualizer = make_visualizer(discr)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
