@@ -26,8 +26,8 @@ Navier-Stokes BR1
 
 The main system of equations we solve in the BR1 approach is summarized as follows:
 
-The compressible NS equations are rewritten as the following coupled system for two unknowns,
-$\mathbf{Q}$ and $\mathbf{\Sigma}$:
+The compressible NS equations are rewritten as the following coupled system for two
+unknowns, $\mathbf{Q}$ and $\mathbf{\Sigma}$:
 
 $$
 \mathbf{\Sigma} - \nabla{\mathbf{Q}} &= \mathbf{0}\quad \text{aux eqn}\\
@@ -43,18 +43,21 @@ the following discontinuous spaces of piecewise (vector-valued) polynomial funct
 $$
 \begin{align}
 \mathbf{V}^k_h &= \left\lbrace \mathbf{v} \in L^2(\Omega_h)^N \text{ such that }
-\mathbf{v}|_E \in \lbrack P^k(E) \rbrack^N, \text{ for all } E \in \Omega_h \right\rbrace, \\
+\mathbf{v}|_E \in \lbrack P^k(E) \rbrack^N, \text{ for all } E \in \Omega_h
+\right\rbrace, \\
 \mathbf{W}^k_h &= \left\lbrace \mathbf{w} \in L^2(\Omega_h)^{N\times d} \text{ such that }
-\mathbf{w}|_E \in \lbrack P^k(E) \rbrack^{N\times d}, \text{ for all } E \in \Omega_h \right\rbrace,
+\mathbf{w}|_E \in \lbrack P^k(E) \rbrack^{N\times d}, \text{ for all } E \in \Omega_h
+\right\rbrace,
 \end{align}
 $$
-where $N = d + 2 + N_s$, $d$ is the spatial dimension, and $N_s$ is the total number of mixture species.
-Here, $P^k(E)$ denotes a polynomial space on $E$ of degree $\leq k$.
-The DG formulation is obtained by multiplying by ''test functions'' $\mathbf{v}_h \in \mathbf{V}^k_h$,
-$\mathbf{w}_h \in \mathbf{W}^k_h$ (one for each equation repsectively) and integrating over each element.
-The resulting DG problem reads as follows.
-Find $(\mathbf{Q}_h, \mathbf{\Sigma}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$
-such that, for all $(\mathbf{v}_h, \mathbf{w}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$, we have:
+where $N = d + 2 + N_s$, $d$ is the spatial dimension, and $N_s$ is the total number of
+mixture species. Here, $P^k(E)$ denotes a polynomial space on $E$ of degree $\leq k$.
+The DG formulation is obtained by multiplying by ''test functions'' $\mathbf{v}_h \in
+\mathbf{V}^k_h$,
+$\mathbf{w}_h \in \mathbf{W}^k_h$ (one for each equation repsectively) and integrating
+over each element. The resulting DG problem reads as follows. Find $(\mathbf{Q}_h,
+\mathbf{\Sigma}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$ such that, for all
+$(\mathbf{v}_h, \mathbf{w}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$, we have:
 
 $$
 \sum_{E\in\Omega_h} \left\lbrack \int_E \mathbf{v}_h\cdot\frac{\partial \mathbf{Q}_h}
