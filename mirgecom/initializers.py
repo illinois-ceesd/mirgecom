@@ -38,8 +38,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
+import grudge.op as op
+
+from arraycontext import thaw
+
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
@@ -373,7 +376,7 @@ class Lump:
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
 
-    def exact_rhs(self, discr, cv, t=0.0):
+    def exact_rhs(self, dcoll, cv, t=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
@@ -382,14 +385,17 @@ class Lump:
 
         Parameters
         ----------
-        q
+        dcoll: :class:`grudge.discretization.DiscretizationCollection`
+            An object containing connections and mappings to different
+            discretizations over the mesh.
+        cv
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
         t: float
             Time at which RHS is desired
         """
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(dcoll.nodes(), actx)
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -550,7 +556,7 @@ class MulticomponentLump:
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, cv, t=0.0):
+    def exact_rhs(self, dcoll, cv, t=0.0):
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
@@ -559,14 +565,17 @@ class MulticomponentLump:
 
         Parameters
         ----------
-        q
+        dcoll: :class:`grudge.discretization.DiscretizationCollection`
+            An object containing connections and mappings to different
+            discretizations over the mesh.
+        cv
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
         t: float
             Time at which RHS is desired
         """
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(dcoll.nodes(), actx)
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -747,20 +756,23 @@ class Uniform:
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, cv, t=0.0):
+    def exact_rhs(self, dcoll, cv, t=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
         Parameters
         ----------
-        q
+        dcoll: :class:`grudge.discretization.DiscretizationCollection`
+            An object containing connections and mappings to different
+            discretizations over the mesh.
+        cv
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point. (unused)
         t: float
             Time at which RHS is desired (unused)
         """
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(dcoll.nodes(), actx)
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass

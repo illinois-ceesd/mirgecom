@@ -30,16 +30,20 @@ import pytest
 import numpy as np
 from functools import partial
 
-from meshmode.dof_array import thaw
-from grudge.eager import EagerDGDiscretization
-from meshmode.array_context import (  # noqa
+from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+    as pytest_generate_tests
+)
+
 from pytools.obj_array import (
     make_obj_array
 )
-from meshmode.dof_array import thaw  # noqa
+
 from mirgecom.filter import make_spectral_filter
+
+from grudge.discretization import DiscretizationCollection
+import grudge.op as op
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -65,8 +69,8 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    vol_discr = discr.discr_from_dd("vol")
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    vol_discr = dcoll.discr_from_dd("vol")
 
     eta = .5  # just filter half the modes
     # number of modes see e.g.:
@@ -125,7 +129,7 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
 
     for group in vol_discr.groups:
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         filter_coeff = actx.thaw(
             make_spectral_filter(
                 actx, group, cutoff=cutoff,
@@ -167,8 +171,8 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         a=(0.0,) * dim, b=(1.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
 
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
@@ -189,10 +193,10 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     uniform_soln = initr(t=0, x_vec=nodes).join()
 
     from mirgecom.filter import filter_modally
-    filtered_soln = filter_modally(discr, "vol", cutoff,
+    filtered_soln = filter_modally(dcoll, "vol", cutoff,
                                    frfunc, uniform_soln)
     soln_resid = uniform_soln - filtered_soln
-    max_errors = [discr.norm(v, np.inf) for v in soln_resid]
+    max_errors = [op.norm(dcoll, v, np.inf) for v in soln_resid]
 
     tol = 1e-14
 
@@ -206,7 +210,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         r = nodes[0]
         result = 0
         for n, a in enumerate(coeff):
-            result += a * r ** n
+            result = result + a * r ** n
         return make_obj_array([result])
 
     # Any order {cutoff} and below fields should be unharmed
@@ -214,10 +218,10 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     field_order = int(cutoff)
     coeff = [1.0 / (i + 1) for i in range(field_order + 1)]
     field = polyfn(coeff=coeff)
-    filtered_field = filter_modally(discr, "vol", cutoff,
+    filtered_field = filter_modally(dcoll, "vol", cutoff,
                                     frfunc, field)
     soln_resid = field - filtered_field
-    max_errors = [discr.norm(v, np.inf) for v in soln_resid]
+    max_errors = [op.norm(dcoll, v, np.inf) for v in soln_resid]
     logger.info(f"Field = {field}")
     logger.info(f"Filtered = {filtered_field}")
     logger.info(f"Max Errors (poly) = {max_errors}")
@@ -228,16 +232,16 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     tol = 1e-1
     if do_viz is True:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order)
+        vis = make_visualizer(dcoll)
 
     from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
 
-    modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
 
     for field_order in range(cutoff+1, cutoff+4):
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]
         field = polyfn(coeff=coeff)
-        filtered_field = filter_modally(discr, "vol", cutoff,
+        filtered_field = filter_modally(dcoll, "vol", cutoff,
                                         frfunc, field)
 
         unfiltered_spectrum = modal_map(field)
@@ -253,6 +257,6 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
             ]
             vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
         field_resid = unfiltered_spectrum - filtered_spectrum
-        max_errors = [discr.norm(v, np.inf) for v in field_resid]
+        max_errors = [op.norm(dcoll, v, np.inf) for v in field_resid]
         # fields should be different, but not too different
         assert(tol > np.max(max_errors) > threshold)

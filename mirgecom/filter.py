@@ -94,7 +94,7 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
         lambda grp: grp.discretization_key()
     )
     def _spectral_filter_scaling(group):
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         order = group.order
 
         nmodes = len(mode_ids)
