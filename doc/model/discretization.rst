@@ -51,11 +51,11 @@ $$
 \end{align}
 $$
 where $N = d + 2 + N_s$, $d$ is the spatial dimension, and $N_s$ is the total number of
-mixture species. Here, $P^k(E)$ denotes a polynomial space on $E$ of degree $\leq k$.
-The DG formulation is obtained by multiplying by ''test functions'' $\mathbf{v}_h \in
-\mathbf{V}^k_h$,
-$\mathbf{w}_h \in \mathbf{W}^k_h$ (one for each equation repsectively) and integrating
-over each element. The resulting DG problem reads as follows. Find $(\mathbf{Q}_h,
+mixture species. Here, $P^k(E)$ denotes a polynomial space on $E$ consisting of functions
+of degree $\leq k$. The DG formulation is obtained by multiplying by ''test functions''
+$\mathbf{v}_h \in \mathbf{V}^k_h$, $\mathbf{w}_h \in \mathbf{W}^k_h$
+(one for each equation repsectively) and integrating over each element.
+The resulting DG problem reads as follows. Find $(\mathbf{Q}_h,
 \mathbf{\Sigma}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$ such that, for all
 $(\mathbf{v}_h, \mathbf{w}_h) \in \mathbf{V}^k_h \times \mathbf{W}^k_h$, we have:
 
