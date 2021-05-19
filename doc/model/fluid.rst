@@ -19,8 +19,8 @@ Fluid
 *MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for
 viscous flows and the :ref:`Euler equations<euler-eqns>` equations for inviscid flows of
 reactive fluid mixtures. *MIRGE-Com* supports reactive fluid mixtures with a number of
-mixture species $N_s$ on unstructured meshes and
-:ref:`discretizes the equations in a Discontinuous Galerkin setting<disc-strat>`.
+mixture species $N_s$ on unstructured meshes of 1, 2, and 3-dimensional domains $\Omega$,
+and :ref:`discretizes the equations in a Discontinuous Galerkin setting<disc-strat>`.
 
 The formulation presented here follows [Ihme_2014]_ and [Cook_2009]_. Unless otherwise
 noted, Einstein summation convention is used throughout the following sections.  The
