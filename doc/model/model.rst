@@ -4,7 +4,8 @@ Model
 
 .. note::
 
-   This model document has been updated to be *MIRGE-Com* specific, and to include chemical reactions, and multi-component mixtures.
+   This model document has been updated to be *MIRGE-Com* specific, and to include multi-component mixtures
+   with chemical reactions.
    
 .. raw:: latex
 
@@ -20,9 +21,13 @@ Model
 
 .. _NS-eqns:
 
-*MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for a number of mixture
-species = $N_s$, with chemical reactions on unstructured meshes in a Discontinuous-Galerkin setting.  The formulation
-presented here is after [Ihme_2014]_ and [Cook_2009]_. The basic conservation equations are as follows:
+*MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for viscous flows and
+the :ref:`Euler equations<Euler-eqns>` equations for inviscid flows of reactive fluid mixtures. *MIRGE-Com*
+supports reactive fluid mixtures with a number of mixture species = $N_s$ on unstructured meshes and discretizes
+the equations in a Discontinuous-Galerkin setting.
+
+The formulation presented here is after [Ihme_2014]_ and [Cook_2009]_. The basic conservation equations are as
+follows:
 
 .. math::
     \partial_{t}{\rho} + \partial_{j}{\rho v_j} &= S_\rho \\
@@ -58,8 +63,14 @@ with the components of each following directly from above:
 
 where ${E}^{\mathtt{chem}}$, and $W^{\mathtt{chem}}_{\alpha}$, are the chemical reaction source terms
 in the energy and species conservation equations, respectively.  See :ref:`Chemistry` for more details
-on chemical reaction source terms, and :ref:`here<viscous-rhs>` for details on the 2nd order terms
+on chemical reaction source terms, and :ref:`here<disc-strat>` for details on the 2nd order terms
 in the viscous RHS.
+
+.. _Euler-eqns:
+
+The Euler flow equations for inviscid flows are recovered from the Navier-Stokes system above when the
+viscous fluxes vanish, that is when $\mathbf{F}^V=0$. *MIRGE-Com* also provides an Euler operator and
+utilities for solving inviscid flows.
 
 .. _viscous-stress-tensor:
 
@@ -159,23 +170,26 @@ the fluid $\mathbf{Q}$, in general, and are provided by transport models.  Trans
 by *MIRGE-Com* are documented in :mod:`mirgecom.transport`.
 
 
-.. _viscous-rhs:
+.. _disc-strat:
 
-Viscous RHS
------------
+Discretization Strategy
+-----------------------
 
 How to discretize the conservation equations with DG, including how to handle the required fluxes,
 particularly in the viscous setting, is a current topic of research and internal discussion.  The
 following references are useful:
 
 * "The DG Book:" Nodal Discontinuous Galerkin Methods, [Hesthaven_2008]_
-* The BR1 algorithm for discretization of NS, [Bassi_1997]_
+* The BR1 algorithm for discretization of Navier-Stokes, [Bassi_1997]_
 * NS with reactions, [Ihme_2014]_, and [Cook_2009]_
 * The BR2 algorithm, [Bassi_2000]_
 * [Ayuso_2009]_
 
-2nd order terms on the RHS
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+*MIRGE-Com* currently employs a strategy akin to the BR1 algorithm outlined in [Bassi_1997]_, but
+with thermal terms and chemical reaction sources as outlined in [Ihme_2014]_ and [Cook_2009]_.
+
+2nd order terms on the viscous RHS
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The viscous fluxes $\mathbf{F}^{V}$ are proportional to gradients of the fluid state variables,
 introducing 2nd order terms on the RHS of the conservation equations. These 2nd order terms with their
