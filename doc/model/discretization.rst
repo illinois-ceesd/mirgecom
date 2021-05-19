@@ -41,14 +41,12 @@ approximations $\mathbf{Q}_h$ and $\mathbf{\Sigma}_h$ to $\mathbf{Q}$ and $\math
 respectively, in discontinuous finite element spaces. For any integer $k$, we define
 the following discontinuous spaces of piecewise (vector-valued) polynomial functions:
 $$
-\begin{align}
 \mathbf{V}^k_h &= \left\lbrace \mathbf{v} \in L^2(\Omega_h)^N \text{ such that }
 \mathbf{v}|_E \in \lbrack P^k(E) \rbrack^N, \text{ for all } E \in \Omega_h
 \right\rbrace, \\
 \mathbf{W}^k_h &= \left\lbrace \mathbf{w} \in L^2(\Omega_h)^{N\times d} \text{ such that }
 \mathbf{w}|_E \in \lbrack P^k(E) \rbrack^{N\times d}, \text{ for all } E \in \Omega_h
 \right\rbrace,
-\end{align}
 $$
 where $N = d + 2 + N_s$, $d$ is the spatial dimension, and $N_s$ is the total number of
 mixture species. Here, $P^k(E)$ denotes a polynomial space on $E$ consisting of functions
@@ -94,7 +92,6 @@ allows us to obtain a set of algebraic equations for the prognostic state $\math
 the auxiliary gradient variable $\mathbf{\Sigma}_h$. That is, for each
 $j = 1, \cdots, \dim P^k$, we have:
 $$
-\begin{align}
 \frac{d}{dt} \sum_{E\in\Omega_h}\int_E \phi_j^k\mathbf{Q}_h d\Omega &= \sum_{E\in\Omega_h}
 \left\lbrack\int_E \nabla\phi_j^k\cdot\left(\mathbf{F}^V(\mathbf{Q}_h, \mathbf{\Sigma}_h) -
 \mathbf{F}^I(\mathbf{Q}_h)\right)d\Omega\right\rbrack \\
@@ -105,7 +102,6 @@ $$
 \sum_{E\in\Omega_h}\int_E\phi_j^k \mathbf{\Sigma}_h d\Omega &= \sum_{E\in\Omega_h}\left\lbrack
 \oint_{\partial{E}}\phi_j^k \mathbf{H}_s(\mathbf{Q}^+_h, \mathbf{Q}_h^-; \mathbf{n}) d\sigma -
 \int_E\nabla\phi^k_j\cdot\mathbf{Q}_h d\Omega\right\rbrack.
-\end{align}
 $$
 
 Numerical fluxes
@@ -126,7 +122,7 @@ Choices of numerical fluxes corresponding to BR1
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * Take $\mathbf{h}_e(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n})$ to be one of:
-  
+
   * Local Lax-Friedrichs (LLF), Roe, Engquist-Osher, HLLC (there are many more!). If you're
     feeling especially brave, you can even use the average of the inviscid flux (centered
     flux).
@@ -178,7 +174,7 @@ interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc
 
   $\mathbf{h}^*_e$ is equal to the (interior; - side) pressure contribution of
   $\mathbf{F}^I(\mathbf{Q}_{bc})\cdot\mathbf{n}$ (since $\mathbf{V}\cdot\mathbf{n} = 0$).
-    
+
   * The viscous boundary flux is computed as:
     $$
     \mathbf{h}^*_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc}) = \mathbf{F}_V(\mathbf{Q}_{bc},
@@ -248,7 +244,7 @@ $$
 \partial_j \tau_{jk} {v}_k = \left[\partial_j\left(\mu\partial_k{v}_j{v}_k\right) +
 \partial_j\left(\mu\partial_j{v}^2_k\right) + \partial_j\left(\mu_{B} - \frac{2}{3}\mu
 \right)\partial_m{v}_m\delta_{jk}{v}_k\right]
-$$   
+$$
 
 - Conductive part
 
@@ -270,7 +266,7 @@ $$
 $$
 
 with fluid density $\rho$, species diffusivity ${d}_{(\alpha)}$, and species mass
-fractions ${Y}_{\alpha}$. 
+fractions ${Y}_{\alpha}$.
 
 Species equation
 ^^^^^^^^^^^^^^^^
@@ -283,4 +279,4 @@ $$
 $$
 
 with fluid density $\rho$, species diffusivity ${d}_{(\alpha)}$, and species mass
-fractions ${Y}_{\alpha}$. 
+fractions ${Y}_{\alpha}$.
