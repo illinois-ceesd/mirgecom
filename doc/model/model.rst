@@ -29,10 +29,9 @@ Model
 *MIRGE-Com* provides capabilities for solving the compressible Navier-Stokes equations for viscous flows and
 the :ref:`Euler equations<Euler-eqns>` equations for inviscid flows of reactive fluid mixtures. *MIRGE-Com*
 supports reactive fluid mixtures with a number of mixture species = $N_s$ on unstructured meshes and discretizes
-the equations in a Discontinuous-Galerkin setting.
+the equations in a Discontinuous Galerkin setting.
 
-The formulation presented here is after [Ihme_2014]_ and [Cook_2009]_. The basic conservation equations are as
-follows:
+The formulation presented here follows from [Ihme_2014]_ and [Cook_2009]_. The governing equations, written in conservative form, are summarized as follows:
 
 .. math::
     \partial_{t}{\rho} + \partial_{j}{\rho v_j} &= S_\rho \\
@@ -44,18 +43,18 @@ with fluid density $\rho$, velocity components $v_i$, momentum density component
 and vector of species mass fractions ${Y}_{\alpha}$. The :ref:`thermodynamic pressure<eos-and-matprop>` of the fluid
 is $p$.  ${\tau_{ij}}$ are the components of the :ref:`viscous stress tensor<viscous-stress-tensor>`, $q_i$ are the
 components of the total :ref:`heat flux<heat-flux>` vector, and the components of the
-species :ref:`diffusive flux<diffusive-flux>` vector are $(\mathbf{J}_{\alpha})_i)$. Mixtures have $N_s$ components
+species :ref:`diffusive flux<diffusive-flux>` vector are $(\mathbf{J}_{\alpha})_i$. Mixtures have $N_s$ components
 with $1 \le \alpha \le N_s$. Unless otherwise noted, repeated indices imply summation.
 
-The equations can be recast in this more compact form:
+The equations can be recast in a more compact form:
 
 .. math::
 
     \partial_t{\mathbf{Q}} + \partial_j{\mathbf{F}^{I}_j} = \partial_j{\mathbf{F}^{V}_j} + \mathbf{S},
 
 where $\mathbf{Q}$ is the vector of conserved variables, $\mathbf{F}^I$ is the vector of inviscid fluxes,
-$\mathbf{F}^V$ is the vector of viscous fluxes, and the vector of sources for each scalar equation  is $S$,
-with the components of each following directly from above:
+$\mathbf{F}^V$ is the vector of viscous fluxes, and the vector of sources for each scalar equation  is $\mathbf{S}$.
+The components of each vector follow directly from above:
 
 .. math::
 
@@ -73,9 +72,7 @@ in the viscous RHS.
 
 .. _Euler-eqns:
 
-The Euler flow equations for inviscid flows are recovered from the Navier-Stokes system above when the
-viscous fluxes vanish, that is when $\mathbf{F}^V=0$. *MIRGE-Com* also provides an Euler operator and
-utilities for solving inviscid flows.
+The Euler equations for inviscid flows are recovered from the Navier-Stokes system above when the viscous fluxes vanish. That is, when $\mathbf{F}^V=0$, we are left with a system of nonlinear equations for a completely inviscid fluid. *MIRGE-Com* provides an Euler operator, with associated utilities functions, for solving flows of this type.
 
 .. _viscous-stress-tensor:
 
@@ -120,7 +117,7 @@ respectively:
 
 Conductive heat flux
 ^^^^^^^^^^^^^^^^^^^^
-The conductive heat flux vector is defined as
+The conductive heat flux vector is defined directly from Fourier's law of thermal conduction:
 
 .. math::
     \mathbf{q}_c = -\kappa\nabla{T},
