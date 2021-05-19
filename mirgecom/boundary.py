@@ -33,10 +33,14 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from meshmode.dof_array import thaw
+
+from arraycontext.container.traversal import thaw
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import split_conserved, join_conserved
+
+import grudge.op as op
 
 
 class PrescribedBoundary:
@@ -59,14 +63,13 @@ class PrescribedBoundary:
         """
         self._userfunc = userfunc
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, dcoll, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
 
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
+        nodes = thaw(op.nodes(dcoll, btag), actx)
         ext_soln = self._userfunc(nodes, **kwargs)
-        int_soln = discr.project("vol", btag, q)
+        int_soln = op.project(dcoll, "vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
 
@@ -76,9 +79,9 @@ class DummyBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, dcoll, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = discr.project("vol", btag, q)
+        dir_soln = op.project(dcoll, "vol", btag, q)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
 
@@ -100,7 +103,7 @@ class AdiabaticSlipBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, dcoll, q, btag, **kwargs):
         """Get the interior and exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -112,15 +115,15 @@ class AdiabaticSlipBoundary:
         E_plus = E_minus
         """
         # Grab some boundary-relevant data
-        dim = discr.dim
+        dim = dcoll.dim
         cv = split_conserved(dim, q)
         actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
+        nhat = thaw(actx, op.normal(dcoll, btag))
 
         # Get the interior/exterior solns
-        int_soln = discr.project("vol", btag, q)
+        int_soln = op.project(dcoll, "vol", btag, q)
         int_cv = split_conserved(dim, int_soln)
 
         # Subtract out the 2*wall-normal component

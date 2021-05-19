@@ -33,25 +33,29 @@ import pytest
 import math
 from functools import partial
 
+from arraycontext import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
+from arraycontext.container.traversal import thaw
+
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
 
-from meshmode.dof_array import DOFArray, thaw
+from meshmode.dof_array import DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair
-from grudge.symbolic.primitives import TracePair
+
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import split_conserved, join_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
+from grudge.discretization import DiscretizationCollection
+from grudge.symbolic.primitives import TracePair
+import grudge.op as op
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import (
@@ -86,13 +90,13 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
     eos = IdealSingleGas()
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
     def rand():
-        ary = discr.zeros(actx)
+        ary = dcoll.zeros(actx)
         for grp_ary in ary:
             grp_ary.set(np.random.rand(*grp_ary.shape))
         return ary
@@ -128,7 +132,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    flux = inviscid_flux(discr, eos, q)
+    flux = inviscid_flux(dcoll, eos, q)
     flux_resid = flux - expected_flux
 
     for i in range(numeq, dim):
@@ -326,14 +330,14 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        zeros = discr.zeros(actx)
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
 
-        mass_input = discr.zeros(actx) + 1.0
-        energy_input = discr.zeros(actx) + 2.5
+        mass_input = dcoll.zeros(actx) + 1.0
+        energy_input = dcoll.zeros(actx) + 2.5
         mom_input = flat_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim)]
+            [dcoll.zeros(actx) for i in range(dcoll.dim)]
         )
         mass_frac_input = flat_obj_array(
             [ones / ((i + 1) * 10) for i in range(nspecies)]
@@ -347,11 +351,13 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         from mirgecom.euler import _facial_flux
 
         interior_face_flux = _facial_flux(
-            discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
+            dcoll, eos=IdealSingleGas(),
+            q_tpair=op.interior_trace_pair(dcoll, fields)
+        )
 
         def inf_norm(data):
             if len(data) > 0:
-                return discr.norm(data, np.inf, dd="all_faces")
+                return op.norm(dcoll, data, np.inf, dd="all_faces")
             else:
                 return 0.0
 
@@ -372,8 +378,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
         # generate the exact answer: just p0*nhat for the given boundary
-        nhat = thaw(actx, discr.normal("int_faces"))
-        mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
+        nhat = thaw(op.normal(dcoll, "int_faces"), actx)
+        mom_flux_exact = op.project(dcoll, "int_faces", "all_faces", p0*nhat)
 
         momerr = inf_norm(iff_split.momentum - mom_flux_exact)
         assert momerr < tolerance
@@ -381,17 +387,18 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
         # Check the boundary facial fluxes as called on a boundary
-        dir_mass = discr.project("vol", BTAG_ALL, mass_input)
-        dir_e = discr.project("vol", BTAG_ALL, energy_input)
-        dir_mom = discr.project("vol", BTAG_ALL, mom_input)
-        dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
+        dir_mass = op.project(dcoll, "vol", BTAG_ALL, mass_input)
+        dir_e = op.project(dcoll, "vol", BTAG_ALL, energy_input)
+        dir_mom = op.project(dcoll, "vol", BTAG_ALL, mom_input)
+        dir_mf = op.project(dcoll, "vol", BTAG_ALL, species_mass_input)
+
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                   species_mass=dir_mf)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                 species_mass=dir_mf)
 
         boundary_flux = _facial_flux(
-            discr, eos=IdealSingleGas(),
+            dcoll, eos=IdealSingleGas(),
             q_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
         )
 
@@ -401,8 +408,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(bf_split.species_mass) < tolerance
 
         # generate the exact answer: just p0*nhat for the given boundary
-        nhat = thaw(actx, discr.normal(BTAG_ALL))
-        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
+        nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
+        mom_flux_exact = op.project(dcoll, BTAG_ALL, "all_faces", p0*nhat)
 
         momerr = inf_norm(bf_split.momentum - mom_flux_exact)
         assert momerr < tolerance
@@ -448,15 +455,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        zeros = discr.zeros(actx)
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
 
-        mass_input = discr.zeros(actx) + 1
-        energy_input = discr.zeros(actx) + 2.5
+        mass_input = dcoll.zeros(actx) + 1
+        energy_input = dcoll.zeros(actx) + 2.5
 
         mom_input = make_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim)]
+            [dcoll.zeros(actx) for i in range(dcoll.dim)]
         )
 
         mass_frac_input = flat_obj_array(
@@ -469,11 +476,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             species_mass=species_mass_input)
 
         expected_rhs = make_obj_array(
-            [discr.zeros(actx) for i in range(len(fields))]
+            [dcoll.zeros(actx) for i in range(len(fields))]
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
+        inviscid_rhs = euler_operator(dcoll, eos=IdealSingleGas(),
                                       boundaries=boundaries, q=fields, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
@@ -496,26 +503,26 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        assert op.norm(dcoll, rho_resid, np.inf) < tolerance
+        assert op.norm(dcoll, rhoe_resid, np.inf) < tolerance
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            assert op.norm(dcoll, mom_resid[i], np.inf) < tolerance
         for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+            assert op.norm(dcoll, rhoy_resid[i], np.inf) < tolerance
 
-        err_max = discr.norm(rho_resid, np.inf)
+        err_max = op.norm(dcoll, rho_resid, np.inf)
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
-            mom_input[i] = discr.zeros(actx) + (-1.0) ** i
+            mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
 
         fields = join_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
+        inviscid_rhs = euler_operator(dcoll, eos=IdealSingleGas(),
                                       boundaries=boundaries, q=fields, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
@@ -525,15 +532,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = resid_split.momentum
         rhoy_resid = resid_split.species_mass
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        assert op.norm(dcoll, rho_resid, np.inf) < tolerance
+        assert op.norm(dcoll, rhoe_resid, np.inf) < tolerance
 
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            assert op.norm(dcoll, mom_resid[i], np.inf) < tolerance
         for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+            assert op.norm(dcoll, rhoy_resid[i], np.inf) < tolerance
 
-        err_max = discr.norm(rho_resid, np.inf)
+        err_max = op.norm(dcoll, rho_resid, np.inf)
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -576,8 +583,8 @@ def test_vortex_rhs(actx_factory, order):
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        nodes = thaw(op.nodes(dcoll), actx)
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -585,10 +592,10 @@ def test_vortex_rhs(actx_factory, order):
         boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries,
+            dcoll, eos=IdealSingleGas(), boundaries=boundaries,
             q=vortex_soln, t=0.0)
 
-        err_max = discr.norm(inviscid_rhs, np.inf)
+        err_max = op.norm(dcoll, inviscid_rhs, np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -629,8 +636,8 @@ def test_lump_rhs(actx_factory, dim, order):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        nodes = thaw(op.nodes(dcoll), actx)
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
@@ -639,10 +646,10 @@ def test_lump_rhs(actx_factory, dim, order):
         lump_soln = lump(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+            dcoll, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
+        expected_rhs = lump.exact_rhs(dcoll, lump_soln, 0)
 
-        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
+        err_max = op.norm(dcoll, inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -688,8 +695,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        nodes = thaw(op.nodes(dcoll), actx)
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -707,11 +714,11 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+            dcoll, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
+        expected_rhs = lump.exact_rhs(dcoll, lump_soln, 0)
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
-        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
+        err_max = op.norm(dcoll, inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -757,10 +764,10 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
     fields = initializer(nodes)
-    sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
+    sdt = get_inviscid_timestep(dcoll, eos=eos, cfl=cfl, q=fields)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -773,7 +780,7 @@ def _euler_flow_stepper(actx, parameters):
         f"EOS:             {eosname}"
     )
 
-    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
+    vis = make_visualizer(dcoll, order + 3 if dim == 2 else order)
 
     def write_soln(write_status=True):
         cv = split_conserved(dim, fields)
@@ -805,7 +812,7 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return euler_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
+        return euler_operator(dcoll, eos=eos, boundaries=boundaries, q=q, t=t)
 
     filter_order = 8
     eta = .5
@@ -834,20 +841,20 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
-        fields = filter_modally(discr, "vol", cutoff,
+        fields = filter_modally(dcoll, "vol", cutoff,
                                 frfunc, fields)
 
         t += dt
         istep += 1
 
-        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, q=fields)
+        sdt = get_inviscid_timestep(dcoll, eos=eos, cfl=cfl, q=fields)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
         maxerr = max(write_soln(False))
     else:
         expected_result = initializer(nodes, t=t)
-        maxerr = discr.norm(fields - expected_result, np.inf)
+        maxerr = op.norm(dcoll, fields - expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:

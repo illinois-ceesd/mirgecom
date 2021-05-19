@@ -38,8 +38,10 @@ THE SOFTWARE.
 """
 
 import numpy as np
+import grudge.op as op
+
+from arraycontext.container.traversal import thaw
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import split_conserved, join_conserved
 
@@ -372,7 +374,7 @@ class Lump:
 
         return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, dcoll, q, t=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
@@ -381,6 +383,9 @@ class Lump:
 
         Parameters
         ----------
+        dcoll: :class:`grudge.discretization.DiscretizationCollection`
+            An object containing connections and mappings to different
+            discretizations over the mesh.
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
@@ -388,7 +393,7 @@ class Lump:
             Time at which RHS is desired
         """
         actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(op.nodes(dcoll), actx)
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -549,7 +554,7 @@ class MulticomponentLump:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, dcoll, q, t=0.0):
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
@@ -558,6 +563,9 @@ class MulticomponentLump:
 
         Parameters
         ----------
+        dcoll: :class:`grudge.discretization.DiscretizationCollection`
+            An object containing connections and mappings to different
+            discretizations over the mesh.
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
@@ -565,7 +573,7 @@ class MulticomponentLump:
             Time at which RHS is desired
         """
         actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(op.nodes(dcoll), actx)
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -747,12 +755,15 @@ class Uniform:
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, dcoll, q, t=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
         Parameters
         ----------
+        dcoll: :class:`grudge.discretization.DiscretizationCollection`
+            An object containing connections and mappings to different
+            discretizations over the mesh.
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point. (unused)
@@ -760,7 +771,7 @@ class Uniform:
             Time at which RHS is desired (unused)
         """
         actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(op.nodes(dcoll), actx)
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass

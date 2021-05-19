@@ -94,7 +94,7 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
         lambda grp: grp.discretization_key()
     )
     def _spectral_filter_scaling(group):
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         order = group.order
 
         nmodes = len(mode_ids)
@@ -146,7 +146,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
         DOFArray or object array of DOFArrays
 
     """
-    from meshmode.array_context import FirstAxisIsElementsTag
+    from arraycontext.metadata import FirstAxisIsElementsTag
     return DOFArray(
         actx,
         tuple(actx.einsum("j,ej->ej",

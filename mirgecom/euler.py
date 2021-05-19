@@ -53,28 +53,30 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from meshmode.dof_array import thaw
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
+
+from arraycontext.container.traversal import thaw
+
+import grudge.op as op
+
 from mirgecom.fluid import (
     compute_wavespeed,
     split_conserved,
 )
-
-from mirgecom.inviscid import (
-    inviscid_flux
-)
-from functools import partial
 from mirgecom.flux import lfr_flux
+from mirgecom.inviscid import inviscid_flux
+
+from functools import partial
 
 
-def _facial_flux(discr, eos, q_tpair, local=False):
+def _facial_flux(dcoll, eos, q_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
     Parameters
     ----------
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
+
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
@@ -89,24 +91,24 @@ def _facial_flux(discr, eos, q_tpair, local=False):
         "all_faces"; remaining instead on the boundary restriction.
     """
     actx = q_tpair[0].int.array_context
-    dim = discr.dim
+    dim = dcoll.dim
 
-    euler_flux = partial(inviscid_flux, discr, eos)
+    euler_flux = partial(inviscid_flux, dcoll, eos)
     lam = actx.np.maximum(
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
     )
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+    normal = thaw(op.normal(dcoll, q_tpair.dd), actx)
 
     # todo: user-supplied flux routine
     flux_weak = lfr_flux(q_tpair, flux_func=euler_flux, normal=normal, lam=lam)
 
     if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+        return op.project(dcoll, q_tpair.dd, "all_faces", flux_weak)
     return flux_weak
 
 
-def euler_operator(discr, eos, boundaries, q, t=0.0):
+def euler_operator(dcoll, eos, boundaries, q, t=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -121,6 +123,14 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
 
     Parameters
     ----------
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
+
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
     q
         State array which expects at least the canonical conserved quantities
         (mass, energy, momentum) for the fluid at each point. For multi-component
@@ -134,54 +144,55 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
     t
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-
     Returns
     -------
     numpy.ndarray
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    vol_flux = inviscid_flux(discr, eos, q)
-    dflux = discr.weak_div(vol_flux)
 
     interior_face_flux = _facial_flux(
-        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
+        dcoll, eos=eos,
+        q_tpair=op.interior_trace_pair(dcoll, q)
+    )
 
     # Domain boundaries
     domain_boundary_flux = sum(
         _facial_flux(
-            discr,
-            q_tpair=boundaries[btag].boundary_pair(discr,
+            dcoll,
+            eos=eos,
+            q_tpair=boundaries[btag].boundary_pair(dcoll,
                                                    eos=eos,
                                                    btag=btag,
                                                    t=t,
                                                    q=q),
-            eos=eos
         )
         for btag in boundaries
     )
 
     # Flux across partition boundaries
     partition_boundary_flux = sum(
-        _facial_flux(discr, eos=eos, q_tpair=part_pair)
-        for part_pair in cross_rank_trace_pairs(discr, q)
+        _facial_flux(dcoll, eos=eos, q_tpair=part_pair)
+        for part_pair in op.cross_rank_trace_pairs(dcoll, q)
     )
 
-    return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux)
+    return op.inverse_mass(
+        dcoll,
+        op.weak_local_div(dcoll, inviscid_flux(dcoll, eos, q))
+        - op.face_mass(
+            dcoll,
+            interior_face_flux + domain_boundary_flux
+            + partition_boundary_flux
+        )
     )
 
 
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+def inviscid_operator(dcoll, eos, boundaries, q, t=0.0):
     """Interface :function:`euler_operator` with backwards-compatible API."""
     from warnings import warn
     warn("Do not call inviscid_operator; it is now called euler_operator. This"
          "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, q, t)
+    return euler_operator(dcoll, eos, boundaries, q, t)
 
 
 # By default, run unitless
