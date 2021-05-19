@@ -36,8 +36,8 @@ $$
 Let $\Omega_h$ denote a collection of disjoint elements $E$. Then the DG formulation is obtained by multiplying by ''test functions'' $\mathbf{v}_h$, $\mathbf{w}_h$ (one for each equation repsectively) and integrating over each element:
 
 $$
-\sum_{E\in\Omega_h} \left\lbrack \int_E \mathbf{v}_h\cdot\frac{\partial \mathbf{Q}_h}{\partial t} d\Omega + \oint_{\partial E} \mathbf{v}_h\mathbf{h} d\sigma - \int_E \nabla\mathbf{v}_h\cdot\mathbf{F}(\mathbf{Q}_h, \mathbf{\Sigma}_h)d\Omega\right\rbrack &= \sum_{E\in\Omega_h} \int_E \mathbf{v}_h\cdot\mathbf{S}_h d\Omega, &\quad \forall \mathbf{v}_h \\
-\sum_{E\in\Omega_h}\left\lbrack \int_E \mathbf{w}_h\cdot \mathbf{\Sigma}_h d\Omega - \oint_{\partial E} \mathbf{w}_h\cdot\mathbf{H}_s d\sigma + \int_E \nabla\mathbf{w}_h\cdot\mathbf{Q}_h d\Omega\right\rbrack &= 0, &\quad \forall \mathbf{w}_h,
+\sum_{E\in\Omega_h} \left\lbrack \int_E \mathbf{v}_h\cdot\frac{\partial \mathbf{Q}_h}{\partial t} d\Omega + \oint_{\partial E} \mathbf{v}_h\mathbf{h} d\sigma - \int_E \nabla\mathbf{v}_h\cdot\mathbf{F}(\mathbf{Q}_h, \mathbf{\Sigma}_h)d\Omega\right\rbrack &= \sum_{E\in\Omega_h} \int_E \mathbf{v}_h\cdot\mathbf{S}_h d\Omega, \qquad \forall \mathbf{v}_h \\
+\sum_{E\in\Omega_h}\left\lbrack \int_E \mathbf{w}_h\cdot \mathbf{\Sigma}_h d\Omega - \oint_{\partial E} \mathbf{w}_h\cdot\mathbf{H}_s d\sigma + \int_E \nabla\mathbf{w}_h\cdot\mathbf{Q}_h d\Omega\right\rbrack &= 0, \qquad \forall \mathbf{w}_h,
 $$
 
 where $\mathbf{h} = \mathbf{h}_e - \mathbf{h}_v$ is a **numerical flux** consisting of a **invicid** and **viscous** component respectively, and $\mathbf{H}_s$ is the **gradient numerical flux** for the auxiliary equation. Here, we use the subscript "h" to denote discretized quantities.
@@ -53,12 +53,10 @@ $$
 $$
 allows us to obtain a set of algebraic equations for the prognostic state $\mathbf{Q}_h$ and the auxiliary gradient variable $\mathbf{\Sigma}_h$. That is, for each $j = 1, \cdots, \dim P^k$, we have:
 $$
-\begin{align}
 \frac{d}{dt} \sum_{E\in\Omega_h}\int_E \phi_j^k\mathbf{Q}_h d\Omega &= \sum_{E\in\Omega_h}\left\lbrack\int_E \nabla\phi_j^k\cdot\left(\mathbf{F}^V(\mathbf{Q}_h, \mathbf{\Sigma}_h) - \mathbf{F}^I(\mathbf{Q}_h)\right)d\Omega\right\rbrack \\
 &- \sum_{E\in\Omega_h}\left\lbrack\oint_{\partial E}\phi_j^k \mathbf{h}_e(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n}) d\sigma + \oint_{\partial E} \phi_j^k \mathbf{h}_v(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+, \mathbf{Q}_h^-, \mathbf{\Sigma}_h^-; \mathbf{n}) d\sigma\right\rbrack \\
 &+ \sum_{E\in\Omega_h} \int_E \phi_j^k\mathbf{S}_h d\Omega, \\
 \sum_{E\in\Omega_h}\int_E\phi_j^k \mathbf{\Sigma}_h d\Omega &= \sum_{E\in\Omega_h}\left\lbrack\oint_{\partial{E}}\phi_j^k \mathbf{H}_s(\mathbf{Q}^+_h, \mathbf{Q}_h^-; \mathbf{n}) d\sigma -\int_E\nabla\phi^k_j\cdot\mathbf{Q}_h d\Omega\right\rbrack.
-\end{align}
 $$
 
 Numerical fluxes
@@ -75,7 +73,7 @@ Choices of numerical fluxes corresponding to BR1
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * Take $\mathbf{h}_e(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n})$ to be one of:
-  
+
   * Local Lax-Friedrichs (LLF), Roe, Engquist-Osher, HLLC (there are many more!). If you're feeling especially brave, you can even use the average of the inviscid flux (centered flux).
 
   * Mirgecom uses LLF at the moment:
@@ -109,7 +107,7 @@ For all $\partial E \cap \partial\Omega$ there is no $+$ side to consider; just 
 * At solid walls:
 
   $\mathbf{h}^*_e$ is equal to the (interior; - side) pressure contribution of $\mathbf{F}^I(\mathbf{Q}_{bc})\cdot\mathbf{n}$ (since $\mathbf{V}\cdot\mathbf{n} = 0$).
-    
+
   * The viscous boundary flux is computed as:
     $$
     \mathbf{h}^*_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc}) = \mathbf{F}_V(\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc})\cdot\mathbf{n},
@@ -176,7 +174,7 @@ diffusive terms as follows:
    \partial_j \tau_{jk} {v}_k = \left[\partial_j\left(\mu\partial_k{v}_j{v}_k\right) +
    \partial_j\left(\mu\partial_j{v}^2_k\right) + \partial_j\left(\mu_{B} -
    \frac{2}{3}\mu\right)\partial_m{v}_m\delta_{jk}{v}_k\right]
-   
+
 
 - Conductive part
 
@@ -193,9 +191,9 @@ The diffusive heat part of the RHS is:
 
 .. math::
    \partial_j{(q_{d})_j} = \partial_j\left(\rho{h}_{\alpha}{d}_{(\alpha)}\partial_j{Y}_{\alpha}\right)
-   
+
 with fluid density $\rho$, species diffusivity ${d}_{(\alpha)}$, and species mass fractions
-${Y}_{\alpha}$. 
+${Y}_{\alpha}$.
 
 Species equation
 ^^^^^^^^^^^^^^^^
@@ -206,4 +204,4 @@ The species diffusive transport RHS is:
    \partial_j{(J_{\alpha})_j} = \partial_j\left(\rho{d}_{(\alpha)}\partial_j{Y}_{\alpha}\right),
 
 with fluid density $\rho$, species diffusivity ${d}_{(\alpha)}$, and species mass fractions
-${Y}_{\alpha}$. 
+${Y}_{\alpha}$.
