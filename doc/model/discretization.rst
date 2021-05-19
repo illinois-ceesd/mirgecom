@@ -12,9 +12,9 @@ particularly in the viscous setting, is a current topic of research and internal
 following references are useful:
 
 * "The DG Book:" Nodal Discontinuous Galerkin Methods, [Hesthaven_2008]_
-* The BR1 algorithm for discretization of Navier-Stokes, [Bassi_1997]_
+* The BR1 method for discretization of Navier-Stokes, [Bassi_1997]_
 * NS with reactions, [Ihme_2014]_, and [Cook_2009]_
-* The BR2 algorithm, [Bassi_2000]_
+* The BR2 method, [Bassi_2000]_
 * [Ayuso_2009]_
 
 *MIRGE-Com* currently employs a strategy akin to the BR1 algorithm outlined in [Bassi_1997]_, but

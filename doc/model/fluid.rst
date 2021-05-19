@@ -16,12 +16,14 @@ Fluid
 
     \def\RE{\operatorname{RE}}
     \def\PR{\operatorname{PR}}
+    \let\b=\mathbf
 
 .. raw:: html
 
     \(
     \def\RE{\operatorname{RE}}
     \def\PR{\operatorname{PR}}
+    \let\b=\mathbf
     \)
 
 .. _NS-eqns:
@@ -31,7 +33,7 @@ the :ref:`Euler equations<Euler-eqns>` equations for inviscid flows of reactive 
 supports reactive fluid mixtures with a number of mixture species = $N_s$ on unstructured meshes and
 :ref:`discretizes the equations in a Discontinuous Galerkin setting<disc-strat>`.
 
-The formulation presented here follows from [Ihme_2014]_ and [Cook_2009]_. The governing equations, written in conservative form, are summarized as follows:
+The formulation presented here follows [Ihme_2014]_ and [Cook_2009]_. The governing equations, written in conservative form, are summarized as follows:
 
 .. math::
     \partial_{t}{\rho} + \partial_{j}{\rho v_j} &= S_\rho \\
@@ -65,7 +67,7 @@ The components of each vector follow directly from above:
    -(\mathbf{J}_{\alpha})_{j}\end{bmatrix},
    ~\mathbf{S} = \begin{bmatrix}0\\E^{\mathtt{chem}}\\0\\W^{\mathtt{chem}}_{\alpha}\end{bmatrix}
 
-where ${E}^{\mathtt{chem}}$, and $W^{\mathtt{chem}}_{\alpha}$, are the chemical reaction source terms
+where ${E}^{\text{chem}}$, and $W^{\text{chem}}_{\alpha}$, are the chemical reaction source terms
 in the energy and species conservation equations, respectively.  See :ref:`Chemistry` for more details
 on chemical reaction source terms, and :ref:`here<disc-strat>` for details on the discretization
 strategy for this system of conservation equations.
@@ -173,4 +175,4 @@ and total energy $E$.  The EOS provided *MIRGE-Com* are documented in :mod:`mirg
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity $\mu_B$,
 thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$ depend on the state of
 the fluid $\mathbf{Q}$, in general, and are provided by transport models.  Transport models provided
-by *MIRGE-Com* ~~are~~ (will be) documented in forthcoming the transport module.
+by *MIRGE-Com* ~~are~~ (will be) documented in the forthcoming transport module.
