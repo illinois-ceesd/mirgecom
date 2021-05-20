@@ -187,3 +187,27 @@ $\mu_B$, thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$
 the state of the fluid $\mathbf{Q}$, in general, and are provided by transport models.
 Transport models provided by |mirgecom| ~~are~~ (will be) documented in the forthcoming
 transport module.
+
+Code correspondence
+-------------------
+
+The following summarizes the code components and constructs that implement the various
+pieces of the conservation systems presented above.
+
+- Inviscid flow (:mod:`mirgecom.inviscid`)
+
+  - inviscid flux :func:`~mirgecom.inviscid.inviscid_flux`
+
+  - Euler RHS: :func:`~mirgecom.euler.euler_operator`
+
+- Viscous flow (soon)
+
+- Equations of State (:mod:`mirgecom.eos`)
+
+  - single ideal gas: :class:`~mirgecom.eos.IdealSingleGas`
+
+  - gas mixture: :class:`~mirgecom.eos.PyrometheusMixture`
+
+- Transport models (soon)
+
+- Chemistry (:mod:`pyrometheus`)
