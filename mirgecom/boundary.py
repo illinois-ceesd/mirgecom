@@ -72,15 +72,16 @@ class FluidBoundary(metaclass=ABCMeta):
         """Get the inviscid flux across the boundary faces."""
 
     @abstractmethod
-    def viscous_boundary_flux(self, discr, btag, q, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
+    def viscous_boundary_flux(self, discr, btag, q, grad_q, grad_t,
+                              eos, **kwargs):
+        """Get the viscous flux across the boundary faces."""
 
     @abstractmethod
     def q_boundary_flux(self, discr, btag, q, eos, **kwargs):
         """Get the scalar conserved quantity flux across the boundary faces."""
 
     @abstractmethod
-    def s_boundary_flux(self, discr, btag, q, eos, **kwargs):
+    def s_boundary_flux(self, discr, btag, grad_q, eos, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
 
     @abstractmethod
@@ -103,7 +104,7 @@ class FluidBC(FluidBoundary):
         """Get the flux through boundary *btag* for each scalar in *q*."""
         raise NotImplementedError()
 
-    def s_boundary_flux(self, discr, btag, q, eos, **kwargs):
+    def s_boundary_flux(self, discr, btag, grad_q, eos, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
         raise NotImplementedError()
 
