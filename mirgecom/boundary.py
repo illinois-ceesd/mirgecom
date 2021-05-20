@@ -12,6 +12,7 @@ Inviscid Boundary Conditions
 .. autoclass:: PrescribedFluidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
+.. autoclass:: AdiabaticNoslipMovingBoundary
 
 Viscous Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -386,7 +387,59 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                               species_mass=-gradq_comp.species_mass)
 
 
-class IsothermalNoSlipBoundary(FluidBoundary):
+class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
+    r"""Boundary condition implementing a noslip moving boundary.
+
+    .. automethod:: adiabatic_noslip_pair
+    .. automethod:: exterior_soln
+    .. automethod:: exterior_grad_q
+    """
+
+    def __init__(self, wall_velocity=None, dim=2):
+        """Initialize boundary device."""
+        PrescribedInviscidBoundary.__init__(
+            self, boundary_pair_func=self.adiabatic_noslip_pair,
+            fluid_solution_gradient_func=self.exterior_grad_q
+        )
+        # Check wall_velocity (assumes dim is correct)
+        if wall_velocity is None:
+            wall_velocity = np.zeros(shape=(dim,))
+        if len(wall_velocity) != dim:
+            raise ValueError(f"Specified wall velocity must be {dim}-vector.")
+        self._wall_velocity = wall_velocity
+
+    def adiabatic_noslip_pair(self, discr, q, btag, **kwargs):
+        """Get the interior and exterior solution on the boundary."""
+        bndry_soln = self.exterior_soln(discr, q, btag, **kwargs)
+        int_soln = discr.project("vol", btag, q)
+
+        return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+
+    def exterior_soln(self, discr, q, btag, **kwargs):
+        """Get the exterior solution on the boundary."""
+        dim = discr.dim
+
+        # Get the interior/exterior solns
+        int_soln = discr.project("vol", btag, q)
+        int_cv = split_conserved(dim, int_soln)
+
+        # Compute momentum solution
+        wall_pen = 2.0 * self._wall_velocity * int_cv.mass
+        ext_mom = wall_pen - int_cv.momentum  # no-slip
+
+        # Form the external boundary solution with the new momentum
+        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
+                                    energy=int_cv.energy,
+                                    momentum=ext_mom)
+
+        return bndry_soln
+
+    def exterior_grad_q(self, nodes, nhat, grad_q, **kwargs):
+        """Get the exterior solution on the boundary."""
+        return(-grad_q)
+
+
+class IsothermalNoSlipBoundary(FluidBC):
     r"""Isothermal no-slip viscous wall boundary.
 
     This class implements an isothermal no-slip wall by:
