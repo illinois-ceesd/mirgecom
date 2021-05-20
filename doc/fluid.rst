@@ -27,17 +27,17 @@ noted, Einstein summation convention is used throughout the following sections. 
 governing equations, written in conservative form, are summarized as follows:
 
 $$
-\partial_{t}{\rho} + \partial_{j}{\rho v_j} &= {S}_\rho \\
+\partial_{t}{\rho} + \partial_{j}{(\rho v)_j} &= {S}_\rho \\
 \partial_{t}(\rho{E}) + \partial_j\left(\left\{\rho E + p\right\}v_j + q_j -
 \tau_{jk}v_k\right) &= {S}_{\rho E} \\
-\partial_{t}({\rho}{v_i}) + \partial_j\left(\rho v_i v_j + p\delta_{ij} -
+\partial_{t}({\rho}{v_i}) + \partial_j\left((\rho v)_i v_j + p\delta_{ij} -
 \tau_{ij}\right) &= {S}_{\rho v_i} \\
-\partial_{t}(\rho{Y}_{\alpha}) + \partial_j\left(\rho{Y}_{\alpha}v_j +
+\partial_{t}(\rho{Y})_{\alpha} + \partial_j\left((\rho{Y})_{\alpha}v_j +
 (\mathbf{J}_{\alpha})_j\right) &= {S}_{\alpha},
 $$
 
 with fluid density $\rho$, velocity components $v_i$, momentum density components
-$(\rho v_i$), total energy $(\rho E)$, and vector of species mass fractions
+$((\rho v)_i$), total energy $(\rho E)$, and vector of species mass fractions
 ${Y}_{\alpha}$. The :ref:`thermodynamic pressure<eos-and-matprop>` of the fluid is $p$.
 ${\tau_{ij}}$ are the components of the
 :ref:`viscous stress tensor<viscous-stress-tensor>`, $q_i$ are the components of the total
@@ -58,9 +58,9 @@ for each scalar equation  is $\mathbf{S}$. The components of each vector follow 
 above:
 
 $$
-\mathbf{Q} = \begin{bmatrix}\rho\\\rho{E}\\\rho{v}_{i}\\\rho{Y}_{\alpha}\end{bmatrix},
-~\mathbf{F}^{I}_{j} = \begin{bmatrix}\rho{v}_{j}\\\left(\rho{E}+p\right){v}_{j}\\
-\left(\rho{v}_{j}{v}_{i}+p\delta_{ij}\right)\\\rho{Y}_{\alpha}{v}_{j}\end{bmatrix},
+\mathbf{Q} = \begin{bmatrix}\rho\\\rho{E}\\(\rho{v})_{i}\\(\rho{Y})_{\alpha}\end{bmatrix},
+~\mathbf{F}^{I}_{j} = \begin{bmatrix}(\rho{v})_{j}\\\left(\rho{E}+p\right){v}_{j}\\
+\left((\rho{v})_{j}{v}_{i}+p\delta_{ij}\right)\\(\rho{Y})_{\alpha}{v}_{j}\end{bmatrix},
 ~\mathbf{F}^V_{j} = \begin{bmatrix}0\\\left(\tau_{jk}{v}_{k}-{q}_{j}\right)\\
 {\tau}_{ij}\\-(\mathbf{J}_{\alpha})_{j}\end{bmatrix},
 ~\mathbf{S} = \begin{bmatrix}0\\E^{\mathtt{chem}}\\0\\W^{\mathtt{chem}}_{\alpha}
