@@ -107,12 +107,12 @@ class ConservedVars:
 
         with the `ndim`-vector components of fluid velocity ($v_i$), and the
         `nspecies`-vector of species mass fractions ($Y_\alpha$). In total, the
-        fluid system has $N_\mbox{eq}$ = (`ndim + 2 + nspecies`) equations.
+        fluid system has $N_{\text{eq}}$ = (`ndim + 2 + nspecies`) equations.
 
         Internally to `MIRGE-Com`, $\mathbf{Q}$ is stored as an object array
         (:class:`numpy.ndarray`) of :class:`~meshmode.dof_array.DOFArray`, one for
         each component of the fluid $\mathbf{Q}$, i.e. a flat object array of
-        $N_\mbox{eq}$ :class:`~meshmode.dof_array.DOFArray`.
+        $N_{\text{eq}}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
         $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
@@ -140,7 +140,7 @@ class ConservedVars:
         fluid conserved quantities (CV).
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
-        `nspecies`, and $N_\mbox{eq}$.
+        `nspecies`, and $N_{\text{eq}}$.
 
         Often, a user starts with the fluid conserved quantities like mass and
         energy densities, and it is desired to glom those quantities together into
@@ -158,7 +158,7 @@ class ConservedVars:
 
             q = join_conserved(ndim, mass=rho, energy=rho*e, momentum=rho*v)
 
-        after which *q* will be an obj array of $N_\mbox{eq}$ DOFArrays containing
+        after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
         the fluid conserved state data.
 
         Examples of this sort of use for `join_conserved` can be found in:
@@ -170,7 +170,7 @@ class ConservedVars:
         Use `ConservedVars` to access a vector quantity for each fluid equation.
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
-        `nspecies`, and $N_\mbox{eq}$.
+        `nspecies`, and $N_{\text{eq}}$.
 
         Suppose the user wants to access the gradient of the fluid state,
         $\nabla\mathbf{Q}$, in a fluid-specific way. For a fluid $\mathbf{Q}$,
@@ -182,7 +182,7 @@ class ConservedVars:
             \begin{bmatrix}(\nabla\rho)_j\\(\nabla\rho{E})_j\\(\nabla\rho{v}_{i})_j
             \\(\nabla\rho{Y}_{\alpha})_j\end{bmatrix},
 
-        where $1 \le j \le \mbox{ndim}$, such that the first component of
+        where $1 \le j \le \text{ndim}$, such that the first component of
         $\mathbf{Q}$ is an `ndim`-vector corresponding to the gradient of the fluid
         density, i.e. object array of `ndim` `DOFArray`. Similarly for the energy
         term. The momentum part of $\nabla\mathbf{Q}$ is a 2D array with shape
