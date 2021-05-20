@@ -177,16 +177,24 @@ where $h^f_{\alpha}$ is the enthalpy of formation for each species.
 Equations of State and Material properties
 ------------------------------------------
 
-Equations of state (EOS) provide functions that relate the fluid state $Q$, and the
-thermodynamic properties such as pressure $p$, temperature $T$, specific enthalpies
-$h_{\alpha}$, and total energy $E$.  The EOS provided by |mirgecom| are documented in
-:mod:`mirgecom.eos`.
+Equations of state (EOS) provide functions that relate the fluid state $\mathbf{Q}$,
+and the thermodynamic properties such as pressure $p$, temperature $T$, specific
+enthalpies $h_{\alpha}$, and total energy $E$.  The EOS provided by |mirgecom| are
+documented in :mod:`mirgecom.eos`.
 
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity
 $\mu_B$, thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$ depend on
 the state of the fluid $\mathbf{Q}$, in general, and are provided by transport models.
 Transport models provided by |mirgecom| ~~are~~ (will be) documented in the forthcoming
 transport module.
+
+.. note::
+
+  In general, thermal state variables such as pressure $p$, temperature $T$, and material
+  properties such as viscosity $\mu$, and thermal conductivity $\kappa$ are functions of
+  the current fluid state $\mathbf{Q}$. The EOS and transport models provide constructs
+  that manage the relationships between these quantities, and provide methods for
+  calculating them from minimal working sets of input data.
 
 Code correspondence
 -------------------
