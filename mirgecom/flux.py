@@ -85,7 +85,7 @@ def central_vector_flux(trace_pair, normal):
         h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
         \left(\mathbf{v}^{+}+\mathbf{v}^{-}\right) \cdot \hat{n}
 
-    where $\mathbf{v}^-, \matbhf{v}^+$, are the vectors on the interior and exterior
+    where $\mathbf{v}^-, \mathbf{v}^+$, are the vectors on the interior and exterior
     of the face across which the central flux is to be calculated, and $\hat{n}$ is
     the unit normal to the face.
 
