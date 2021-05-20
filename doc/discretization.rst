@@ -1,11 +1,11 @@
 =======================
- Navier-Stokes with DG
+Discretization Strategy
 =======================
 
 .. _disc-strat:
 
-Discretization Strategy
-=======================
+Literature on DG for Fluid Flow
+===============================
 
 How to discretize the conservation equations with DG, including how to handle the required
 fluxes, particularly in the viscous setting, is a current topic of research and internal
@@ -210,8 +210,8 @@ interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc
 
 
 
-2nd order terms on the viscous RHS
-==================================
+Second order terms on the viscous RHS
+=====================================
 
 This section breaks out explicit component versions of the 2nd order terms on the RHS to
 help guide a discussion about alternate approaches to discretization in which a generic
