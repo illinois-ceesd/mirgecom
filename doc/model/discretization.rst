@@ -21,8 +21,8 @@ discussion.  The following references are useful:
 [Bassi_1997]_, but with thermal terms and chemical reaction sources as outlined in
 [Ihme_2014]_ and [Cook_2009]_.
 
-Navier-Stokes BR1
-=================
+Nodal DG for Navier-Stokes
+==========================
 
 The main system of equations we solve in the BR1 approach is summarized as follows:
 
@@ -105,7 +105,7 @@ $$
 $$
 
 Numerical fluxes
-----------------
+================
 
 To account for the discontinuities at element faces, DG employs numerical fluxes, which are
 enforced to be singled-valued, but are functions of both $\pm$ states:
@@ -119,7 +119,7 @@ $$
 $$
 
 Choices of numerical fluxes corresponding to BR1
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------------------
 
 * Take $\mathbf{h}_e(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n})$ to be one of:
 
@@ -182,7 +182,7 @@ interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc
     $$
     where $\mathbf{Q}_{bc}$ are the same values used to prescribe $\mathbf{h}^*_e$.
 
-  * If there are no conditions of $\nabla\mathbf{Q}\cdot\mathbf{n}$, then
+  * If there are no conditions on $\nabla\mathbf{Q}\cdot\mathbf{n}$, then
     $$
     \mathbf{\Sigma}_{bc} = \mathbf{\Sigma}_h^-.
     $$
@@ -211,7 +211,7 @@ interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc
 
 
 2nd order terms on the viscous RHS
-----------------------------------
+==================================
 
 This section breaks out explicit component versions of the 2nd order terms on the RHS to
 help guide a discussion about alternate approaches to discretization in which a generic
@@ -222,9 +222,9 @@ variables, introducing 2nd order terms on the RHS of the conservation equations.
 order terms with their relevant RHS component are summarized below.
 
 Momentum equation
-^^^^^^^^^^^^^^^^^
+-----------------
 
-The 2nd order terms in the viscous RHS for the moementum equation are:
+The 2nd order terms in the viscous RHS for the momentum equation are:
 
 $$
 \partial_j \tau_{ij} = \left[\partial_j\left(\mu\partial_j{v}_i\right) + \partial_j
@@ -233,7 +233,7 @@ $$
 $$
 
 Energy equation
-^^^^^^^^^^^^^^^
+---------------
 
 The 2nd order terms in the energy equation RHS have convective, conductive, and
 diffusive terms as follows:
@@ -269,7 +269,7 @@ with fluid density $\rho$, species diffusivity ${d}_{(\alpha)}$, and species mas
 fractions ${Y}_{\alpha}$.
 
 Species equation
-^^^^^^^^^^^^^^^^
+----------------
 
 The species diffusive transport RHS is:
 

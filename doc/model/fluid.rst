@@ -48,8 +48,8 @@ $N_s$ components with $1 \le \alpha \le N_s$.
 The equations can be recast in a more compact form:
 
 $$
-\partial_t{\mathbf{Q}} + \partial_j{\mathbf{F}^{I}_j} = \partial_j{\mathbf{F}^{V}_j} +
-\mathbf{S},
+\partial_t{\mathbf{Q}} + \partial_j{\mathbf{F}^{I}(\mathbf{Q})_j} =
+\partial_j{\mathbf{F}^{V}(\mathbf{Q}, \nabla\mathbf{Q})_j} + \mathbf{S},
 $$
 
 where $\mathbf{Q}$ is the vector of conserved variables, $\mathbf{F}^I$ is the vector of
