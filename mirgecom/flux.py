@@ -47,7 +47,7 @@ def central_scalar_flux(trace_pair, normal):
         h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
         \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
 
-    where $\mathbf{u}^-, \matbhf{u}^+$, are the vector of independent scalar
+    where $\mathbf{u}^-, \mathbf{u}^+$, are the vector of independent scalar
     components and scalar solution components on the interior and exterior of the
     face on which the central flux is to be calculated, and $\hat{n}$ is the normal
     vector.
