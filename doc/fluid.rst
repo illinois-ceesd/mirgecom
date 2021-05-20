@@ -2,11 +2,6 @@
 Mathematical Model of Fluid Flow
 ================================
 
-.. note::
-
-   This model document has been updated to be |mirgecom| specific, and to include
-   multi-component mixtures with chemical reactions.
-
 .. important::
 
    |mirgecom| main repo branch currently provides fluid simulation operators and
