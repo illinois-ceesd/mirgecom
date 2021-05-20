@@ -102,3 +102,7 @@ mathjax_config = {
         "displayMath": [["\\[", "\\]"]],
     },
 }
+
+rst_prolog = """
+.. |mirgecom| replace:: *MIRGE-Com*
+"""

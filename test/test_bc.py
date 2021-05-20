@@ -270,7 +270,7 @@ def test_noslip(actx_factory, dim):
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
             t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                             q=uniform_state, temperature=temper)
+                                             q=uniform_state)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
@@ -387,7 +387,7 @@ def test_prescribedviscous(actx_factory, dim):
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
             t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                             q=uniform_state, temperature=temper)
+                                             q=uniform_state)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
