@@ -6,6 +6,7 @@ pyvisfile
 pymetis
 importlib-resources
 psutil
+gmsh
 
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
