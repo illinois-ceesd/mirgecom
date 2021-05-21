@@ -74,9 +74,10 @@ denote discretized quantities. See below for more on these functions.
 
 Since $\mathbf{F}^I(\mathbf{Q}_h)\cdot\mathbf{n}$ is discontinuous, the quantities are
 allowed to vary on either side of a shared element boundary. That is, $\mathbf{F}^I
-(\mathbf{Q}^+_h)\cdot\mathbf{n}^+ \neq \mathbf{F}^I(\mathbf{Q}^-_h)\cdot\mathbf{n}^-$,
-where $\mathbf{n}^\pm$ denotes the ''cell-local'' (or interior) normal with respect to the
-elements $E^\pm$ which share a face: $\partial E^+ \cap \partial E^- \neq \emptyset$.
+(\mathbf{Q}^+_h)\cdot\mathbf{n}^+ \neq \mathbf{F}^I(\mathbf{Q}^-_h)\cdot\mathbf{n}^-$.
+Here, $\mathbf{n}^+$ and $\mathbf{n}^-$ denote the ''cell-local'' (outward pointing) normals
+for elements $E^+$ and $E^-$ (respectively) which share a face:
+$\partial E^+ \cap \partial E^- \neq \emptyset$.
 Similarly for $\mathbf{F}^V(\mathbf{Q}_h, \mathbf{\Sigma}_h)\cdot\mathbf{n}$ and
 $\mathbf{Q}_h\mathbf{n}$.
 
@@ -88,7 +89,7 @@ $$
 \mathbf{v}(\mathbf{x})_h|_E = \sum_{i=1}^n \mathbf{v}_i\phi_i^k(\mathbf{x}), \quad
 \mathbf{w}(\mathbf{x})_h|_E = \sum_{i=1}^n \mathbf{w}_i\phi_i^k(\mathbf{x}),
 $$
-allows us to obtain a set of algebraic equations for the prognostic state $\mathbf{Q}_h$ and
+allows us to obtain a set of algebraic equations for the conserved state $\mathbf{Q}_h$ and
 the auxiliary gradient variable $\mathbf{\Sigma}_h$. That is, for each
 $j = 1, \dots, \dim P^k$, we have:
 $$
