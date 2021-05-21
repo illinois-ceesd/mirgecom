@@ -173,43 +173,53 @@ interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc
 Solid walls
 ^^^^^^^^^^^
 
-  $\mathbf{h}^*_e$ is equal to the (interior; - side) pressure contribution of
-  $\mathbf{F}^I(\mathbf{Q}_{bc})\cdot\mathbf{n}$ (since $\mathbf{V}\cdot\mathbf{n} = 0$).
+Inviscid boundary flux
+""""""""""""""""""""""
+$\mathbf{h}^*_e$ is equal to the (interior; - side) pressure contribution of
+$\mathbf{F}^I(\mathbf{Q}_{bc})\cdot\mathbf{n}$
+(since $\mathbf{V}\cdot\mathbf{n} = 0$).
 
-  * The viscous boundary flux is computed as:
-    $$
-    \mathbf{h}^*_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc}) = \mathbf{F}_V(\mathbf{Q}_{bc},
-    \mathbf{\Sigma}_{bc})\cdot\mathbf{n},
-    $$
-    where $\mathbf{Q}_{bc}$ are the same values used to prescribe $\mathbf{h}^*_e$.
-
-  * If there are no conditions on $\nabla\mathbf{Q}\cdot\mathbf{n}$, then
-    $$
-    \mathbf{\Sigma}_{bc} = \mathbf{\Sigma}_h^-.
-    $$
-
-  Otherwise, $\mathbf{\Sigma}_{bc}$ will need to be modified accordingly.
-
-* At inflow/outflow boundaries:
-
-  $$
-  \mathbf{h}^*_e(\mathbf{Q}_{bc}) = \mathbf{h}_e(\mathbf{Q}_{bc}, \mathbf{Q}^-_{h};
-  \mathbf{n}).
-  $$
-
-  * $\mathbf{Q}_{bc}$ is also used to define the gradient boundary flux:
-    $$
-    \mathbf{H}^*_s(\mathbf{Q}_{bc}) = \mathbf{Q}_{bc}\mathbf{n}.
-    $$
-
-  * The viscous boundary flux is evaluated as:
-    $$
-    \mathbf{h}^*_v = \mathbf{h}_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_h^-, \mathbf{Q}_h^-,
-    \mathbf{\Sigma}_h^-; \mathbf{n}),
-    $$
-    where $\mathbf{Q}_{bc}$ are the same values used for $\mathbf{h}^*_e$.
+Viscous boundary flux
+"""""""""""""""""""""
+$$
+\mathbf{h}^*_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_{bc}) = \mathbf{F}_V(\mathbf{Q}_{bc},
+\mathbf{\Sigma}_{bc})\cdot\mathbf{n},
+$$
+where $\mathbf{Q}_{bc}$ are the same values used to prescribe $\mathbf{h}^*_e$.
 
 
+Gradient boundary flux
+""""""""""""""""""""""
+If there are no conditions on $\nabla\mathbf{Q}\cdot\mathbf{n}$, then:
+$$
+\mathbf{\Sigma}_{bc} = \mathbf{\Sigma}_h^-.
+$$
+Otherwise, $\mathbf{\Sigma}_{bc}$ will need to be modified accordingly.
+
+Inflow/outflow boundaries
+^^^^^^^^^^^^^^^^^^^^^^^^^
+Inviscid boundary flux
+""""""""""""""""""""""
+$$
+\mathbf{h}^*_e(\mathbf{Q}_{bc}) = \mathbf{h}_e(\mathbf{Q}_{bc}, \mathbf{Q}^-_{h};
+\mathbf{n}).
+$$
+
+Viscous boundary flux
+"""""""""""""""""""""
+$$
+\mathbf{h}^*_v = \mathbf{h}_v(\mathbf{Q}_{bc}, \mathbf{\Sigma}_h^-, \mathbf{Q}_h^-,
+\mathbf{\Sigma}_h^-; \mathbf{n}),
+$$
+where $\mathbf{Q}_{bc}$ are the same values used for $\mathbf{h}^*_e$.
+
+
+Gradient boundary flux
+""""""""""""""""""""""
+$\mathbf{Q}_{bc}$ is also used to define the gradient boundary flux:
+$$
+\mathbf{H}^*_s(\mathbf{Q}_{bc}) = \mathbf{Q}_{bc}\mathbf{n}.
+$$
 
 Second-order terms on the viscous RHS
 =====================================
