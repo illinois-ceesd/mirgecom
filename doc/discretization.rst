@@ -121,37 +121,45 @@ $$
 Choices of numerical fluxes corresponding to BR1
 ------------------------------------------------
 
-* Take $\mathbf{h}_e(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n})$ to be one of:
+Numerical inviscid flux
+^^^^^^^^^^^^^^^^^^^^^^^
 
-  * Local Lax-Friedrichs (LLF), Roe, Engquist-Osher, HLLC (there are many more!). If you're
-    feeling especially brave, you can even use the average of the inviscid flux (centered
-    flux).
+Typical choices for $\mathbf{h}_e(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n})$ include,
+but are not limited to:
 
-  * Mirgecom uses LLF at the moment:
-    $$
-    \mathbf{h}_{e}(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n}) = \frac{1}{2}\left(
-    \mathbf{F}^{I}(\mathbf{Q}_h^+)+\mathbf{F}^{I}(\mathbf{Q}_h^-)\right) - \frac{\lambda}
-    {2}\left(\mathbf{Q}_h^+ - \mathbf{Q}_h^-\right)\mathbf{n},
-    $$
-    where $\lambda$ is the characteristic max wave-speed of the fluid. Numerical fluxes
-    which penalize the ''jump'' of the state $\left(\mathbf{Q}_h^+ - \mathbf{Q}_h^-\right)
-    \mathbf{n}$ act as an additional source of dissipation, which has a stabilizing effect
-    on the numerics.
+* Local Lax-Friedrichs (LLF)
+* Roe
+* Engquist-Osher
+* HLLC
 
-* Take $\mathbf{h}_v(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+, \mathbf{Q}_h^-,
-  \mathbf{\Sigma}_h^-; \mathbf{n})$ to be defined in a ''centered'' (average) way:
-  $$
-  \mathbf{h}_v(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+, \mathbf{Q}_h^-, \mathbf{\Sigma}_h^-;
-  \mathbf{n}) = \frac{1}{2}\left(\mathbf{F}^V(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+) +
-  \mathbf{F}^V(\mathbf{Q}_h^-, \mathbf{\Sigma}_h^-)\right)\cdot\mathbf{n}
-  $$
+|mirgecom| currently uses LLF, which is implemented as follows:
+$$
+\mathbf{h}_{e}(\mathbf{Q}_h^+, \mathbf{Q}^-_h; \mathbf{n}) = \frac{1}{2}\left(
+\mathbf{F}^{I}(\mathbf{Q}_h^+)+\mathbf{F}^{I}(\mathbf{Q}_h^-)\right) - \frac{\lambda}
+{2}\left(\mathbf{Q}_h^+ - \mathbf{Q}_h^-\right)\mathbf{n},
+$$
+where $\lambda$ is the characteristic max wave-speed of the fluid. Numerical fluxes
+which penalize the ''jump'' of the state $\left(\mathbf{Q}_h^+ - \mathbf{Q}_h^-\right)
+\mathbf{n}$ act as an additional source of dissipation, which has a stabilizing effect
+on the numerics.
 
-* And similarly for the gradient flux:
-  $$
-  \mathbf{H}_s(\mathbf{Q}_h^+, \mathbf{Q}_h^- ; \mathbf{n}) = \frac{1}{2}\left(
-  \mathbf{Q}_h^+ + \mathbf{Q}_h^-\right)\mathbf{n}
-  $$
+Numerical viscous flux
+^^^^^^^^^^^^^^^^^^^^^^
+Take $\mathbf{h}_v(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+, \mathbf{Q}_h^-, \mathbf{\Sigma}_h^-; \mathbf{n})$ to be
+defined in a ''centered'' (average) way:
+$$
+\mathbf{h}_v(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+, \mathbf{Q}_h^-, \mathbf{\Sigma}_h^-;
+\mathbf{n}) = \frac{1}{2}\left(\mathbf{F}^V(\mathbf{Q}_h^+, \mathbf{\Sigma}_h^+) +
+\mathbf{F}^V(\mathbf{Q}_h^-, \mathbf{\Sigma}_h^-)\right)\cdot\mathbf{n}
+$$
 
+Numerical gradient flux
+^^^^^^^^^^^^^^^^^^^^^^^
+And similarly for the gradient flux:
+$$
+\mathbf{H}_s(\mathbf{Q}_h^+, \mathbf{Q}_h^- ; \mathbf{n}) = \frac{1}{2}\left(
+\mathbf{Q}_h^+ + \mathbf{Q}_h^-\right)\mathbf{n}
+$$
 
 Domain boundary considerations
 ------------------------------
@@ -249,16 +257,16 @@ Energy equation
 The 2nd order terms in the energy equation RHS have convective, conductive, and
 diffusive terms as follows:
 
-- Convective part
-
+Convective part
+^^^^^^^^^^^^^^^
 $$
 \partial_j \tau_{jk} {v}_k = \left[\partial_j\left(\mu\partial_k{v}_j{v}_k\right) +
 \partial_j\left(\mu\partial_j{v}^2_k\right) + \partial_j\left(\mu_{B} - \frac{2}{3}\mu
 \right)\partial_m{v}_m\delta_{jk}{v}_k\right]
 $$
 
-- Conductive part
-
+Conductive part
+^^^^^^^^^^^^^^^
 The conductive heat part of the RHS is:
 
 $$
@@ -267,8 +275,8 @@ $$
 
 where $T$ is the fluid temperature.
 
-- Diffusive part
-
+Diffusive part
+^^^^^^^^^^^^^^
 The diffusive heat part of the RHS is:
 
 $$
