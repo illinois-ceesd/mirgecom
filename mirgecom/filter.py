@@ -69,8 +69,8 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
 
     Parameters
     ----------
-    actx: :class:`meshmode.array_context.ArrayContext`
-        A :class:`meshmode.array_context.ArrayContext` associated with
+    actx: :class:`arraycontext.ArrayContext`
+        A :class:`arraycontext.ArrayContext` associated with
         an array of degrees of freedom
     group: :class:`meshmode.mesh.MeshElementGroup`
         A :class:`meshmode.mesh.MeshElementGroup` from which the mode ids,
@@ -126,8 +126,8 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
 
     Parameters
     ----------
-    actx: :class:`meshmode.array_context.ArrayContext`
-        A :class:`meshmode.array_context.ArrayContext` associated with
+    actx: :class:`arraycontext.ArrayContext`
+        A :class:`arraycontext.ArrayContext` associated with
         an array of degrees of freedom
     modal_field: numpy.ndarray
         DOFArray or object array of DOFArrays denoting the modal data
