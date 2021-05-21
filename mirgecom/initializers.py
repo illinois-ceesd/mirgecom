@@ -1006,7 +1006,7 @@ class PlanarDiscontinuity:
         normal_dir: int
             specifies the direction (plane) the discontinuity is applied in
         disc_location: float or Callable
-            fixed location of discontinuity or optionally a function that 
+            fixed location of discontinuity or optionally a function that
             returns the time-dependent location.
         nspecies: int
             specifies the number of mixture species
