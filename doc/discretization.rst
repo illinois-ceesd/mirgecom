@@ -30,10 +30,10 @@ The compressible NS equations are rewritten as the following coupled system for 
 unknowns, $\mathbf{Q}$ and $\mathbf{\Sigma}$:
 
 $$
-\mathbf{\Sigma} - \nabla{\mathbf{Q}} &= \mathbf{0}\quad \text{aux eqn}\\
+\mathbf{\Sigma} - \nabla{\mathbf{Q}} &= \mathbf{0}\tag{\text{auxiliary eqn}}\\
 \frac{\partial \mathbf{Q}}{\partial t} + \underbrace{\nabla\cdot\mathbf{F}^I(\mathbf{Q}) -
 \nabla\cdot\mathbf{F}^V(\mathbf{Q},\mathbf{\Sigma})}_{= \nabla\cdot\mathbf{F}(\mathbf{Q},
-\mathbf{\Sigma})} &= \mathbf{S} \quad \text{primary eqn}
+\mathbf{\Sigma})} &= \mathbf{S} \tag{\text{primary eqn}}
 $$
 
 Let $\Omega_h$ denote a collection of disjoint elements $E$. The DG method constructs
@@ -41,10 +41,10 @@ approximations $\mathbf{Q}_h$ and $\mathbf{\Sigma}_h$ to $\mathbf{Q}$ and $\math
 respectively, in discontinuous finite element spaces. For any integer $k$, we define
 the following discontinuous spaces of piecewise (vector-valued) polynomial functions:
 $$
-\mathbf{V}^k_h &= \left\lbrace \mathbf{v} \in L^2(\Omega_h)^N \text{ such that }
+\mathbf{V}^k_h &= \left\lbrace \mathbf{v} \in L^2(\Omega_h)^N:
 \mathbf{v}|_E \in \lbrack P^k(E) \rbrack^N, \text{ for all } E \in \Omega_h
 \right\rbrace, \\
-\mathbf{W}^k_h &= \left\lbrace \mathbf{w} \in L^2(\Omega_h)^{N\times d} \text{ such that }
+\mathbf{W}^k_h &= \left\lbrace \mathbf{w} \in L^2(\Omega_h)^{N\times d}:
 \mathbf{w}|_E \in \lbrack P^k(E) \rbrack^{N\times d}, \text{ for all } E \in \Omega_h
 \right\rbrace,
 $$
@@ -68,15 +68,15 @@ $$
 $$
 
 where $\mathbf{h} = \mathbf{h}_e - \mathbf{h}_v$ is a *numerical flux* consisting of a
-*invicid* and *viscous* component respectively, and $\mathbf{H}_s$ is the
-*gradient numerical flux* for the auxiliary equation. Here, we use the subscript "h" to
-denote discretized quantities.
+*inviscid* and *viscous* component respectively, and $\mathbf{H}_s$ is the
+*gradient numerical flux* for the auxiliary equation. Here, we use the subscript "$h$" to
+denote discretized quantities. See below for more on these functions.
 
 Since $\mathbf{F}^I(\mathbf{Q}_h)\cdot\mathbf{n}$ is discontinuous, the quantities are
 allowed to vary on either side of a shared element boundary. That is, $\mathbf{F}^I
 (\mathbf{Q}^+_h)\cdot\mathbf{n}^+ \neq \mathbf{F}^I(\mathbf{Q}^-_h)\cdot\mathbf{n}^-$,
 where $\mathbf{n}^\pm$ denotes the ''cell-local'' (or interior) normal with respect to the
-element $E^\pm$ which share a face: $\partial E^+ \cap \partial E^- \neq \emptyset$.
+elements $E^\pm$ which share a face: $\partial E^+ \cap \partial E^- \neq \emptyset$.
 Similarly for $\mathbf{F}^V(\mathbf{Q}_h, \mathbf{\Sigma}_h)\cdot\mathbf{n}$ and
 $\mathbf{Q}_h\mathbf{n}$.
 
@@ -90,7 +90,7 @@ $$
 $$
 allows us to obtain a set of algebraic equations for the prognostic state $\mathbf{Q}_h$ and
 the auxiliary gradient variable $\mathbf{\Sigma}_h$. That is, for each
-$j = 1, \cdots, \dim P^k$, we have:
+$j = 1, \dots, \dim P^k$, we have:
 $$
 \frac{d}{dt} \sum_{E\in\Omega_h}\int_E \phi_j^k\mathbf{Q}_h d\Omega &= \sum_{E\in\Omega_h}
 \left\lbrack\int_E \nabla\phi_j^k\cdot\left(\mathbf{F}^V(\mathbf{Q}_h, \mathbf{\Sigma}_h) -
@@ -159,7 +159,7 @@ Domain boundary considerations
 What happens when $\partial E \cap \partial\Omega \neq \emptyset$?
 
 In DG, numerical fluxes are not only responsible for handling the flow of information
-between adjacent cells, but they also enforce information at the boundaries.
+between adjacent cells, but they also enforce information flow at the boundaries.
 
 We denote the *boundary fluxes* as $\mathbf{h}^*_e(\mathbf{Q}_{bc})$,
 $\mathbf{h}^*_v(\mathbf{Q}_{bc}$, $\mathbf{\Sigma}_{bc})$, and
@@ -170,7 +170,8 @@ For all $\partial E \cap \partial\Omega$ there is no $+$ side to consider; just 
 interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc},
 \mathbf{\Sigma}_{bc}$.
 
-* At solid walls:
+Solid walls
+^^^^^^^^^^^
 
   $\mathbf{h}^*_e$ is equal to the (interior; - side) pressure contribution of
   $\mathbf{F}^I(\mathbf{Q}_{bc})\cdot\mathbf{n}$ (since $\mathbf{V}\cdot\mathbf{n} = 0$).
@@ -210,7 +211,7 @@ interior state ($-$ side) and the prescribed boundary conditions $\mathbf{Q}_{bc
 
 
 
-Second order terms on the viscous RHS
+Second-order terms on the viscous RHS
 =====================================
 
 This section breaks out explicit component versions of the 2nd order terms on the RHS to

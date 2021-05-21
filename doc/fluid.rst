@@ -180,7 +180,7 @@ documented in :mod:`mirgecom.eos`.
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity
 $\mu_B$, thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$ depend on
 the state of the fluid $\mathbf{Q}$, in general, and are provided by transport models.
-Transport models provided by |mirgecom| ~~are~~ (will be) documented in the forthcoming
+Transport models provided by |mirgecom| will be documented in the forthcoming
 transport module.
 
 .. note::
