@@ -371,7 +371,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        momerr = inf_norm(iff_split.momentum) - p0
+        momerr = abs(inf_norm(iff_split.momentum) - p0)
         assert momerr < tolerance
 
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
@@ -397,7 +397,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(bf_split.energy) < tolerance
         assert inf_norm(bf_split.species_mass) < tolerance
 
-        momerr = inf_norm(bf_split.momentum) - p0
+        momerr = abs(inf_norm(bf_split.momentum) - p0)
         assert momerr < tolerance
 
         eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
