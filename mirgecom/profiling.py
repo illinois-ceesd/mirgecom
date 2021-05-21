@@ -80,7 +80,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     .. automethod:: get_profiling_data_for_kernel
     .. automethod:: reset_profiling_data_for_kernel
 
-    Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
+    Inherits from :class:`arraycontext.PyOpenCLArrayContext`.
     """
 
     def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:

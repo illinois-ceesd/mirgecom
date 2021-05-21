@@ -29,7 +29,7 @@ Logging Helpers
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -53,57 +53,16 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from meshmode.dof_array import thaw
+from mirgecom.fluid import split_conserved
+from mirgecom.inviscid import (
+    inviscid_flux,
+    inviscid_facial_flux
+)
 from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
-from mirgecom.fluid import (
-    compute_wavespeed,
-    split_conserved,
-)
-
-from mirgecom.inviscid import (
-    inviscid_flux
-)
-from functools import partial
-from mirgecom.flux import lfr_flux
-
-
-def _facial_flux(discr, eos, q_tpair, local=False):
-    """Return the flux across a face given the solution on both sides *q_tpair*.
-
-    Parameters
-    ----------
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-
-    q_tpair: :class:`grudge.sym.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
-
-    local: bool
-        Indicates whether to skip projection of fluxes to "all_faces" or not. If
-        set to *False* (the default), the returned fluxes are projected to
-        "all_faces."  If set to *True*, the returned fluxes are not projected to
-        "all_faces"; remaining instead on the boundary restriction.
-    """
-    actx = q_tpair[0].int.array_context
-    dim = discr.dim
-
-    euler_flux = partial(inviscid_flux, discr, eos)
-    lam = actx.np.maximum(
-        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
-    )
-    normal = thaw(actx, discr.normal(q_tpair.dd))
-
-    # todo: user-supplied flux routine
-    flux_weak = lfr_flux(q_tpair, flux_func=euler_flux, normal=normal, lam=lam)
-
-    if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
-    return flux_weak
+from mirgecom.operators import dg_div_low as dg_div
 
 
 def euler_operator(discr, eos, boundaries, q, t=0.0):
@@ -144,36 +103,17 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    vol_flux = inviscid_flux(discr, eos, q)
-    dflux = discr.weak_div(vol_flux)
-
-    interior_face_flux = _facial_flux(
-        discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
-
-    # Domain boundaries
-    domain_boundary_flux = sum(
-        _facial_flux(
-            discr,
-            q_tpair=boundaries[btag].boundary_pair(discr,
-                                                   eos=eos,
-                                                   btag=btag,
-                                                   t=t,
-                                                   q=q),
-            eos=eos
-        )
-        for btag in boundaries
+    inviscid_flux_vol = inviscid_flux(discr, eos, q)
+    inviscid_flux_bnd = (
+        inviscid_facial_flux(discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
+        + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=part_tpair)
+              for part_tpair in cross_rank_trace_pairs(discr, q))
+        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, q=q, eos=eos,
+              time=t)
+              for btag in boundaries)
     )
 
-    # Flux across partition boundaries
-    partition_boundary_flux = sum(
-        _facial_flux(discr, eos=eos, q_tpair=part_pair)
-        for part_pair in cross_rank_trace_pairs(discr, q)
-    )
-
-    return discr.inverse_mass(
-        dflux - discr.face_mass(interior_face_flux + domain_boundary_flux
-                                + partition_boundary_flux)
-    )
+    return -dg_div(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):

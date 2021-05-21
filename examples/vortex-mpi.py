@@ -49,7 +49,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
@@ -99,7 +99,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     eos = IdealSingleGas()
     initializer = Vortex2D(center=orig, velocity=vel)
     casename = "vortex"
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    boundaries = {
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+    }
     constant_cfl = False
     nstatus = 10
     nviz = 10
@@ -176,7 +178,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
-                              vis_timer=vis_timer)
+                              vis_timer=vis_timer, overwrite=True)
 
     try:
         (current_step, current_t, current_state) = \

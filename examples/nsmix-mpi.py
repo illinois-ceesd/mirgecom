@@ -35,10 +35,15 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
+from mirgecom.inviscid import (
+    get_inviscid_timestep
+)
+from mirgecom.transport import SimpleTransport
+from mirgecom.viscous import get_viscous_timestep
+from mirgecom.navierstokes import ns_operator
+# from mirgecom.heat import heat_operator
 
-from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
-    inviscid_sim_timestep,
     sim_checkpoint,
     check_step,
     generate_and_distribute_mesh,
@@ -49,10 +54,13 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import (  # noqa
+    AdiabaticSlipBoundary,
+    IsothermalNoSlipBoundary,
+)
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.euler import split_conserved
+from mirgecom.fluid import split_conserved
 import cantera
 import pyrometheus as pyro
 
@@ -97,7 +105,7 @@ def main(ctx_factory=cl.create_some_context):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
+                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
     local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
@@ -154,13 +162,22 @@ def main(ctx_factory=cl.create_some_context):
 
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
+    # {{{ Initialize simple transport model
+    kappa = 1e-5
+    spec_diffusivity = 1e-5 * np.ones(nspecies)
+    sigma = 1e-5
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
+                                      species_diffusivity=spec_diffusivity)
+    # }}}
+
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    casename = "autoignition"
+    casename = "nsmix"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature)
+                             temperature_guess=init_temperature,
+                             transport_model=transport_model)
 
     # }}}
 
@@ -173,8 +190,9 @@ def main(ctx_factory=cl.create_some_context):
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    my_boundary = AdiabaticSlipBoundary()
-    boundaries = {BTAG_ALL: my_boundary}
+    #    my_boundary = AdiabaticSlipBoundary()
+    my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
+    visc_bnds = {BTAG_ALL: my_boundary}
     current_state = initializer(eos=eos, x_vec=nodes, time=0)
 
     # Inspection at physics debugging time
@@ -191,7 +209,8 @@ def main(ctx_factory=cl.create_some_context):
 
     # }}}
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(discr, order + 3
+                                 if discr.dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -215,15 +234,33 @@ def main(ctx_factory=cl.create_some_context):
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
-                           t_final=t_final, constant_cfl=constant_cfl)
+    def get_timestep(state):
+        next_dt = current_dt
+        t_end = t_final
+        if constant_cfl is True:
+            inviscid_dt = get_inviscid_timestep(discr=discr, eos=eos,
+                                                cfl=current_cfl, q=state)
+            viscous_dt = get_viscous_timestep(discr=discr, eos=eos,
+                                              transport_model=transport_model,
+                                              cfl=current_cfl, q=state)
+            next_dt = min([next_dt, inviscid_dt, viscous_dt])
+        # else:
+        #     inviscid_cfl = get_inviscid_cfl(discr=discr, eos=eos,
+        #                                     dt=next_dt, state=state)
+        #     viscous_cfl = get_viscous_cfl(discr, eos=eos,
+        #                                   transport_model=transport_model,
+        #                                   dt=next_dt, state=state)
+        if(current_t + next_dt) > t_end:
+            next_dt = t_end - current_t
+
+        return next_dt
 
     def my_rhs(t, state):
         cv = split_conserved(dim=dim, q=state)
-        return (euler_operator(discr, q=state, t=t,
-                               boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(cv))
+        ns_rhs = ns_operator(discr, q=state, t=t,
+                             boundaries=visc_bnds, eos=eos)
+        reaction_source = eos.get_species_source_terms(cv)
+        return ns_rhs + reaction_source
 
     def my_checkpoint(step, t, dt, state):
         cv = split_conserved(dim, state)
