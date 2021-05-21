@@ -30,10 +30,10 @@ The compressible NS equations are rewritten as the following coupled system for 
 unknowns, $\mathbf{Q}$ and $\mathbf{\Sigma}$:
 
 $$
-\mathbf{\Sigma} - \nabla{\mathbf{Q}} &= \mathbf{0}\tag{\text{auxiliary eqn}}\\
+\mathbf{\Sigma} - \nabla{\mathbf{Q}} &= \mathbf{0}\quad{\text{auxiliary eqn}}\\
 \frac{\partial \mathbf{Q}}{\partial t} + \underbrace{\nabla\cdot\mathbf{F}^I(\mathbf{Q}) -
 \nabla\cdot\mathbf{F}^V(\mathbf{Q},\mathbf{\Sigma})}_{= \nabla\cdot\mathbf{F}(\mathbf{Q},
-\mathbf{\Sigma})} &= \mathbf{S} \tag{\text{primary eqn}}
+\mathbf{\Sigma})} &= \mathbf{S} \quad{\text{primary eqn}}
 $$
 
 Let $\Omega_h$ denote a collection of disjoint elements $E$. The DG method constructs
