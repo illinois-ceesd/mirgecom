@@ -67,7 +67,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     """Return the maximum stable dt."""
     mydt = dt
     if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
+        mydt = get_inviscid_timestep(discr=discr, cv=state,
                                      cfl=cfl, eos=eos)
     if (t + mydt) > t_final:
         mydt = t_final - t
@@ -157,7 +157,7 @@ def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
             logger.info(statusmesg)
 
     if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=q)
+        raise ExactSolutionMismatch(step, t=t, state=cv)
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
