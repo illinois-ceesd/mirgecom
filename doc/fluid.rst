@@ -53,12 +53,13 @@ for each scalar equation  is $\mathbf{S}$. The components of each vector follow 
 above:
 
 $$
-\mathbf{Q} = \begin{bmatrix}\rho\\\rho{E}\\(\rho{v})_{i}\\(\rho{Y})_{\alpha}\end{bmatrix},
-~\mathbf{F}^{I}_{j} = \begin{bmatrix}(\rho{v})_{j}\\\left(\rho{E}+p\right){v}_{j}\\
+\let\b=\mathbf
+\b{Q} = \begin{bmatrix}\rho\\\rho{E}\\(\rho{v})_{i}\\(\rho{Y})_{\alpha}\end{bmatrix},
+~\b{F}^{I}_{j} = \begin{bmatrix}(\rho{v})_{j}\\\left(\rho{E}+p\right){v}_{j}\\
 \left((\rho{v})_{j}{v}_{i}+p\delta_{ij}\right)\\(\rho{Y})_{\alpha}{v}_{j}\end{bmatrix},
-~\mathbf{F}^V_{j} = \begin{bmatrix}0\\\left(\tau_{jk}{v}_{k}-{q}_{j}\right)\\
-{\tau}_{ij}\\-(\mathbf{J}_{\alpha})_{j}\end{bmatrix},
-~\mathbf{S} = \begin{bmatrix}0\\E^{\mathtt{chem}}\\0\\W^{\mathtt{chem}}_{\alpha}
+~\b{F}^V_{j} = \begin{bmatrix}0\\\left(\tau_{jk}{v}_{k}-{q}_{j}\right)\\
+{\tau}_{ij}\\-(\b{J}_{\alpha})_{j}\end{bmatrix},
+~\b{S} = \begin{bmatrix}0\\E^{\mathtt{chem}}\\0\\W^{\mathtt{chem}}_{\alpha}
 \end{bmatrix}
 $$
 
