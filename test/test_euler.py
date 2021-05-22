@@ -373,8 +373,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         # generate the exact answer: just p0*nhat for the given boundary
         nhat = thaw(actx, discr.normal("int_faces"))
-        expected_mom_flux = p0*nhat
-        mom_flux_exact = discr.project("int_faces", "all_faces", expected_mom_flux)
+        mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
 
         momerr = inf_norm(iff_split.momentum - mom_flux_exact)
         assert momerr < tolerance
@@ -403,8 +402,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         # generate the exact answer: just p0*nhat for the given boundary
         nhat = thaw(actx, discr.normal(BTAG_ALL))
-        expected_mom_flux = p0*nhat
-        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", expected_mom_flux)
+        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
 
         momerr = inf_norm(bf_split.momentum - mom_flux_exact)
         assert momerr < tolerance
