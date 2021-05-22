@@ -52,7 +52,6 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.euler import split_conserved
 import cantera
 import pyrometheus as pyro
 
@@ -175,18 +174,14 @@ def main(ctx_factory=cl.create_some_context):
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
-    cv = initializer(eos=eos, x_vec=nodes, t=0)
+    current_state = initializer(eos=eos, x_vec=nodes, t=0)
 
     # Inspection at physics debugging time
     if debug:
         print("Initial MIRGE-Com state:")
-        print(f"{cv.mass=}")
-        print(f"{cv.energy=}")
-        print(f"{cv.momentum=}")
-        print(f"{cv.species_mass=}")
-        print(f"Initial Y: {cv.species_mass / cv.mass}")
-        print(f"Initial DV pressure: {eos.pressure(cv)}")
-        print(f"Initial DV temperature: {eos.temperature(cv)}")
+        print(f"{current_state=}")
+        print(f"Initial DV pressure: {eos.pressure(current_state)}")
+        print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -219,10 +214,9 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        cv = split_conserved(dim=dim, q=state)
-        return (euler_operator(discr, q=state, t=t,
+        return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(cv))
+                + eos.get_species_source_terms(state))
 
     def my_checkpoint(step, t, dt, state):
         reaction_rates = eos.get_production_rates(state)
@@ -237,7 +231,7 @@ def main(ctx_factory=cl.create_some_context):
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=cv,
+                          get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = True
