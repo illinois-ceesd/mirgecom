@@ -360,7 +360,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(iff_split.energy) < tolerance
         assert inf_norm(iff_split.species_mass) < tolerance
 
-        # The expected pressure 1.0 (by design). And the flux diagonal is
+        # The expected pressure is 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
         #
         # The off-diagonals are zero. We get a {ndim}-vector for each
@@ -371,7 +371,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        momerr = inf_norm(iff_split.momentum) - p0
+        # generate the exact answer: just p0*nhat for the given boundary
+        nhat = thaw(actx, discr.normal("int_faces"))
+        mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
+
+        momerr = inf_norm(iff_split.momentum - mom_flux_exact)
         assert momerr < tolerance
 
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
@@ -381,7 +385,6 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_e = discr.project("vol", BTAG_ALL, energy_input)
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
-
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                   species_mass=dir_mf)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
@@ -397,7 +400,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(bf_split.energy) < tolerance
         assert inf_norm(bf_split.species_mass) < tolerance
 
-        momerr = inf_norm(bf_split.momentum) - p0
+        # generate the exact answer: just p0*nhat for the given boundary
+        nhat = thaw(actx, discr.normal(BTAG_ALL))
+        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
+
+        momerr = inf_norm(bf_split.momentum - mom_flux_exact)
         assert momerr < tolerance
 
         eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
