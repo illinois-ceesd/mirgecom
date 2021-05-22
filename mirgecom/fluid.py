@@ -227,6 +227,7 @@ class ConservedVars:
 
     @property
     def array_context(self):
+        """Return an array context for the ConservedVars object."""
         return self.mass.array_context
 
     @property
