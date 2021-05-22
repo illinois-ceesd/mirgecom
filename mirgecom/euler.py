@@ -71,7 +71,7 @@ from mirgecom.flux import lfr_flux
 
 
 def _facial_flux(discr, eos, cv_tpair, local=False):
-    """Return the flux across a face given the solution on both sides *q_tpair*.
+    """Return the flux across a face given the solution on both sides *cv_tpair*.
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ def _facial_flux(discr, eos, cv_tpair, local=False):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
-    q_tpair: :class:`grudge.sym.TracePair`
+    cv_tpair: :class:`grudge.sym.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
 
     local: bool
@@ -148,7 +148,7 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
     boundary_flux = (
         _facial_flux(discr=discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
         + sum(
-            _facial_flux(discr, eos=eos, q_tpair=part_pair)
+            _facial_flux(discr, eos=eos, cv_tpair=part_pair)
             for part_pair in cross_rank_trace_pairs(discr, cv))
         + sum(
             _facial_flux(
