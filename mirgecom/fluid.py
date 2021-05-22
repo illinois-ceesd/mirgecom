@@ -6,6 +6,7 @@ State Vector Handling
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
+.. autofunction:: create_conserved
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
@@ -287,11 +288,9 @@ def split_conserved(dim, q):
                          species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum,
-        # empty: immutable
-        species_mass=None):
+def join_conserved(dim, mass, energy, momentum, species_mass=None):
     """Create agglomerated array from quantities for each conservation eqn."""
-    if species_mass is None:
+    if species_mass is None:  # empty: immutable
         species_mass = np.empty((0,), dtype=object)
 
     nspec = len(species_mass)
@@ -311,6 +310,30 @@ def join_conserved(dim, mass, energy, momentum,
     result[dim+2:] = species_mass
 
     return result
+
+
+def create_conserved(dim, mass, energy, momentum, species_mass=None):
+    """Create :class:`ConservedVars` from separated conserved quantities."""
+    if species_mass is None:  # empty is immutable
+        species_mass = np.empty((0,), dtype=object)
+
+    nspec = len(species_mass)
+    aux_shapes = [
+        _aux_shape(mass, ()),
+        _aux_shape(energy, ()),
+        _aux_shape(momentum, (dim,)),
+        _aux_shape(species_mass, (nspec,))]
+
+    from pytools import single_valued
+    aux_shape = single_valued(aux_shapes)
+
+    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
+    result[0] = mass
+    result[1] = energy
+    result[2:dim+2] = momentum
+    result[dim+2:] = species_mass
+
+    return split_conserved(dim, result)
 
 
 def velocity_gradient(discr, cv, grad_cv):
@@ -409,7 +432,7 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
-    actx = cv.mass.array_context
+    actx = cv.array_context
 
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)

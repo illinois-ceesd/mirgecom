@@ -89,7 +89,7 @@ class ExactSolutionMismatch(Exception):
         self.state = state
 
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
                    constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
                    vis_timer=None):
@@ -99,8 +99,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if do_viz is False and do_status is False:
         return 0
 
-    from mirgecom.fluid import split_conserved
-    cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 
     rank = 0
@@ -112,8 +110,8 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         actx = cv.mass.array_context
         nodes = thaw(actx, discr.nodes())
         expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-        exp_resid = q - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
+        exp_resid = cv - expected_state
+        err_norms = [discr.norm(v, np.inf) for v in exp_resid.join()]
         maxerr = max(err_norms)
 
     if do_viz:

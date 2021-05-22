@@ -150,7 +150,7 @@ def main(ctx_factory=cl.create_some_context):
     def my_checkpoint(step, t, dt, state):
         global checkpoint_t
         checkpoint_t = t
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)

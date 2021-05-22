@@ -88,24 +88,25 @@ def test_slipwall_identity(actx_factory, dim):
             from functools import partial
             bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
-            bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                          btag=BTAG_ALL, eos=eos)
-            bnd_cv_int = split_conserved(dim, bnd_pair.int)
-            bnd_cv_ext = split_conserved(dim, bnd_pair.ext)
+            bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
+                                          eos=eos, cv=uniform_state)
+            # bnd_cv_int = split_conserved(dim, bnd_pair.int)
+            # bnd_cv_ext = split_conserved(dim, bnd_pair.ext)
 
             # check that mass and energy are preserved
-            mass_resid = bnd_cv_int.mass - bnd_cv_ext.mass
+            mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
             mass_err = bnd_norm(mass_resid)
             assert mass_err == 0.0
-            energy_resid = bnd_cv_int.energy - bnd_cv_ext.energy
+
+            energy_resid = bnd_pair.int.energy - bnd_pair.ext.energy
             energy_err = bnd_norm(energy_resid)
             assert energy_err == 0.0
 
             # check that exterior momentum term is mom_interior - 2 * mom_normal
-            mom_norm_comp = np.dot(bnd_cv_int.momentum, nhat)
+            mom_norm_comp = np.dot(bnd_pair.int.momentum, nhat)
             mom_norm = nhat * mom_norm_comp
-            expected_mom_ext = bnd_cv_int.momentum - 2.0 * mom_norm
-            mom_resid = bnd_cv_ext.momentum - expected_mom_ext
+            expected_mom_ext = bnd_pair.int.momentum - 2.0 * mom_norm
+            mom_resid = bnd_pair.ext.momentum - expected_mom_ext
             mom_err = bnd_norm(mom_resid)
 
             assert mom_err == 0.0
@@ -153,19 +154,17 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                              btag=BTAG_ALL, eos=eos)
+                bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
+                                              eos=eos, cv=uniform_state)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
                 # numerical fluxes cannot be zero.
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
-                acv = split_conserved(dim, avg_state)
-                err_max = max(err_max, bnd_norm(np.dot(acv.momentum, nhat)))
+                err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
                 from mirgecom.euler import _facial_flux
-                bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
-                                                             bnd_pair, local=True))
+                bnd_flux = _facial_flux(discr, eos, cv_tpair=bnd_pair, local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 

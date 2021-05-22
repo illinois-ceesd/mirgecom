@@ -37,14 +37,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved
-)
+from mirgecom.fluid import create_conserved
 
 
-def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*.
+def inviscid_flux(discr, eos, cv):
+    r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
@@ -52,31 +49,24 @@ def inviscid_flux(discr, eos, q):
 
     .. note::
 
-        The fluxes are returned as a 2D object array with shape:
-        ``(num_equations, ndim)``.  Each entry in the
-        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-        form and shape for the flux data is required by the built-in
-        state data handling mechanism in :mod:`mirgecom.fluid`. That
-        mechanism is used by at least
-        :class:`mirgecom.fluid.ConservedVars`, and
-        :func:`mirgecom.fluid.join_conserved`, and
-        :func:`mirgecom.fluid.split_conserved`.
+        The fluxes are returned as a :class:`mirgecom.fluid.ConservedVars`
+        object with a *dim-vector* for each conservation equation. See
+        :class:`mirgecom.fluid.ConservedVars` for more information about
+        how the fluxes are represented.
     """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
+    dim = cv.dim
     p = eos.pressure(cv)
 
     mom = cv.momentum
 
-    return join_conserved(dim,
-            mass=mom,
-            energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            species_mass=(  # reshaped: (nspecies, dim)
-                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+    return create_conserved(
+        dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
+        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+        species_mass=(  # reshaped: (nspecies, dim)
+            (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def get_inviscid_timestep(discr, eos, cfl, q):
+def get_inviscid_timestep(discr, eos, cfl, cv):
     """Routine (will) return the (local) maximum stable inviscid timestep.
 
     Currently, it's a hack waiting for the geometric_factor helpers port
@@ -99,7 +89,7 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 #    return c*dt_ngf*dt_gf/max_v
 
 
-def get_inviscid_cfl(discr, eos, dt, q):
+def get_inviscid_cfl(discr, eos, dt, cv):
     """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
+    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, cv=cv)
     return dt / wanted_dt

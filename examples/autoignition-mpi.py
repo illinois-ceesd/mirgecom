@@ -175,11 +175,10 @@ def main(ctx_factory=cl.create_some_context):
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
-    current_state = initializer(eos=eos, x_vec=nodes, t=0)
+    cv = initializer(eos=eos, x_vec=nodes, t=0)
 
     # Inspection at physics debugging time
     if debug:
-        cv = split_conserved(dim, current_state)
         print("Initial MIRGE-Com state:")
         print(f"{cv.mass=}")
         print(f"{cv.energy=}")
@@ -226,10 +225,9 @@ def main(ctx_factory=cl.create_some_context):
                 + eos.get_species_source_terms(cv))
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        reaction_rates = eos.get_production_rates(cv)
+        reaction_rates = eos.get_production_rates(state)
         viz_fields = [("reaction_rates", reaction_rates)]
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               constant_cfl=constant_cfl, comm=comm,
@@ -239,7 +237,7 @@ def main(ctx_factory=cl.create_some_context):
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
+                          get_timestep=get_timestep, state=cv,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = True
