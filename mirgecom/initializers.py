@@ -887,8 +887,9 @@ class PlanarDiscontinuity:
             specifies the number of dimensions for the solution
         normal_dir: int
             specifies the direction (plane) the discontinuity is applied in
-        disc_location: float or Function[float]
-           location of discontinuity (in time)
+        disc_location: float or Callable
+           location of discontinuity or optionally a function returning the
+           time-dependent location.
         nspecies: int
             specifies the number of mixture species
         pressure_left: float
