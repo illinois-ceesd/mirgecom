@@ -35,15 +35,18 @@ THE SOFTWARE.
 import abc
 import numpy as np
 import numpy.linalg as la  # noqa
+from arraycontext.container.traversal import thaw
+
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import thaw
+
 from grudge.dof_desc import DOFDesc, as_dofdesc
-from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.trace_pair import TracePair
 
+import grudge.op as op
 
-def gradient_flux(discr, quad_tag, u_tpair):
+
+def gradient_flux(dcoll, quad_tag, u_tpair):
     r"""Compute the numerical flux for $\nabla u$."""
     actx = u_tpair.int.array_context
 
@@ -51,19 +54,19 @@ def gradient_flux(discr, quad_tag, u_tpair):
     dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
-    normal_quad = thaw(actx, discr.normal(dd_quad))
+    normal_quad = thaw(op.normal(dcoll, dd_quad), actx)
 
     def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+        return op.project(dcoll, dd, dd_quad, a)
 
     def flux(u, normal):
         return -u * normal
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux(
+    return op.project(dcoll, dd_quad, dd_allfaces_quad, flux(
         to_quad(u_tpair.avg), normal_quad))
 
 
-def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
+def diffusion_flux(dcoll, quad_tag, alpha_tpair, grad_u_tpair):
     r"""Compute the numerical flux for $\nabla \cdot (\alpha \nabla u)$."""
     actx = grad_u_tpair.int[0].array_context
 
@@ -71,10 +74,10 @@ def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
     dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
-    normal_quad = thaw(actx, discr.normal(dd_quad))
+    normal_quad = thaw(op.normal(dcoll, dd_quad), actx)
 
     def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+        return op.project(dcoll, dd, dd_quad, a)
 
     def flux(alpha, grad_u, normal):
         return -alpha * np.dot(grad_u, normal)
@@ -86,7 +89,7 @@ def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
             to_quad(alpha_tpair.ext), to_quad(grad_u_tpair.ext), normal_quad)
         )
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux_tpair.avg)
+    return op.project(dcoll, dd_quad, dd_allfaces_quad, flux_tpair.avg)
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
@@ -98,12 +101,12 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractmethod
-    def get_gradient_flux(self, discr, quad_tag, dd, alpha, u):
+    def get_gradient_flux(self, dcoll, quad_tag, dd, alpha, u):
         """Compute the flux for grad(u) on the boundary corresponding to *dd*."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_diffusion_flux(self, discr, quad_tag, dd, alpha, grad_u):
+    def get_diffusion_flux(self, dcoll, quad_tag, dd, alpha, grad_u):
         """Compute the flux for diff(u) on the boundary corresponding to *dd*."""
         raise NotImplementedError
 
@@ -136,17 +139,17 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         """
         self.value = value
 
-    def get_gradient_flux(self, discr, quad_tag, dd, alpha, u):  # noqa: D102
-        u_int = discr.project("vol", dd, u)
+    def get_gradient_flux(self, dcoll, quad_tag, dd, alpha, u):  # noqa: D102
+        u_int = op.project(dcoll, "vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
-        return gradient_flux(discr, quad_tag, u_tpair)
+        return gradient_flux(dcoll, quad_tag, u_tpair)
 
-    def get_diffusion_flux(self, discr, quad_tag, dd, alpha, grad_u):  # noqa: D102
-        alpha_int = discr.project("vol", dd, alpha)
+    def get_diffusion_flux(self, dcoll, quad_tag, dd, alpha, grad_u):  # noqa: D102
+        alpha_int = op.project(dcoll, "vol", dd, alpha)
         alpha_tpair = TracePair(dd, interior=alpha_int, exterior=alpha_int)
-        grad_u_int = discr.project("vol", dd, grad_u)
+        grad_u_int = op.project(dcoll, "vol", dd, grad_u)
         grad_u_tpair = TracePair(dd, interior=grad_u_int, exterior=grad_u_int)
-        return diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair)
+        return diffusion_flux(dcoll, quad_tag, alpha_tpair, grad_u_tpair)
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
@@ -185,12 +188,12 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         """
         self.value = value
 
-    def get_gradient_flux(self, discr, quad_tag, dd, alpha, u):  # noqa: D102
-        u_int = discr.project("vol", dd, u)
+    def get_gradient_flux(self, dcoll, quad_tag, dd, alpha, u):  # noqa: D102
+        u_int = op.project(dcoll, "vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
-        return gradient_flux(discr, quad_tag, u_tpair)
+        return gradient_flux(dcoll, quad_tag, u_tpair)
 
-    def get_diffusion_flux(self, discr, quad_tag, dd, alpha, grad_u):  # noqa: D102
+    def get_diffusion_flux(self, dcoll, quad_tag, dd, alpha, grad_u):  # noqa: D102
         dd_quad = dd.with_discr_tag(quad_tag)
         dd_allfaces_quad = dd_quad.with_dtag("all_faces")
         # Compute the flux directly instead of constructing an external grad_u value
@@ -198,13 +201,13 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         # spatially-varying alpha case (the other approach would result in a
         # grad_u_tpair that lives in the quadrature discretization; diffusion_flux
         # would need to be modified to accept such values).
-        alpha_int_quad = discr.project("vol", dd_quad, alpha)
-        value_quad = discr.project(dd, dd_quad, self.value)
+        alpha_int_quad = op.project(dcoll, "vol", dd_quad, alpha)
+        value_quad = op.project(dcoll, dd, dd_quad, self.value)
         flux_quad = -alpha_int_quad*value_quad
-        return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
+        return op.project(dcoll, dd_quad, dd_allfaces_quad, flux_quad)
 
 
-def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=False):
+def diffusion_operator(dcoll, quad_tag, alpha, boundaries, u, return_grad_u=False):
     r"""
     Compute the diffusion operator.
 
@@ -216,10 +219,11 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
     quad_tag:
-        quadrature tag indicating which discretization in *discr* to use for
+        quadrature tag indicating which discretization in *dcoll* to use for
         overintegration
     alpha: numbers.Number or meshmode.dof_array.DOFArray
         the diffusivity value(s)
@@ -245,7 +249,7 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
         return obj_array_vectorize_n_args(lambda boundaries_i, u_i:
-            diffusion_operator(discr, quad_tag, alpha, boundaries_i, u_i,
+            diffusion_operator(dcoll, quad_tag, alpha, boundaries_i, u_i,
             return_grad_u=return_grad_u), make_obj_array(boundaries), u)
 
     for btag, bdry in boundaries.items():
@@ -256,39 +260,43 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
     dd_quad = DOFDesc("vol", quad_tag)
     dd_allfaces_quad = DOFDesc("all_faces", quad_tag)
 
-    grad_u = discr.inverse_mass(
-        discr.weak_grad(-u)
+    grad_u = op.inverse_mass(
+        dcoll,
+        op.weak_local_grad(dcoll, -u)
         -  # noqa: W504
-        discr.face_mass(
+        op.face_mass(
+            dcoll,
             dd_allfaces_quad,
-            gradient_flux(discr, quad_tag, interior_trace_pair(discr, u))
+            gradient_flux(dcoll, quad_tag, op.interior_trace_pair(dcoll, u))
             + sum(
-                bdry.get_gradient_flux(discr, quad_tag, as_dofdesc(btag), alpha, u)
+                bdry.get_gradient_flux(dcoll, quad_tag, as_dofdesc(btag), alpha, u)
                 for btag, bdry in boundaries.items())
             + sum(
-                gradient_flux(discr, quad_tag, u_tpair)
-                for u_tpair in cross_rank_trace_pairs(discr, u))
+                gradient_flux(dcoll, quad_tag, u_tpair)
+                for u_tpair in op.cross_rank_trace_pairs(dcoll, u))
             )
         )
 
-    alpha_quad = discr.project("vol", dd_quad, alpha)
-    grad_u_quad = discr.project("vol", dd_quad, grad_u)
+    alpha_quad = op.project(dcoll, "vol", dd_quad, alpha)
+    grad_u_quad = op.project(dcoll, "vol", dd_quad, grad_u)
 
-    diff_u = discr.inverse_mass(
-        discr.weak_div(dd_quad, -alpha_quad*grad_u_quad)
+    diff_u = op.inverse_mass(
+        dcoll,
+        op.weak_local_div(dcoll, dd_quad, -alpha_quad*grad_u_quad)
         -  # noqa: W504
-        discr.face_mass(
+        op.face_mass(
+            dcoll,
             dd_allfaces_quad,
-            diffusion_flux(discr, quad_tag, interior_trace_pair(discr, alpha),
-                interior_trace_pair(discr, grad_u))
+            diffusion_flux(dcoll, quad_tag, op.interior_trace_pair(dcoll, alpha),
+                op.interior_trace_pair(dcoll, grad_u))
             + sum(
-                bdry.get_diffusion_flux(discr, quad_tag, as_dofdesc(btag), alpha,
+                bdry.get_diffusion_flux(dcoll, quad_tag, as_dofdesc(btag), alpha,
                     grad_u) for btag, bdry in boundaries.items())
             + sum(
-                diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair)
+                diffusion_flux(dcoll, quad_tag, alpha_tpair, grad_u_tpair)
                 for alpha_tpair, grad_u_tpair in zip(
-                    cross_rank_trace_pairs(discr, alpha),
-                    cross_rank_trace_pairs(discr, grad_u)))
+                    op.cross_rank_trace_pairs(dcoll, alpha),
+                    op.cross_rank_trace_pairs(dcoll, grad_u)))
             )
         )
 
