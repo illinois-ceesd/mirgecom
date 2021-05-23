@@ -58,10 +58,10 @@ def make_status_message(*, dcoll, t, step, dt, cfl, dependent_vars):
     dv = dependent_vars
 
     def _min(u):
-        return op.nodal_min(dcoll, u, "vol")
+        return op.nodal_min(dcoll, "vol", u)
 
     def _max(u):
-        return op.nodal_max(dcoll, u, "vol")
+        return op.nodal_max(dcoll, "vol", u)
 
     statusmsg = (
         f"Status: {step=} {t=}\n"

@@ -258,11 +258,11 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
         if op == "min":
             self._nodal_reduction = lambda u: grudge_op.nodal_min(self.dcoll,
-                                                                  u, "vol")
+                                                                  "vol", u)
             self.rank_aggr = min
         elif op == "max":
             self._nodal_reduction = lambda u: grudge_op.nodal_max(self.dcoll,
-                                                                  u, "vol")
+                                                                  "vol", u)
             self.rank_aggr = max
         elif op == "L2_norm":
             self._nodal_reduction = lambda u: grudge_op.norm(self.dcoll, u, 2)
