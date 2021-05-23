@@ -29,16 +29,21 @@ import numpy.linalg as la  # noqa
 import logging
 import pytest
 
-from meshmode.dof_array import thaw
+from arraycontext import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
+from arraycontext.container.traversal import thaw
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
 from mirgecom.fluid import split_conserved
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from grudge.discretization import DiscretizationCollection
+import grudge.op as op
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +69,14 @@ def test_slipwall_identity(actx_factory, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = thaw(actx, discr.normal(BTAG_ALL))
-    #    normal_mag = actx.np.sqrt(np.dot(normal, normal))
-    #    nhat_mult = 1.0 / normal_mag
-    #    nhat = normal * make_obj_array([nhat_mult])
+    nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
+
+    def bnd_norm(u):
+        return op.norm(dcoll, u, p=np.inf, dd=BTAG_ALL)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -85,10 +90,8 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
-            from functools import partial
-            bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
 
-            bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
+            bnd_pair = wall.boundary_pair(dcoll, uniform_state, t=0.0,
                                           btag=BTAG_ALL, eos=eos)
             bnd_cv_int = split_conserved(dim, bnd_pair.int)
             bnd_cv_ext = split_conserved(dim, bnd_pair.ext)
@@ -133,13 +136,13 @@ def test_slipwall_flux(actx_factory, dim, order):
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
-        nhat = thaw(actx, discr.normal(BTAG_ALL))
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        nodes = thaw(op.nodes(dcoll), actx)
+        nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
         h = 1.0 / nel_1d
 
-        from functools import partial
-        bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+        def bnd_norm(u):
+            return op.norm(dcoll, u, p=np.inf, dd=BTAG_ALL)
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
@@ -153,7 +156,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
+                bnd_pair = wall.boundary_pair(dcoll, uniform_state, t=0.0,
                                               btag=BTAG_ALL, eos=eos)
 
                 # Check the total velocity component normal
@@ -164,7 +167,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 err_max = max(err_max, bnd_norm(np.dot(acv.momentum, nhat)))
 
                 from mirgecom.euler import _facial_flux
-                bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
+                bnd_flux = split_conserved(dim, _facial_flux(dcoll, eos,
                                                              bnd_pair, local=True))
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))

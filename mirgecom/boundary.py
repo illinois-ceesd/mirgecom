@@ -120,7 +120,7 @@ class AdiabaticSlipBoundary:
         actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, op.normal(dcoll, btag))
+        nhat = thaw(op.normal(dcoll, btag), actx)
 
         # Get the interior/exterior solns
         int_soln = op.project(dcoll, "vol", btag, q)
