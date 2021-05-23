@@ -1,7 +1,0 @@
-=====
-Model
-=====
-.. toctree::
-
-   fluid
-   discretization

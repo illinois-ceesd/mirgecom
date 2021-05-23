@@ -70,7 +70,8 @@ Table of Contents
 .. toctree::
     :numbered:
 
-    model/model
+    fluid
+    discretization
     operators/operators
     support/support
     development/development
