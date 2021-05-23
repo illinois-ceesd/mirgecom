@@ -31,17 +31,18 @@ import pyopencl.clmath  # noqa
 import logging
 import pytest
 
-from pytools.obj_array import (
-    make_obj_array,
-    obj_array_vectorize
+from arraycontext import (  # noqa
+    thaw,
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
 )
 
-from meshmode.dof_array import thaw
+from pytools.obj_array import make_obj_array
+
 from mirgecom.fluid import split_conserved, join_conserved
-from grudge.eager import EagerDGDiscretization
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from grudge.discretization import DiscretizationCollection
+import grudge.op as op
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +65,14 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    zeros = discr.zeros(actx)
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(dcoll.nodes(), actx)
+    zeros = dcoll.zeros(actx)
     ones = zeros + 1.0
 
     mass = 1*ones
     for i in range(mass_exp):
-        mass *= (mass + i)
+        mass = mass * (mass + i)
     energy = zeros + 2.5
     velocity = vel_fac * nodes
     mom = mass * velocity
@@ -79,14 +80,14 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
 
-    grad_q = obj_array_vectorize(discr.grad, q)
+    grad_q = op.local_grad(dcoll, q)
     grad_cv = split_conserved(dim, grad_q)
 
-    grad_v = velocity_gradient(discr, cv, grad_cv)
+    grad_v = velocity_gradient(dcoll, cv, grad_cv)
 
     tol = 1e-12
     exp_result = vel_fac * np.eye(dim) * ones
-    grad_v_err = [discr.norm(grad_v[i] - exp_result[i], np.inf)
+    grad_v_err = [op.norm(dcoll, grad_v[i] - exp_result[i], np.inf)
                   for i in range(dim)]
 
     assert max(grad_v_err) < tol
@@ -114,9 +115,9 @@ def test_velocity_gradient_eoc(actx_factory, dim):
             a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
-        zeros = discr.zeros(actx)
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
+        nodes = thaw(dcoll.nodes(), actx)
+        zeros = dcoll.zeros(actx)
         energy = zeros + 2.5
 
         mass = nodes[dim-1]*nodes[dim-1]
@@ -126,10 +127,10 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
         cv = split_conserved(dim, q)
 
-        grad_q = obj_array_vectorize(discr.grad, q)
+        grad_q = op.local_grad(dcoll, q)
         grad_cv = split_conserved(dim, grad_q)
 
-        grad_v = velocity_gradient(discr, cv, grad_cv)
+        grad_v = velocity_gradient(dcoll, cv, grad_cv)
 
         def exact_grad_row(xdata, gdim, dim):
             exact_grad_row = make_obj_array([zeros for _ in range(dim)])
@@ -137,7 +138,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
             return exact_grad_row
 
         comp_err = make_obj_array([
-            discr.norm(grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf)
+            op.norm(dcoll, grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf)
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
