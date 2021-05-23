@@ -31,8 +31,9 @@ import pyopencl.clmath
 from pytools.obj_array import make_obj_array
 import pytest
 
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from arraycontext.container.traversal import thaw
+from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
@@ -47,7 +48,9 @@ from mirgecom.fluid import (
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
-from grudge.eager import EagerDGDiscretization
+from grudge.discretization import DiscretizationCollection
+import grudge.op as op
+
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
@@ -77,8 +80,8 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
@@ -90,7 +93,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     def inf_norm(data):
         if len(data) > 0:
-            return discr.norm(data, np.inf)
+            return op.norm(dcoll, data, np.inf)
         else:
             return 0.0
 
@@ -133,8 +136,8 @@ def test_lump_init(ctx_factory):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -147,7 +150,7 @@ def test_lump_init(ctx_factory):
     cv = split_conserved(dim, lump_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = op.norm(dcoll, p - exp_p, np.inf)
 
     logger.info(f"lump_soln = {lump_soln}")
     logger.info(f"pressure = {p}")
@@ -175,8 +178,8 @@ def test_vortex_init(ctx_factory):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
 
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -185,7 +188,7 @@ def test_vortex_init(ctx_factory):
     cv = split_conserved(dim, vortex_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = op.norm(dcoll, p - exp_p, np.inf)
 
     logger.info(f"vortex_soln = {vortex_soln}")
     logger.info(f"pressure = {p}")
@@ -214,8 +217,8 @@ def test_shock_init(ctx_factory):
     order = 3
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
 
     initr = SodShock1D()
     initsoln = initr(t=0.0, x_vec=nodes)
@@ -228,7 +231,7 @@ def test_shock_init(ctx_factory):
     cv = split_conserved(dim, initsoln)
     p = eos.pressure(cv)
 
-    assert discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol
+    assert op.norm(dcoll, actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -252,8 +255,8 @@ def test_uniform(ctx_factory, dim):
     order = 1
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -263,8 +266,8 @@ def test_uniform(ctx_factory, dim):
     tol = 1e-15
     ssoln = split_conserved(dim, initsoln)
 
-    assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
-    assert discr.norm(ssoln.energy - 2.5, np.inf) < tol
+    assert op.norm(dcoll, ssoln.mass - 1.0, np.inf) < tol
+    assert op.norm(dcoll, ssoln.energy - 2.5, np.inf) < tol
 
     print(f"Uniform Soln:{initsoln}")
     eos = IdealSingleGas()
@@ -272,7 +275,7 @@ def test_uniform(ctx_factory, dim):
     p = eos.pressure(cv)
     print(f"Press:{p}")
 
-    assert discr.norm(p - 1.0, np.inf) < tol
+    assert op.norm(dcoll, p - 1.0, np.inf) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -296,8 +299,8 @@ def test_pulse(ctx_factory, dim):
     order = 1
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -316,25 +319,25 @@ def test_pulse(ctx_factory, dim):
     print(f"exact: {pulse_check}")
     pulse_resid = pulse - pulse_check
     print(f"pulse residual: {pulse_resid}")
-    assert(discr.norm(pulse_resid, np.inf) < tol)
+    assert(op.norm(dcoll, pulse_resid, np.inf) < tol)
 
     # proper scaling with amplitude?
     amp = 2.0
     pulse = 0
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     pulse_resid = pulse - (pulse_check + pulse_check)
-    assert(discr.norm(pulse_resid, np.inf) < tol)
+    assert(op.norm(dcoll, pulse_resid, np.inf) < tol)
 
     # proper scaling with r?
     amp = 1.0
     rcheck = np.sqrt(2.0) * nodes
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
-    assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
+    assert(op.norm(dcoll, pulse - (pulse_check * pulse_check), np.inf) < tol)
 
     # proper scaling with w?
     w = w / np.sqrt(2.0)
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
-    assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
+    assert(op.norm(dcoll, pulse - (pulse_check * pulse_check), np.inf) < tol)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -356,8 +359,8 @@ def test_multilump(ctx_factory, dim):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(op.nodes(dcoll), actx)
 
     rho0 = 1.5
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
@@ -383,11 +386,11 @@ def test_multilump(ctx_factory, dim):
     assert get_num_species(dim, lump_soln) == nspecies
 
     cv = split_conserved(dim, lump_soln)
-    assert discr.norm(cv.mass - rho0) == 0.0
+    assert op.norm(dcoll, cv.mass - rho0, np.inf) == 0.0
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = op.norm(dcoll, p - exp_p, np.inf)
     assert len(cv.species_mass) == nspecies
     species_mass = cv.species_mass
 
@@ -402,7 +405,7 @@ def test_multilump(ctx_factory, dim):
     print(f"exp_mass = {exp_mass}")
     print(f"mass_resid = {mass_resid}")
 
-    assert discr.norm(mass_resid, np.inf) == 0.0
+    assert op.norm(dcoll, mass_resid, np.inf) == 0.0
 
     logger.info(f"lump_soln = {lump_soln}")
     logger.info(f"pressure = {p}")
