@@ -158,13 +158,9 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
             for part_pair in cross_rank_trace_pairs(discr, cv.join()))
         + sum(
             _facial_flux(
-                discr=discr,
-                cv_tpair=boundaries[btag].boundary_pair(discr,
-                                                        eos=eos,
-                                                        btag=btag,
-                                                        t=t,
-                                                        cv=cv),
-                eos=eos
+                discr=discr, eos=eos,
+                cv_tpair=boundaries[btag].boundary_pair(
+                    discr, eos=eos, btag=btag, t=t, cv=cv)
             )
             for btag in boundaries)
     ).join()
