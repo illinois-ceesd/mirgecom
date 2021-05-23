@@ -150,7 +150,6 @@ def euler_operator(dcoll, eos, boundaries, q, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-
     interior_face_flux = _facial_flux(
         dcoll, eos=eos,
         q_tpair=op.interior_trace_pair(dcoll, q)
