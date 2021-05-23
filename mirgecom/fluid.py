@@ -42,8 +42,14 @@ import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
+from arraycontext import (
+    dataclass_array_container,
+    with_container_arithmetic,
+)
 
 
+@with_container_arithmetic(bcast_obj_array=False, rel_comparison=True)
+@dataclass_array_container
 @dataclass(frozen=True)
 class ConservedVars:
     r"""Store and resolve quantities according to the fluid conservation equations.
@@ -218,6 +224,11 @@ class ConservedVars:
     energy: DOFArray
     momentum: np.ndarray
     species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
+
+    @property
+    def array_context(self):
+        """Return an array context for the ConservedVars object."""
+        return self.mass.array_context
 
     @property
     def dim(self):
