@@ -23,16 +23,20 @@ THE SOFTWARE.
 import numpy as np
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
+
+from arraycontext import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
+from arraycontext.container.traversal import thaw
+
 from pytools.obj_array import flat_obj_array, make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
-from meshmode.dof_array import thaw
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+import grudge.op as op
 
 import pytest
 
@@ -164,10 +168,10 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     for n in [8, 10, 12] if p.dim == 3 else [8, 12, 16]:
         mesh = p.mesh_factory(n)
 
-        from grudge.eager import EagerDGDiscretization
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.discretization import DiscretizationCollection
+        dcoll = DiscretizationCollection(actx, mesh, order=order)
 
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(op.nodes(dcoll), actx)
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
@@ -179,19 +183,19 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
         fields = flat_obj_array(u, v)
 
-        rhs = wave_operator(discr, c=p.c, w=fields)
+        rhs = wave_operator(dcoll, c=p.c, w=fields)
         rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
         rel_linf_err = (
-            discr.norm(rhs - expected_rhs, np.inf)
-            / discr.norm(expected_rhs, np.inf))
+            op.norm(dcoll, rhs - expected_rhs, np.inf)
+            / op.norm(dcoll, expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order)
+            vis = make_visualizer(dcoll)
             vis.write_vtk_file("wave_accuracy_{order}_{n}.vtu".format(order=order,
                         n=n), [
                             ("u", fields[0]),
@@ -228,16 +232,16 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     mesh = p.mesh_factory(8)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    from grudge.discretization import DiscretizationCollection
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(op.nodes(dcoll), actx)
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
 
     def get_rhs(t, w):
-        result = wave_operator(discr, c=p.c, w=w)
+        result = wave_operator(dcoll, c=p.c, w=w)
         result[0] += sym_eval(sym_f, t)
         return result
 
@@ -260,7 +264,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order)
+        vis = make_visualizer(dcoll)
         vis.write_vtk_file("wave_stability.vtu",
                 [
                     ("u", fields[0]),
@@ -269,8 +273,8 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
                     ("v_expected", expected_fields[1:]),
                     ])
 
-    err = discr.norm(fields-expected_fields, np.inf)
-    max_err = discr.norm(expected_fields, np.inf)
+    err = op.norm(dcoll, fields-expected_fields, np.inf)
+    max_err = op.norm(dcoll, expected_fields, np.inf)
 
     assert err < max_err
 
