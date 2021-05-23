@@ -77,10 +77,13 @@ $$
 \b{Q}_h d\Omega\right\rbrack &= 0,
 $$
 
-where $\b{h} = \b{h}_e - \b{h}_v$ is a *numerical flux* consisting of a
-*inviscid* and *viscous* component respectively, and $\b{H}_s$ is the
-*gradient numerical flux* for the auxiliary equation. Here, we use the subscript "$h$" to
-denote discretized quantities. See below for more on these functions.
+where $\b{h} = \b{h}_e - \b{h}_v$ is a *numerical flux* respectively representing
+the inviscid and viscous contributions to the physical flux
+$\left(\b{F}^I(\b{Q}_h) - F^V(\b{Q}_h, \nabla\b{Q}_h)\right)\cdot\b{n}$, with
+$\b{n}$ being the outward facing unit normal with respect to the local element.
+$\b{H}_s$ is the *gradient numerical flux* ($\b{Q}_h\b{n}$) for the auxiliary equation.
+Here, we use the subscript "$h$" to denote discretized quantities. See below for more
+on these functions.
 
 Since $\b{F}^I(\b{Q}_h)\cdot\b{n}$ is discontinuous, the quantities are
 allowed to vary on either side of a shared element boundary. That is, $\b{F}^I
