@@ -29,11 +29,14 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from arraycontext.container.traversal import thaw
+from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
 
 
 from mirgecom.euler import euler_operator
@@ -53,6 +56,7 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.euler import split_conserved
+
 import cantera
 import pyrometheus as pyro
 
@@ -101,10 +105,10 @@ def main(ctx_factory=cl.create_some_context):
     local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
-    discr = EagerDGDiscretization(
+    dcoll = DiscretizationCollection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(op.nodes(dcoll), actx)
 
     # {{{  Set up initial state using Cantera
 
@@ -191,7 +195,7 @@ def main(ctx_factory=cl.create_some_context):
 
     # }}}
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -215,13 +219,13 @@ def main(ctx_factory=cl.create_some_context):
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
+    get_timestep = partial(inviscid_sim_timestep, dcoll=dcoll, t=current_t,
                            dt=current_dt, cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
         cv = split_conserved(dim=dim, q=state)
-        return (euler_operator(discr, q=state, t=t,
+        return (euler_operator(dcoll, q=state, t=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(cv))
 
@@ -229,7 +233,7 @@ def main(ctx_factory=cl.create_some_context):
         cv = split_conserved(dim, state)
         reaction_rates = eos.get_production_rates(cv)
         viz_fields = [("reaction_rates", reaction_rates)]
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(dcoll, visualizer, eos, q=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               constant_cfl=constant_cfl, comm=comm,

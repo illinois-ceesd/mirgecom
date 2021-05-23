@@ -26,28 +26,34 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
+
 from pytools.obj_array import flat_obj_array
-from grudge.eager import EagerDGDiscretization
+
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
+
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
+
+from arraycontext.container.traversal import thaw
+from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+
 import pyopencl.tools as cl_tools
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 
-def bump(actx, discr, t=0):
+def bump(actx, dcoll, t=0):
     """Create a bump."""
-    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
+    source_center = np.array([0.2, 0.35, 0.1])[:dcoll.dim]
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(op.nodes(dcoll), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
-        for i in range(discr.dim)
+        for i in range(dcoll.dim)
         ])
 
     return (
@@ -83,26 +89,26 @@ def main(use_profiling=False):
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
-        dt = 0.75 / (nel_1d * order ** 2)
+        dt = 0.7 / (nel_1d * order ** 2)
     elif dim == 3:
         # no deep meaning here, just a fudge factor
-        dt = 0.45 / (nel_1d * order ** 2)
+        dt = 0.4 / (nel_1d * order ** 2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
     print("%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
 
     fields = flat_obj_array(
-        bump(actx, discr),
-        [discr.zeros(actx) for i in range(discr.dim)]
+        bump(actx, dcoll),
+        [dcoll.zeros(actx) for i in range(dcoll.dim)]
         )
 
-    vis = make_visualizer(discr)
+    vis = make_visualizer(dcoll)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(dcoll, c=1, w=w)
 
     t = 0
     t_final = 3
@@ -113,7 +119,7 @@ def main(use_profiling=False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, discr.norm(fields[0], np.inf))
+            print(istep, t, op.norm(dcoll, fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
