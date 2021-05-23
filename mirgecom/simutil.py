@@ -34,7 +34,11 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-from meshmode.dof_array import thaw
+
+from arraycontext.container.traversal import thaw
+
+import grudge.op as op
+
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 
@@ -62,12 +66,12 @@ def check_step(step, interval):
     return False
 
 
-def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
+def inviscid_sim_timestep(dcoll, state, t, dt, cfl, eos,
                           t_final, constant_cfl=False):
     """Return the maximum stable dt."""
     mydt = dt
     if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
+        mydt = get_inviscid_timestep(dcoll=dcoll, q=state,
                                      cfl=cfl, eos=eos)
     if (t + mydt) > t_final:
         mydt = t_final - t
@@ -89,7 +93,7 @@ class ExactSolutionMismatch(Exception):
         self.state = state
 
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+def sim_checkpoint(dcoll, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
                    constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
                    vis_timer=None):
@@ -100,7 +104,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         return 0
 
     from mirgecom.fluid import split_conserved
-    cv = split_conserved(discr.dim, q)
+    cv = split_conserved(dcoll.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 
     rank = 0
@@ -110,10 +114,10 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     maxerr = 0.0
     if exact_soln is not None:
         actx = cv.mass.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(op.nodes(dcoll), actx)
         expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
         exp_resid = q - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
+        err_norms = [op.norm(dcoll, v, np.inf) for v in exp_resid]
         maxerr = max(err_norms)
 
     if do_viz:
@@ -146,9 +150,9 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
     if do_status is True:
         #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
+        #            current_cfl = get_inviscid_cfl(dcoll=dcoll, q=q,
         #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
+        statusmesg = make_status_message(dcoll=dcoll, t=t, step=step, dt=dt,
                                          cfl=cfl, dependent_vars=dependent_vars)
         if exact_soln is not None:
             statusmesg += (

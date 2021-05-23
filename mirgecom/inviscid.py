@@ -43,7 +43,7 @@ from mirgecom.fluid import (
 )
 
 
-def inviscid_flux(discr, eos, q):
+def inviscid_flux(dcoll, eos, q):
     r"""Compute the inviscid flux vectors from flow solution *q*.
 
     The inviscid fluxes are
@@ -62,7 +62,7 @@ def inviscid_flux(discr, eos, q):
         :func:`mirgecom.fluid.join_conserved`, and
         :func:`mirgecom.fluid.split_conserved`.
     """
-    dim = discr.dim
+    dim = dcoll.dim
     cv = split_conserved(dim, q)
     p = eos.pressure(cv)
 
@@ -76,15 +76,15 @@ def inviscid_flux(discr, eos, q):
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def get_inviscid_timestep(discr, eos, cfl, q):
+def get_inviscid_timestep(dcoll, eos, cfl, q):
     """Routine (will) return the (local) maximum stable inviscid timestep.
 
     Currently, it's a hack waiting for the geometric_factor helpers port
     from grudge.
     """
-    dim = discr.dim
-    mesh = discr.mesh
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
+    dim = dcoll.dim
+    mesh = dcoll.mesh
+    order = max([grp.order for grp in dcoll.discr_from_dd("vol").groups])
     nelements = mesh.nelements
     nel_1d = nelements ** (1.0 / (1.0 * dim))
 
@@ -92,14 +92,14 @@ def get_inviscid_timestep(discr, eos, cfl, q):
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     return cfl * dt
 
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
+#    dt_ngf = dt_non_geometric_factor(dcoll.mesh)
+#    dt_gf  = dt_geometric_factor(dcoll.mesh)
 #    wavespeeds = compute_wavespeed(w,eos=eos)
 #    max_v = clmath.max(wavespeeds)
 #    return c*dt_ngf*dt_gf/max_v
 
 
-def get_inviscid_cfl(discr, eos, dt, q):
+def get_inviscid_cfl(dcoll, eos, dt, q):
     """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
+    wanted_dt = get_inviscid_timestep(dcoll, eos=eos, cfl=1.0, q=q)
     return dt / wanted_dt
