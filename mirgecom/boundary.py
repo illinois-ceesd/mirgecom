@@ -353,7 +353,8 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
         PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_slip_pair
+            self, boundary_pair_func=self.adiabatic_slip_pair,
+            fluid_solution_gradient_func=self.exterior_grad_q
         )
 
     def adiabatic_slip_pair(self, discr, q, btag, **kwargs):
@@ -425,7 +426,8 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
         PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_noslip_pair
+            self, boundary_pair_func=self.adiabatic_noslip_pair,
+            fluid_solution_gradient_func=self.exterior_grad_q
         )
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
