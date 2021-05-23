@@ -193,13 +193,13 @@ Transport models provided by |mirgecom| will be documented in the forthcoming
 transport module.
 
 .. note::
-
-  The EOS and transport models provide closure for the fluid model in that the fluid
-  thermal state variables such as pressure $p$, temperature $T$, and material
-  properties such as viscosity $\mu$, and thermal conductivity $\kappa$ are functions of
-  the current fluid state $\b{Q}$. The EOS and transport models provide constructs
-  that manage the relationships between these quantities, and provide methods for
-  calculating them from minimal working sets of input data.
+   
+    The EOS and transport models provide closure for the fluid model in that the fluid
+    thermal state variables such as pressure $p$, temperature $T$, and material
+    properties such as viscosity $\mu$, and thermal conductivity $\kappa$ are functions of
+    the current fluid state $\b{Q}$. The EOS and transport models provide constructs
+    that manage the relationships between these quantities, and provide methods for
+    calculating them from minimal working sets of input data.
 
 Code correspondence
 -------------------
