@@ -27,16 +27,22 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
+
+from arraycontext import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
+from arraycontext.container.traversal import thaw
+
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from meshmode.dof_array import thaw, DOFArray
-from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, DISCR_TAG_QUAD
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.dof_array import DOFArray
+
+from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, DISCR_TAG_QUAD
+import grudge.op as op
 
 import pytest
 
@@ -111,7 +117,7 @@ def get_decaying_trig(dim, alpha):
         sym_u *= sym_sin(sym_coords[i])
     sym_u *= sym_cos(sym_coords[dim-1])
 
-    def get_boundaries(discr, actx, t):
+    def get_boundaries(dcoll, actx, t):
         boundaries = {}
 
         for i in range(dim-1):
@@ -145,8 +151,8 @@ def get_decaying_trig_truncated_domain(dim, alpha):
         sym_u *= sym_sin(sym_coords[i])
     sym_u *= sym_cos(sym_coords[dim-1])
 
-    def get_boundaries(discr, actx, t):
-        nodes = thaw(actx, discr.nodes())
+    def get_boundaries(dcoll, actx, t):
+        nodes = thaw(op.nodes(dcoll), actx)
 
         def sym_eval(expr):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
@@ -159,15 +165,15 @@ def get_decaying_trig_truncated_domain(dim, alpha):
         for i in range(dim-1):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
-            upper_grad_u = discr.project("vol", upper_btag, exact_grad_u)
-            normal = thaw(actx, discr.normal(upper_btag))
+            upper_grad_u = op.project(dcoll, "vol", upper_btag, exact_grad_u)
+            normal = thaw(op.normal(dcoll, upper_btag), actx)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
 
         lower_btag = DTAG_BOUNDARY("-"+str(dim-1))
         upper_btag = DTAG_BOUNDARY("+"+str(dim-1))
-        upper_u = discr.project("vol", upper_btag, exact_u)
+        upper_u = op.project(dcoll, "vol", upper_btag, exact_u)
         boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_btag] = DirichletDiffusionBoundary(upper_u)
 
@@ -201,7 +207,7 @@ def get_static_trig_var_diff(dim):
         sym_u *= sym_sin(sym_coords[i])
     sym_u *= sym_cos(sym_coords[dim-1])
 
-    def get_boundaries(discr, actx, t):
+    def get_boundaries(dcoll, actx, t):
         boundaries = {}
 
         for i in range(dim-1):
@@ -260,11 +266,11 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     for n in scales:
         mesh = p.get_mesh(n)
 
-        from grudge.eager import EagerDGDiscretization
+        from grudge.discretization import DiscretizationCollection
         from meshmode.discretization.poly_element import \
                 QuadratureSimplexGroupFactory, \
                 PolynomialWarpAndBlendGroupFactory
-        discr = EagerDGDiscretization(
+        dcoll = DiscretizationCollection(
             actx, mesh,
             discr_tag_to_group_factory={
                 DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
@@ -272,7 +278,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             }
         )
 
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(op.nodes(dcoll), actx)
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
@@ -285,8 +291,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             discr_tag = DISCR_TAG_BASE
 
         def get_rhs(t, u):
-            return (diffusion_operator(discr, quad_tag=discr_tag, alpha=alpha,
-                    boundaries=p.get_boundaries(discr, actx, t), u=u)
+            return (diffusion_operator(dcoll, quad_tag=discr_tag, alpha=alpha,
+                    boundaries=p.get_boundaries(dcoll, actx, t), u=u)
                 + sym_eval(sym_f, t))
 
         t = 0.
@@ -302,13 +308,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         expected_u = sym_eval(p.sym_u, t)
 
         rel_linf_err = (
-            discr.norm(u - expected_u, np.inf)
-            / discr.norm(expected_u, np.inf))
+            op.norm(dcoll, u - expected_u, np.inf)
+            / op.norm(dcoll, expected_u, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order+3)
+            vis = make_visualizer(dcoll, dcoll.order+3)
             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
                 order=order, n=n), [
                     ("u", u),
@@ -335,10 +341,10 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     mesh = get_box_mesh(1, -1, 1, n)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    from grudge.discretization import DiscretizationCollection
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(op.nodes(dcoll), actx)
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -371,13 +377,13 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     def get_rhs(t, u):
         return diffusion_operator(
-            discr, quad_tag=DISCR_TAG_BASE, alpha=alpha, boundaries=boundaries, u=u)
+            dcoll, quad_tag=DISCR_TAG_BASE, alpha=alpha, boundaries=boundaries, u=u)
 
     rhs = get_rhs(0, u_steady)
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order+3)
+        vis = make_visualizer(dcoll, dcoll.order+3)
         vis.write_vtk_file("diffusion_discontinuous_alpha_rhs_{order}.vtu"
             .format(order=order), [
                 ("alpha", alpha),
@@ -385,7 +391,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
                 ("rhs", rhs),
                 ])
 
-    linf_err = discr.norm(rhs, np.inf)
+    linf_err = op.norm(dcoll, rhs, np.inf)
     assert(linf_err < 1e-11)
 
     # Now check stability
@@ -415,7 +421,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
                 ("u_steady", u_steady),
                 ])
 
-    linf_diff = discr.norm(u - u_steady, np.inf)
+    linf_diff = op.norm(dcoll, u - u_steady, np.inf)
     assert linf_diff < 0.1
 
 
@@ -451,21 +457,21 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             t = 1.23456789
 
-            from grudge.eager import EagerDGDiscretization
-            discr_mirgecom = EagerDGDiscretization(actx, mesh, order=order)
-            nodes_mirgecom = thaw(actx, discr_mirgecom.nodes())
+            from grudge.discretization import DiscretizationCollection
+            dcoll_mirgecom = DiscretizationCollection(actx, mesh, order=order)
+            nodes_mirgecom = thaw(op.nodes(dcoll_mirgecom), actx)
 
             def sym_eval_mirgecom(expr):
                 return sym.EvaluationMapper({"x": nodes_mirgecom, "t": t})(expr)
 
             u_mirgecom = sym_eval_mirgecom(p.sym_u)
 
-            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
-                quad_tag=DISCR_TAG_BASE, alpha=discr_mirgecom.zeros(actx)+1.,
-                boundaries=p.get_boundaries(discr_mirgecom, actx, t), u=u_mirgecom)
+            diffusion_u_mirgecom = diffusion_operator(dcoll_mirgecom,
+                quad_tag=DISCR_TAG_BASE, alpha=dcoll_mirgecom.zeros(actx)+1.,
+                boundaries=p.get_boundaries(dcoll_mirgecom, actx, t), u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
-            nodes_ndg = thaw(actx, discr_ndg.nodes())
+            nodes_ndg = thaw(discr_ndg.nodes(), actx)
 
             def sym_eval_ndg(expr):
                 return sym.EvaluationMapper({"x": nodes_ndg, "t": t})(expr)
@@ -513,10 +519,10 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     mesh = p.get_mesh(n)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=4)
+    from grudge.discretization import DiscretizationCollection
+    dcoll = DiscretizationCollection(actx, mesh, order=4)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(op.nodes(dcoll), actx)
 
     t = 1.23456789
 
@@ -528,24 +534,24 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u1 = sym_eval(sym_u1)
     u2 = sym_eval(sym_u2)
 
-    boundaries = p.get_boundaries(discr, actx, t)
+    boundaries = p.get_boundaries(dcoll, actx, t)
 
-    diffusion_u1 = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
+    diffusion_u1 = diffusion_operator(dcoll, quad_tag=DISCR_TAG_BASE, alpha=alpha,
         boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
     expected_diffusion_u1 = sym_eval(sym_diffusion_u1)
     rel_linf_err = (
-        discr.norm(diffusion_u1 - expected_diffusion_u1, np.inf)
-        / discr.norm(expected_diffusion_u1, np.inf))
+        op.norm(dcoll, diffusion_u1 - expected_diffusion_u1, np.inf)
+        / op.norm(dcoll, expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
 
     boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
     diffusion_u_vector = diffusion_operator(
-        discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
+        dcoll, quad_tag=DISCR_TAG_BASE, alpha=alpha,
         boundaries=boundaries_vector, u=u_vector
     )
 
@@ -557,8 +563,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         sym_eval(sym_diffusion_u2)
     ])
     rel_linf_err = (
-        discr.norm(diffusion_u_vector - expected_diffusion_u_vector, np.inf)
-        / discr.norm(expected_diffusion_u_vector, np.inf))
+        op.norm(dcoll, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
+        / op.norm(dcoll, expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
 
 
