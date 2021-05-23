@@ -46,7 +46,7 @@ from mirgecom.euler import euler_operator
 from mirgecom.fluid import (
     split_conserved,
     join_conserved,
-    create_conserved
+    make_conserved
 )
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
@@ -186,7 +186,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
     p_exact = discr.zeros(actx) + p0
     energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
-    cv = create_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
     flux = inviscid_flux(discr, eos, cv)
     assert discr.norm(p - p_exact, np.inf) < tolerance
@@ -242,7 +242,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             p_exact / (eos.gamma() - 1.0)
             + 0.5 * np.dot(mom, mom) / mass
         )
-        cv = create_conserved(dim, mass=mass, energy=energy, momentum=mom)
+        cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(cv)
         assert discr.norm(p - p_exact, np.inf) < tolerance
         flux = inviscid_flux(discr, eos, cv)
@@ -303,7 +303,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         )
         species_mass_input = mass_input * mass_frac_input
 
-        cv = create_conserved(
+        cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
@@ -349,10 +349,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
 
-        dir_bval = create_conserved(dim, mass=dir_mass, energy=dir_e,
-                                    momentum=dir_mom, species_mass=dir_mf)
-        dir_bc = create_conserved(dim, mass=dir_mass, energy=dir_e,
+        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                   momentum=dir_mom, species_mass=dir_mf)
+        dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
+                                momentum=dir_mom, species_mass=dir_mf)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
@@ -426,7 +426,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         species_mass_input = mass_input * mass_frac_input
         num_equations = dim + 2 + len(species_mass_input)
 
-        cv = create_conserved(
+        cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
@@ -471,7 +471,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         for i in range(len(mom_input)):
             mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
-        cv = create_conserved(
+        cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 

@@ -37,7 +37,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.fluid import create_conserved
+from mirgecom.fluid import make_conserved
 
 
 def inviscid_flux(discr, eos, cv):
@@ -59,7 +59,7 @@ def inviscid_flux(discr, eos, cv):
 
     mom = cv.momentum
 
-    return create_conserved(
+    return make_conserved(
         dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
         momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
         species_mass=(  # reshaped: (nspecies, dim)

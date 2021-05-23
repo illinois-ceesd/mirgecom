@@ -6,7 +6,7 @@ State Vector Handling
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
-.. autofunction:: create_conserved
+.. autofunction:: make_conserved
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
@@ -288,8 +288,7 @@ def split_conserved(dim, q):
                          species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum, species_mass=None):
-    """Create agglomerated array from quantities for each conservation eqn."""
+def _join_conserved(dim, mass, energy, momentum, species_mass=None):
     if species_mass is None:  # empty: immutable
         species_mass = np.empty((0,), dtype=object)
 
@@ -312,28 +311,18 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
     return result
 
 
-def create_conserved(dim, mass, energy, momentum, species_mass=None):
+def join_conserved(dim, mass, energy, momentum, species_mass=None):
+    """Create agglomerated array from quantities for each conservation eqn."""
+    return _join_conserved(dim, mass=mass, energy=energy,
+                           momentum=momentum, species_mass=species_mass)
+
+
+def make_conserved(dim, mass, energy, momentum, species_mass=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
-    if species_mass is None:  # empty is immutable
-        species_mass = np.empty((0,), dtype=object)
-
-    nspec = len(species_mass)
-    aux_shapes = [
-        _aux_shape(mass, ()),
-        _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,)),
-        _aux_shape(species_mass, (nspec,))]
-
-    from pytools import single_valued
-    aux_shape = single_valued(aux_shapes)
-
-    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
-    result[0] = mass
-    result[1] = energy
-    result[2:dim+2] = momentum
-    result[dim+2:] = species_mass
-
-    return split_conserved(dim, result)
+    return split_conserved(
+        dim, _join_conserved(dim, mass=mass, energy=energy,
+                             momentum=momentum, species_mass=species_mass)
+    )
 
 
 def velocity_gradient(discr, cv, grad_cv):
@@ -383,7 +372,7 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
+                                       for i in range(cv.dim)])
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
