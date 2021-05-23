@@ -125,7 +125,7 @@ def main(ctx_factory=cl.create_some_context):
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
-    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
+    current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     visualizer = make_visualizer(discr)
 
