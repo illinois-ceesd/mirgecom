@@ -38,7 +38,7 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.dof_array import DOFArray, thaw
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
@@ -140,15 +140,6 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     for i in range(numeq, dim):
         for j in range(dim):
             assert (la.norm(flux_resid[i, j].get())) == 0.0
-
-
-class MyDiscr:
-    def __init__(self, dim, nnodes):
-        self.dim = dim
-        self.nnodes = nnodes
-
-    def zeros(self, actx, dtype=np.float64):
-        return DOFArray(actx, (actx.zeros((1, self.nnodes), dtype=dtype),))
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -744,10 +735,10 @@ def _euler_flow_stepper(actx, parameters):
 
     vis = make_visualizer(discr, order)
 
-    def write_soln(write_status=True):
-        dv = eos.dependent_vars(cv)
+    def write_soln(state, write_status=True):
+        dv = eos.dependent_vars(cv=state)
         expected_result = initializer(nodes, t=t)
-        result_resid = (cv - expected_result).join()
+        result_resid = (state - expected_result).join()
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -762,7 +753,7 @@ def _euler_flow_stepper(actx, parameters):
             )
             logger.info(statusmsg)
 
-        io_fields = ["cv", cv]
+        io_fields = ["cv", state]
         io_fields += eos.split_fields(dim, dv)
         io_fields.append(("exact_soln", expected_result))
         io_fields.append(("residual", result_resid))
@@ -799,24 +790,24 @@ def _euler_flow_stepper(actx, parameters):
 
         if nstepstatus > 0:
             if istep % nstepstatus == 0:
-                write_soln()
+                write_soln(state=cv)
 
-        fields = rk4_step(cv, t, dt, rhs)
-        fields = split_conserved(
-            dim, filter_modally(discr, "vol", cutoff, frfunc, fields.join())
+        cv = rk4_step(cv, t, dt, rhs)
+        cv = split_conserved(
+            dim, filter_modally(discr, "vol", cutoff, frfunc, cv.join())
         )
 
         t += dt
         istep += 1
 
-        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, cv=fields)
+        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, cv=cv)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
-        maxerr = max(write_soln(False))
+        maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, t=t)
-        maxerr = discr.norm((fields - expected_result).join(), np.inf)
+        maxerr = discr.norm((cv - expected_result).join(), np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
