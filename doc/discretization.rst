@@ -185,9 +185,13 @@ $\b{h}^*_v(\b{Q}_{bc}$, $\b{\Sigma}_{bc})$, and
 $\b{H}^*_s(\b{Q}_{bc})$, where $\b{Q}_{bc}$, $\b{\Sigma}_{bc}$ denote
 boundary conditions imposed on the state, and the gradient of the state respectively.
 
-For all $\partial E \cap \partial\Omega$ there is no $+$ side to consider; just the
-interior state ($-$ side) and the prescribed boundary conditions $\b{Q}_{bc},
-\b{\Sigma}_{bc}$.
+For all $\partial E \cap \partial\Omega$ the $+$ side is on the domain boundary. 
+Boundary conditions are set by prescribing one or more components of the solution
+or its gradient, $\b{Q}^+ = \b{Q}_{bc}$, and $\b{\Sigma}^+ = \b{\Sigma}_{bc}$, respectively,
+or by prescribing one or more components of the boundary fluxes $\b{h}^*_e$, $\b{h}^*_v$,
+and $\b{H}^*_s$.  Descriptions of particular boundary treatments follow in the next few
+sections.
+
 
 Solid walls
 ^^^^^^^^^^^
