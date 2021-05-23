@@ -43,7 +43,10 @@ from logpyle import (LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.discretization import Discretization
+
+from grudge.discretization import DiscretizationCollection
+import grudge.op as grudge_op
+
 import pyopencl as cl
 
 from typing import Optional, Callable
@@ -98,21 +101,21 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
     logmgr.add_quantity(DeviceMemoryUsage())
 
 
-def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
+def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
     for op in ["min", "max", "L2_norm"]:
         for quantity in ["pressure", "temperature"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                dcoll, quantity, op, extract_vars_for_logging, units_for_logging))
 
         for quantity in ["mass", "energy"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                dcoll, quantity, op, extract_vars_for_logging, units_for_logging))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
+                dcoll, "momentum", op, extract_vars_for_logging, units_for_logging,
                 axis=d))
 
 
@@ -237,7 +240,7 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     Possible rank aggregation operations (``op``) are: min, max, L2_norm.
     """
 
-    def __init__(self, discr: Discretization, quantity: str, op: str,
+    def __init__(self, dcoll: DiscretizationCollection, quantity: str, op: str,
                  extract_vars_for_logging, units_logging, name: str = None,
                  axis: Optional[int] = None):
         unit = units_logging(quantity)
@@ -248,21 +251,21 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self, extract_vars_for_logging)
 
-        self.discr = discr
+        self.dcoll = dcoll
 
         self.quantity = quantity
         self.axis = axis
 
-        from functools import partial
-
         if op == "min":
-            self._discr_reduction = partial(self.discr.nodal_min, "vol")
+            self._nodal_reduction = lambda u: grudge_op.nodal_min(self.dcoll,
+                                                                  u, "vol")
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(self.discr.nodal_max, "vol")
+            self._nodal_reduction = lambda u: grudge_op.nodal_max(self.dcoll,
+                                                                  u, "vol")
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(self.discr.norm, p=2)
+            self._nodal_reduction = lambda u: grudge_op.norm(self.dcoll, u, 2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
@@ -282,7 +285,7 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return self._discr_reduction(quantity)
+        return self._nodal_reduction(quantity)
 
 # }}}
 

@@ -74,7 +74,7 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, eos,
+def get_sim_timestep(dcoll, state, t, dt, cfl, eos,
                      t_final, constant_cfl=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
@@ -95,8 +95,9 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
 
     Parameters
     ----------
-    discr
-        Grudge discretization or discretization collection?
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
     state: :class:`~mirgecom.fluid.ConservedVars`
         The fluid state.
     t: float
@@ -123,13 +124,13 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
         from mirgecom.inviscid import get_inviscid_timestep
         from grudge.op import nodal_min
         mydt = cfl * nodal_min(
-            discr, "vol",
-            get_inviscid_timestep(discr=discr, eos=eos, cv=state)
+            dcoll, "vol",
+            get_inviscid_timestep(dcoll=dcoll, eos=eos, cv=state)
         )
     return min(t_remaining, mydt)
 
 
-def write_visfile(discr, io_fields, visualizer, vizname,
+def write_visfile(dcoll, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None):
     """Write VTK output for the fields specified in *io_fields*.
 
@@ -144,7 +145,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    comm = discr.mpi_communicator
+    comm = dcoll.mpi_communicator
     rank = 0
     if comm is not None:
         rank = comm.Get_rank()
@@ -176,24 +177,24 @@ def allsync(local_values, comm=None, op=None):
     return comm.allreduce(local_values, op=op)
 
 
-def check_range_local(discr, dd, field, min_value, max_value):
+def check_range_local(dcoll, dd, field, min_value, max_value):
     """Check for any negative values."""
     return (
-        op.nodal_min_loc(discr, dd, field) < min_value
-        or op.nodal_max_loc(discr, dd, field) > max_value
+        op.nodal_min_loc(dcoll, dd, field) < min_value
+        or op.nodal_max_loc(dcoll, dd, field) > max_value
     )
 
 
-def check_naninf_local(discr, dd, field):
+def check_naninf_local(dcoll, dd, field):
     """Check for any NANs or Infs in the field."""
-    s = op.nodal_sum_loc(discr, dd, field)
+    s = op.nodal_sum_loc(dcoll, dd, field)
     return np.isnan(s) or (s == np.inf)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state):
+def compare_fluid_solutions(dcoll, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component."""
     resid = red_state - blue_state
-    return [discr.norm(v, np.inf) for v in resid.join()]
+    return [op.norm(dcoll, v, np.inf) for v in resid.join()]
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

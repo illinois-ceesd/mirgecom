@@ -40,7 +40,7 @@ import numpy as np
 from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(discr, eos, cv):
+def inviscid_flux(dcoll, eos, cv):
     r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
@@ -66,15 +66,16 @@ def inviscid_flux(discr, eos, cv):
             (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def get_inviscid_timestep(discr, eos, cv):
+def get_inviscid_timestep(dcoll, eos, cv):
     """Return node-local stable timestep estimate for an inviscid fluid.
 
     The maximum stable timestep is computed from the acoustic wavespeed.
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
@@ -88,18 +89,19 @@ def get_inviscid_timestep(discr, eos, cv):
     from grudge.dt_utils import characteristic_lengthscales
     from mirgecom.fluid import compute_wavespeed
     return (
-        characteristic_lengthscales(cv.array_context, discr)
-        / compute_wavespeed(discr, eos, cv)
+        characteristic_lengthscales(cv.array_context, dcoll)
+        / compute_wavespeed(dcoll, eos, cv)
     )
 
 
-def get_inviscid_cfl(discr, eos, dt, cv):
+def get_inviscid_cfl(dcoll, eos, dt, cv):
     """Return node-local CFL based on current state and timestep.
 
     Parameters
     ----------
-    discr: :class:`grudge.eager.EagerDGDiscretization`
-        the discretization to use
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
@@ -113,4 +115,4 @@ def get_inviscid_cfl(discr, eos, dt, cv):
     :class:`meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
-    return dt / get_inviscid_timestep(discr, eos=eos, cv=cv)
+    return dt / get_inviscid_timestep(dcoll, eos=eos, cv=cv)
