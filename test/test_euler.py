@@ -324,7 +324,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(interior_face_flux.energy) < tolerance
         assert inf_norm(interior_face_flux.species_mass) < tolerance
 
-        # The expected pressure 1.0 (by design). And the flux diagonal is
+        # The expected pressure is 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
         #
         # The off-diagonals are zero. We get a {ndim}-vector for each
