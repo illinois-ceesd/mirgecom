@@ -123,10 +123,12 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
+            sudo apt-get install texlive-latex-extra latexmk
             conda install sphinx graphviz
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
+            make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     emirge:
         name: Emirge installation
@@ -153,4 +155,3 @@ jobs:
             source emirge/config/activate_env.sh
             cd mirgecom/examples
             python -m mpi4py ./wave-eager-mpi.py
-
