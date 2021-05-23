@@ -302,7 +302,7 @@ def join_conserved(dim, mass, energy, momentum,
     return result
 
 
-def velocity_gradient(discr, cv, grad_cv):
+def velocity_gradient(dcoll, cv, grad_cv):
     r"""
     Compute the gradient of fluid velocity.
 
@@ -329,8 +329,9 @@ def velocity_gradient(discr, cv, grad_cv):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
     cv: ConservedVars
         the fluid conserved variables
     grad_cv: ConservedVars
@@ -349,10 +350,10 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
+                                       for i in range(dcoll.dim)])
 
 
-def species_mass_fraction_gradient(discr, cv, grad_cv):
+def species_mass_fraction_gradient(dcoll, cv, grad_cv):
     r"""
     Compute the gradient of species mass fractions.
 
@@ -367,8 +368,9 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        An object containing connections and mappings to different
+        discretizations over the mesh.
     cv: ConservedVars
         the fluid conserved variables
     grad_cv: ConservedVars
