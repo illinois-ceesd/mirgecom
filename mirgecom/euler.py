@@ -54,6 +54,7 @@ THE SOFTWARE.
 
 import numpy as np  # noqa
 from meshmode.dof_array import thaw
+from grudge.symbolic.primitives import TracePair
 from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
@@ -148,8 +149,13 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
     boundary_flux = (
         _facial_flux(discr=discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
         + sum(
-            _facial_flux(discr, eos=eos, cv_tpair=part_pair)
-            for part_pair in cross_rank_trace_pairs(discr, cv))
+            _facial_flux(
+                discr, eos=eos,
+                cv_tpair=TracePair(
+                    part_pair.dd,
+                    interior=split_conserved(discr.dim, part_pair.int),
+                    exterior=split_conserved(discr.dim, part_pair.ext)))
+            for part_pair in cross_rank_trace_pairs(discr, cv.join()))
         + sum(
             _facial_flux(
                 discr=discr,
