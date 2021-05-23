@@ -85,7 +85,7 @@ denote discretized quantities. See below for more on these functions.
 Since $\b{F}^I(\b{Q}_h)\cdot\b{n}$ is discontinuous, the quantities are
 allowed to vary on either side of a shared element boundary. That is, $\b{F}^I
 (\b{Q}^+_h)\cdot\b{n}^+ \neq \b{F}^I(\b{Q}^-_h)\cdot\b{n}^-$.
-Here, $\b{n}^+$ and $\b{n}^-$ denote the ''cell-local'' (outward pointing) normals
+Here, $\b{n}^+$ and $\b{n}^-$ denote the ''cell-local'' (outward pointing) unit normals
 for elements $E^+$ and $E^-$ (respectively) which share a face:
 $\partial E^+ \cap \partial E^- \neq \emptyset$.
 Similarly for $\b{F}^V(\b{Q}_h, \b{\Sigma}_h)\cdot\b{n}$ and
@@ -132,7 +132,7 @@ $$
 Choices of numerical fluxes corresponding to BR1
 ------------------------------------------------
 
-Numerical inviscid flux
+Inviscid numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 Typical choices for $\b{h}_e(\b{Q}_h^+, \b{Q}^-_h; \b{n})$ include,
@@ -154,7 +154,7 @@ which penalize the ''jump'' of the state $\left(\b{Q}_h^+ - \b{Q}_h^-\right)
 \b{n}$ act as an additional source of dissipation, which has a stabilizing effect
 on the numerics.
 
-Numerical viscous flux
+Viscous numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^
 Take $\b{h}_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-; \b{n})$ to be
 defined in a ''centered'' (average) way:
@@ -164,7 +164,7 @@ $$
 \b{F}^V(\b{Q}_h^-, \b{\Sigma}_h^-)\right)\cdot\b{n}
 $$
 
-Numerical gradient flux
+Gradient numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^^
 And similarly for the gradient flux:
 $$
