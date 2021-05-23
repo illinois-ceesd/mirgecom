@@ -29,12 +29,13 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
-from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
 
 
 from logpyle import IntervalTimer, set_dt
@@ -166,10 +167,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    discr = EagerDGDiscretization(
+    dcoll = DiscretizationCollection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(dcoll.nodes(), actx)
 
     vis_timer = None
 
@@ -292,7 +293,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     # }}}
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -333,7 +334,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                       ("dv", dv),
                       ("production_rates", production_rates),
                       ("dt" if constant_cfl else "cfl", ts_field)]
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
@@ -357,12 +358,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     def my_health_check(dv):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure) \
-           or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
+        if check_naninf_local(dcoll, "vol", dv.pressure) \
+           or check_range_local(dcoll, "vol", dv.pressure, 1e5, 2.4e5):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
+        if check_range_local(dcoll, "vol", dv.temperature, 1.498e3, 1.52e3):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
 
@@ -373,15 +374,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         t_remaining = max(0, t_final - t)
         if constant_cfl:
             from mirgecom.inviscid import get_inviscid_timestep
-            ts_field = current_cfl * get_inviscid_timestep(discr, eos=eos, cv=state)
+            ts_field = current_cfl * get_inviscid_timestep(dcoll, eos=eos, cv=state)
             from grudge.op import nodal_min
-            dt = nodal_min(discr, "vol", ts_field)
+            dt = nodal_min(dcoll, "vol", ts_field)
             cfl = current_cfl
         else:
             from mirgecom.inviscid import get_inviscid_cfl
-            ts_field = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
+            ts_field = get_inviscid_cfl(dcoll, eos=eos, dt=dt, cv=state)
             from grudge.op import nodal_max
-            cfl = nodal_max(discr, "vol", ts_field)
+            cfl = nodal_max(dcoll, "vol", ts_field)
 
         return ts_field, cfl, min(t_remaining, dt)
 
@@ -442,11 +443,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         return state, dt
 
     def my_rhs(t, state):
-        return (euler_operator(discr, cv=state, t=t,
+        return (euler_operator(dcoll, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \

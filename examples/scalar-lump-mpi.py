@@ -30,11 +30,13 @@ import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw, PyOpenCLArrayContext
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
 
 
 from mirgecom.euler import euler_operator
@@ -144,17 +146,17 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         local_nelements = local_mesh.nelements
 
     order = 3
-    discr = EagerDGDiscretization(
+    dcoll = DiscretizationCollection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(dcoll.nodes(), actx)
 
     vis_timer = None
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -193,7 +195,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         # Set the current state from time 0
         current_state = initializer(nodes)
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -224,7 +226,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                       ("exact", exact),
                       ("resid", resid)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
@@ -245,8 +247,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     def my_health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", pressure) \
-           or check_range_local(discr, "vol", pressure, .9, 1.1):
+        if check_naninf_local(dcoll, "vol", pressure) \
+           or check_range_local(dcoll, "vol", pressure, .9, 1.1):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -277,7 +279,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, t=t)
                 from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(discr, state, exact)
+                component_errors = compare_fluid_solutions(dcoll, state, exact)
                 from mirgecom.simutil import allsync
                 health_errors = allsync(
                     my_health_check(dv.pressure, component_errors),
@@ -305,7 +307,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                     if exact is None:
                         exact = initializer(x_vec=nodes, eos=eos, t=t)
                     from mirgecom.simutil import compare_fluid_solutions
-                    component_errors = compare_fluid_solutions(discr, state, exact)
+                    component_errors = compare_fluid_solutions(dcoll, state, exact)
                 my_write_status(component_errors)
 
         except MyRuntimeError:
@@ -315,7 +317,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
+        dt = get_sim_timestep(dcoll, state, t, dt, current_cfl, eos, t_final,
                               constant_cfl)
         return state, dt
 
@@ -329,10 +331,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         return state, dt
 
     def my_rhs(t, state):
-        return euler_operator(discr, cv=state, t=t,
+        return euler_operator(dcoll, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \

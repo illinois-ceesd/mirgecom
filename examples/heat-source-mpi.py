@@ -25,21 +25,25 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from meshmode.array_context import thaw, PyOpenCLArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from grudge.eager import EagerDGDiscretization
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_BASE, DTAG_BOUNDARY
+import grudge.op as op
+
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
+
 from mirgecom.mpi import mpi_entry_point
+
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
@@ -107,7 +111,7 @@ def main(use_profiling=False, use_logmgr=False):
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
+    dcoll = DiscretizationCollection(actx, local_mesh, order=order,
                     mpi_communicator=comm)
 
     if dim == 2:
@@ -118,14 +122,14 @@ def main(use_profiling=False, use_logmgr=False):
 
     source_width = 0.2
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(dcoll.nodes(), actx)
 
     boundaries = {
         DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
         DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
     }
 
-    u = discr.zeros(actx)
+    u = dcoll.zeros(actx)
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
@@ -144,12 +148,12 @@ def main(use_profiling=False, use_logmgr=False):
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(discr)
+    vis = make_visualizer(dcoll)
 
     def rhs(t, u):
         return (
             diffusion_operator(
-                discr, quad_tag=DISCR_TAG_BASE,
+                dcoll, quad_tag=DISCR_TAG_BASE,
                 alpha=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
@@ -160,7 +164,7 @@ def main(use_profiling=False, use_logmgr=False):
             logmgr.tick_before()
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(u))
+            print(istep, t, op.norm(dcoll, u, 2))
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", u)

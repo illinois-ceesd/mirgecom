@@ -31,11 +31,13 @@ from functools import partial
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw, PyOpenCLArrayContext
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
@@ -149,17 +151,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    discr = EagerDGDiscretization(
+    dcoll = DiscretizationCollection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(dcoll.nodes(), actx)
 
     vis_timer = None
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -195,7 +197,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # Set the current state from time 0
         current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
 
     initname = "pulse"
     eosname = eos.__class__.__name__
@@ -215,7 +217,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields = [("cv", state),
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
@@ -236,8 +238,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(pressure):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", pressure) \
-           or check_range_local(discr, "vol", pressure, .8, 1.5):
+        if check_naninf_local(dcoll, "vol", pressure) \
+           or check_range_local(dcoll, "vol", pressure, .8, 1.5):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
@@ -279,7 +281,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
+        dt = get_sim_timestep(dcoll, state, t, dt, current_cfl, eos, t_final,
                               constant_cfl)
         return state, dt
 
@@ -293,10 +295,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return euler_operator(discr, cv=state, t=t,
+        return euler_operator(dcoll, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \

@@ -29,14 +29,14 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import thaw, PyOpenCLArrayContext
-
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from grudge.eager import EagerDGDiscretization
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
+
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
@@ -50,16 +50,16 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_device_memory_usage)
 
 
-def bump(actx, discr, t=0):
+def bump(actx, dcoll, t=0):
     """Create a bump."""
-    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
+    source_center = np.array([0.2, 0.35, 0.1])[:dcoll.dim]
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(op.nodes(dcoll), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
-        for i in range(discr.dim)
+        for i in range(dcoll.dim)
         ])
 
     return (
@@ -130,7 +130,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
+    dcoll = DiscretizationCollection(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
 
     if local_mesh.dim == 2:
@@ -149,8 +149,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         istep = 0
 
         fields = flat_obj_array(
-            bump(actx, discr),
-            [discr.zeros(actx) for i in range(discr.dim)]
+            bump(actx, dcoll),
+            [dcoll.zeros(actx) for i in range(dcoll.dim)]
             )
 
     else:
@@ -163,7 +163,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
                                               mpi_communicator=comm)
             from meshmode.discretization.connection import make_same_mesh_connection
-            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
+            connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
             fields = connection(restart_fields)
         else:
@@ -186,10 +186,10 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(discr)
+    vis = make_visualizer(dcoll)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(dcoll, c=1, w=w)
 
     while t < t_final:
         if logmgr:
@@ -214,7 +214,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             )
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
+            print(istep, t, op.norm(dcoll, fields[0], np.inf))
             vis.write_parallel_vtk_file(
                 comm,
                 "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
