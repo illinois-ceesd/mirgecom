@@ -8,6 +8,15 @@ Mathematical Model of Fluid Flow
    utilities for inviscid flow (i.e. the :ref:`Euler equations<euler-eqns>`).
    Viscous flow simulation capabilities are forthcoming.
 
+.. raw:: latex
+
+    \let\b=\mathbf
+
+.. raw:: html
+
+    \(
+    \let\b=\mathbf
+    \)
 
 .. _ns-eqns:
 
@@ -28,7 +37,7 @@ $$
 \partial_{t}({\rho}{v_i}) + \partial_j\left((\rho v)_i v_j + p\delta_{ij} -
 \tau_{ij}\right) &= {S}_{\rho v_i} \\
 \partial_{t}(\rho{Y})_{\alpha} + \partial_j\left((\rho{Y})_{\alpha}v_j +
-(\mathbf{J}_{\alpha})_j\right) &= {S}_{\alpha},
+(\b{J}_{\alpha})_j\right) &= {S}_{\alpha},
 $$
 
 with fluid density $\rho$, velocity components $v_i$, momentum density components
@@ -37,28 +46,28 @@ ${Y}_{\alpha}$. The :ref:`thermodynamic pressure<eos-and-matprop>` of the fluid 
 ${\tau_{ij}}$ are the components of the
 :ref:`viscous stress tensor<viscous-stress-tensor>`, $q_i$ are the components of the total
 :ref:`heat flux<heat-flux>` vector, and the components of the species
-:ref:`diffusive flux<diffusive-flux>` vector are $(\mathbf{J}_{\alpha})_i$. Mixtures have
+:ref:`diffusive flux<diffusive-flux>` vector are $(\b{J}_{\alpha})_i$. Mixtures have
 $N_s$ components with $1 \le \alpha \le N_s$.
 
 The equations can be recast in a more compact form:
 
 $$
-\partial_t{\mathbf{Q}} + \partial_j{\mathbf{F}^{I}(\mathbf{Q})_j} =
-\partial_j{\mathbf{F}^{V}(\mathbf{Q}, \nabla\mathbf{Q})_j} + \mathbf{S},
+\partial_t{\b{Q}} + \partial_j{\b{F}^{I}(\b{Q})_j} =
+\partial_j{\b{F}^{V}(\b{Q}, \nabla\b{Q})_j} + \b{S},
 $$
 
-where $\mathbf{Q}$ is the vector of conserved variables, $\mathbf{F}^I$ is the vector of
-inviscid fluxes, $\mathbf{F}^V$ is the vector of viscous fluxes, and the vector of sources
-for each scalar equation  is $\mathbf{S}$. The components of each vector follow directly from
+where $\b{Q}$ is the vector of conserved variables, $\b{F}^I$ is the vector of
+inviscid fluxes, $\b{F}^V$ is the vector of viscous fluxes, and the vector of sources
+for each scalar equation  is $\b{S}$. The components of each vector follow directly from
 above:
 
 $$
-\mathbf{Q} = \begin{bmatrix}\rho\\\rho{E}\\(\rho{v})_{i}\\(\rho{Y})_{\alpha}\end{bmatrix},
-~\mathbf{F}^{I}_{j} = \begin{bmatrix}(\rho{v})_{j}\\\left(\rho{E}+p\right){v}_{j}\\
+\b{Q} = \begin{bmatrix}\rho\\\rho{E}\\(\rho{v})_{i}\\(\rho{Y})_{\alpha}\end{bmatrix},
+~\b{F}^{I}_{j} = \begin{bmatrix}(\rho{v})_{j}\\\left(\rho{E}+p\right){v}_{j}\\
 \left((\rho{v})_{j}{v}_{i}+p\delta_{ij}\right)\\(\rho{Y})_{\alpha}{v}_{j}\end{bmatrix},
-~\mathbf{F}^V_{j} = \begin{bmatrix}0\\\left(\tau_{jk}{v}_{k}-{q}_{j}\right)\\
-{\tau}_{ij}\\-(\mathbf{J}_{\alpha})_{j}\end{bmatrix},
-~\mathbf{S} = \begin{bmatrix}0\\E^{\mathtt{chem}}\\0\\W^{\mathtt{chem}}_{\alpha}
+~\b{F}^V_{j} = \begin{bmatrix}0\\\left(\tau_{jk}{v}_{k}-{q}_{j}\right)\\
+{\tau}_{ij}\\-(\b{J}_{\alpha})_{j}\end{bmatrix},
+~\b{S} = \begin{bmatrix}0\\E^{\mathtt{chem}}\\0\\W^{\mathtt{chem}}_{\alpha}
 \end{bmatrix}
 $$
 
@@ -71,7 +80,7 @@ conservation equations.
 .. _euler-eqns:
 
 The Euler equations for inviscid flows are recovered from the Navier-Stokes system
-above when the viscous fluxes vanish. That is, when $\mathbf{F}^V=0$, we are left with a
+above when the viscous fluxes vanish. That is, when $\b{F}^V=0$, we are left with a
 system of nonlinear equations for a completely inviscid fluid. |mirgecom| provides an
 Euler operator, with associated utilities functions, for solving flows of this type.
 Inviscid fluxes and utilities are found in :mod:`mirgecom.inviscid`, and the Euler
@@ -99,7 +108,7 @@ Diffusive flux
 The species diffusive fluxes are given by:
 
 $$
-\mathbf{J}_{\alpha} = -\rho{d}_{(\alpha)}\nabla{Y}_{\alpha},
+\b{J}_{\alpha} = -\rho{d}_{(\alpha)}\nabla{Y}_{\alpha},
 $$
 
 with gas density $\rho$, species diffusivities ${d}_{\alpha}$, and
@@ -112,12 +121,12 @@ over repeated indices is to be performed.
 Heat flux
 ---------
 
-The total heat flux $\mathbf{q}$ is calculated as the sum of the
-conductive and diffusive components, $\mathbf{q}_{c}$ and $\mathbf{q}_{d}$,
+The total heat flux $\b{q}$ is calculated as the sum of the
+conductive and diffusive components, $\b{q}_{c}$ and $\b{q}_{d}$,
 respectively:
 
 $$
-\mathbf{q} = \mathbf{q}_c + \mathbf{q}_d
+\b{q} = \b{q}_c + \b{q}_d
 $$
 
 Conductive heat flux
@@ -126,7 +135,7 @@ The conductive heat flux vector is defined directly from Fourier's law of therma
 conduction:
 
 $$
-\mathbf{q}_c = -\kappa\nabla{T},
+\b{q}_c = -\kappa\nabla{T},
 $$
 
 where $\kappa$ is the thermal conductivity, and ${T}$ is the gas
@@ -137,11 +146,11 @@ Diffusive heat flux
 The diffusive heat flux vector is defined as
 
 $$
-\mathbf{q}_d = {h}_{\alpha}\mathbf{J}_{\alpha},
+\b{q}_d = {h}_{\alpha}\b{J}_{\alpha},
 $$
 
 with the species specific enthalpy ${h}_{\alpha}$, and the species
-diffusive flux vector $\mathbf{J}_{\alpha}$.
+diffusive flux vector $\b{J}_{\alpha}$.
 
 .. _chemistry:
 
@@ -172,14 +181,14 @@ where $h^f_{\alpha}$ is the enthalpy of formation for each species.
 Equations of State and Material properties
 ------------------------------------------
 
-Equations of state (EOS) provide functions that relate the fluid state $\mathbf{Q}$,
+Equations of state (EOS) provide functions that relate the fluid state $\b{Q}$,
 and the thermodynamic properties such as pressure $p$, temperature $T$, specific
 enthalpies $h_{\alpha}$, and total energy $E$.  The EOS provided by |mirgecom| are
 documented in :mod:`mirgecom.eos`.
 
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity
 $\mu_B$, thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$ depend on
-the state of the fluid $\mathbf{Q}$, in general, and are provided by transport models.
+the state of the fluid $\b{Q}$, in general, and are provided by transport models.
 Transport models provided by |mirgecom| will be documented in the forthcoming
 transport module.
 
@@ -188,7 +197,7 @@ transport module.
   The EOS and transport models provide closure for the fluid model in that the fluid
   thermal state variables such as pressure $p$, temperature $T$, and material
   properties such as viscosity $\mu$, and thermal conductivity $\kappa$ are functions of
-  the current fluid state $\mathbf{Q}$. The EOS and transport models provide constructs
+  the current fluid state $\b{Q}$. The EOS and transport models provide constructs
   that manage the relationships between these quantities, and provide methods for
   calculating them from minimal working sets of input data.
 
