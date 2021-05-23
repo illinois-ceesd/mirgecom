@@ -77,6 +77,10 @@ source terms in the energy and species conservation equations, respectively.  Se
 :ref:`here<disc-strat>` for details on the discretization strategy for this system of
 conservation equations.
 
+Further documentation for the Navier-Stokes system inviscid fluxes, viscous fluxes,
+and RHS operator can be found in :mod:`mirgecom.inviscid`, :mod:`mirgecom.viscous`,
+and :mod:`mirgecom.navierstokes`, respectively.
+
 .. _euler-eqns:
 
 The Euler equations for inviscid flows are recovered from the Navier-Stokes system
@@ -189,8 +193,7 @@ documented in :mod:`mirgecom.eos`.
 Material properties including the first coefficient of viscosity, $\mu$, bulk viscosity
 $\mu_B$, thermal conductivity $\kappa$, and species diffusivities ${d}_{\alpha}$ depend on
 the state of the fluid $\b{Q}$, in general, and are provided by transport models.
-Transport models provided by |mirgecom| will be documented in the forthcoming
-transport module.
+Transport models provided by |mirgecom| are documented :mod:`mirgecom.transport`.
 
 .. note::
    
