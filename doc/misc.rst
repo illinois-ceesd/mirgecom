@@ -66,7 +66,7 @@ References
 .. [Ayuso_2009] B. Ayuso and D. Marini (2009), Siam Journal of Numerical Analysis 47 2 1391 \
     `(DOI) <https://doi.org/10.1137/080719583>`__
 .. [Bassi_1997] F. Bassi and S. Rebay (1997), Journal of Computational Physics 131 \
-    `(DOI) <https://www.sciencedirect.com/science/article/pii/S0021999196955722?via%3Dihub>`__
+    `(DOI) <https://doi.org/10.1006/jcph.1996.5572>`__
 .. [Bassi_2000] F. Bassi and S. Rebay (2000), DG Methods: Theory, Computation, and Applications, Springer \
     `(DOI) <https://doi.org/10.1007/978-3-642-59721-3_14>`__
 .. [Ihme_2014] Yu Lv and Matthias Ihme (2014) Journal of Computationsl Physics 270 105 \
