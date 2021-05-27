@@ -16,6 +16,8 @@ Here’s an example, to give you an impression:
    import numpy as np
    import pyopencl as cl
 
+   from arraycontext import PyOpenCLArrayContext
+
    from pytools.obj_array import flat_obj_array
 
    from grudge.discretization import DiscretizationCollection
@@ -24,8 +26,6 @@ Here’s an example, to give you an impression:
 
    from mirgecom.wave import wave_operator
    from mirgecom.integrators import rk4_step
-
-   from arraycontext.impl.pyopencl import PyOpenCLArrayContext
 
    cl_ctx = cl.create_some_context()
    queue = cl.CommandQueue(cl_ctx)
