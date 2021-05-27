@@ -130,7 +130,11 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
         )
 
     cv_int_tpair = interior_trace_pair(discr, cv)
-    cv_part_pairs = cross_rank_trace_pairs(discr, cv)
+    cv_part_pairs = [
+        TracePair(part_tpair.dd,
+                  interior=make_conserved(dim, q=part_tpair.int),
+                  exterior=make_conserved(dim, q=part_tpair.ext))
+        for part_tpair in cross_rank_trace_pairs(discr, cv.join())]
     cv_flux_bnd = elbnd_flux(discr, scalar_flux_interior, get_q_flux_bnd,
                             cv_int_tpair, cv_part_pairs, boundaries)
 
@@ -157,8 +161,8 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     grad_t = dg_grad(discr, gas_t, t_flux_bnd)
 
     # inviscid parts
-    def finv_interior_face(q_tpair):
-        return inviscid_facial_flux(discr, eos=eos, q_tpair=q_tpair)
+    def finv_interior_face(cv_tpair):
+        return inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_tpair)
 
     # inviscid part of bcs applied here
     def finv_domain_boundary(btag):

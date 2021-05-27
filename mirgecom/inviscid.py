@@ -40,7 +40,7 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 from mirgecom.flux import lfr_flux
 from mirgecom.fluid import make_conserved
 
@@ -80,7 +80,7 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
-    q_tpair: :class:`grudge.sym.TracePair`
+    q_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
 
     local: bool

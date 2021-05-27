@@ -185,18 +185,18 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
-    cv_tpair: :class:`grudge.sym.TracePair`
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the fluid solution
         on the faces
 
-    grad_cv_tpair: :class:`grudge.sym.TracePair`
+    grad_cv_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
         fluid solution on the faces
 
-    t_tpair: :class:`grudge.sym.TracePair`
+    t_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of temperatures on the faces
 
-    grad_t_tpair: :class:`grudge.sym.TracePair`
+    grad_t_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of temperature gradient on the faces.
 
     local: bool
