@@ -25,14 +25,14 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
-import pyopencl.clrandom
-import pyopencl.clmath
 from pytools.obj_array import make_obj_array
 import pytest
 
-from arraycontext.container.traversal import thaw
-from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+from arraycontext import (  # noqa
+    thaw,
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -51,24 +51,18 @@ from mirgecom.eos import IdealSingleGas
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
-
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("nspecies", [0, 10])
-def test_uniform_init(ctx_factory, dim, nspecies):
+def test_uniform_init(actx_factory, dim, nspecies):
     """Test the uniform flow initializer.
 
     Simple test to check that uniform initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -81,7 +75,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
@@ -116,14 +110,12 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     assert mferrmax < 1e-15
 
 
-def test_lump_init(ctx_factory):
+def test_lump_init(actx_factory):
     """
     Simple test to check that Lump initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
     dim = 2
     nel_1d = 4
 
@@ -137,7 +129,7 @@ def test_lump_init(ctx_factory):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -158,14 +150,12 @@ def test_lump_init(ctx_factory):
     assert errmax < 1e-15
 
 
-def test_vortex_init(ctx_factory):
+def test_vortex_init(actx_factory):
     """
     Simple test to check that Vortex2D initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
     dim = 2
     nel_1d = 4
 
@@ -179,7 +169,7 @@ def test_vortex_init(ctx_factory):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -196,14 +186,12 @@ def test_vortex_init(ctx_factory):
     assert errmax < 1e-15
 
 
-def test_shock_init(ctx_factory):
+def test_shock_init(actx_factory):
     """
     Simple test to check that Shock1D initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 10
     dim = 2
@@ -218,7 +206,7 @@ def test_shock_init(ctx_factory):
     print(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     initr = SodShock1D()
     initsoln = initr(t=0.0, x_vec=nodes)
@@ -235,14 +223,12 @@ def test_shock_init(ctx_factory):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_uniform(ctx_factory, dim):
+def test_uniform(actx_factory, dim):
     """
     Simple test to check that Uniform initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 2
 
@@ -256,7 +242,7 @@ def test_uniform(ctx_factory, dim):
     print(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -279,14 +265,12 @@ def test_uniform(ctx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_pulse(ctx_factory, dim):
+def test_pulse(actx_factory, dim):
     """
     Test of Gaussian pulse generator.
     If it looks, walks, and quacks like a Gaussian, then ...
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 10
 
@@ -300,7 +284,7 @@ def test_pulse(ctx_factory, dim):
     print(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -341,11 +325,9 @@ def test_pulse(ctx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_multilump(ctx_factory, dim):
+def test_multilump(actx_factory, dim):
     """Test the multi-component lump initializer."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
     nspecies = 10
@@ -360,7 +342,7 @@ def test_multilump(ctx_factory, dim):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     rho0 = 1.5
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])

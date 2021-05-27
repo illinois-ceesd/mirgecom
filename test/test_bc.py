@@ -30,10 +30,10 @@ import logging
 import pytest
 
 from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from arraycontext.container.traversal import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -70,10 +70,10 @@ def test_slipwall_identity(actx_factory, dim):
 
     order = 3
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
+    nhat = thaw(dcoll.normal(BTAG_ALL), actx)
 
     def bnd_norm(u):
         return op.norm(dcoll, u, p=np.inf, dd=BTAG_ALL)
@@ -137,8 +137,8 @@ def test_slipwall_flux(actx_factory, dim, order):
         )
 
         dcoll = DiscretizationCollection(actx, mesh, order=order)
-        nodes = thaw(op.nodes(dcoll), actx)
-        nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
+        nodes = thaw(dcoll.nodes(), actx)
+        nhat = thaw(dcoll.normal(BTAG_ALL), actx)
         h = 1.0 / nel_1d
 
         def bnd_norm(u):

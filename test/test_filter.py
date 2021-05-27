@@ -31,10 +31,10 @@ import numpy as np
 from functools import partial
 
 from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from arraycontext.container.traversal import thaw
 
 from pytools.obj_array import (
     make_obj_array
@@ -172,7 +172,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     )
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1

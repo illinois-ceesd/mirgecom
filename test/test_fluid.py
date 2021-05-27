@@ -32,10 +32,10 @@ import logging
 import pytest
 
 from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from arraycontext.container.traversal import thaw
 
 from pytools.obj_array import make_obj_array
 
@@ -66,7 +66,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     order = 3
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     zeros = dcoll.zeros(actx)
     ones = zeros + 1.0
 
@@ -116,7 +116,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         )
 
         dcoll = DiscretizationCollection(actx, mesh, order=order)
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
         zeros = dcoll.zeros(actx)
         energy = zeros + 2.5
 

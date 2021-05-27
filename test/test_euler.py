@@ -34,10 +34,10 @@ import math
 from functools import partial
 
 from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from arraycontext.container.traversal import thaw
 
 from pytools.obj_array import (
     flat_obj_array,
@@ -378,7 +378,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
         # generate the exact answer: just p0*nhat for the given boundary
-        nhat = thaw(op.normal(dcoll, "int_faces"), actx)
+        nhat = thaw(dcoll.normal("int_faces"), actx)
         mom_flux_exact = op.project(dcoll, "int_faces", "all_faces", p0*nhat)
 
         momerr = inf_norm(iff_split.momentum - mom_flux_exact)
@@ -408,7 +408,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(bf_split.species_mass) < tolerance
 
         # generate the exact answer: just p0*nhat for the given boundary
-        nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
+        nhat = thaw(dcoll.normal(BTAG_ALL), actx)
         mom_flux_exact = op.project(dcoll, BTAG_ALL, "all_faces", p0*nhat)
 
         momerr = inf_norm(bf_split.momentum - mom_flux_exact)
@@ -584,7 +584,7 @@ def test_vortex_rhs(actx_factory, order):
         )
 
         dcoll = DiscretizationCollection(actx, mesh, order=order)
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -637,7 +637,7 @@ def test_lump_rhs(actx_factory, dim, order):
         logger.info(f"Number of elements: {mesh.nelements}")
 
         dcoll = DiscretizationCollection(actx, mesh, order=order)
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
@@ -696,7 +696,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         logger.info(f"Number of elements: {mesh.nelements}")
 
         dcoll = DiscretizationCollection(actx, mesh, order=order)
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -765,7 +765,7 @@ def _euler_flow_stepper(actx, parameters):
     istep = 0
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     fields = initializer(nodes)
     sdt = get_inviscid_timestep(dcoll, eos=eos, cfl=cfl, q=fields)
 
