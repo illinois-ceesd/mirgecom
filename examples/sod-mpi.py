@@ -35,8 +35,6 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
-import grudge.op as op
-
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
