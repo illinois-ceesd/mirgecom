@@ -35,7 +35,8 @@ THE SOFTWARE.
 import abc
 import numpy as np
 import numpy.linalg as la  # noqa
-from arraycontext.container.traversal import thaw
+
+from arraycontext import thaw
 
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -54,7 +55,7 @@ def gradient_flux(dcoll, quad_tag, u_tpair):
     dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
-    normal_quad = thaw(op.normal(dcoll, dd_quad), actx)
+    normal_quad = thaw(dcoll.normal(dd_quad), actx)
 
     def to_quad(a):
         return op.project(dcoll, dd, dd_quad, a)
@@ -74,7 +75,7 @@ def diffusion_flux(dcoll, quad_tag, alpha_tpair, grad_u_tpair):
     dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
-    normal_quad = thaw(op.normal(dcoll, dd_quad), actx)
+    normal_quad = thaw(dcoll.normal(dd_quad), actx)
 
     def to_quad(a):
         return op.project(dcoll, dd, dd_quad, a)

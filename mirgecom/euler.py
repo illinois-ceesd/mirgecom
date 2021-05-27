@@ -54,7 +54,7 @@ THE SOFTWARE.
 
 import numpy as np
 
-from arraycontext.container.traversal import thaw
+from arraycontext import thaw
 
 import grudge.op as op
 
@@ -98,7 +98,7 @@ def _facial_flux(dcoll, eos, q_tpair, local=False):
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
         compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
     )
-    normal = thaw(op.normal(dcoll, q_tpair.dd), actx)
+    normal = thaw(dcoll.normal(q_tpair.dd), actx)
 
     # todo: user-supplied flux routine
     flux_weak = lfr_flux(q_tpair, flux_func=euler_flux, normal=normal, lam=lam)

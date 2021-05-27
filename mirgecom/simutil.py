@@ -35,7 +35,7 @@ import logging
 
 import numpy as np
 
-from arraycontext.container.traversal import thaw
+from arraycontext import thaw
 
 import grudge.op as op
 
@@ -114,7 +114,7 @@ def sim_checkpoint(dcoll, visualizer, eos, q, vizname, exact_soln=None,
     maxerr = 0.0
     if exact_soln is not None:
         actx = cv.mass.array_context
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
         expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
         exp_resid = q - expected_state
         err_norms = [op.norm(dcoll, v, np.inf) for v in exp_resid]

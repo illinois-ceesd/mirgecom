@@ -45,7 +45,7 @@ def _flux(dcoll, c, w_tpair):
 
     actx = w_tpair.int[0].array_context
 
-    normal = thaw(op.normal(dcoll, w_tpair.dd), actx)
+    normal = thaw(dcoll.normal(w_tpair.dd), actx)
 
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),

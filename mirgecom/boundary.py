@@ -34,7 +34,7 @@ THE SOFTWARE.
 
 import numpy as np
 
-from arraycontext.container.traversal import thaw
+from arraycontext import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair
@@ -67,7 +67,7 @@ class PrescribedBoundary:
         """Get the interior and exterior solution on the boundary."""
         actx = q[0].array_context
 
-        nodes = thaw(op.nodes(dcoll, btag), actx)
+        nodes = thaw(dcoll.nodes(btag), actx)
         ext_soln = self._userfunc(nodes, **kwargs)
         int_soln = op.project(dcoll, "vol", btag, q)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
@@ -120,7 +120,7 @@ class AdiabaticSlipBoundary:
         actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(op.normal(dcoll, btag), actx)
+        nhat = thaw(dcoll.normal(btag), actx)
 
         # Get the interior/exterior solns
         int_soln = op.project(dcoll, "vol", btag, q)
