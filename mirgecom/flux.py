@@ -33,7 +33,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray
 from mirgecom.operators import jump
 from mirgecom.fluid import (
@@ -81,7 +80,9 @@ def central_scalar_flux(trace_pair, normal):
 
     ncomp = len(tp_join)
     if ncomp > 1:
-        result = make_obj_array([tp_join[i]*normal for i in range(ncomp)])
+        result = np.empty((ncomp, len(normal)), dtype=object)
+        for i in range(ncomp):
+            result[i] = tp_join[i] * normal
     else:
         result = tp_join*normal
     if isinstance(tp_avg, ConservedVars):

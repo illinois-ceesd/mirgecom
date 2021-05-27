@@ -62,7 +62,7 @@ from grudge.eager import (
     cross_rank_trace_pairs
 )
 from mirgecom.fluid import make_conserved
-from mirgecom.operators import dg_div_low as dg_div
+from mirgecom.operators import dg_div
 
 
 def euler_operator(discr, eos, boundaries, cv, t=0.0):

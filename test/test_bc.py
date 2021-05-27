@@ -280,12 +280,11 @@ def test_noslip(actx_factory, dim):
             print(f"{t_flux_bnd=}")
             print(f"{i_flux_bnd=}")
 
-            from mirgecom.operators import dg_grad_low
+            from mirgecom.operators import dg_grad
             grad_cv = make_conserved(
-                dim, q=np.stack(dg_grad_low(discr, uniform_state.join(),
-                                            cv_flux_bnd.join()))
+                dim, q=dg_grad(discr, uniform_state.join(), cv_flux_bnd.join())
             )
-            grad_t = dg_grad_low(discr, temper, t_flux_bnd)
+            grad_t = dg_grad(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 
@@ -378,11 +377,11 @@ def test_prescribedviscous(actx_factory, dim):
             temper = eos.temperature(cv)
             print(f"{temper=}")
 
-            q_int_tpair = interior_trace_pair(discr, cv)
-            q_flux_int = scalar_flux_interior(q_int_tpair)
-            q_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
-                                             eos=eos, cv=cv)
-            q_flux_bnd = q_flux_bc + q_flux_int
+            cv_int_tpair = interior_trace_pair(discr, cv)
+            cv_flux_int = scalar_flux_interior(cv_int_tpair)
+            cv_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
+                                              eos=eos, cv=cv)
+            cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
@@ -393,20 +392,22 @@ def test_prescribedviscous(actx_factory, dim):
             from mirgecom.inviscid import inviscid_facial_flux
             i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
                                                     cv=cv)
-            i_flux_int = inviscid_facial_flux(discr, eos=eos, q_tpair=q_int_tpair)
+            i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
-            print(f"{q_flux_bnd=}")
+            print(f"{cv_flux_bnd=}")
             print(f"{t_flux_bnd=}")
             print(f"{i_flux_bnd=}")
 
-            from mirgecom.operators import dg_grad_low
-            grad_q = dg_grad_low(discr, cv, q_flux_bnd)
-            grad_t = dg_grad_low(discr, temper, t_flux_bnd)
-            print(f"{grad_q=}")
+            from mirgecom.operators import dg_grad
+            grad_cv = make_conserved(
+                dim, q=dg_grad(discr, cv.join(), cv_flux_bnd.join())
+            )
+            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            print(f"{grad_cv=}")
             print(f"{grad_t=}")
 
             v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                   cv=cv, grad_q=grad_q,
+                                                   cv=cv, grad_cv=grad_cv,
                                                    t=temper, grad_t=grad_t)
             print(f"{v_flux_bc=}")

@@ -31,14 +31,18 @@ import pyopencl.clmath  # noqa
 import logging
 import pytest  # noqa
 
-from pytools.obj_array import make_obj_array, obj_array_vectorize
-
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
-from mirgecom.fluid import split_conserved, join_conserved  # noqa
+import grudge.op as op
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
+
+from mirgecom.fluid import make_conserved
+from mirgecom.fluid import split_conserved, join_conserved  # noqa
+from mirgecom.transport import SimpleTransport
+from mirgecom.eos import IdealSingleGas
 
 logger = logging.getLogger(__name__)
 
@@ -72,16 +76,14 @@ def test_viscous_stress_tensor(actx_factory):
     energy = zeros + 2.5
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-
-    grad_q = obj_array_vectorize(discr.grad, q)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
 
     mu_b = 1.0
     mu = 0.5
-    from mirgecom.transport import SimpleTransport
+
     tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu)
 
-    from mirgecom.eos import IdealSingleGas
     eos = IdealSingleGas(transport_model=tv_model)
 
     # Exact answer for tau
@@ -92,7 +94,7 @@ def test_viscous_stress_tensor(actx_factory):
                + (mu_b - 2*mu/3)*exp_grad_v_div*np.eye(3))
 
     from mirgecom.viscous import viscous_stress_tensor
-    tau = viscous_stress_tensor(discr, eos, q, grad_q)
+    tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
 
     # The errors come from grad_v
     assert discr.norm(tau - exp_tau, np.inf) < 1e-12
@@ -138,9 +140,10 @@ def test_species_diffusive_flux(actx_factory):
     mom = mass * velocity
     species_mass = mass*y
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       species_mass=species_mass)
-    grad_q = obj_array_vectorize(discr.grad, q)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+
+    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
 
     mu_b = 1.0
     mu = 0.5
@@ -148,16 +151,14 @@ def test_species_diffusive_flux(actx_factory):
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
-    from mirgecom.transport import SimpleTransport
     tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu,
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
 
-    from mirgecom.eos import IdealSingleGas
     eos = IdealSingleGas(transport_model=tv_model)
 
     from mirgecom.viscous import diffusive_flux
-    j = diffusive_flux(discr, eos, q, grad_q)
+    j = diffusive_flux(discr, eos, cv, grad_cv)
 
     tol = 1e-10
     for idim in range(dim):
@@ -210,9 +211,9 @@ def test_diffusive_heat_flux(actx_factory):
     mom = mass * velocity
     species_mass = mass*y
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       species_mass=species_mass)
-    grad_q = obj_array_vectorize(discr.grad, q)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
 
     mu_b = 1.0
     mu = 0.5
@@ -220,16 +221,14 @@ def test_diffusive_heat_flux(actx_factory):
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
-    from mirgecom.transport import SimpleTransport
     tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu,
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
 
-    from mirgecom.eos import IdealSingleGas
     eos = IdealSingleGas(transport_model=tv_model)
 
     from mirgecom.viscous import diffusive_flux
-    j = diffusive_flux(discr, eos, q, grad_q)
+    j = diffusive_flux(discr, eos, cv, grad_cv)
 
     tol = 1e-10
     for idim in range(dim):

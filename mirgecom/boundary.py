@@ -629,5 +629,5 @@ class PrescribedViscousBoundary(FluidBC):
 
             from mirgecom.viscous import viscous_facial_flux
             return viscous_facial_flux(discr, eos, cv_tpair=cv_tpair,
-                                       s_tpair=s_tpair, t_tpair=t_tpair,
+                                       grad_cv_tpair=s_tpair, t_tpair=t_tpair,
                                        grad_t_tpair=grad_t_tpair)
