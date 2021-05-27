@@ -38,6 +38,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DTAG_BOUNDARY
 
+from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
@@ -52,10 +53,6 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedViscousBoundary,
     IsothermalNoSlipBoundary
-)
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -124,7 +121,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     base_pressure = 100000.0
     pressure_ratio = 1.001
 
-    def poiseuille_soln(nodes, eos, q=None, **kwargs):
+    def poiseuille_soln(nodes, eos, cv=None, **kwargs):
         dim = len(nodes)
         x0 = left_boundary_location
         xmax = right_boundary_location
@@ -135,13 +132,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         ke = 0
         mass = nodes[0] + 1.0 - nodes[0]
         momentum = make_obj_array([0*mass for i in range(dim)])
-        if q is not None:
-            cv = split_conserved(dim, q)
+        if cv is not None:
             mass = cv.mass
             momentum = cv.momentum
             ke = .5*np.dot(cv.momentum, cv.momentum)/cv.mass
         energy_bc = p_x / (eos.gamma() - 1) + ke
-        return join_conserved(dim, mass=mass, energy=energy_bc,
+        return make_conserved(dim, mass=mass, energy=energy_bc,
                               momentum=momentum)
 
     initializer = poiseuille_soln
@@ -173,10 +169,10 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return ns_operator(discr, eos=eos, boundaries=boundaries, q=state, t=t)
+        return ns_operator(discr, eos=eos, boundaries=boundaries, cv=state, t=t)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
