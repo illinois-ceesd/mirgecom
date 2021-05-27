@@ -216,6 +216,7 @@ def create_parallel_grid(comm, generate_grid):
          DeprecationWarning, stacklevel=2)
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
 
+
 def linear_operator_kernal():
     """Apply linear operator to all elements."""
     from meshmode.array_context import make_loopy_program
@@ -230,20 +231,20 @@ def linear_operator_kernal():
     )
     return knl
 
+
 def polynomial_refine(new_discr, old_discr, current_state):
-    "Refine solution to match new discretization."
+    """Refine solution to match new discretization."""
     from meshmode.dof_array import DOFArray
     from modepy import resampling_matrix
     actx = current_state[0].array_context
-    for index,var in enumerate(current_state):
+    for index, var in enumerate(current_state):
         out = DOFArray(actx,
             data=tuple(
                 actx.call_loopy(
                     linear_operator_kernal(),
                     mat=actx.from_numpy(resampling_matrix(old_grp.basis(),
-                        new_grp.unit_nodes,old_grp.unit_nodes,
-                        least_squares_ok=False)
-                    ),
+                        new_grp.unit_nodes, old_grp.unit_nodes,
+                        least_squares_ok=False)),
                     vec=var[new_grp.index])["result"]
                 for new_grp, old_grp in zip(new_discr.discr_from_dd("vol").groups,
                                             old_discr.discr_from_dd("vol").groups)
