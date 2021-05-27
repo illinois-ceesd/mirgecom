@@ -43,19 +43,16 @@ THE SOFTWARE.
 import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import (
-    split_conserved,
-    join_conserved,
     velocity_gradient,
-    species_mass_fraction_gradient
+    species_mass_fraction_gradient,
+    make_conserved
 )
 from meshmode.dof_array import thaw
 
 
-def viscous_stress_tensor(discr, eos, q, grad_q):
+def viscous_stress_tensor(discr, eos, cv, grad_cv):
     """Compute the viscous stress tensor."""
-    dim = discr.dim
-    cv = split_conserved(dim, q)
-    grad_cv = split_conserved(dim, grad_q)
+    dim = cv.dim
     transport = eos.transport_model()
 
     mu_b = transport.bulk_viscosity(eos, cv)
@@ -67,7 +64,7 @@ def viscous_stress_tensor(discr, eos, q, grad_q):
     return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*div_v*np.eye(dim)
 
 
-def diffusive_flux(discr, eos, q, grad_q):
+def diffusive_flux(discr, eos, cv, grad_cv):
     r"""Compute the species diffusive flux vector, ($\mathbf{J}_{\alpha}$).
 
     The species diffussive flux is defined by:
@@ -80,8 +77,6 @@ def diffusive_flux(discr, eos, q, grad_q):
     with species diffusivities ${d}_{\alpha}$, and species mass
     fractions ${Y}_{\alpha}$.
     """
-    cv = split_conserved(discr.dim, q)
-    grad_cv = split_conserved(discr.dim, grad_q)
     nspecies = len(cv.species_mass)
     transport = eos.transport_model()
 
@@ -97,7 +92,7 @@ def diffusive_flux(discr, eos, q, grad_q):
     return diffusive_flux
 
 
-def conductive_heat_flux(discr, eos, q, grad_t):
+def conductive_heat_flux(discr, eos, cv, grad_t):
     r"""Compute the conductive heat flux, ($\mathbf{q}_{c}$).
 
     The conductive heat flux is defined by:
@@ -108,12 +103,11 @@ def conductive_heat_flux(discr, eos, q, grad_t):
 
     with thermal conductivity $\kappa$, and gas temperature $T$.
     """
-    cv = split_conserved(discr.dim, q)
     transport = eos.transport_model()
     return transport.thermal_conductivity(eos, cv)*grad_t
 
 
-def diffusive_heat_flux(discr, eos, q, j):
+def diffusive_heat_flux(discr, eos, cv, j):
     r"""Compute the diffusive heat flux, ($\mathbf{q}_{d}$).
 
     The diffusive heat flux is defined by:
@@ -132,14 +126,13 @@ def diffusive_heat_flux(discr, eos, q, j):
 
     where ${Y}_{\alpha}$ is the vector of species mass fractions.
     """
-    cv = split_conserved(discr.dim, q)
     numspecies = len(cv.species_mass)
     transport = eos.transport_model()
     d = transport.species_diffusivity(eos, cv)
     return sum(d[i]*j[i] for i in range(numspecies))
 
 
-def viscous_flux(discr, eos, q, grad_q, t, grad_t):
+def viscous_flux(discr, eos, cv, grad_cv, t, grad_t):
     r"""Compute the viscous flux vectors.
 
     The viscous fluxes are:
@@ -165,15 +158,14 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
         :func:`mirgecom.fluid.join_conserved`, and
         :func:`mirgecom.fluid.split_conserved`.
     """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
+    dim = cv.dim
 
-    j = diffusive_flux(discr, eos, q, grad_q)
-    heat_flux = conductive_heat_flux(discr, eos, q, grad_t)
+    j = diffusive_flux(discr, eos, cv, grad_cv)
+    heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
     #    heat_flux = (conductive_heat_flux(discr, eos, q, grad_t)
     #                 + diffusive_heat_flux(discr, eos, q, j))
     vel = cv.momentum / cv.mass
-    tau = viscous_stress_tensor(discr, eos, q, grad_q)
+    tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_mass_flux = 0 * cv.momentum
     viscous_energy_flux = np.dot(tau, vel) - heat_flux
 
@@ -182,13 +174,13 @@ def viscous_flux(discr, eos, q, grad_q, t, grad_t):
     if len(j) == 0:
         j = cv.momentum * cv.species_mass.reshape(-1, 1)
 
-    return join_conserved(dim,
+    return make_conserved(dim,
             mass=viscous_mass_flux,
             energy=viscous_energy_flux,
             momentum=tau, species_mass=-j)
 
 
-def viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
+def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
                         t_tpair, grad_t_tpair, local=False):
     """Return the viscous flux across a face given the solution on both sides.
 
@@ -207,23 +199,23 @@ def viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
     """
-    actx = q_tpair[0].int.array_context
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+    actx = cv_tpair.int.array_context
+    normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    f_int = viscous_flux(discr, eos, q_tpair.int, grad_q_tpair.int, t_tpair.int,
+    f_int = viscous_flux(discr, eos, cv_tpair.int, grad_cv_tpair.int, t_tpair.int,
                          grad_t_tpair.int)
-    f_ext = viscous_flux(discr, eos, q_tpair.ext, grad_q_tpair.ext, t_tpair.ext,
+    f_ext = viscous_flux(discr, eos, cv_tpair.ext, grad_cv_tpair.ext, t_tpair.ext,
                          grad_t_tpair.ext)
     f_avg = 0.5*(f_int + f_ext)
-    flux_weak = f_avg @ normal
+    flux_weak = make_conserved(cv_tpair.int.dim, q=(f_avg.join() @ normal))
 
     if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
     return flux_weak
 
 
-def get_viscous_timestep(discr, eos, transport_model, cfl, q):
+def get_viscous_timestep(discr, eos, transport_model, cfl, cv):
     """Routine (will) return the (local) maximum stable viscous timestep.
 
     Currently, it's a hack waiting for the geometric_factor helpers port

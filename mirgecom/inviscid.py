@@ -38,18 +38,15 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved
-)
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.symbolic.primitives import TracePair
 from mirgecom.flux import lfr_flux
+from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*.
+def inviscid_flux(discr, eos, cv):
+    r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
@@ -57,31 +54,24 @@ def inviscid_flux(discr, eos, q):
 
     .. note::
 
-        The fluxes are returned as a 2D object array with shape:
-        ``(num_equations, ndim)``.  Each entry in the
-        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-        form and shape for the flux data is required by the built-in
-        state data handling mechanism in :mod:`mirgecom.fluid`. That
-        mechanism is used by at least
-        :class:`mirgecom.fluid.ConservedVars`, and
-        :func:`mirgecom.fluid.join_conserved`, and
-        :func:`mirgecom.fluid.split_conserved`.
+        The fluxes are returned as a :class:`mirgecom.fluid.ConservedVars`
+        object with a *dim-vector* for each conservation equation. See
+        :class:`mirgecom.fluid.ConservedVars` for more information about
+        how the fluxes are represented.
     """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
+    dim = cv.dim
     p = eos.pressure(cv)
 
     mom = cv.momentum
 
-    return join_conserved(dim,
-            mass=mom,
-            energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            species_mass=(  # reshaped: (nspecies, dim)
-                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+    return make_conserved(
+        dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
+        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+        species_mass=(  # reshaped: (nspecies, dim)
+            (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def inviscid_facial_flux(discr, eos, q_tpair, local=False):
+def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
     Parameters
@@ -99,27 +89,33 @@ def inviscid_facial_flux(discr, eos, q_tpair, local=False):
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
     """
-    actx = q_tpair[0].int.array_context
+    actx = cv_tpair.int.array_context
     dim = discr.dim
-    flux_tpair = TracePair(q_tpair.dd,
-                           interior=inviscid_flux(discr, eos, q_tpair.int),
-                           exterior=inviscid_flux(discr, eos, q_tpair.ext))
+
+    flux_tpair = TracePair(cv_tpair.dd,
+                           interior=inviscid_flux(discr, eos, cv_tpair.int),
+                           exterior=inviscid_flux(discr, eos, cv_tpair.ext))
 
     lam = actx.np.maximum(
-        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+        compute_wavespeed(dim, eos=eos, cv=cv_tpair.int),
+        compute_wavespeed(dim, eos=eos, cv=cv_tpair.ext)
     )
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+
+    normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    flux_weak = lfr_flux(q_tpair, flux_tpair, normal=normal, lam=lam)
+    # flux_weak = make_conserved(
+    #     dim, q=lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
+    # )
+    flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+
     return flux_weak
 
 
-def get_inviscid_timestep(discr, eos, cfl, q):
+def get_inviscid_timestep(discr, eos, cfl, cv):
     """Routine (will) return the (local) maximum stable inviscid timestep.
 
     Currently, it's a hack waiting for the geometric_factor helpers port
@@ -142,7 +138,7 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 #    return c*dt_ngf*dt_gf/max_v
 
 
-def get_inviscid_cfl(discr, eos, dt, q):
+def get_inviscid_cfl(discr, eos, dt, cv):
     """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
+    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, cv=cv)
     return dt / wanted_dt

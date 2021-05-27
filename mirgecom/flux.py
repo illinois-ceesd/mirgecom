@@ -34,7 +34,12 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
+from meshmode.dof_array import DOFArray
 from mirgecom.operators import jump
+from mirgecom.fluid import (
+    ConservedVars,
+    make_conserved
+)
 
 
 def central_scalar_flux(trace_pair, normal):
@@ -67,12 +72,21 @@ def central_scalar_flux(trace_pair, normal):
         for each scalar component.
     """
     tp_avg = trace_pair.avg
-    ncomp = 1
-    if isinstance(tp_avg, np.ndarray):
-        ncomp = len(tp_avg)
+    if isinstance(tp_avg, DOFArray):
+        return tp_avg*normal
+    elif isinstance(tp_avg, ConservedVars):
+        tp_join = tp_avg.join()
+    elif isinstance(tp_avg, np.ndarray):
+        tp_join = tp_avg
+
+    ncomp = len(tp_join)
     if ncomp > 1:
-        return make_obj_array([tp_avg[i]*normal for i in range(ncomp)])
-    return trace_pair.avg*normal
+        result = make_obj_array([tp_join[i]*normal for i in range(ncomp)])
+    else:
+        result = tp_join*normal
+    if isinstance(tp_avg, ConservedVars):
+        return make_conserved(tp_avg.dim, q=result)
+    return result
 
 
 def central_vector_flux(trace_pair, normal):
@@ -103,10 +117,11 @@ def central_vector_flux(trace_pair, normal):
         object array of `meshmode.dof_array.DOFArray` with the central scalar flux
         for each scalar component.
     """
-    return trace_pair.avg@normal
+    tp_avg = trace_pair.avg
+    return make_conserved(tp_avg.dim, q=trace_pair.avg.join()@normal)
 
 
-def lfr_flux(q_tpair, f_tpair, normal, lam):
+def lfr_flux(cv_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -147,4 +162,7 @@ def lfr_flux(q_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg @ normal - lam*jump(q_tpair)/2
+    f_avg = f_tpair.avg
+    return make_conserved(
+        f_avg.dim, q=(f_avg.join() @ normal - lam*jump(cv_tpair).join()/2)
+    )

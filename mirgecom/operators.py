@@ -202,7 +202,8 @@ def dg_div_low(discr, vol_flux, bnd_flux):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg divergence operator applied to the flux of *u*.
     """
-    return -discr.inverse_mass(discr.weak_div(vol_flux)-discr.face_mass(bnd_flux))
+    return -discr.inverse_mass(discr.weak_div(vol_flux)
+                               - discr.face_mass(bnd_flux))
 
 
 def dg_div(discr, compute_vol_flux, compute_interior_flux,
