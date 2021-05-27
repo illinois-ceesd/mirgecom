@@ -68,10 +68,13 @@ def test_slipwall_identity(actx_factory, dim):
 
     order = 3
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = thaw(actx, dcoll.normal(BTAG_ALL))
+    nhat = thaw(dcoll.normal(BTAG_ALL), actx)
+
+    def bnd_norm(u):
+        return op.norm(dcoll, u, p=np.inf, dd=BTAG_ALL)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -131,8 +134,8 @@ def test_slipwall_flux(actx_factory, dim, order):
         )
 
         dcoll = DiscretizationCollection(actx, mesh, order=order)
-        nodes = thaw(op.nodes(dcoll), actx)
-        nhat = thaw(op.normal(dcoll, BTAG_ALL), actx)
+        nodes = thaw(dcoll.nodes(), actx)
+        nhat = thaw(dcoll.normal(BTAG_ALL), actx)
         h = 1.0 / nel_1d
 
         def bnd_norm(u):

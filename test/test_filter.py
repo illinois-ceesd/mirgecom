@@ -172,7 +172,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     )
 
     dcoll = DiscretizationCollection(actx, mesh, order=order)
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1

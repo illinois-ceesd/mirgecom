@@ -29,10 +29,10 @@ import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 
 from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from arraycontext.container.traversal import thaw
 
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -152,7 +152,7 @@ def get_decaying_trig_truncated_domain(dim, alpha):
     sym_u *= sym_cos(sym_coords[dim-1])
 
     def get_boundaries(dcoll, actx, t):
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
 
         def sym_eval(expr):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
@@ -166,7 +166,7 @@ def get_decaying_trig_truncated_domain(dim, alpha):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
             upper_grad_u = op.project(dcoll, "vol", upper_btag, exact_grad_u)
-            normal = thaw(op.normal(dcoll, upper_btag), actx)
+            normal = thaw(dcoll.normal(upper_btag), actx)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
@@ -278,7 +278,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             }
         )
 
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
@@ -344,7 +344,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
     from grudge.discretization import DiscretizationCollection
     dcoll = DiscretizationCollection(actx, mesh, order=order)
 
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -459,7 +459,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             from grudge.discretization import DiscretizationCollection
             dcoll_mirgecom = DiscretizationCollection(actx, mesh, order=order)
-            nodes_mirgecom = thaw(op.nodes(dcoll_mirgecom), actx)
+            nodes_mirgecom = thaw(dcoll_mirgecom.nodes(), actx)
 
             def sym_eval_mirgecom(expr):
                 return sym.EvaluationMapper({"x": nodes_mirgecom, "t": t})(expr)
@@ -522,7 +522,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     from grudge.discretization import DiscretizationCollection
     dcoll = DiscretizationCollection(actx, mesh, order=4)
 
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     t = 1.23456789
 

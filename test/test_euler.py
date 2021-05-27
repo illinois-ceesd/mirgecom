@@ -103,7 +103,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
         return DOFArray(
             actx,
             tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))
-                  for grp in discr.discr_from_dd("vol").groups)
+                  for grp in dcoll.discr_from_dd("vol").groups)
         )
 
     mass = rand()
@@ -139,7 +139,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    flux = inviscid_flux(discr, eos, cv)
+    flux = inviscid_flux(dcoll, eos, cv)
     flux_resid = flux - expected_flux
 
     for i in range(numeq, dim):
@@ -175,7 +175,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
     eos = IdealSingleGas()
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -186,24 +186,24 @@ def test_inviscid_flux_components(actx_factory, dim):
     # the expected values (and p0 within tolerance)
     # === with V = 0, fixed P = p0
     tolerance = 1e-15
-    nodes = thaw(discr.nodes(), actx)
-    mass = discr.zeros(actx) + np.dot(nodes, nodes) + 1.0
-    mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
-    p_exact = discr.zeros(actx) + p0
+    nodes = thaw(dcoll.nodes(), actx)
+    mass = dcoll.zeros(actx) + np.dot(nodes, nodes) + 1.0
+    mom = make_obj_array([dcoll.zeros(actx) for _ in range(dim)])
+    p_exact = dcoll.zeros(actx) + p0
     energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
-    flux = inviscid_flux(discr, eos, cv)
-    assert discr.norm(p - p_exact, np.inf) < tolerance
+    flux = inviscid_flux(dcoll, eos, cv)
+    assert op.norm(dcoll, p - p_exact, np.inf) < tolerance
     logger.info(f"{dim}d flux = {flux}")
 
     # for velocity zero, these components should be == zero
-    assert discr.norm(flux.mass, 2) == 0.0
-    assert discr.norm(flux.energy, 2) == 0.0
+    assert op.norm(dcoll, flux.mass, 2) == 0.0
+    assert op.norm(dcoll, flux.energy, 2) == 0.0
 
     # The momentum diagonal should be p
     # Off-diagonal should be identically 0
-    assert discr.norm(flux.momentum - p0*np.identity(dim), np.inf) < tolerance
+    assert op.norm(dcoll, flux.momentum - p0*np.identity(dim), np.inf) < tolerance
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -234,34 +234,34 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(dcoll.nodes(), actx)
 
     tolerance = 1e-15
     for livedim in range(dim):
-        mass = discr.zeros(actx) + 1.0 + np.dot(nodes, nodes)
-        mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
+        mass = dcoll.zeros(actx) + 1.0 + np.dot(nodes, nodes)
+        mom = make_obj_array([dcoll.zeros(actx) for _ in range(dim)])
         mom[livedim] = mass
-        p_exact = discr.zeros(actx) + p0
+        p_exact = dcoll.zeros(actx) + p0
         energy = (
             p_exact / (eos.gamma() - 1.0)
             + 0.5 * np.dot(mom, mom) / mass
         )
         cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(cv)
-        assert discr.norm(p - p_exact, np.inf) < tolerance
-        flux = inviscid_flux(discr, eos, cv)
+        assert op.norm(dcoll, p - p_exact, np.inf) < tolerance
+        flux = inviscid_flux(dcoll, eos, cv)
         logger.info(f"{dim}d flux = {flux}")
         vel_exact = mom / mass
 
         # first two components should be nonzero in livedim only
-        assert discr.norm(flux.mass - mom, np.inf) == 0
+        assert op.norm(dcoll, flux.mass - mom, np.inf) == 0
         eflux_exact = (energy + p_exact)*vel_exact
-        assert discr.norm(flux.energy - eflux_exact, np.inf) == 0
+        assert op.norm(dcoll, flux.energy - eflux_exact, np.inf) == 0
 
         logger.info("Testing momentum")
         xpmomflux = mass*np.outer(vel_exact, vel_exact) + p_exact*np.identity(dim)
-        assert discr.norm(flux.momentum - xpmomflux, np.inf) < tolerance
+        assert op.norm(dcoll, flux.momentum - xpmomflux, np.inf) < tolerance
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
@@ -728,7 +728,7 @@ def _euler_flow_stepper(actx, parameters):
     nodes = thaw(dcoll.nodes(), actx)
 
     cv = initializer(nodes)
-    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+    sdt = cfl * get_inviscid_timestep(dcoll, eos=eos, cv=cv)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -741,7 +741,7 @@ def _euler_flow_stepper(actx, parameters):
         f"EOS:             {eosname}"
     )
 
-    vis = make_visualizer(discr, order)
+    vis = make_visualizer(dcoll, order)
 
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)

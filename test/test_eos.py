@@ -27,18 +27,17 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
-import pyopencl.clrandom
-import pyopencl.clmath
 import pytest
+
+from arraycontext import (  # noqa
+    thaw,
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
+
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
 import cantera
 import pyrometheus as pyro
@@ -47,11 +46,13 @@ from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
 )
-from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 from mirgecom.mechanisms import get_mechanism_cti
+
+from grudge.discretization import DiscretizationCollection
+import grudge.op as op
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ logger = logging.getLogger(__name__)
                          [("uiuc", 1e-12),
                           ("sanDiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
-def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
+def test_pyrometheus_mechanisms(actx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
@@ -68,9 +69,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     Tests that the Pyrometheus mechanism code  gets the same thermo properties as the
     corresponding mechanism in Cantera.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 1
     nel_1d = 2
@@ -85,7 +84,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
@@ -120,7 +119,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         can_r = cantera_soln.net_rates_of_progress
         can_omega = cantera_soln.net_production_rates
 
-        ones = discr.zeros(actx) + 1.0
+        ones = dcoll.zeros(actx) + 1.0
         tin = can_t * ones
         pin = can_p * ones
         yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
@@ -149,33 +148,31 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         print(f"can_omega = {can_omega}")
         print(f"prom_omega = {prom_omega}")
 
-        assert discr.norm((prom_c - can_c) / can_c, np.inf) < 1e-14
-        assert discr.norm((prom_t - can_t) / can_t, np.inf) < 1e-14
-        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < 1e-14
-        assert discr.norm((prom_p - can_p) / can_p, np.inf) < 1e-14
-        assert discr.norm((prom_e - can_e) / can_e, np.inf) < 1e-6
-        assert discr.norm((prom_k - can_k) / can_k, np.inf) < 1e-10
+        assert op.norm(dcoll, (prom_c - can_c) / can_c, np.inf) < 1e-14
+        assert op.norm(dcoll, (prom_t - can_t) / can_t, np.inf) < 1e-14
+        assert op.norm(dcoll, (prom_rho - can_rho) / can_rho, np.inf) < 1e-14
+        assert op.norm(dcoll, (prom_p - can_p) / can_p, np.inf) < 1e-14
+        assert op.norm(dcoll, (prom_e - can_e) / can_e, np.inf) < 1e-6
+        assert op.norm(dcoll, (prom_k - can_k) / can_k, np.inf) < 1e-10
 
         # Pyro chem test comparisons
         for i, rate in enumerate(can_r):
-            assert discr.norm((prom_r[i] - rate), np.inf) < rate_tol
+            assert op.norm(dcoll, (prom_r[i] - rate), np.inf) < rate_tol
         for i, rate in enumerate(can_omega):
-            assert discr.norm((prom_omega[i] - rate), np.inf) < rate_tol
+            assert op.norm(dcoll, (prom_omega[i] - rate), np.inf) < rate_tol
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
-def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
+def test_pyrometheus_eos(actx_factory, mechname, dim, y0, vel):
     """Test PyrometheusMixture EOS for all available mechanisms.
 
     Tests that the PyrometheusMixture EOS gets the same thermo properties
     (p, T, e) as the Pyrometheus-native mechanism code.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
 
@@ -189,8 +186,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
@@ -215,7 +212,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         print(f"Testing {mechname}(t,P) = ({tempin}, {pressin})")
 
-        ones = discr.zeros(actx) + 1.0
+        ones = dcoll.zeros(actx) + 1.0
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
@@ -246,17 +243,17 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"pyro_eos.e = {internal_energy}")
 
         tol = 1e-14
-        assert discr.norm((cv.mass - pyro_rho) / pyro_rho, np.inf) < tol
-        assert discr.norm((temperature - pyro_t) / pyro_t, np.inf) < tol
-        assert discr.norm((internal_energy - pyro_e) / pyro_e, np.inf) < tol
-        assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
+        assert op.norm(dcoll, (cv.mass - pyro_rho) / pyro_rho, np.inf) < tol
+        assert op.norm(dcoll, (temperature - pyro_t) / pyro_t, np.inf) < tol
+        assert op.norm(dcoll, (internal_energy - pyro_e) / pyro_e, np.inf) < tol
+        assert op.norm(dcoll, (p - pyro_p) / pyro_p, np.inf) < tol
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
                          [("uiuc", 1e-12),
                           ("sanDiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
-def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
+def test_pyrometheus_kinetics(actx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus reaction mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
@@ -266,9 +263,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     are integrated in time and verified against a homogeneous reactor in
     Cantera.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 1
     nel_1d = 4
@@ -283,8 +278,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    ones = discr.zeros(actx) + 1.0
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    ones = dcoll.zeros(actx) + 1.0
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
@@ -346,34 +341,32 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
         # Print
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
-        abs_diff = discr.norm(pyro_r - can_r, np.inf)
+        abs_diff = op.norm(dcoll, pyro_r - can_r, np.inf)
         if abs_diff > 1e-14:
             min_r = (np.abs(can_r)).min()
             if min_r > 0:
-                assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
+                assert op.norm(dcoll, (pyro_r - can_r) / can_r, np.inf) < rate_tol
             else:
-                assert discr.norm(pyro_r, np.inf) < rate_tol
+                assert op.norm(dcoll, pyro_r, np.inf) < rate_tol
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
         for i, omega in enumerate(can_omega):
             omin = np.abs(omega).min()
             if omin > 1e-12:
-                assert discr.norm((pyro_omega[i] - omega) / omega, np.inf) < 1e-8
+                assert op.norm(dcoll, (pyro_omega[i] - omega) / omega, np.inf) < 1e-8
             else:
-                assert discr.norm(pyro_omega[i], np.inf) < 1e-12
+                assert op.norm(dcoll, pyro_omega[i], np.inf) < 1e-12
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_idealsingle_lump(ctx_factory, dim):
+def test_idealsingle_lump(actx_factory, dim):
     """Test IdealSingle EOS with mass lump.
 
     Tests that the IdealSingleGas EOS returns the correct (uniform) pressure for the
     Lump solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
 
@@ -386,8 +379,8 @@ def test_idealsingle_lump(ctx_factory, dim):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(dcoll.nodes(), actx)
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -399,14 +392,14 @@ def test_idealsingle_lump(ctx_factory, dim):
 
     p = eos.pressure(cv)
     exp_p = 1.0
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = op.norm(dcoll, p - exp_p, np.inf)
 
     exp_ke = 0.5 * cv.mass
     ke = eos.kinetic_energy(cv)
-    kerr = discr.norm(ke - exp_ke, np.inf)
+    kerr = op.norm(dcoll, ke - exp_ke, np.inf)
 
     te = eos.total_energy(cv, p)
-    terr = discr.norm(te - cv.energy, np.inf)
+    terr = op.norm(dcoll, te - cv.energy, np.inf)
 
     logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
@@ -416,15 +409,13 @@ def test_idealsingle_lump(ctx_factory, dim):
     assert terr < 1e-15
 
 
-def test_idealsingle_vortex(ctx_factory):
+def test_idealsingle_vortex(actx_factory):
     r"""Test EOS with isentropic vortex.
 
     Tests that the IdealSingleGas EOS returns the correct pressure (p) for the
     Vortex2D solution field (i.e. $p = \rho^{\gamma}$).
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 2
     nel_1d = 4
@@ -438,8 +429,8 @@ def test_idealsingle_vortex(ctx_factory):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    dcoll = DiscretizationCollection(actx, mesh, order=order)
+    nodes = thaw(dcoll.nodes(), actx)
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -448,14 +439,14 @@ def test_idealsingle_vortex(ctx_factory):
     gamma = eos.gamma()
     p = eos.pressure(cv)
     exp_p = cv.mass ** gamma
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = op.norm(dcoll, p - exp_p, np.inf)
 
     exp_ke = 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass
     ke = eos.kinetic_energy(cv)
-    kerr = discr.norm(ke - exp_ke, np.inf)
+    kerr = op.norm(dcoll, ke - exp_ke, np.inf)
 
     te = eos.total_energy(cv, p)
-    terr = discr.norm(te - cv.energy, np.inf)
+    terr = op.norm(dcoll, te - cv.energy, np.inf)
 
     logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")

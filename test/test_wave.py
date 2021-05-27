@@ -25,10 +25,10 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 
 from arraycontext import (  # noqa
+    thaw,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from arraycontext.container.traversal import thaw
 
 from pytools.obj_array import flat_obj_array, make_obj_array
 import pymbolic as pmbl
@@ -171,7 +171,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
         from grudge.discretization import DiscretizationCollection
         dcoll = DiscretizationCollection(actx, mesh, order=order)
 
-        nodes = thaw(op.nodes(dcoll), actx)
+        nodes = thaw(dcoll.nodes(), actx)
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
@@ -235,7 +235,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
     from grudge.discretization import DiscretizationCollection
     dcoll = DiscretizationCollection(actx, mesh, order=order)
 
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
