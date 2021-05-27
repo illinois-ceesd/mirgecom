@@ -38,10 +38,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import grudge.op as op
 
 from arraycontext import thaw
-
 from pytools.obj_array import make_obj_array
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
