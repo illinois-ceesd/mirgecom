@@ -41,6 +41,29 @@ from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 logger = logging.getLogger(__name__)
 
 
+class MIRGEComParameters:
+    """Simple parameters object."""
+    def __init__(self, **kwargs):
+        self._parameters = kwargs
+
+    @property
+    def parameters(self):
+        """Grab the parameters."""
+        return self._parameters
+
+    def update(self, **kwargs):
+        """Update parameters with new or replacement parameters or values."""
+        self._parameters.update(kwargs)
+
+    def read(self, file_path):
+        """Read new or replacement values from a file at system path *file_path*."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("user_parameters", file_path)
+        foo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(foo)
+        self._parameters.update(foo.mirgecom_parameters.parameters)
+
+
 def check_step(step, interval):
     """
     Check step number against a user-specified interval.
