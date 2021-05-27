@@ -86,7 +86,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         if mesh_dist.is_mananger_rank():
             from meshmode.mesh.generation import generate_regular_rect_mesh
             mesh = generate_regular_rect_mesh(
-                a=(-0.5,)*dim, b=(0.5,)*dim, n=(nel_1d,)*dim)
+                a=(-0.5,)*dim, b=(0.5,)*dim, 
+                nelements_per_axis=(nel_1d,)*dim)
 
             print("%d elements" % mesh.nelements)
             part_per_element = get_partition_by_pymetis(mesh, num_parts)
@@ -140,7 +141,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         assert istep == restart_step
         fields = restart_data["fields"]
 
-    vis = make_visualizer(discr, order+3 if local_mesh.dim == 2 else order)
+    vis = make_visualizer(discr)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)

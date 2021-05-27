@@ -78,6 +78,7 @@ intersphinx_mapping = {
     "https://numpy.org/doc/stable/": None,
     "https://documen.tician.de/pyopencl/": None,
     "https://documen.tician.de/modepy/": None,
+    "https://documen.tician.de/arraycontext/": None,
     "https://documen.tician.de/meshmode/": None,
     "https://documen.tician.de/grudge/": None,
     "https://documen.tician.de/pytato/": None,
@@ -101,3 +102,7 @@ mathjax_config = {
         "displayMath": [["\\[", "\\]"]],
     },
 }
+
+rst_prolog = """
+.. |mirgecom| replace:: *MIRGE-Com*
+"""

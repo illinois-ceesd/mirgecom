@@ -1,3 +1,5 @@
+"""Test the Euler gas dynamics module."""
+
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
@@ -28,6 +30,8 @@ import numpy.linalg as la  # noqa
 import pyopencl.clmath  # noqa
 import logging
 import pytest
+import math
+from functools import partial
 
 from pytools.obj_array import (
     flat_obj_array,
@@ -78,7 +82,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     #    for dim in [1, 2, 3]:
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -143,7 +147,7 @@ class MyDiscr:
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_inviscid_flux_components(actx_factory, dim):
-    """Uniform pressure test
+    """Test uniform pressure case.
 
     Checks that the Euler-internal inviscid flux routine
     :func:`mirgecom.inviscid.inviscid_flux` returns exactly the expected result
@@ -317,7 +321,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
     for nel_1d in [4, 8, 12]:
 
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -356,7 +360,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(iff_split.energy) < tolerance
         assert inf_norm(iff_split.species_mass) < tolerance
 
-        # The expected pressure 1.0 (by design). And the flux diagonal is
+        # The expected pressure is 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
         #
         # The off-diagonals are zero. We get a {ndim}-vector for each
@@ -367,7 +371,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        momerr = inf_norm(iff_split.momentum) - p0
+        # generate the exact answer: just p0*nhat for the given boundary
+        nhat = thaw(actx, discr.normal("int_faces"))
+        mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
+
+        momerr = inf_norm(iff_split.momentum - mom_flux_exact)
         assert momerr < tolerance
 
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
@@ -377,7 +385,6 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_e = discr.project("vol", BTAG_ALL, energy_input)
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
-
         dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
                                   species_mass=dir_mf)
         dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
@@ -393,7 +400,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         assert inf_norm(bf_split.energy) < tolerance
         assert inf_norm(bf_split.species_mass) < tolerance
 
-        momerr = inf_norm(bf_split.momentum) - p0
+        # generate the exact answer: just p0*nhat for the given boundary
+        nhat = thaw(actx, discr.normal(BTAG_ALL))
+        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
+
+        momerr = inf_norm(bf_split.momentum - mom_flux_exact)
         assert momerr < tolerance
 
         eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
@@ -430,7 +441,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     for nel_1d in [4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         logger.info(
@@ -555,10 +566,10 @@ def test_vortex_rhs(actx_factory, order):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    for nel_1d in [16, 32, 64]:
+    for nel_1d in [32, 48, 64]:
 
         mesh = generate_regular_rect_mesh(
-            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
+            a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
 
         logger.info(
@@ -613,7 +624,7 @@ def test_lump_rhs(actx_factory, dim, order):
         )
 
         mesh = generate_regular_rect_mesh(
-            a=(-5,) * dim, b=(5,) * dim, n=(nel_1d,) * dim,
+            a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -672,7 +683,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         )
 
         mesh = generate_regular_rect_mesh(
-            a=(-1,) * dim, b=(1,) * dim, n=(nel_1d,) * dim,
+            a=(-1,) * dim, b=(1,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -720,7 +731,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
 def _euler_flow_stepper(actx, parameters):
     """
-    Implements a generic time stepping loop for testing an inviscid flow.
+    Implements a generic time stepping loop for testing an inviscid flow
+    using a spectral filter.
     """
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
@@ -795,6 +807,21 @@ def _euler_flow_stepper(actx, parameters):
     def rhs(t, q):
         return euler_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
 
+    filter_order = 8
+    eta = .5
+    alpha = -1.0*np.log(np.finfo(float).eps)
+    nummodes = int(1)
+    for _ in range(dim):
+        nummodes *= int(order + dim + 1)
+    nummodes /= math.factorial(int(dim))
+    cutoff = int(eta * order)
+
+    from mirgecom.filter import (
+        exponential_mode_response_function as xmrfunc,
+        filter_modally
+    )
+    frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
+
     while t < t_final:
 
         if constantcfl is True:
@@ -807,6 +834,9 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln()
 
         fields = rk4_step(fields, t, dt, rhs)
+        fields = filter_modally(discr, "vol", cutoff,
+                                frfunc, fields)
+
         t += dt
         istep += 1
 
@@ -826,7 +856,7 @@ def _euler_flow_stepper(actx, parameters):
     return(maxerr)
 
 
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [2, 3, 4])
 def test_isentropic_vortex(actx_factory, order):
     """Advance the 2D isentropic vortex case in time with non-zero velocities
     using an RK4 timestepping scheme. Check the advanced field values against
@@ -849,7 +879,7 @@ def test_isentropic_vortex(actx_factory, order):
         )
 
         mesh = generate_regular_rect_mesh(
-            a=(-5.0,) * dim, b=(5.0,) * dim, n=(nel_1d,) * dim
+            a=(-5.0,) * dim, b=(5.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         exittol = 1.0
