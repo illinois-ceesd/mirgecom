@@ -30,10 +30,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
 
 
 # placeholder awaits resolution on grudge PR #71
@@ -64,14 +60,6 @@ def elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
             + sum(compute_interior_flux(part_tpair)
                   for part_tpair in xrank_pairs)
             + sum(compute_boundary_flux(btag) for btag in boundaries))
-
-
-def element_boundary_flux(discr, compute_interior_flux, compute_boundary_flux,
-                          boundaries, u):
-    """Generically compute flux across element boundaries for simple f(u) flux."""
-    return elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                      interior_trace_pair(discr, u),
-                      cross_rank_trace_pairs(discr, u), boundaries)
 
 
 def dg_grad(discr, interior_u, bndry_flux):
