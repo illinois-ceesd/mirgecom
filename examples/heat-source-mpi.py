@@ -25,8 +25,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from arraycontext.container.traversal import thaw
-from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -99,7 +98,7 @@ def main():
 
     source_width = 0.2
 
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     boundaries = {
         DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),

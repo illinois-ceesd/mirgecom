@@ -36,8 +36,7 @@ import grudge.op as op
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
-from arraycontext.container.traversal import thaw
-from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
 import pyopencl.tools as cl_tools
 
@@ -50,7 +49,7 @@ def bump(actx, dcoll, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(dcoll.dim)

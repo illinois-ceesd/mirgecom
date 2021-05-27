@@ -30,15 +30,12 @@ import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
-from arraycontext.container.traversal import thaw
-from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
-import grudge.op as op
-
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
@@ -115,7 +112,7 @@ def main(ctx_factory=cl.create_some_context):
     dcoll = DiscretizationCollection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     current_state = initializer(nodes)
 
     visualizer = make_visualizer(dcoll)

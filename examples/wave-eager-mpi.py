@@ -29,8 +29,7 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from arraycontext.container.traversal import thaw
-from arraycontext.impl.pyopencl import PyOpenCLArrayContext
+from arraycontext import thaw, PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -51,7 +50,7 @@ def bump(actx, dcoll, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(op.nodes(dcoll), actx)
+    nodes = thaw(dcoll.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(dcoll.dim)
