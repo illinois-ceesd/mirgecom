@@ -32,7 +32,7 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 
 

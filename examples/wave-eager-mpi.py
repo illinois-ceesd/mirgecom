@@ -86,7 +86,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         if mesh_dist.is_mananger_rank():
             from meshmode.mesh.generation import generate_regular_rect_mesh
             mesh = generate_regular_rect_mesh(
-                a=(-0.5,)*dim, b=(0.5,)*dim, n=(nel_1d,)*dim)
+                a=(-0.5,)*dim, b=(0.5,)*dim,
+                nelements_per_axis=(nel_1d,)*dim)
 
             print("%d elements" % mesh.nelements)
             part_per_element = get_partition_by_pymetis(mesh, num_parts)

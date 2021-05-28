@@ -77,7 +77,7 @@ def main(use_profiling=False):
     mesh = generate_regular_rect_mesh(
         a=(-0.5,)*dim,
         b=(0.5,)*dim,
-        n=(nel_1d,)*dim)
+        nelements_per_axis=(nel_1d,)*dim)
 
     order = 3
 
@@ -99,7 +99,7 @@ def main(use_profiling=False):
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
-    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
+    vis = make_visualizer(discr)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
