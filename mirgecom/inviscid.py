@@ -95,11 +95,10 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 
     mpi_comm = discr.mpi_communicator
     if mpi_comm is None:
-        max_wavespeed_global = max_wavespeed_local
-        h_min_global = h_min_local
-    else:
-        h_min_global = mpi_comm.allreduce(h_min_local, op=MPI.MIN)
-        max_wavespeed_global = mpi_comm.allreduce(max_wavespeed_local, op=MPI.MAX)
+        return cfl * h_min_local / max_wavespeed_local
+
+    h_min_global = mpi_comm.allreduce(h_min_local, op=MPI.MIN)
+    max_wavespeed_global = mpi_comm.allreduce(max_wavespeed_local, op=MPI.MAX)
 
     return cfl * h_min_global / max_wavespeed_global
 
