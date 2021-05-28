@@ -162,9 +162,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                checkpoint=my_checkpoint,
-                get_timestep=get_timestep, state=current_state,
-                t=current_t, t_final=t_final)
+                          pre_step_callback=my_checkpoint,
+                          get_timestep=get_timestep, state=current_state,
+                          t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = 1
         current_step = ex.step
