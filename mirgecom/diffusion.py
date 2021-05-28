@@ -40,7 +40,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.dof_desc import DOFDesc, as_dofdesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 
 
 def gradient_flux(discr, quad_tag, u_tpair):

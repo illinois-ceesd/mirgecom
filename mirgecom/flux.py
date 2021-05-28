@@ -58,7 +58,7 @@ def central_scalar_flux(trace_pair, normal):
 
     Parameters
     ----------
-    trace_pair: `grudge.sym.TracePair`
+    trace_pair: `grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
@@ -106,7 +106,7 @@ def central_vector_flux(trace_pair, normal):
 
     Parameters
     ----------
-    trace_pair: `grudge.sym.TracePair`
+    trace_pair: `grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
@@ -139,11 +139,11 @@ def lfr_flux(cv_tpair, f_tpair, normal, lam):
 
     Parameters
     ----------
-    q_tpair: :class:`grudge.sym.TracePair`
+    q_tpair: :class:`grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 
-    f_tpair: :class:`grudge.sym.TracePair`
+    f_tpair: :class:`grudge.trace_pair.TracePair`
 
         Physical flux trace pair on faces on which numerical flux is to be calculated
 
