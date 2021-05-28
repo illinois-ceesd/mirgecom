@@ -93,7 +93,7 @@ def get_inviscid_timestep(discr, eos, cfl, q):
     local_wavespeeds = compute_wavespeed(dim, eos, cv)
     max_wavespeed_local = op.nodal_max(discr, "vol", local_wavespeeds)
 
-    mpi_comm = discr.get_comm()
+    mpi_comm = discr.mpi_communicator
     if mpi_comm is None:
         max_wavespeed_global = max_wavespeed_local
         h_min_global = h_min_local
