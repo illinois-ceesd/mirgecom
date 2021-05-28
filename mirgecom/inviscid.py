@@ -82,21 +82,26 @@ def get_inviscid_timestep(discr, eos, cfl, q):
     Currently, it's a hack waiting for the geometric_factor helpers port
     from grudge.
     """
+    from mpi4py import MPI
     dim = discr.dim
-    mesh = discr.mesh
     order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
-    nelements = mesh.nelements
-    nel_1d = nelements ** (1.0 / (1.0 * dim))
+    cv = split_conserved(dim, q)
 
-    # This roughly reproduces the timestep AK used in wave toy
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return cfl * dt
+    import grudge.op as op
+    h_min_local = op.h_min_from_volume(discr) / (order * order)
+    from mirgecom.fluid import compute_wavespeed
+    local_wavespeeds = compute_wavespeed(dim, eos, cv)
+    max_wavespeed_local = op.nodal_max(discr, "vol", local_wavespeeds)
 
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = compute_wavespeed(w,eos=eos)
-#    max_v = clmath.max(wavespeeds)
-#    return c*dt_ngf*dt_gf/max_v
+    mpi_comm = discr.get_comm()
+    if mpi_comm is None:
+        max_wavespeed_global = max_wavespeed_local
+        h_min_global = h_min_local
+    else:
+        h_min_global = mpi_comm.allreduce(h_min_local, op=MPI.MIN)
+        max_wavespeed_global = mpi_comm.allreduce(max_wavespeed_local, op=MPI.MAX)
+
+    return cfl * h_min_global / max_wavespeed_global
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
