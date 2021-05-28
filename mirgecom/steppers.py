@@ -32,8 +32,11 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
 
-def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
+def advance_state(rhs, timestepper, get_timestep,
+                  state, t_final, t=0.0, istep=0,
+                  pre_step_callback=None,
+                  post_step_callback=None,
+                  logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -44,12 +47,7 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
         a call with signature ``rhs(t, state)``.
     timestepper
         Function that advances the state from t=time to t=(time+dt), and
-        returns the advanced state. Has a call with signature
-        ``timestepper(state, t, dt, rhs)``.
-    checkpoint
-        Function is user-defined and can be used to preform simulation status
-        reporting, viz, and restart i/o.  A non-zero return code from this function
-        indicates that this function should stop gracefully.
+        returns the advanced state.
     get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
@@ -63,6 +61,17 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
         Time at which to start
     istep: int
         Step number from which to start
+    pre_step_callback
+        An optional user-defined function to be called before the timestepper
+        is called for that particular step. A non-zero return code from this
+        function indicates that this function should stop gracefully.
+        Examples of such functions include visualization, io, or restart
+        checkpoints.
+    post_step_callback
+        An optional user-defined function to be called after the timestepper
+        is called for that particular step. A non-zero return code from this
+        function indicates that this function should stop gracefully.
+        Examples of such functions include applying modal filtering or limiters.
 
     Returns
     -------
@@ -84,11 +93,16 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
         if dt < 0:
             return istep, t, state
 
-        checkpoint(state=state, step=istep, t=t, dt=dt)
+        if pre_step_callback is not None:
+            pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
         t += dt
+
+        if post_step_callback is not None:
+            post_step_callback(state=state, step=istep, t=t, dt=dt)
+
         istep += 1
 
         if logmgr:
