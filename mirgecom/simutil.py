@@ -2,8 +2,8 @@
 
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
-.. autoexception:: ExactSolutionMismatch
 .. autofunction:: sim_checkpoint
+.. autofunction:: sim_healthcheck
 .. autofunction:: generate_and_distribute_mesh
 """
 
@@ -37,6 +37,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
+from mirgecom.exceptions import ExactSolutionMismatch, SimulationHealthError
 
 logger = logging.getLogger(__name__)
 
@@ -72,21 +73,6 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     if (t + mydt) > t_final:
         mydt = t_final - t
     return mydt
-
-
-class ExactSolutionMismatch(Exception):
-    """Exception class for solution mismatch.
-
-    .. attribute:: step
-    .. attribute:: t
-    .. attribute:: state
-    """
-
-    def __init__(self, step, t, state):
-        """Record the simulation state on creation."""
-        self.step = step
-        self.t = t
-        self.state = state
 
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
@@ -160,6 +146,41 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
     if maxerr > exittol:
         raise ExactSolutionMismatch(step, t=t, state=q)
+
+
+def sim_healthcheck(discr, eos, q, conserved_vars, step=0, t=0):
+    """Checks the health of the simulation by checking for unphysical values.
+    """
+    import grudge.op as op
+
+    # NOTE: Derived quantities are functions of the conserved variables.
+    # Therefore is it sufficient to check for unphysical values of
+    # temperature and pressure.
+    dependent_vars = eos.dependent_vars(conserved_vars)
+
+    # Check for NaN
+    if (np.isnan(op.nodal_sum(discr, "vol", dependent_vars.pressure))
+            or np.isnan(op.nodal_sum(discr, "vol", dependent_vars.temperature))):
+        raise SimulationHealthError(
+            step, t=t, state=q,
+            message="Detected a NaN."
+        )
+
+    # Check for non-positivity
+    if (op.nodal_min(discr, "vol", dependent_vars.pressure) < 0
+            or op.nodal_min(discr, "vol", dependent_vars.temperature) < 0):
+        raise SimulationHealthError(
+            step, t=t, state=q,
+            message="Found non-positive values for pressure or temperature."
+        )
+
+    # Check for blow-up
+    if (op.norm(discr, dependent_vars.pressure, np.inf) == np.inf
+            or op.norm(discr, dependent_vars.temperature, np.inf) == np.inf):
+        raise SimulationHealthError(
+            step, t=t, state=q,
+            message="Infinity-norm of derived quantities is not finite."
+        )
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
