@@ -144,7 +144,10 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         if old_order != order:
             old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
                                               mpi_communicator=comm)
-            
+            from mirgecom.simutil import polynomial_refine
+            fields = polynomial_refine(discr, old_discr, restart_fields)
+        else:
+            fields = restart_fields
 
     vis = make_visualizer(discr)
 
