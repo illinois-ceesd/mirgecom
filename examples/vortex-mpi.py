@@ -41,9 +41,11 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
-    generate_and_distribute_mesh,
-    ExactSolutionMismatch,
+    sim_healthcheck,
+    generate_and_distribute_mesh
 )
+from mirgecom.exceptions import MirgecomException
+from mirgecom.fluid import split_conserved
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -183,14 +185,20 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
                               vis_timer=vis_timer)
 
+    def my_simhealthcheck(state, step, t, dt):
+        cv = split_conserved(discr.dim, state)
+        sim_healthcheck(discr, eos, q=state, conserved_vars=cv, step=step, t=t)
+
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           pre_step_callback=my_checkpoint,
+                          post_step_callback=my_simhealthcheck,
                           get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
                           dim=dim)
-    except ExactSolutionMismatch as ex:
+
+    except MirgecomException as ex:
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state

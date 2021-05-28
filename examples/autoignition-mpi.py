@@ -40,10 +40,12 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
+    sim_healthcheck,
     check_step,
-    generate_and_distribute_mesh,
-    ExactSolutionMismatch
+    generate_and_distribute_mesh
 )
+from mirgecom.exceptions import MirgecomException
+from mirgecom.fluid import split_conserved
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -52,7 +54,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.euler import split_conserved
+
 import cantera
 import pyrometheus as pyro
 
@@ -239,13 +241,18 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               constant_cfl=constant_cfl, comm=comm,
                               viz_fields=viz_fields)
 
+    def my_simhealthcheck(state, step, t, dt):
+        cv = split_conserved(discr.dim, state)
+        sim_healthcheck(discr, eos, q=state, conserved_vars=cv, step=step, t=t)
+
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
                           pre_step_callback=my_checkpoint,
+                          post_step_callback=my_simhealthcheck,
                           get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final)
-    except ExactSolutionMismatch as ex:
+    except MirgecomException as ex:
         error_state = True
         current_step = ex.step
         current_t = ex.t
