@@ -149,8 +149,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
 
 def sim_healthcheck(discr, eos, q, conserved_vars, step=0, t=0):
-    """Checks the health of the simulation by checking for unphysical values.
-    """
+    """Check the health of the simulation by checking for unphysical values."""
     import grudge.op as op
 
     # NOTE: Derived quantities are functions of the conserved variables.
