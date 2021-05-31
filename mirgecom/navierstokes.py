@@ -172,7 +172,10 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
 
     # viscous parts
     s_int_pair = interior_trace_pair(discr, grad_cv)
-    s_part_pairs = cross_rank_trace_pairs(discr, grad_cv)
+    s_part_pairs = [TracePair(xrank_tpair.dd,
+                             interior=make_conserved(dim, q=xrank_tpair.int),
+                             exterior=make_conserved(dim, q=xrank_tpair.ext))
+                    for xrank_tpair in cross_rank_trace_pairs(discr, grad_cv.join())]
     delt_int_pair = interior_trace_pair(discr, grad_t)
     delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
     num_partition_interfaces = len(cv_part_pairs)
