@@ -52,7 +52,7 @@ def lfr_flux(cv_tpair, flux_func, normal, lam):
 
         function should return ambient dim-vector fluxes given *q* values
 
-    q_tpair: :class:`grudge.sym.TracePair`
+    q_tpair: :class:`grudge.trace_pair.TracePair`
 
         Trace pair for the face upon which flux calculation is to be performed
 

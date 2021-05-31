@@ -80,8 +80,8 @@ def _facial_flux(discr, eos, cv_tpair, local=False):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
-    cv_tpair: :class:`grudge.sym.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
+        Trace pair of :class:`ConservedVars` for the face
 
     local: bool
         Indicates whether to skip projection of fluxes to "all_faces" or not. If

@@ -35,7 +35,7 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 
 
