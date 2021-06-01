@@ -217,4 +217,4 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     ).join()
 
     # NS RHS
-    return dg_div(discr, vol_term, bnd_term)
+    return make_conserved(dim, q=dg_div(discr, vol_term, bnd_term))
