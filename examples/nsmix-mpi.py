@@ -60,7 +60,6 @@ from mirgecom.boundary import (  # noqa
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.fluid import split_conserved
 import cantera
 import pyrometheus as pyro
 
@@ -197,15 +196,14 @@ def main(ctx_factory=cl.create_some_context):
 
     # Inspection at physics debugging time
     if debug:
-        cv = split_conserved(dim, current_state)
         print("Initial MIRGE-Com state:")
-        print(f"{cv.mass=}")
-        print(f"{cv.energy=}")
-        print(f"{cv.momentum=}")
-        print(f"{cv.species_mass=}")
-        print(f"Initial Y: {cv.species_mass / cv.mass}")
-        print(f"Initial DV pressure: {eos.pressure(cv)}")
-        print(f"Initial DV temperature: {eos.temperature(cv)}")
+        print(f"{current_state.mass=}")
+        print(f"{current_state.energy=}")
+        print(f"{current_state.momentum=}")
+        print(f"{current_state.species_mass=}")
+        print(f"Initial Y: {current_state.species_mass / current_state.mass}")
+        print(f"Initial DV pressure: {eos.pressure(current_state)}")
+        print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -239,10 +237,10 @@ def main(ctx_factory=cl.create_some_context):
         t_end = t_final
         if constant_cfl is True:
             inviscid_dt = get_inviscid_timestep(discr=discr, eos=eos,
-                                                cfl=current_cfl, q=state)
+                                                cfl=current_cfl, cv=state)
             viscous_dt = get_viscous_timestep(discr=discr, eos=eos,
                                               transport_model=transport_model,
-                                              cfl=current_cfl, q=state)
+                                              cfl=current_cfl, cv=state)
             next_dt = min([next_dt, inviscid_dt, viscous_dt])
         # else:
         #     inviscid_cfl = get_inviscid_cfl(discr=discr, eos=eos,
@@ -256,17 +254,15 @@ def main(ctx_factory=cl.create_some_context):
         return next_dt
 
     def my_rhs(t, state):
-        cv = split_conserved(dim=dim, q=state)
-        ns_rhs = ns_operator(discr, q=state, t=t,
+        ns_rhs = ns_operator(discr, cv=state, t=t,
                              boundaries=visc_bnds, eos=eos)
-        reaction_source = eos.get_species_source_terms(cv)
+        reaction_source = eos.get_species_source_terms(state)
         return ns_rhs + reaction_source
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        reaction_rates = eos.get_production_rates(cv)
+        reaction_rates = eos.get_production_rates(state)
         viz_fields = [("reaction_rates", reaction_rates)]
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               constant_cfl=constant_cfl, comm=comm,

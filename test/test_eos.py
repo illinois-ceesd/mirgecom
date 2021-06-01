@@ -47,7 +47,6 @@ from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
 )
-from mirgecom.fluid import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -235,9 +234,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
                                          pressure=pyro_p, temperature=pyro_t,
                                          massfractions=y0s, velocity=velocity)
 
-        q = initializer(eos=eos, t=0, x_vec=nodes)
-        cv = split_conserved(dim, q)
-
+        cv = initializer(eos=eos, t=0, x_vec=nodes)
         p = eos.pressure(cv)
         temperature = eos.temperature(cv)
         internal_energy = eos.get_internal_energy(tin, yin)
@@ -398,9 +395,8 @@ def test_idealsingle_lump(ctx_factory, dim):
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
     eos = IdealSingleGas()
-    lump_soln = lump(nodes)
+    cv = lump(nodes)
 
-    cv = split_conserved(dim, lump_soln)
     p = eos.pressure(cv)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
@@ -412,7 +408,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     te = eos.total_energy(cv, p)
     terr = discr.norm(te - cv.energy, np.inf)
 
-    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
@@ -447,8 +443,8 @@ def test_idealsingle_vortex(ctx_factory):
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()
-    vortex_soln = vortex(nodes)
-    cv = split_conserved(dim, vortex_soln)
+    cv = vortex(nodes)
+
     gamma = eos.gamma()
     p = eos.pressure(cv)
     exp_p = cv.mass ** gamma
@@ -461,7 +457,7 @@ def test_idealsingle_vortex(ctx_factory):
     te = eos.total_energy(cv, p)
     terr = discr.norm(te - cv.energy, np.inf)
 
-    logger.info(f"vortex_soln = {vortex_soln}")
+    logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15

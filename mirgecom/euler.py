@@ -52,8 +52,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-from mirgecom.fluid import split_conserved
+import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
@@ -62,10 +61,12 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
-from mirgecom.operators import dg_div_low as dg_div
+from grudge.trace_pair import TracePair
+from mirgecom.fluid import make_conserved
+from mirgecom.operators import dg_div
 
 
-def euler_operator(discr, eos, boundaries, q, t=0.0):
+def euler_operator(discr, eos, boundaries, cv, t=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -80,12 +81,8 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
 
     Parameters
     ----------
-    q
-        State array which expects at least the canonical conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
+    cv: :class:`mirgecom.fluid.ConservedVars`
+        Fluid conserved state object with the conserved variables.
 
     boundaries
         Dictionary of boundary functions, one for each valid btag
@@ -103,25 +100,20 @@ def euler_operator(discr, eos, boundaries, q, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, q)
+    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
     inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, q_tpair=interior_trace_pair(discr, q))
-        + sum(inviscid_facial_flux(discr, eos=eos, q_tpair=part_tpair)
-              for part_tpair in cross_rank_trace_pairs(discr, q))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, q=q, eos=eos,
-              time=t)
+        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
+        + sum(inviscid_facial_flux(
+            discr, eos=eos, cv_tpair=TracePair(
+                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
+                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
+              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
+        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
+                                                      eos=eos, time=t)
               for btag in boundaries)
     )
-
-    return -dg_div(discr, inviscid_flux_vol, inviscid_flux_bnd)
-
-
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, q, t)
+    q = -dg_div(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
+    return make_conserved(discr.dim, q=q)
 
 
 # By default, run unitless
@@ -139,12 +131,11 @@ def units_for_logging(quantity: str) -> str:
     return NAME_TO_UNITS[quantity]
 
 
-def extract_vars_for_logging(dim: int, state: np.ndarray, eos) -> dict:
+def extract_vars_for_logging(dim: int, state, eos) -> dict:
     """Extract state vars."""
-    cv = split_conserved(dim, state)
-    dv = eos.dependent_vars(cv)
+    dv = eos.dependent_vars(state)
 
     from mirgecom.utils import asdict_shallow
-    name_to_field = asdict_shallow(cv)
+    name_to_field = asdict_shallow(state)
     name_to_field.update(asdict_shallow(dv))
     return name_to_field

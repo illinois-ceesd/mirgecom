@@ -31,8 +31,9 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
 
-def advance_state(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
+def advance_state(rhs, timestepper, get_timestep, state,
+                  t_final, t=0.0, istep=0,
+                  checkpoint=None, logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -80,7 +81,8 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep,
         if dt < 0:
             return istep, t, state
 
-        checkpoint(state=state, step=istep, t=t, dt=dt)
+        if checkpoint:
+            checkpoint(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 

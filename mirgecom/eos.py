@@ -39,7 +39,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.fluid import ConservedVars, join_conserved
+from mirgecom.fluid import ConservedVars, make_conserved
 
 
 @dataclass
@@ -493,5 +493,5 @@ class PyrometheusMixture(GasEOS):
         mom_source = 0 * cv.momentum
         energy_source = 0 * cv.energy
 
-        return join_conserved(dim, rho_source, energy_source, mom_source,
+        return make_conserved(dim, rho_source, energy_source, mom_source,
                               species_sources)
