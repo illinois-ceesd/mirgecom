@@ -83,10 +83,10 @@ def main(use_profiling=False):
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
-        dt = 0.75 / (nel_1d * order ** 2)
+        dt = 0.7 / (nel_1d * order ** 2)
     elif dim == 3:
         # no deep meaning here, just a fudge factor
-        dt = 0.45 / (nel_1d * order ** 2)
+        dt = 0.4 / (nel_1d * order ** 2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 

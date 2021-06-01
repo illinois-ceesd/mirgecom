@@ -198,7 +198,7 @@ def viscous_facial_flux(discr, eos, q_tpair, grad_q_tpair,
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
-    q_tpair: :class:`grudge.sym.TracePair`
+    q_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
 
     local: bool
