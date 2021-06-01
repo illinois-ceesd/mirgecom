@@ -74,5 +74,5 @@ def lfr_flux(cv_tpair, flux_func, normal, lam):
     """
     flux_avg = 0.5*(flux_func(cv_tpair.int)
                     + flux_func(cv_tpair.ext))
-    return flux_avg.join() @ normal - 0.5*lam*(cv_tpair.ext.join()
-                                               - cv_tpair.int.join())
+    return flux_avg @ normal - 0.5*lam*(cv_tpair.ext
+                                        - cv_tpair.int)
