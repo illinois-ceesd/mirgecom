@@ -49,7 +49,10 @@ from arraycontext import (
 )
 
 
-@with_container_arithmetic(bcast_obj_array=False, rel_comparison=True)
+@with_container_arithmetic(bcast_obj_array=False,
+                           bcast_container_types=(DOFArray, np.ndarray),
+                           matmul=True,
+                           rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
 class ConservedVars:

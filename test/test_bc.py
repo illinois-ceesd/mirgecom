@@ -260,8 +260,10 @@ def test_noslip(actx_factory, dim):
 
             cv_int_tpair = interior_trace_pair(discr, uniform_state)
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
+            print(f"{cv_flux_int=}")
             cv_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
                                               eos=eos, cv=uniform_state)
+            print(f"{cv_flux_bc=}")
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)

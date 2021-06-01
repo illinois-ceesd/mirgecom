@@ -118,8 +118,7 @@ def central_vector_flux(trace_pair, normal):
         object array of `meshmode.dof_array.DOFArray` with the central scalar flux
         for each scalar component.
     """
-    tp_avg = trace_pair.avg
-    return make_conserved(tp_avg.dim, q=trace_pair.avg.join()@normal)
+    return trace_pair.avg@normal
 
 
 def lfr_flux(cv_tpair, f_tpair, normal, lam):
@@ -163,7 +162,4 @@ def lfr_flux(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    f_avg = f_tpair.avg
-    return make_conserved(
-        f_avg.dim, q=(f_avg.join() @ normal - lam*jump(cv_tpair).join()/2)
-    )
+    return f_tpair.avg@normal - lam*jump(cv_tpair)/2
