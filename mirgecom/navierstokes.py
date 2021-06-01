@@ -201,17 +201,20 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                                                       cv=cv, grad_cv=grad_cv,
                                                       grad_t=grad_t, time=t)
 
-    # NS RHS
-    return dg_div(
-        discr, (  # volume part
-            viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, t=gas_t,
-                         grad_t=grad_t)
-            - inviscid_flux(discr, eos=eos, cv=cv)),
-        elbnd_flux(  # viscous boundary
+    vol_term = (
+        viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, t=gas_t, grad_t=grad_t)
+        - inviscid_flux(discr, eos=eos, cv=cv)
+    ).join()
+
+    bnd_term = (
+        elbnd_flux(
             discr, fvisc_interior_face, visc_bnd_flux,
             (cv_int_tpair, s_int_pair, t_int_tpair, delt_int_pair),
             visc_part_inputs, boundaries)
-        - elbnd_flux(  # inviscid boundary
-            discr, finv_interior_face, finv_domain_boundary,
-            cv_int_tpair, cv_part_pairs, boundaries)
-    )
+        - elbnd_flux(
+            discr, finv_interior_face, finv_domain_boundary, cv_int_tpair,
+            cv_part_pairs, boundaries)
+    ).join()
+
+    # NS RHS
+    return dg_div(discr, vol_term, bnd_term)
