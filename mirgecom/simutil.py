@@ -43,7 +43,9 @@ logger = logging.getLogger(__name__)
 
 class MIRGEComParameters:
     """Simple parameters object."""
+
     def __init__(self, **kwargs):
+        """Initialize parameters object."""
         self._parameters = kwargs
 
     @property

@@ -47,9 +47,9 @@ def test_mirgecom_parameters():
     assert my_params["hello"] == "hello"
 
     params_string = (
-        f"from mirgecom.simutil import MIRGEComParameters"
-        f"\nmirgecom_parameters = MIRGEComParameters("
-        f"\ndim=5, newparam=\"string\")"
+        "from mirgecom.simutil import MIRGEComParameters"
+        "\nmirgecom_parameters = MIRGEComParameters("
+        "\ndim=5, newparam='string')"
     )
 
     file1 = open("test_params_fjsfjksd.py", "a")
@@ -62,5 +62,3 @@ def test_mirgecom_parameters():
     assert my_params["newparam"] == "string"
     import os
     os.remove("test_params_fjsfjksd.py")
-
-
