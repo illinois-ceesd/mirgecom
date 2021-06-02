@@ -41,10 +41,11 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
     rhs
         Function that should return the time derivative of the state.
         This function should take time and state as arguments, with
-        a call looking like rhs(t, state).
+        a call with signature ``rhs(t, state)``.
     timestepper
         Function that advances the state from t=time to t=(time+dt), and
-        returns the advanced state.
+        returns the advanced state. Has a call with signature
+        ``timestepper(state, t, dt, rhs)``.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
@@ -101,18 +102,16 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
 def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, component_id="state", t=0.0, istep=0,
                   logmgr=None, eos=None, dim=None):
-    """Advance state from some time (t) to some time (t_final) using Leap.
+    """Advance state from some time (t) to some time (t_final) using :mod:`leap`.
 
     Parameters
     ----------
     rhs
         Function that should return the time derivative of the state.
         This function should take time and state as arguments, with
-        a call looking like rhs(t, state).
+        a call with signature ``rhs(t, state)``.
     timestepper
-        Leap method descriptor containing instructions for timestepping.
-        When passed to a code generator, this provides a Python class
-        that can be used to advance from time t to t_final.
+        An instance of :class:`dagrt.codegen.python.StepperInterface`.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
@@ -175,7 +174,7 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
 
 def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
                                       state):
-    """Generate single-rate Leap code to be used to advance state.
+    """Generate Leap code to advance all state at the same timestep, without substepping.
 
     Parameters
     ----------
@@ -215,19 +214,22 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
                     component_id="state", t=0.0, istep=0, logmgr=None,
                     eos=None, dim=None):
-    """Determine what stepper we're using and call the appropriate advancer.
+    """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
     ----------
     rhs
         Function that should return the time derivative of the state.
         This function should take time and state as arguments, with
-        a call looking like rhs(t, state).
+        a call with signature``rhs(t, state)``.
     timestepper
         This is either a user-defined function that advances the state
-        from t=time to t=(time+dt) and returns the advanced state, or
-        a leap method generator. If it's the latter, we are responsible
-        for generating a timestepper before using it.
+        from t=time to t=(time+dt) and returns the advanced state
+        with call signature ``timestepper(state, t, dt, rhs)``, or
+        an instance of :class:`leap.MethodBuilder`. If it's the latter, we are
+        responsible for generating timestepper code from the method instructions
+        before using it, as well as providing context in the form of the state
+        to be integrated, the initial time and timestep, and the RHS function.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
@@ -259,11 +261,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
     # The timestepper should either be a Leap
     # method object, or a user-passed function.
     # First, check if we have leap.
-    import importlib
-    leap_spec = importlib.util.find_spec("leap")
-    found = leap_spec is not None
+    import sys
     leap_timestepper = False
-    if found:
+    if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
         from leap import MethodBuilder
