@@ -213,6 +213,8 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
                       for btag, bnd in boundaries.items())
     if isinstance(q, np.ndarray):
         q_bnd_flux2 = np.stack(q_bnd_flux2)
+    if isinstance(q_bnd_flux2, ConservedVars):
+        q_bnd_flux2 = q_bnd_flux2.join()
     q_bnd_flux = q_bnd_flux + q_bnd_flux2
 
     # Compute R
