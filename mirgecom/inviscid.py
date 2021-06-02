@@ -100,9 +100,9 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 
     mpi_comm = discr.mpi_communicator
     if mpi_comm is None:
-        return cfl * dt_min_local
-
-    dt_min_global = mpi_comm.allreduce(dt_min_local, op=MPI.MIN)
+        dt_min_global = dt_min_local
+    else:
+        dt_min_global = mpi_comm.allreduce(dt_min_local, op=MPI.MIN)
 
     # this routine is collective - so this error should be ok
     # if dt_min_global < 0:
