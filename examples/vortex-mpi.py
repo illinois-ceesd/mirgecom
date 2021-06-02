@@ -52,6 +52,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
+from mirgecom.inviscid import get_inviscid_cfl
 
 from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -172,11 +173,15 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, q=state)
+        viz_fields = [
+            ("cfl", cfl)
+        ]
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
-                              vis_timer=vis_timer)
+                              vis_timer=vis_timer, viz_fields=viz_fields)
 
     try:
         (current_step, current_t, current_state) = \
