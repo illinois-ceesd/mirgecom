@@ -111,7 +111,7 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         This function should take time and state as arguments, with
         a call with signature ``rhs(t, state)``.
     timestepper
-        An instance of :class:`dagrt.codegen.python.StepperInterface`.
+        An instance of :class:`leap.MethodBuilder`.
     checkpoint
         Function is user-defined and can be used to preform simulation status
         reporting, viz, and restart i/o.  A non-zero return code from this function
@@ -179,8 +179,8 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     Parameters
     ----------
     timestepper
-        Leap method that advances the state from t=time to t=(time+dt), and
-        returns the advanced state.
+        An instance of :class:`leap.MethodBuilder` that advances the state
+        from t=time to t=(time+dt), and returns the advanced state.
     component_id
         State id (required input for leap method generation)
     rhs
