@@ -84,23 +84,31 @@ def get_inviscid_timestep(discr, eos, cfl, q):
     """
     from mpi4py import MPI
     dim = discr.dim
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
     cv = split_conserved(dim, q)
 
-    import grudge.op as op
-    h_min_local = op.h_min_from_volume(discr) / (order * order)
+    from grudge.dt_utils import (dt_non_geometric_factor,
+                                 dt_geometric_factor)
+
+    dt_factor = (
+        dt_non_geometric_factor(discr) * dt_geometric_factor(discr)
+    )
+
+    from grudge.op import nodal_min
     from mirgecom.fluid import compute_wavespeed
-    local_wavespeeds = compute_wavespeed(dim, eos, cv)
-    max_wavespeed_local = op.nodal_max(discr, "vol", local_wavespeeds)
+    cell_dts = dt_factor / compute_wavespeed(dim, eos, cv)
+    dt_min_local = nodal_min(discr, "vol", cell_dts)
 
     mpi_comm = discr.mpi_communicator
     if mpi_comm is None:
-        return cfl * h_min_local / max_wavespeed_local
+        dt_min_global = dt_min_local
+    else:
+        dt_min_global = mpi_comm.allreduce(dt_min_local, op=MPI.MIN)
 
-    h_min_global = mpi_comm.allreduce(h_min_local, op=MPI.MIN)
-    max_wavespeed_global = mpi_comm.allreduce(max_wavespeed_local, op=MPI.MAX)
+    # this routine is collective - so this error should be ok
+    # if dt_min_global < 0:
+    #    raise ValueError("Negative timstep detected.")
 
-    return cfl * h_min_global / max_wavespeed_global
+    return cfl * dt_min_global
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
