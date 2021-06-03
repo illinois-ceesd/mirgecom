@@ -51,6 +51,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
+from mirgecom.inviscid import get_inviscid_cfl
 
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,11 @@ def main(ctx_factory=cl.create_some_context):
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        local_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, q=state)
+        viz_fields = [
+            ("cfl", local_cfl)
+        ]
+        return sim_checkpoint(discr, visualizer, eos, q=state, viz_fields=viz_fields,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)

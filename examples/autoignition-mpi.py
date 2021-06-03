@@ -52,7 +52,8 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.euler import split_conserved
+from mirgecom.fluid import split_conserved
+from mirgecom.inviscid import get_inviscid_cfl
 import cantera
 import pyrometheus as pyro
 
@@ -228,7 +229,9 @@ def main(ctx_factory=cl.create_some_context):
     def my_checkpoint(step, t, dt, state):
         cv = split_conserved(dim, state)
         reaction_rates = eos.get_production_rates(cv)
-        viz_fields = [("reaction_rates", reaction_rates)]
+        local_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, q=state)
+        viz_fields = [("reaction_rates", reaction_rates),
+                      ("cfl", local_cfl)]
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,

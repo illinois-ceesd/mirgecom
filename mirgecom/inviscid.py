@@ -77,12 +77,11 @@ def inviscid_flux(discr, eos, q):
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):
-    """Routine (will) return the (local) maximum stable inviscid timestep.
+    """Routine returns the cell-local maximum stable inviscid timestep.
 
     Currently, it's a hack waiting for the geometric_factor helpers port
     from grudge.
     """
-    from mpi4py import MPI
     dim = discr.dim
     cv = split_conserved(dim, q)
 
@@ -93,25 +92,12 @@ def get_inviscid_timestep(discr, eos, cfl, q):
         dt_non_geometric_factor(discr) * dt_geometric_factor(discr)
     )
 
-    from grudge.op import nodal_min
     from mirgecom.fluid import compute_wavespeed
-    cell_dts = dt_factor / compute_wavespeed(dim, eos, cv)
-    dt_min_local = nodal_min(discr, "vol", cell_dts)
+    inviscid_dt = cfl * dt_factor / compute_wavespeed(dim, eos, cv)
 
-    mpi_comm = discr.mpi_communicator
-    if mpi_comm is None:
-        dt_min_global = dt_min_local
-    else:
-        dt_min_global = mpi_comm.allreduce(dt_min_local, op=MPI.MIN)
-
-    # this routine is collective - so this error should be ok
-    # if dt_min_global < 0:
-    #    raise ValueError("Negative timstep detected.")
-
-    return cfl * dt_min_global
+    return inviscid_dt
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
     """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
-    return dt / wanted_dt
+    return dt / get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=1)

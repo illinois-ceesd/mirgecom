@@ -173,9 +173,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, q=state)
+        local_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, q=state)
         viz_fields = [
-            ("cfl", cfl)
+            ("cfl", local_cfl)
         ]
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
