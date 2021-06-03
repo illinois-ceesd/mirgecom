@@ -102,7 +102,7 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
 def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
                   state, t_final, component_id="state", t=0.0, istep=0,
                   logmgr=None, eos=None, dim=None):
-    """Advance state from some time (t) to some time (t_final) using :mod:`leap`.
+    """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
     ----------
