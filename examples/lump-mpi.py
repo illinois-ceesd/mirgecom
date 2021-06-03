@@ -132,9 +132,11 @@ def main(ctx_factory=cl.create_some_context):
         viz_fields = [
             ("cfl", local_cfl)
         ]
+        from grudge.op import nodal_max
+        max_cfl = nodal_max(discr, "vol", local_cfl)
         return sim_checkpoint(discr, visualizer, eos, q=state, viz_fields=viz_fields,
                               exact_soln=initializer, vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+                              t=t, dt=dt, nstatus=nstatus, nviz=nviz, cfl=max_cfl,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)
 
     try:

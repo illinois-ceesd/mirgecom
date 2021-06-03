@@ -100,4 +100,4 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 
 def get_inviscid_cfl(discr, eos, dt, q):
     """Calculate and return CFL based on current state and timestep."""
-    return dt / get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=1)
+    return dt / get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
