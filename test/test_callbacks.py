@@ -79,7 +79,6 @@ def test_basic_healthcheck(actx_factory):
     velocity = np.nan * nodes
     mom = mass * velocity
 
-    eos = IdealSingleGas()
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
 
@@ -92,7 +91,6 @@ def test_basic_healthcheck(actx_factory):
     velocity = 2 * nodes
     mom = mass * velocity
 
-    eos = IdealSingleGas()
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
     cv = split_conserved(dim, q)
 
