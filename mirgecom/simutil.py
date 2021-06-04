@@ -76,9 +76,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
             get_inviscid_timestep(discr=discr, q=state,
                                   cfl=cfl, eos=eos)
         )
-    if (t + mydt) > t_final:
-        mydt = t_final - t
-    return mydt
+    return min(mydt, dt_left)
 
 
 class ExactSolutionMismatch(Exception):
