@@ -77,23 +77,19 @@ def inviscid_flux(discr, eos, q):
 
 
 def get_inviscid_timestep(discr, eos, cfl, q):
-    """Routine returns the cell-local maximum stable inviscid timestep.
-
-    Currently, it's a hack waiting for the geometric_factor helpers port
-    from grudge.
-    """
+    """Routine returns the cell-local maximum stable inviscid timestep."""
     dim = discr.dim
     cv = split_conserved(dim, q)
 
     from grudge.dt_utils import (dt_non_geometric_factor,
-                                 dt_geometric_factor)
+                                 dt_geometric_factors)
 
-    dt_factor = (
-        dt_non_geometric_factor(discr) * dt_geometric_factor(discr)
+    dt_factors = (
+        dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
     )
 
     from mirgecom.fluid import compute_wavespeed
-    inviscid_dt = cfl * dt_factor / compute_wavespeed(dim, eos, cv)
+    inviscid_dt = cfl * dt_factors / compute_wavespeed(dim, eos, cv)
 
     return inviscid_dt
 
