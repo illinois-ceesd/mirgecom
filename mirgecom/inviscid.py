@@ -83,15 +83,12 @@ def get_inviscid_timestep(discr, eos, cfl, q):
 
     from grudge.dt_utils import (dt_non_geometric_factor,
                                  dt_geometric_factors)
-
-    dt_factors = (
-        dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
-    )
-
     from mirgecom.fluid import compute_wavespeed
-    inviscid_dt = cfl * dt_factors / compute_wavespeed(dim, eos, cv)
 
-    return inviscid_dt
+    return (
+        cfl * dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
+        / compute_wavespeed(dim, eos, cv)
+    )
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
