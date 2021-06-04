@@ -128,13 +128,13 @@ if found:
                 return dt
 
             def my_checkpoint(state, step, t, dt):
-                return 0
+                return state
 
             (step, t, state) = \
                 advance_state(rhs=rhs, timestepper=method,
-                            checkpoint=my_checkpoint,
-                            get_timestep=get_timestep, state=state,
-                            t=t, t_final=t_final, component_id="y")
+                              get_timestep=get_timestep, state=state,
+                              t=t, t_final=t_final, component_id="y",
+                              post_step_callback=my_checkpoint)
 
             error = np.abs(state - exact_soln(t)) / exact_soln(t)
             integrator_eoc.add_data_point(dt, error)

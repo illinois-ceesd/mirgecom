@@ -139,7 +139,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     def my_simhealthcheck(state, step, t, dt):
         cv = split_conserved(discr.dim, state)
-        sim_healthcheck(discr, eos, q=state, conserved_vars=cv, step=step, t=t)
+        return sim_healthcheck(discr, eos, q=state,
+                               conserved_vars=cv,
+                               step=step, t=t)
 
     try:
         (current_step, current_t, current_state) = \

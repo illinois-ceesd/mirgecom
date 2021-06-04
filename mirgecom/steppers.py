@@ -62,16 +62,13 @@ def advance_state(rhs, timestepper, get_timestep,
     istep: int
         Step number from which to start
     pre_step_callback
-        An optional user-defined function to be called before the timestepper
-        is called for that particular step. A non-zero return code from this
-        function indicates that this function should stop gracefully.
-        Examples of such functions include visualization, io, or restart
-        checkpoints.
+        An optional user-defined function, with signature:
+        ``state = pre_step_callback(state, step, t, dt)``,
+        to be called before the timestepper is called for that particular step.
     post_step_callback
-        An optional user-defined function to be called after the timestepper
-        is called for that particular step. A non-zero return code from this
-        function indicates that this function should stop gracefully.
-        Examples of such functions include applying modal filtering or limiters.
+        An optional user-defined function, with signature:
+        ``state = post_step_callback(state, step, t, dt)``,
+        to be called after the timestepper is called for that particular step.
 
     Returns
     -------
@@ -94,14 +91,14 @@ def advance_state(rhs, timestepper, get_timestep,
             return istep, t, state
 
         if pre_step_callback is not None:
-            pre_step_callback(state=state, step=istep, t=t, dt=dt)
+            state = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
         t += dt
 
         if post_step_callback is not None:
-            post_step_callback(state=state, step=istep, t=t, dt=dt)
+            state = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
         istep += 1
 
@@ -145,6 +142,14 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         Time at which to start
     istep: int
         Step number from which to start
+    pre_step_callback
+        An optional user-defined function, with signature:
+        ``state = pre_step_callback(state, step, t, dt)``,
+        to be called before the timestepper is called for that particular step.
+    post_step_callback
+        An optional user-defined function, with signature:
+        ``state = post_step_callback(state, step, t, dt)``,
+        to be called after the timestepper is called for that particular step.
 
     Returns
     -------
@@ -170,13 +175,22 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         if dt < 0:
             return istep, t, state
 
-        checkpoint(state=state, step=istep, t=t, dt=dt)
+        if pre_step_callback is not None:
+            state = pre_step_callback(state=state,
+                                      step=istep,
+                                      t=t, dt=dt)
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component
                 t += dt
+
+                if post_step_callback is not None:
+                    state = post_step_callback(state=state,
+                                               step=istep,
+                                               t=t, dt=dt)
+
                 istep += 1
                 if logmgr:
                     set_dt(logmgr, dt)
@@ -263,6 +277,14 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
         Time at which to start
     istep: int
         Step number from which to start
+    pre_step_callback
+        An optional user-defined function, with signature:
+        ``state = pre_step_callback(state, step, t, dt)``,
+        to be called before the timestepper is called for that particular step.
+    post_step_callback
+        An optional user-defined function, with signature:
+        ``state = post_step_callback(state, step, t, dt)``,
+        to be called after the timestepper is called for that particular step.
 
     Returns
     -------

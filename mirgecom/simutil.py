@@ -83,7 +83,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
     if do_viz is False and do_status is False:
-        return 0
+        return q
 
     from mirgecom.fluid import split_conserved
     cv = split_conserved(discr.dim, q)
@@ -147,6 +147,8 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if maxerr > exittol:
         raise ExactSolutionMismatch(step, t=t, state=q)
 
+    return q
+
 
 def sim_healthcheck(discr, eos, q, conserved_vars, step=0, t=0):
     """Check the health of the simulation by checking for unphysical values."""
@@ -180,6 +182,8 @@ def sim_healthcheck(discr, eos, q, conserved_vars, step=0, t=0):
             step, t=t, state=q,
             message="Infinity-norm of derived quantities is not finite."
         )
+
+    return q
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
