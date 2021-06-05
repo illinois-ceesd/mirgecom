@@ -104,10 +104,10 @@ def main():
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
-        dt = 0.75/(nel_1d*order**2)
+        dt = 0.7 / (nel_1d*order**2)
     elif dim == 3:
         # no deep meaning here, just a fudge factor
-        dt = 0.45/(nel_1d*order**2)
+        dt = 0.4 / (nel_1d*order**2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
@@ -131,11 +131,14 @@ def main():
 
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))
-            vis.write_vtk_file("fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
+            vis.write_parallel_vtk_file(
+                comm,
+                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                ]
+            )
 
         t += dt
         istep += 1
