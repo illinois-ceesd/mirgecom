@@ -65,7 +65,8 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
+def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False,
+         use_leap=False):
     """Drive the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -106,7 +107,11 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = rk4_step
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
 
@@ -181,10 +186,10 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
-                          dim=dim)
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final, logmgr=logmgr,
+                eos=eos, dim=dim)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -210,7 +215,8 @@ if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     use_profiling = True
     use_logging = True
+    use_leap = False
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging)
+    main(use_profiling=use_profiling, use_logmgr=use_logging, use_leap=use_leap)
 
 # vim: foldmethod=marker
