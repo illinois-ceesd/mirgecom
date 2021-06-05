@@ -40,7 +40,7 @@ from grudge.eager import EagerDGDiscretization
 
 
 def test_basic_cfd_healthcheck(actx_factory):
-    from mirgecom.simutil import sim_cfd_healthcheck
+    from mirgecom.simutil import cfd_healthcheck
 
     actx = actx_factory()
     nel_1d = 4
@@ -70,7 +70,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     from mirgecom.exceptions import SimulationHealthError
 
     with pytest.raises(SimulationHealthError):
-        sim_cfd_healthcheck(discr, eos, q, ncheck=1)
+        cfd_healthcheck(discr, eos, q, freq=1)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
@@ -81,7 +81,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     with pytest.raises(SimulationHealthError):
-        sim_cfd_healthcheck(discr, eos, q, ncheck=1)
+        cfd_healthcheck(discr, eos, q, freq=1)
 
     # Let's make one last very bad state (inf)
     mass = 1*ones
@@ -92,4 +92,4 @@ def test_basic_cfd_healthcheck(actx_factory):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     with pytest.raises(SimulationHealthError):
-        sim_cfd_healthcheck(discr, eos, q, ncheck=1)
+        cfd_healthcheck(discr, eos, q, freq=1)

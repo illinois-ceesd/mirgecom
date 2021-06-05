@@ -41,7 +41,7 @@ from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_visualization,
     sim_checkpoint,
-    sim_cfd_healthcheck,
+    cfd_healthcheck,
     check_step,
     generate_and_distribute_mesh
 )
@@ -233,29 +233,32 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 + eos.get_species_source_terms(cv))
 
     def my_checkpoint(step, t, dt, state):
+        cv = split_conserved(dim, state)
+        reaction_rates = eos.get_production_rates(cv)
+        viz_fields = [("reaction_rates", reaction_rates)]
         try:
             # Check the health of the simulation
-            sim_cfd_healthcheck(discr, eos, q=state,
-                                ncheck=ncheck, step=step, t=t)
+            cfd_healthcheck(discr, eos, state,
+                            step=step, t=t, freq=ncheck)
             # Perform checkpointing
-            sim_checkpoint(discr, eos, q=state,
-                           exact_soln=initializer,
-                           step=step, t=t, dt=dt,
-                           nstatus=nstatus,
+            sim_checkpoint(discr, eos, state,
+                           step=step, t=t, dt=dt, freq=nstatus,
                            constant_cfl=constant_cfl)
             # Visualize
-            sim_visualization(discr, state, eos,
+            sim_visualization(discr, eos, state,
                               visualizer, vizname=casename,
-                              step=step, t=t, nviz=nviz)
+                              step=step, t=t, freq=nviz,
+                              viz_fields=viz_fields)
         except StepperCrashError as err:
             # Log crash error message
             if rank == 0:
                 logger.info(str(err))
                 logger.info("Visualizing crashed state ...")
             # Write out crashed field
-            sim_visualization(discr, state, eos,
+            sim_visualization(discr, eos, state,
                               visualizer, vizname=casename,
-                              step=step, t=t, nviz=1)
+                              step=step, t=t, freq=1,
+                              viz_fields=viz_fields)
             raise err
         return state
 

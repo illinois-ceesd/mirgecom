@@ -40,7 +40,8 @@ from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_visualization,
     sim_checkpoint,
-    sim_cfd_healthcheck,
+    cfd_healthcheck,
+    compare_with_analytic_solution,
     generate_and_distribute_mesh
 )
 from mirgecom.exceptions import StepperCrashError
@@ -135,27 +136,30 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     def my_checkpoint(step, t, dt, state):
         try:
             # Check the health of the simulation
-            sim_cfd_healthcheck(discr, eos, q=state,
-                                ncheck=ncheck, step=step, t=t)
+            cfd_healthcheck(discr, eos, state,
+                            step=step, t=t, freq=ncheck)
             # Perform checkpointing
-            sim_checkpoint(discr, eos, q=state,
-                           exact_soln=initializer,
-                           step=step, t=t, dt=dt,
-                           nstatus=nstatus, exittol=exittol,
+            sim_checkpoint(discr, eos, state,
+                           step=step, t=t, dt=dt, freq=nstatus,
                            constant_cfl=constant_cfl)
+            # Compare with analytic result
+            compare_with_analytic_solution(discr, eos, state,
+                                           exact_soln=initializer,
+                                           step=step, t=t, freq=nstatus,
+                                           exittol=exittol)
             # Visualize
-            sim_visualization(discr, state, eos,
+            sim_visualization(discr, eos, state,
                               visualizer, vizname=casename,
-                              step=step, t=t, nviz=nviz)
+                              step=step, t=t, freq=nviz)
         except StepperCrashError as err:
             # Log crash error message
             if rank == 0:
                 logger.info(str(err))
                 logger.info("Visualizing crashed state ...")
             # Write out crashed field
-            sim_visualization(discr, state, eos,
+            sim_visualization(discr, eos, state,
                               visualizer, vizname=casename,
-                              step=step, t=t, nviz=1)
+                              step=step, t=t, freq=1)
             raise err
         return state
 
