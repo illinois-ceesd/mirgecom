@@ -10,5 +10,4 @@ Simulation Support
    mpi
    input-output
    tools
-   symbolic
    thermochem

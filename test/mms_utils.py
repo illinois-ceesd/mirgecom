@@ -1,13 +1,8 @@
-"""Utilities and functions for symbolic code expressions.
+"""Utilities and functions for symbolic math expressions used in unit testing."""
 
-.. autofunction:: diff
-.. autofunction:: div
-.. autofunction:: grad
-
-.. autoclass:: EvaluationMapper
+__copyright__ = """
+Copyright (C) 2020-21 University of Illinois Board of Trustees
 """
-
-__copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,8 +25,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import numpy.linalg as la # noqa
-# from pytools.obj_array import flat_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
