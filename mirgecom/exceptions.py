@@ -1,6 +1,6 @@
 """Provide custom exceptions for use in callback routines.
 
-.. autoexception:: MirgecomException
+.. autoexception:: StepperCrashError
 .. autoexception:: SimulationHealthError
 """
 
@@ -38,8 +38,7 @@ class StepperCrashError(Exception):
     """
 
     def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+        super().__init__(message)
 
 
 class SimulationHealthError(StepperCrashError):

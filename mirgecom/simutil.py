@@ -180,7 +180,7 @@ def sim_checkpoint(discr, eos, q, exact_soln=None,
 
 
 def sim_cfd_healthcheck(discr, eos, q, ncheck=-1, step=0, t=0):
-    """Check the global health of the fluids state *q.
+    """Check the global health of the fluids state *q*.
 
     Determine the health of a state by inspecting for unphyiscal
     values of pressure and temperature.
@@ -198,10 +198,6 @@ def sim_cfd_healthcheck(discr, eos, q, ncheck=-1, step=0, t=0):
         of species masses.
     ncheck: int
         An integer denoting the frequency interval.
-
-    Returns
-    -------
-    None
     """
     from mirgecom.fluid import split_conserved
     import grudge.op as op
