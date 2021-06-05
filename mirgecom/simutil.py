@@ -80,7 +80,28 @@ def sim_visualization(discr, state, eos, visualizer, vizname,
                       step=0, t=0, nviz=-1,
                       exact_soln=None, viz_fields=None,
                       overwrite=False, vis_timer=None):
-    """Visualize the simulation fields."""
+    """Visualize the simulation fields.
+
+    Write VTK output of the conserved state and and specified derived
+    quantities *viz_fields*.
+
+    Parameters
+    ----------
+    state
+        State array which expects at least the conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    visualizer:
+        A :class:`meshmode.discretization.visualization.Visualizer`
+        VTK output object.
+    nviz: int
+        An integer denoting the frequency interval.
+    """
     from contextlib import nullcontext
     from mirgecom.fluid import split_conserved
     from mirgecom.io import make_rank_fname, make_par_fname
@@ -132,7 +153,25 @@ def sim_visualization(discr, state, eos, visualizer, vizname,
 def sim_checkpoint(discr, eos, q, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, exittol=1e-16,
                    constant_cfl=False):
-    """Check simulation status, and restart."""
+    """Checkpoint the simulation status.
+
+    Checkpoints the simulation status by reporting relevant diagnostic
+    quantities, such as pressure/temperature.
+
+    Parameters
+    ----------
+    q
+        State array which expects at least the conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    nstatus: int
+        An integer denoting the frequency interval.
+    """
     from mirgecom.fluid import split_conserved
 
     do_status = check_step(step=step, interval=nstatus)
