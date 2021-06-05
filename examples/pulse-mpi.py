@@ -40,12 +40,12 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    generate_and_distribute_mesh,
+    sim_visualization,
     sim_checkpoint,
-    sim_healthcheck
+    sim_cfd_healthcheck,
+    generate_and_distribute_mesh
 )
-from mirgecom.exceptions import MirgecomException
-from mirgecom.fluid import split_conserved
+from mirgecom.exceptions import StepperCrashError
 from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
@@ -92,6 +92,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     constant_cfl = False
     nstatus = 10
     nviz = 10
+    ncheck = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -155,29 +156,37 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
-                              vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+        try:
+            # Check the health of the simulation
+            sim_cfd_healthcheck(discr, eos, q=state,
+                                ncheck=ncheck, step=step, t=t)
+            # Perform checkpointing
+            sim_checkpoint(discr, eos, q=state,
+                           exact_soln=initializer,
+                           step=step, t=t, dt=dt,
+                           nstatus=nstatus, exittol=exittol,
+                           constant_cfl=constant_cfl)
+            # Visualize
+            sim_visualization(discr, state, eos,
+                              visualizer, vizname=casename,
+                              step=step, t=t, nviz=nviz)
+        except StepperCrashError as err:
+            # Log crash error message
+            if rank == 0:
+                logger.info(str(err))
+                logger.info("Visualizing crashed state ...")
+            # Write out crashed field
+            sim_visualization(discr, state, eos,
+                              visualizer, vizname=casename,
+                              step=step, t=t, nviz=1)
+            raise err
+        return state
 
-    def my_simhealthcheck(state, step, t, dt):
-        cv = split_conserved(discr.dim, state)
-        return sim_healthcheck(discr, eos, q=state,
-                               conserved_vars=cv,
-                               step=step, t=t)
-
-    try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          pre_step_callback=my_checkpoint,
-                          post_step_callback=my_simhealthcheck,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
-
-    except MirgecomException as ex:
-        current_step = ex.step
-        current_t = ex.t
-        current_state = ex.state
+    current_step, current_t, current_state = \
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      pre_step_callback=my_checkpoint,
+                      get_timestep=get_timestep, state=current_state,
+                      t=current_t, t_final=t_final, eos=eos, dim=dim)
 
     #    if current_t != checkpoint_t:
     if rank == 0:
@@ -185,9 +194,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     my_checkpoint(current_step, t=current_t,
                   dt=(current_t - checkpoint_t),
                   state=current_state)
-
-    if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
 
 
 if __name__ == "__main__":

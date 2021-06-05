@@ -39,12 +39,13 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
+    sim_visualization,
     sim_checkpoint,
-    sim_healthcheck,
+    sim_cfd_healthcheck,
     check_step,
     generate_and_distribute_mesh
 )
-from mirgecom.exceptions import MirgecomException
+from mirgecom.exceptions import StepperCrashError
 from mirgecom.fluid import split_conserved
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -84,6 +85,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     constant_cfl = False
     nstatus = 1
     nviz = 5
+    ncheck = 1
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -94,7 +96,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         timestepper = rk4_step
     box_ll = -0.005
     box_ur = 0.005
-    error_state = False
     debug = False
 
     from mpi4py import MPI
@@ -232,33 +233,37 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 + eos.get_species_source_terms(cv))
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        reaction_rates = eos.get_production_rates(cv)
-        viz_fields = [("reaction_rates", reaction_rates)]
-        return sim_checkpoint(discr, visualizer, eos, q=state,
-                              vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              constant_cfl=constant_cfl, comm=comm,
-                              viz_fields=viz_fields)
+        try:
+            # Check the health of the simulation
+            sim_cfd_healthcheck(discr, eos, q=state,
+                                ncheck=ncheck, step=step, t=t)
+            # Perform checkpointing
+            sim_checkpoint(discr, eos, q=state,
+                           exact_soln=initializer,
+                           step=step, t=t, dt=dt,
+                           nstatus=nstatus,
+                           constant_cfl=constant_cfl)
+            # Visualize
+            sim_visualization(discr, state, eos,
+                              visualizer, vizname=casename,
+                              step=step, t=t, nviz=nviz)
+        except StepperCrashError as err:
+            # Log crash error message
+            if rank == 0:
+                logger.info(str(err))
+                logger.info("Visualizing crashed state ...")
+            # Write out crashed field
+            sim_visualization(discr, state, eos,
+                              visualizer, vizname=casename,
+                              step=step, t=t, nviz=1)
+            raise err
+        return state
 
-    def my_simhealthcheck(state, step, t, dt):
-        cv = split_conserved(discr.dim, state)
-        return sim_healthcheck(discr, eos, q=state,
-                               conserved_vars=cv,
-                               step=step, t=t)
-
-    try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          pre_step_callback=my_checkpoint,
-                          post_step_callback=my_simhealthcheck,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
-    except MirgecomException as ex:
-        error_state = True
-        current_step = ex.step
-        current_t = ex.t
-        current_state = ex.state
+    current_step, current_t, current_state = \
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      pre_step_callback=my_checkpoint,
+                      get_timestep=get_timestep, state=current_state,
+                      t=current_t, t_final=t_final, eos=eos, dim=dim)
 
     if not check_step(current_step, nviz):  # If final step not an output step
         if rank == 0:
@@ -266,12 +271,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         my_checkpoint(current_step, t=current_t,
                       dt=(current_t - checkpoint_t),
                       state=current_state)
-
-    if current_t - t_final < 0:
-        error_state = True
-
-    if error_state:
-        raise ValueError("Simulation did not complete successfully.")
 
 
 if __name__ == "__main__":

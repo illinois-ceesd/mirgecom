@@ -40,12 +40,12 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
+    sim_visualization,
     sim_checkpoint,
-    sim_healthcheck,
+    sim_cfd_healthcheck,
     generate_and_distribute_mesh
 )
-from mirgecom.exceptions import MirgecomException
-from mirgecom.fluid import split_conserved
+from mirgecom.exceptions import StepperCrashError
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -106,6 +106,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     constant_cfl = False
     nstatus = 10
     nviz = 10
+    ncheck = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -179,41 +180,46 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
-                              exact_soln=initializer, vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm,
+        try:
+            # Check the health of the simulation
+            sim_cfd_healthcheck(discr, eos, q=state,
+                                ncheck=ncheck, step=step, t=t)
+            # Perform checkpointing
+            sim_checkpoint(discr, eos, q=state,
+                           exact_soln=initializer,
+                           step=step, t=t, dt=dt,
+                           nstatus=nstatus, exittol=exittol,
+                           constant_cfl=constant_cfl)
+            # Visualize
+            sim_visualization(discr, state, eos,
+                              visualizer, vizname=casename,
+                              step=step, t=t, nviz=nviz,
                               vis_timer=vis_timer)
+        except StepperCrashError as err:
+            # Log crash error message
+            if rank == 0:
+                logger.info(str(err))
+                logger.info("Visualizing crashed state ...")
+            # Write out crashed field
+            sim_visualization(discr, state, eos,
+                              visualizer, vizname=casename,
+                              step=step, t=t, nviz=1,
+                              vis_timer=vis_timer)
+            raise err
+        return state
 
-    def my_simhealthcheck(state, step, t, dt):
-        cv = split_conserved(discr.dim, state)
-        return sim_healthcheck(discr, eos, q=state,
-                               conserved_vars=cv,
-                               step=step, t=t)
+    current_step, current_t, current_state = \
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      pre_step_callback=my_checkpoint,
+                      get_timestep=get_timestep, state=current_state,
+                      t=current_t, t_final=t_final,
+                      logmgr=logmgr, eos=eos, dim=dim)
 
-    try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          pre_step_callback=my_checkpoint,
-                          post_step_callback=my_simhealthcheck,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
-                          dim=dim)
-
-    except MirgecomException as ex:
-        current_step = ex.step
-        current_t = ex.t
-        current_state = ex.state
-
-    #    if current_t != checkpoint_t:
     if rank == 0:
         logger.info("Checkpointing final state ...")
     my_checkpoint(current_step, t=current_t,
                   dt=(current_t - checkpoint_t),
                   state=current_state)
-
-    if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
 
     if logmgr:
         logmgr.close()

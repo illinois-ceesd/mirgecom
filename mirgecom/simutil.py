@@ -2,8 +2,9 @@
 
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
+.. autofunction:: sim_visualization
 .. autofunction:: sim_checkpoint
-.. autofunction:: sim_healthcheck
+.. autofunction:: sim_cfd_healthcheck
 .. autofunction:: generate_and_distribute_mesh
 """
 
@@ -37,7 +38,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
-from mirgecom.exceptions import ExactSolutionMismatch, SimulationHealthError
+from mirgecom.exceptions import SimulationHealthError
 
 logger = logging.getLogger(__name__)
 
@@ -75,23 +76,71 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
-                   vis_timer=None):
-    """Check simulation health, status, viz dumps, and restart."""
-    do_viz = check_step(step=step, interval=nviz)
-    do_status = check_step(step=step, interval=nstatus)
-    if do_viz is False and do_status is False:
-        return q
-
+def sim_visualization(discr, state, eos, visualizer, vizname,
+                      step=0, t=0, nviz=-1,
+                      exact_soln=None, viz_fields=None,
+                      overwrite=False, vis_timer=None):
+    """Visualize the simulation fields."""
+    from contextlib import nullcontext
     from mirgecom.fluid import split_conserved
-    cv = split_conserved(discr.dim, q)
+    from mirgecom.io import make_rank_fname, make_par_fname
+
+    if not check_step(step=step, interval=nviz):
+        return
+
+    cv = split_conserved(discr.dim, state)
     dependent_vars = eos.dependent_vars(cv)
 
+    io_fields = [
+        ("cv", cv),
+        ("dv", dependent_vars)
+    ]
+    if exact_soln is not None:
+        actx = cv.mass.array_context
+        nodes = thaw(actx, discr.nodes())
+        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
+        exact_list = [
+            ("exact_soln", expected_state),
+        ]
+        io_fields.extend(exact_list)
+
+    if viz_fields is not None:
+        io_fields.extend(viz_fields)
+
+    comm = discr.mpi_communicator
     rank = 0
     if comm is not None:
         rank = comm.Get_rank()
+
+    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+
+    if vis_timer:
+        ctm = vis_timer.start_sub_timer()
+    else:
+        ctm = nullcontext()
+
+    with ctm:
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields,
+            overwrite=overwrite,
+            par_manifest_filename=make_par_fname(
+                basename=vizname, step=step, t=t
+            )
+        )
+
+
+def sim_checkpoint(discr, eos, q, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, exittol=1e-16,
+                   constant_cfl=False):
+    """Check simulation status, and restart."""
+    from mirgecom.fluid import split_conserved
+
+    do_status = check_step(step=step, interval=nstatus)
+    if do_status is False:
+        return
+
+    cv = split_conserved(discr.dim, q)
+    dependent_vars = eos.dependent_vars(cv)
 
     maxerr = 0.0
     if exact_soln is not None:
@@ -102,33 +151,10 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         err_norms = [discr.norm(v, np.inf) for v in exp_resid]
         maxerr = max(err_norms)
 
-    if do_viz:
-        io_fields = [
-            ("cv", cv),
-            ("dv", dependent_vars)
-        ]
-        if exact_soln is not None:
-            exact_list = [
-                ("exact_soln", expected_state),
-            ]
-            io_fields.extend(exact_list)
-        if viz_fields is not None:
-            io_fields.extend(viz_fields)
-
-        from mirgecom.io import make_rank_fname, make_par_fname
-        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
-
-        from contextlib import nullcontext
-
-        if vis_timer:
-            ctm = vis_timer.start_sub_timer()
-        else:
-            ctm = nullcontext()
-
-        with ctm:
-            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
-                overwrite=overwrite, par_manifest_filename=make_par_fname(
-                    basename=vizname, step=step, t=t))
+    comm = discr.mpi_communicator
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
 
     if do_status is True:
         #        if constant_cfl is False:
@@ -145,45 +171,79 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
             logger.info(statusmesg)
 
     if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=q)
+        raise SimulationHealthError(
+            message=(
+                "Simulation exited abnormally; "
+                "solution doesn't agree with analytic result."
+            )
+        )
 
-    return q
 
+def sim_cfd_healthcheck(discr, eos, q, ncheck=-1, step=0, t=0):
+    """Check the global health of the fluids state *q.
 
-def sim_healthcheck(discr, eos, q, conserved_vars, step=0, t=0):
-    """Check the health of the simulation by checking for unphysical values."""
+    Determine the health of a state by inspecting for unphyiscal
+    values of pressure and temperature.
+
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    q
+        State array which expects at least the conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+    ncheck: int
+        An integer denoting the frequency interval.
+
+    Returns
+    -------
+    None
+    """
+    from mirgecom.fluid import split_conserved
     import grudge.op as op
+
+    if not check_step(step=step, interval=ncheck):
+        return
+
+    cv = split_conserved(discr.dim, q)
 
     # NOTE: Derived quantities are functions of the conserved variables.
     # Therefore is it sufficient to check for unphysical values of
     # temperature and pressure.
-    dependent_vars = eos.dependent_vars(conserved_vars)
+    dependent_vars = eos.dependent_vars(cv)
 
     # Check for NaN
-    if (np.isnan(op.nodal_sum(discr, "vol", dependent_vars.pressure))
-            or np.isnan(op.nodal_sum(discr, "vol", dependent_vars.temperature))):
+    if (np.isnan(op.nodal_sum_loc(discr, "vol", dependent_vars.pressure))
+            or np.isnan(op.nodal_sum_loc(discr, "vol", dependent_vars.temperature))):
         raise SimulationHealthError(
-            step, t=t, state=q,
-            message="Detected a NaN."
+            message=(
+                "Simulation exited abnormally; detected a NaN."
+            )
         )
 
     # Check for non-positivity
-    if (op.nodal_min(discr, "vol", dependent_vars.pressure) < 0
-            or op.nodal_min(discr, "vol", dependent_vars.temperature) < 0):
+    if (op.nodal_min_loc(discr, "vol", dependent_vars.pressure) < 0
+            or op.nodal_min_loc(discr, "vol", dependent_vars.temperature) < 0):
         raise SimulationHealthError(
-            step, t=t, state=q,
-            message="Found non-positive values for pressure or temperature."
+            message=(
+                "Simulation exited abnormally; "
+                "found non-positive values for pressure or temperature."
+            )
         )
 
     # Check for blow-up
-    if (op.norm(discr, dependent_vars.pressure, np.inf) == np.inf
-            or op.norm(discr, dependent_vars.temperature, np.inf) == np.inf):
+    if (op.nodal_sum_loc(discr, "vol", dependent_vars.pressure) == np.inf
+            or op.nodal_sum_loc(discr, "vol", dependent_vars.temperature) == np.inf):
         raise SimulationHealthError(
-            step, t=t, state=q,
-            message="Infinity-norm of derived quantities is not finite."
+            message=(
+                "Simulation exited abnormally; "
+                "derived quantities are not finite."
+            )
         )
-
-    return q
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

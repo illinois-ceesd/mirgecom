@@ -1,7 +1,6 @@
 """Provide custom exceptions for use in callback routines.
 
 .. autoexception:: MirgecomException
-.. autoexception:: ExactSolutionMismatch
 .. autoexception:: SimulationHealthError
 """
 
@@ -30,49 +29,18 @@ THE SOFTWARE.
 """
 
 
-class MirgecomException(Exception):
-    """Exception base class for mirgecom exceptions.
-
-    .. attribute:: step
-
-        A :class:`int` denoting the simulation step when the exception
-        was raised.
-
-    .. attribute:: t
-
-        A :class:`float` denoting the simulation time when the
-        exception was raised.
-
-    .. attribute:: state
-
-        The simulation state when the exception was raised.
+class StepperCrashError(Exception):
+    """Exception base class for simulation exceptions.
 
     .. attribute:: message
 
         A :class:`str` describing the message for the exception.
     """
 
-    def __init__(self, step, t, state, message):
-        """Record the simulation state on creation."""
-        self.step = step
-        self.t = t
-        self.state = state
+    def __init__(self, message):
         self.message = message
         super().__init__(self.message)
 
 
-class ExactSolutionMismatch(MirgecomException):
-    """Exception class for solution mismatch."""
-
-    def __init__(self, step, t, state):
-        super().__init__(
-            step, t, state,
-            message="Solution doesn't agree with analytic result."
-        )
-
-
-class SimulationHealthError(MirgecomException):
+class SimulationHealthError(StepperCrashError):
     """Exception class for an unphysical simulation."""
-
-    def __init__(self, step, t, state, message):
-        super().__init__(step, t, state, message)

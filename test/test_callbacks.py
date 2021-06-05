@@ -33,14 +33,14 @@ from arraycontext import (  # noqa
     as pytest_generate_tests
 )
 
-from mirgecom.fluid import join_conserved, split_conserved
+from mirgecom.fluid import join_conserved
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import EagerDGDiscretization
 
 
-def test_basic_healthcheck(actx_factory):
-    from mirgecom.simutil import sim_healthcheck
+def test_basic_cfd_healthcheck(actx_factory):
+    from mirgecom.simutil import sim_cfd_healthcheck
 
     actx = actx_factory()
     nel_1d = 4
@@ -66,12 +66,11 @@ def test_basic_healthcheck(actx_factory):
 
     eos = IdealSingleGas()
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    cv = split_conserved(dim, q)
 
     from mirgecom.exceptions import SimulationHealthError
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q, cv)
+        sim_cfd_healthcheck(discr, eos, q, ncheck=1)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
@@ -80,10 +79,9 @@ def test_basic_healthcheck(actx_factory):
     mom = mass * velocity
 
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    cv = split_conserved(dim, q)
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q, cv)
+        sim_cfd_healthcheck(discr, eos, q, ncheck=1)
 
     # Let's make one last very bad state (inf)
     mass = 1*ones
@@ -92,7 +90,6 @@ def test_basic_healthcheck(actx_factory):
     mom = mass * velocity
 
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    cv = split_conserved(dim, q)
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q, cv)
+        sim_cfd_healthcheck(discr, eos, q, ncheck=1)
