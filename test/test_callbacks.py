@@ -93,3 +93,36 @@ def test_basic_cfd_healthcheck(actx_factory):
 
     with pytest.raises(SimulationHealthError):
         cfd_healthcheck(discr, eos, q, freq=1)
+
+
+def test_analytic_comparison(actx_factory):
+    from mirgecom.initializers import Vortex2D
+    from mirgecom.simutil import compare_with_analytic_solution
+
+    actx = actx_factory()
+    nel_1d = 4
+    dim = 2
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 2
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(discr.nodes(), actx)
+    zeros = discr.zeros(actx)
+    ones = zeros + 1.0
+    eos = IdealSingleGas()
+    mass = ones
+    energy = ones
+    velocity = 2 * nodes
+    mom = mass * velocity
+
+    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+
+    from mirgecom.exceptions import SimulationHealthError
+
+    with pytest.raises(SimulationHealthError):
+        compare_with_analytic_solution(discr, eos, q, Vortex2D(), freq=1)
