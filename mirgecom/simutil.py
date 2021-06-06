@@ -71,10 +71,9 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
         return 0.0
     if constant_cfl is True:
         from grudge.op import nodal_min
-        mydt = nodal_min(
+        mydt = cfl * nodal_min(
             discr, "vol",
-            get_inviscid_timestep(discr=discr, q=state,
-                                  cfl=cfl, eos=eos)
+            get_inviscid_timestep(discr=discr, eos=eos, q=state)
         )
     return min(mydt, dt_left)
 

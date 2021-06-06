@@ -76,21 +76,63 @@ def inviscid_flux(discr, eos, q):
                 (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def get_inviscid_timestep(discr, eos, cfl, q):
-    """Routine returns the cell-local maximum stable inviscid timestep."""
-    dim = discr.dim
-    cv = split_conserved(dim, q)
+def get_inviscid_timestep(discr, eos, q):
+    """Routine returns the node-local maximum stable inviscid timestep.
 
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    q
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+
+    Returns
+    -------
+    class:`~grudge.dof_array.DOFArray`
+        The maximum stable timestep at each node.
+    """
     from grudge.dt_utils import (dt_non_geometric_factor,
                                  dt_geometric_factors)
     from mirgecom.fluid import compute_wavespeed
 
+    dim = discr.dim
+    cv = split_conserved(dim, q)
+
     return (
-        cfl * dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
+        dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
         / compute_wavespeed(dim, eos, cv)
     )
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
-    """Calculate and return CFL based on current state and timestep."""
-    return dt / get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
+    """Calculate and return node-local CFL based on current state and timestep.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    dt: float or class:`~grudge.dof_array.DOFArray`
+        A constant scalar dt or node-local dt
+    q
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+
+    Returns
+    -------
+    class:`grudge.dof_array.DOFArray`
+        The CFL at each node.
+    """
+    return dt / get_inviscid_timestep(discr, eos=eos, q=q)
