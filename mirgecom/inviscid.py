@@ -86,7 +86,7 @@ def get_inviscid_timestep(discr, eos, q):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
-    q
+    q: numpy.ndarray
         State array which expects at least the canonical conserved quantities
         (mass, energy, momentum) for the fluid at each point. For multi-component
         fluids, the conserved quantities should include
@@ -95,7 +95,7 @@ def get_inviscid_timestep(discr, eos, q):
 
     Returns
     -------
-    class:`~grudge.dof_array.DOFArray`
+    class:`~meshmode.dof_array.DOFArray`
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import (dt_non_geometric_factor,
@@ -116,14 +116,14 @@ def get_inviscid_cfl(discr, eos, dt, q):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: :class:`grudge.eager.EagerDGDiscretization`
         the discretization to use
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
-    dt: float or class:`~grudge.dof_array.DOFArray`
+    dt: float or :class:`~meshmode.dof_array.DOFArray`
         A constant scalar dt or node-local dt
-    q
+    q: numpy.ndarray
         State array which expects at least the canonical conserved quantities
         (mass, energy, momentum) for the fluid at each point. For multi-component
         fluids, the conserved quantities should include
@@ -132,7 +132,7 @@ def get_inviscid_cfl(discr, eos, dt, q):
 
     Returns
     -------
-    class:`grudge.dof_array.DOFArray`
+    :class:`meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
     return dt / get_inviscid_timestep(discr, eos=eos, q=q)
