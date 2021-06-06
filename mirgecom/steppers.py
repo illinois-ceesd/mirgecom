@@ -5,7 +5,7 @@
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2020-21 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -32,11 +32,12 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
 
-def advance_state(rhs, timestepper, get_timestep,
-                  state, t_final, t=0.0, istep=0,
-                  pre_step_callback=None,
-                  post_step_callback=None,
-                  logmgr=None, eos=None, dim=None):
+def _advance_state_stepper_func(rhs, timestepper, get_timestep,
+                                state, t_final,
+                                t=0.0, istep=0,
+                                pre_step_callback=None,
+                                post_step_callback=None,
+                                logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -47,7 +48,8 @@ def advance_state(rhs, timestepper, get_timestep,
         a call with signature ``rhs(t, state)``.
     timestepper
         Function that advances the state from t=time to t=(time+dt), and
-        returns the advanced state.
+        returns the advanced state. Has a call with signature
+        ``timestepper(state, t, dt, rhs)``.
     get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
@@ -110,9 +112,13 @@ def advance_state(rhs, timestepper, get_timestep,
     return istep, t, state
 
 
-def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, component_id="state", t=0.0, istep=0,
-                  logmgr=None, eos=None, dim=None):
+def _advance_state_leap(rhs, timestepper, get_timestep,
+                        state, t_final,
+                        component_id="state",
+                        t=0.0, istep=0,
+                        pre_step_callback=None,
+                        post_step_callback=None,
+                        logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -123,10 +129,6 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         a call with signature ``rhs(t, state)``.
     timestepper
         An instance of :class:`leap.MethodBuilder`.
-    checkpoint
-        Function is user-defined and can be used to preform simulation status
-        reporting, viz, and restart i/o.  A non-zero return code from this function
-        indicates that this function should stop gracefully.
     get_timestep
         Function that should return dt for the next step. This interface allows
         user-defined adaptive timestepping. A negative return value indicated that
@@ -192,6 +194,7 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
                                                t=t, dt=dt)
 
                 istep += 1
+
                 if logmgr:
                     set_dt(logmgr, dt)
                     set_sim_state(logmgr, dim, state, eos)
@@ -239,9 +242,12 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     return stepper_cls
 
 
-def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
-                    component_id="state", t=0.0, istep=0, logmgr=None,
-                    eos=None, dim=None):
+def advance_state(rhs, timestepper, get_timestep, state, t_final,
+                  component_id="state",
+                  t=0.0, istep=0,
+                  pre_step_callback=None,
+                  post_step_callback=None,
+                  logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -258,10 +264,6 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
         responsible for generating timestepper code from the method instructions
         before using it, as well as providing context in the form of the state
         to be integrated, the initial time and timestep, and the RHS function.
-    checkpoint
-        Function is user-defined and can be used to preform simulation status
-        reporting, viz, and restart i/o.  A non-zero return code from this function
-        indicates that this function should stop gracefully.
     component_id
         State id (required input for leap method generation)
     get_timestep
@@ -308,17 +310,25 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
 
     if leap_timestepper:
         (current_step, current_t, current_state) = \
-            _advance_state_leap(rhs=rhs, timestepper=timestepper,
-                        checkpoint=checkpoint,
-                        get_timestep=get_timestep, state=state,
-                        t=t, t_final=t_final, component_id=component_id,
-                        istep=istep, logmgr=logmgr, eos=eos, dim=dim)
+            _advance_state_leap(
+                rhs=rhs, timestepper=timestepper,
+                get_timestep=get_timestep, state=state,
+                t=t, t_final=t_final,
+                pre_step_callback=pre_step_callback,
+                post_step_callback=post_step_callback,
+                component_id=component_id,
+                istep=istep, logmgr=logmgr, eos=eos, dim=dim
+            )
     else:
         (current_step, current_t, current_state) = \
-            _advance_state_stepper_func(rhs=rhs, timestepper=timestepper,
-                        checkpoint=checkpoint,
-                        get_timestep=get_timestep, state=state,
-                        t=t, t_final=t_final, istep=istep,
-                        logmgr=logmgr, eos=eos, dim=dim)
+            _advance_state_stepper_func(
+                rhs=rhs, timestepper=timestepper,
+                get_timestep=get_timestep, state=state,
+                t=t, t_final=t_final,
+                pre_step_callback=pre_step_callback,
+                post_step_callback=post_step_callback,
+                istep=istep,
+                logmgr=logmgr, eos=eos, dim=dim
+            )
 
     return current_step, current_t, current_state
