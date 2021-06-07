@@ -333,6 +333,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
                 domain_params)
 
+            # Footprint gathering is not yet available in loopy with kernel callables:
+            # https://github.com/inducer/loopy/issues/399
             if 0:
                 try:
                     footprint = lp.gather_access_footprint_bytes(typed_t_unit)
