@@ -83,6 +83,8 @@ intersphinx_mapping = {
     "https://documen.tician.de/grudge/": None,
     "https://documen.tician.de/pytato/": None,
     "https://documen.tician.de/loopy/": None,
+    "https://documen.tician.de/dagrt/": None,
+    "https://documen.tician.de/leap/": None,
     "https://documen.tician.de/pymbolic/": None,
     "https://documen.tician.de/pytools/": None,
     "https://pyrometheus.readthedocs.io/en/latest": None,
