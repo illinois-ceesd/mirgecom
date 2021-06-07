@@ -38,13 +38,9 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    sim_visualization,
     sim_checkpoint,
-    sim_healthcheck,
-    compare_with_analytic_solution,
     generate_and_distribute_mesh
 )
-from mirgecom.exceptions import SynchronizedError
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -82,7 +78,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     constant_cfl = False
     nstatus = 10
     nviz = 10
-    ncheck = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -134,33 +129,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        try:
-            # Check the health of the simulation
-            sim_healthcheck(discr, eos, state,
-                            step=step, t=t, freq=ncheck)
-            # Perform checkpointing
-            sim_checkpoint(discr, eos, state,
-                           step=step, t=t, dt=dt, freq=nstatus,
-                           constant_cfl=constant_cfl)
-            # Compare with analytic result
-            compare_with_analytic_solution(discr, eos, state,
-                                           exact_soln=initializer,
-                                           step=step, t=t, freq=nstatus,
-                                           exittol=exittol)
-            # Visualize
-            sim_visualization(discr, eos, state,
-                              visualizer, vizname=casename,
-                              step=step, t=t, freq=nviz)
-        except SynchronizedError as err:
-            # Log crash error message
-            if rank == 0:
-                logger.info(str(err))
-                logger.info("Visualizing crashed state ...")
-            # Write out crashed field
-            sim_visualization(discr, eos, state,
-                              visualizer, vizname=casename,
-                              step=step, t=t, freq=1)
-            raise err
+        sim_checkpoint(discr, visualizer, eos, q=state,
+                       exact_soln=initializer, vizname=casename, step=step,
+                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+                       exittol=exittol, constant_cfl=constant_cfl)
         return state
 
     current_step, current_t, current_state = \

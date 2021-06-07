@@ -50,7 +50,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
-from mirgecom.exceptions import SimulationHealthError
+from mirgecom.exceptions import SynchronizedError, SimulationHealthError
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
 
 
 def sim_visualization(discr, eos, state, visualizer, vizname,
-                      step=0, t=0, freq=-1,
+                      step=0, t=0,
                       exact_soln=None, viz_fields=None,
                       overwrite=False, vis_timer=None):
     """Visualize the simulation fields.
@@ -111,100 +111,146 @@ def sim_visualization(discr, eos, state, visualizer, vizname,
     visualizer:
         A :class:`meshmode.discretization.visualization.Visualizer`
         VTK output object.
-    freq: int
-        An integer denoting the step frequency.
     """
-    if check_step(step=step, interval=freq):
+    from contextlib import nullcontext
+    from mirgecom.fluid import split_conserved
+    from mirgecom.io import make_rank_fname, make_par_fname
 
-        from contextlib import nullcontext
-        from mirgecom.fluid import split_conserved
-        from mirgecom.io import make_rank_fname, make_par_fname
+    cv = split_conserved(discr.dim, state)
+    dependent_vars = eos.dependent_vars(cv)
 
-        cv = split_conserved(discr.dim, state)
-        dependent_vars = eos.dependent_vars(cv)
-
-        io_fields = [
-            ("cv", cv),
-            ("dv", dependent_vars)
+    io_fields = [
+        ("cv", cv),
+        ("dv", dependent_vars)
+    ]
+    if exact_soln is not None:
+        actx = cv.mass.array_context
+        nodes = thaw(actx, discr.nodes())
+        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
+        exact_list = [
+            ("exact_soln", expected_state),
         ]
-        if exact_soln is not None:
-            actx = cv.mass.array_context
-            nodes = thaw(actx, discr.nodes())
-            expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-            exact_list = [
-                ("exact_soln", expected_state),
-            ]
-            io_fields.extend(exact_list)
+        io_fields.extend(exact_list)
 
-        if viz_fields is not None:
-            io_fields.extend(viz_fields)
+    if viz_fields is not None:
+        io_fields.extend(viz_fields)
 
-        comm = discr.mpi_communicator
-        rank = 0
-        if comm is not None:
-            rank = comm.Get_rank()
+    comm = discr.mpi_communicator
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
 
-        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
-        if vis_timer:
-            ctm = vis_timer.start_sub_timer()
-        else:
-            ctm = nullcontext()
+    if vis_timer:
+        ctm = vis_timer.start_sub_timer()
+    else:
+        ctm = nullcontext()
 
-        with ctm:
-            visualizer.write_parallel_vtk_file(
-                comm, rank_fn, io_fields,
-                overwrite=overwrite,
-                par_manifest_filename=make_par_fname(
-                    basename=vizname, step=step, t=t
-                )
+    with ctm:
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields,
+            overwrite=overwrite,
+            par_manifest_filename=make_par_fname(
+                basename=vizname, step=step, t=t
             )
+        )
 
 
-def sim_checkpoint(discr, eos, state, step=0, t=0, dt=0,
-                   cfl=1.0, freq=-1, constant_cfl=False):
+def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
+                   constant_cfl=False, viz_fields=None, overwrite=False,
+                   vis_timer=None):
     """Checkpoint the simulation status.
 
     Checkpoints the simulation status by reporting relevant diagnostic
-    quantities, such as pressure/temperature.
+    quantities, such as pressure/temperature, and visualization.
 
     Parameters
     ----------
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state.
-    state
+        returning pressure and temperature as a function of the state *q*.
+    q
         State array which expects at least the conserved quantities
         (mass, energy, momentum) for the fluid at each point. For multi-component
         fluids, the conserved quantities should include
         (mass, energy, momentum, species_mass), where *species_mass* is a vector
         of species masses.
-    freq: int
-        An integer denoting the step frequency.
+    freq: nstatus
+        An integer denoting the step frequency for performing status checks.
+    freq: nviz
+        An integer denoting the step frequency for writing vtk output.
     """
-    if check_step(step=step, interval=freq):
+    exception = None
+    comm = discr.mpi_communicator
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
 
-        from mirgecom.fluid import split_conserved
+    try:
+        # Status checks
+        if check_step(step=step, interval=nstatus):
+            from mirgecom.fluid import split_conserved
 
-        #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=state,
-        #                                           eos=eos, dt=dt)
+            #        if constant_cfl is False:
+            #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
+            #                                           eos=eos, dt=dt)
 
-        comm = discr.mpi_communicator
-        rank = 0
-        if comm is not None:
-            rank = comm.Get_rank()
+            cv = split_conserved(discr.dim, q)
+            dependent_vars = eos.dependent_vars(cv)
+            msg = make_status_message(discr=discr,
+                                    t=t, step=step, dt=dt, cfl=cfl,
+                                    dependent_vars=dependent_vars)
+            if rank == 0:
+                logger.info(msg)
 
-        cv = split_conserved(discr.dim, state)
-        dependent_vars = eos.dependent_vars(cv)
-        msg = make_status_message(discr=discr,
-                                  t=t, step=step, dt=dt, cfl=cfl,
-                                  dependent_vars=dependent_vars)
+            # Check the health of the simulation
+            sim_healthcheck(discr, eos, q, step=step, t=t)
+
+            # Compare with exact solution, if provided
+            if exact_soln is not None:
+                compare_with_analytic_solution(
+                    discr, eos, q, exact_soln,
+                    step=step, t=t, exittol=exittol
+                )
+
+        # Visualization
+        if check_step(step=step, interval=nviz):
+            sim_visualization(
+                discr, eos, q, visualizer, vizname,
+                step=step, t=t,
+                exact_soln=exact_soln, viz_fields=viz_fields,
+                overwrite=overwrite, vis_timer=vis_timer
+            )
+    except SynchronizedError as err:
+        exception = err
+
+    terminate = True if exception is not None else False
+
+    if comm is None:
+        if terminate:
+            raise exception
+        return
+
+    from mpi4py import MPI
+
+    terminate = comm.allreduce(terminate, MPI.LOR)
+
+    if terminate:
+        # Log crash error message
         if rank == 0:
-            logger.info(msg)
+            logger.info(str(exception))
+            logger.info("Visualizing crashed state ...")
+        # Write out crashed field
+        sim_visualization(discr, eos, q,
+                          visualizer, vizname=vizname,
+                          step=step, t=t,
+                          viz_fields=viz_fields)
+        raise exception
 
 
-def sim_healthcheck(discr, eos, state, step=0, t=0, freq=-1):
+def sim_healthcheck(discr, eos, state, step=0, t=0):
     """Check the global health of the fluids state.
 
     Determine the health of a state by inspecting for unphyiscal
@@ -221,48 +267,44 @@ def sim_healthcheck(discr, eos, state, step=0, t=0, freq=-1):
         fluids, the conserved quantities should include
         (mass, energy, momentum, species_mass), where *species_mass* is a vector
         of species masses.
-    freq: int
-        An integer denoting the step frequency.
     """
-    if check_step(step=step, interval=freq):
+    from mirgecom.fluid import split_conserved
+    import grudge.op as op
 
-        from mirgecom.fluid import split_conserved
-        import grudge.op as op
+    # NOTE: Derived quantities are functions of the conserved variables.
+    # Therefore is it sufficient to check for unphysical values of
+    # temperature and pressure.
+    cv = split_conserved(discr.dim, state)
+    dependent_vars = eos.dependent_vars(cv)
+    pressure = dependent_vars.pressure
+    temperature = dependent_vars.temperature
 
-        # NOTE: Derived quantities are functions of the conserved variables.
-        # Therefore is it sufficient to check for unphysical values of
-        # temperature and pressure.
-        cv = split_conserved(discr.dim, state)
-        dependent_vars = eos.dependent_vars(cv)
-        pressure = dependent_vars.pressure
-        temperature = dependent_vars.temperature
+    # Check for NaN
+    if (np.isnan(op.nodal_sum_loc(discr, "vol", pressure))
+            or np.isnan(op.nodal_sum_loc(discr, "vol", temperature))):
+        raise SimulationHealthError(
+            message=("Simulation exited abnormally; detected a NaN.")
+        )
 
-        # Check for NaN
-        if (np.isnan(op.nodal_sum_loc(discr, "vol", pressure))
-                or np.isnan(op.nodal_sum_loc(discr, "vol", temperature))):
-            raise SimulationHealthError(
-                message=("Simulation exited abnormally; detected a NaN.")
-            )
+    # Check for non-positivity
+    if (op.nodal_min_loc(discr, "vol", pressure) < 0
+            or op.nodal_min_loc(discr, "vol", temperature) < 0):
+        raise SimulationHealthError(
+            message=("Simulation exited abnormally; "
+                        "found non-positive values for pressure or temperature.")
+        )
 
-        # Check for non-positivity
-        if (op.nodal_min_loc(discr, "vol", pressure) < 0
-                or op.nodal_min_loc(discr, "vol", temperature) < 0):
-            raise SimulationHealthError(
-                message=("Simulation exited abnormally; "
-                         "found non-positive values for pressure or temperature.")
-            )
-
-        # Check for blow-up
-        if (op.nodal_sum_loc(discr, "vol", pressure) == np.inf
-                or op.nodal_sum_loc(discr, "vol", temperature) == np.inf):
-            raise SimulationHealthError(
-                message=("Simulation exited abnormally; "
-                         "derived quantities are not finite.")
-            )
+    # Check for blow-up
+    if (op.nodal_sum_loc(discr, "vol", pressure) == np.inf
+            or op.nodal_sum_loc(discr, "vol", temperature) == np.inf):
+        raise SimulationHealthError(
+            message=("Simulation exited abnormally; "
+                        "derived quantities are not finite.")
+        )
 
 
 def compare_with_analytic_solution(discr, eos, state, exact_soln,
-                                   step=0, t=0, freq=-1, exittol=None):
+                                   step=0, t=0, exittol=None):
     """Compute the infinite norm of the problem residual.
 
     Computes the infinite norm of the residual with respect to a specified
@@ -284,39 +326,35 @@ def compare_with_analytic_solution(discr, eos, state, exact_soln,
         A callable for the exact solution with signature:
         ``exact_soln(x_vec, t, eos)`` where `x_vec` are the nodes,
         `t` is time, and `eos` is a :class:`mirgecom.eos.GasEOS`.
-    freq: int
-        An integer denoting the step frequency.
     """
-    if check_step(step=step, interval=freq):
+    if exittol is None:
+        exittol = 1e-16
 
-        if exittol is None:
-            exittol = 1e-16
+    actx = discr._setup_actx
+    nodes = thaw(actx, discr.nodes())
+    expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
+    exp_resid = state - expected_state
+    norms = [discr.norm(v, np.inf) for v in exp_resid]
 
-        actx = discr._setup_actx
-        nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-        exp_resid = state - expected_state
-        norms = [discr.norm(v, np.inf) for v in exp_resid]
+    comm = discr.mpi_communicator
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
 
-        comm = discr.mpi_communicator
-        rank = 0
-        if comm is not None:
-            rank = comm.Get_rank()
+    statusmesg = (
+        f"Errors: {step=} {t=}\n"
+        f"------- errors = "
+        + ", ".join("%.3g" % err_norm for err_norm in norms)
+    )
 
-        statusmesg = (
-            f"Errors: {step=} {t=}\n"
-            f"------- errors = "
-            + ", ".join("%.3g" % err_norm for err_norm in norms)
+    if rank == 0:
+        logger.info(statusmesg)
+
+    if max(norms) > exittol:
+        raise SimulationHealthError(
+            message=("Simulation exited abnormally; "
+                        "solution doesn't agree with analytic result.")
         )
-
-        if rank == 0:
-            logger.info(statusmesg)
-
-        if max(norms) > exittol:
-            raise SimulationHealthError(
-                message=("Simulation exited abnormally; "
-                         "solution doesn't agree with analytic result.")
-            )
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
