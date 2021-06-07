@@ -41,11 +41,11 @@ from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_visualization,
     sim_checkpoint,
-    cfd_healthcheck,
+    sim_healthcheck,
     check_step,
     generate_and_distribute_mesh
 )
-from mirgecom.exceptions import StepperCrashError
+from mirgecom.exceptions import SynchronizedError
 from mirgecom.fluid import split_conserved
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -238,7 +238,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         viz_fields = [("reaction_rates", reaction_rates)]
         try:
             # Check the health of the simulation
-            cfd_healthcheck(discr, eos, state,
+            sim_healthcheck(discr, eos, state,
                             step=step, t=t, freq=ncheck)
             # Perform checkpointing
             sim_checkpoint(discr, eos, state,
@@ -249,7 +249,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               visualizer, vizname=casename,
                               step=step, t=t, freq=nviz,
                               viz_fields=viz_fields)
-        except StepperCrashError as err:
+        except SynchronizedError as err:
             # Log crash error message
             if rank == 0:
                 logger.info(str(err))

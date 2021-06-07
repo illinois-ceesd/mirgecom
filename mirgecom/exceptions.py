@@ -1,6 +1,6 @@
 """Provide custom exceptions for use in callback routines.
 
-.. autoexception:: StepperCrashError
+.. autoexception:: SynchronizedError
 .. autoexception:: SimulationHealthError
 """
 
@@ -29,17 +29,17 @@ THE SOFTWARE.
 """
 
 
-class StepperCrashError(Exception):
-    """Exception base class for simulation exceptions.
+class SynchronizedError(Exception):
+    """Exception base class which must be globally synchronized.
 
     .. attribute:: message
 
-        A :class:`str` describing the message for the exception.
+        A :class:`str` describing the message for the global exception.
     """
 
     def __init__(self, message):
         super().__init__(message)
 
 
-class SimulationHealthError(StepperCrashError):
+class SimulationHealthError(SynchronizedError):
     """Exception class for an unphysical simulation."""

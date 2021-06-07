@@ -11,7 +11,7 @@ Diagnostic callbacks
 
 .. autofunction:: sim_visualization
 .. autofunction:: sim_checkpoint
-.. autofunction:: cfd_healthcheck
+.. autofunction:: sim_healthcheck
 .. autofunction:: compare_with_analytic_solution
 
 Mesh utilities
@@ -204,7 +204,7 @@ def sim_checkpoint(discr, eos, state, step=0, t=0, dt=0,
             logger.info(msg)
 
 
-def cfd_healthcheck(discr, eos, state, step=0, t=0, freq=-1):
+def sim_healthcheck(discr, eos, state, step=0, t=0, freq=-1):
     """Check the global health of the fluids state.
 
     Determine the health of a state by inspecting for unphyiscal
