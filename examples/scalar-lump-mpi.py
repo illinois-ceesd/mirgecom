@@ -58,7 +58,8 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
+def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext,
+         use_leap=False):
     """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -79,7 +80,11 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = rk4_step
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
 
@@ -105,7 +110,7 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
     local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
@@ -115,8 +120,7 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(nodes)
 
-    visualizer = make_visualizer(discr, discr.order + 3
-                                 if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -146,9 +150,9 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -174,6 +178,7 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext)
+    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext,
+         use_leap=False)
 
 # vim: foldmethod=marker

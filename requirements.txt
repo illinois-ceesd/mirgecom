@@ -14,6 +14,7 @@ psutil
 --editable git+https://github.com/inducer/dagrt.git#egg=dagrt
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git@c7f4877a6411e8db2519b6b324391e8361409fde#egg=modepy
+--editable git+https://github.com/inducer/arraycontext.git#egg=arraycontext
 --editable git+https://github.com/kaushikcfd/meshmode.git@pytato_array_context#egg=meshmode
 --editable git+https://github.com/matthiasdiener/grudge.git@pytato_array_context#egg=grudge
 --editable git+https://github.com/inducer/pytato.git@pytato_array_context#egg=pytato

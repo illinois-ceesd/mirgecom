@@ -6,6 +6,7 @@ Simulation Support
 
    time-integrators
    integration-loops
+   filter
    mpi
    input-output
    tools

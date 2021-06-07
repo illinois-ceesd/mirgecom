@@ -84,16 +84,16 @@ def main(use_profiling: bool, lazy_eval: bool):
     mesh = generate_regular_rect_mesh(
         a=(-0.5,)*dim,
         b=(0.5,)*dim,
-        n=(nel_1d,)*dim)
+        nelements_per_axis=(nel_1d,)*dim)
 
     order = 3
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
-        dt = 0.75 / (nel_1d * order ** 2)
+        dt = 0.7 / (nel_1d * order ** 2)
     elif dim == 3:
         # no deep meaning here, just a fudge factor
-        dt = 0.45 / (nel_1d * order ** 2)
+        dt = 0.4 / (nel_1d * order ** 2)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
@@ -110,7 +110,7 @@ def main(use_profiling: bool, lazy_eval: bool):
         fields = flat_obj_array(bump(actx, discr),
                                 [discr.zeros(actx) for i in range(discr.dim)])
 
-    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
+    vis = make_visualizer(discr)
 
     def rhs(t, w):
         return wave_operator(discr, c=1, w=w)
