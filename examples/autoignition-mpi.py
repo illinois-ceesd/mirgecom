@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context, use_leap=False):
     """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -85,7 +85,11 @@ def main(ctx_factory=cl.create_some_context):
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = rk4_step
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
     box_ll = -0.005
     box_ur = 0.005
     error_state = False
@@ -238,9 +242,9 @@ def main(ctx_factory=cl.create_some_context):
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = True
         current_step = ex.step
@@ -263,6 +267,6 @@ def main(ctx_factory=cl.create_some_context):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    main()
+    main(use_leap=False)
 
 # vim: foldmethod=marker
