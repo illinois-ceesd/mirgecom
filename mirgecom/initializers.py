@@ -152,8 +152,8 @@ class Vortex2D:
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
-        x_rel = x_vec[0] - (self._center[0] + t*self._velocity[0])
-        y_rel = x_vec[1] - (self._center[1] + t*self._velocity[1])
+        x_rel = x_vec[0] - vortex_loc[0]
+        y_rel = x_vec[1] - vortex_loc[1]
         actx = x_vec[0].array_context
         gamma = eos.gamma()
         r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
