@@ -119,30 +119,63 @@ def inviscid_facial_flux(discr, eos, q_tpair, local=False):
     return flux_weak
 
 
-def get_inviscid_timestep(discr, eos, cfl, q):
-    """Routine (will) return the (local) maximum stable inviscid timestep.
+def get_inviscid_timestep(discr, eos, q):
+    """Routine returns the node-local maximum stable inviscid timestep.
 
-    Currently, it's a hack waiting for the geometric_factor helpers port
-    from grudge.
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    q: numpy.ndarray
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+
+    Returns
+    -------
+    class:`~meshmode.dof_array.DOFArray`
+        The maximum stable timestep at each node.
     """
+    from grudge.dt_utils import (dt_non_geometric_factor,
+                                 dt_geometric_factors)
+    from mirgecom.fluid import compute_wavespeed
+
     dim = discr.dim
-    mesh = discr.mesh
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
-    nelements = mesh.nelements
-    nel_1d = nelements ** (1.0 / (1.0 * dim))
+    cv = split_conserved(dim, q)
 
-    # This roughly reproduces the timestep AK used in wave toy
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return cfl * dt
-
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = compute_wavespeed(w,eos=eos)
-#    max_v = clmath.max(wavespeeds)
-#    return c*dt_ngf*dt_gf/max_v
+    return (
+        dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
+        / compute_wavespeed(dim, eos, cv)
+    )
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
-    """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, q=q)
-    return dt / wanted_dt
+    """Calculate and return node-local CFL based on current state and timestep.
+
+    Parameters
+    ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    dt: float or :class:`~meshmode.dof_array.DOFArray`
+        A constant scalar dt or node-local dt
+    q: numpy.ndarray
+        State array which expects at least the canonical conserved quantities
+        (mass, energy, momentum) for the fluid at each point. For multi-component
+        fluids, the conserved quantities should include
+        (mass, energy, momentum, species_mass), where *species_mass* is a vector
+        of species masses.
+
+    Returns
+    -------
+    :class:`meshmode.dof_array.DOFArray`
+        The CFL at each node.
+    """
+    return dt / get_inviscid_timestep(discr, eos=eos, q=q)
