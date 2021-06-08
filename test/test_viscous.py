@@ -40,7 +40,6 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 
 from mirgecom.fluid import make_conserved
-from mirgecom.fluid import split_conserved, join_conserved  # noqa
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
 
