@@ -70,7 +70,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     from mirgecom.exceptions import SimulationHealthError
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q, freq=1)
+        sim_healthcheck(discr, eos, q)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
@@ -81,7 +81,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q, freq=1)
+        sim_healthcheck(discr, eos, q)
 
     # Let's make one last very bad state (inf)
     mass = 1*ones
@@ -92,7 +92,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q, freq=1)
+        sim_healthcheck(discr, eos, q)
 
 
 def test_analytic_comparison(actx_factory):
@@ -125,4 +125,4 @@ def test_analytic_comparison(actx_factory):
     from mirgecom.exceptions import SimulationHealthError
 
     with pytest.raises(SimulationHealthError):
-        compare_with_analytic_solution(discr, eos, q, Vortex2D(), freq=1)
+        compare_with_analytic_solution(discr, eos, q, Vortex2D())
