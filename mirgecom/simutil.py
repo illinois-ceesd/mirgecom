@@ -177,9 +177,9 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         fluids, the conserved quantities should include
         (mass, energy, momentum, species_mass), where *species_mass* is a vector
         of species masses.
-    freq: nstatus
+    nstatus: int
         An integer denoting the step frequency for performing status checks.
-    freq: nviz
+    nviz: int
         An integer denoting the step frequency for writing vtk output.
     """
     exception = None
@@ -228,20 +228,15 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
 
     terminate = True if exception is not None else False
 
-    if comm is None:
-        if terminate:
-            raise exception
-        return
+    if comm is not None:
+        from mpi4py import MPI
 
-    from mpi4py import MPI
-
-    terminate = comm.allreduce(terminate, MPI.LOR)
+        terminate = comm.allreduce(terminate, MPI.LOR)
 
     if terminate:
-        # Log crash error message
         if rank == 0:
-            logger.info(str(exception))
             logger.info("Visualizing crashed state ...")
+
         # Write out crashed field
         sim_visualization(discr, eos, q,
                           visualizer, vizname=vizname,
