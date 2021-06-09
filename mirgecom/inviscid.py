@@ -98,12 +98,14 @@ def get_inviscid_timestep(discr, eos, q):
     class:`~meshmode.dof_array.DOFArray`
         The maximum stable timestep at each node.
     """
-    from grudge.dt_utils import estimate_local_timestep
+    from grudge.dt_utils import characteristic_length_scales
     from mirgecom.fluid import compute_wavespeed
 
     dim = discr.dim
     cv = split_conserved(dim, q)
-    return estimate_local_timestep(discr, compute_wavespeed(dim, eos, cv))
+    return (
+        characteristic_length_scales(discr)/compute_wavespeed(discr, eos, cv)
+    )
 
 
 def get_inviscid_cfl(discr, eos, dt, q):
