@@ -53,7 +53,10 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary, PrescribedBoundary
+from mirgecom.boundary import (
+    AdiabaticNoslipMovingBoundary,
+    PrescribedBoundary
+)
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -137,8 +140,8 @@ def main(ctx_factory=cl.create_some_context):
         DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
         DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
         DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("wall"): AdiabaticSlipBoundary(),
-        DTAG_BOUNDARY("out"): AdiabaticSlipBoundary(),
+        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
+        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
     }
     constant_cfl = False
     nstatus = 10
@@ -203,9 +206,9 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         return ns_operator(
-            discr, q=state, t=t, boundaries=boundaries, eos=eos
+            discr, cv=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
-            discr, q=state, boundaries=boundaries,
+            discr, q=state.join(), boundaries=boundaries,
             boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa
         )

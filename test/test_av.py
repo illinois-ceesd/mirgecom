@@ -36,7 +36,6 @@ from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
 )
-from mirgecom.boundary import DummyBoundary
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -176,22 +175,45 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
 
-    boundaries = {BTAG_ALL: DummyBoundary()}
+    class TestBoundary:
+        def soln_gradient_flux(self, disc, btag, soln, **kwargs):
+            soln_int = disc.project("vol", btag, soln)
+            from grudge.trace_pair import TracePair
+            bnd_pair = TracePair(btag,
+                                 interior=soln_int,
+                                 exterior=soln_int)
+            nhat = thaw(actx, disc.normal(btag))
+            from mirgecom.flux import central_scalar_flux
+            flux_weak = central_scalar_flux(bnd_pair, normal=nhat)
+            return disc.project(btag, "all_faces", flux_weak)
+
+        def av_flux(self, disc, btag, diffusion, **kwargs):
+            nhat = thaw(actx, disc.normal(btag))
+            grad_soln_minus = discr.project("vol", btag, diffusion)
+            grad_soln_plus = grad_soln_minus
+            from grudge.trace_pair import TracePair
+            bnd_grad_pair = TracePair(btag, interior=grad_soln_minus,
+                                      exterior=grad_soln_plus)
+            from mirgecom.flux import central_vector_flux
+            flux_weak = central_vector_flux(bnd_grad_pair, normal=nhat)
+            return disc.project(btag, "all_faces", flux_weak)
+
+    boundaries = {BTAG_ALL: TestBoundary()}
 
     # Uniform field return 0 rhs
-    q = zeros + 1.0
-    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
+    soln = zeros + 1.0
+    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Linear field return 0 rhs
-    q = nodes[0]
-    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
+    soln = nodes[0]
+    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
-    q = np.dot(nodes, nodes)
-    rhs = av_operator(discr, boundaries=boundaries, q=q, alpha=1.0, s0=-np.inf)
+    soln = np.dot(nodes, nodes)
+    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
