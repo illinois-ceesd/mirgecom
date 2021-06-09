@@ -426,7 +426,7 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     return grad_y
 
 
-def compute_wavespeed(dim, eos, cv: ConservedVars):
+def compute_wavespeed(eos, cv: ConservedVars):
     r"""Return the wavespeed in the flow.
 
     The wavespeed is calculated as:
@@ -438,6 +438,5 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
     actx = cv.array_context
-
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
