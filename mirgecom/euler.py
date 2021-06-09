@@ -100,10 +100,6 @@ def _facial_flux(discr, eos, cv_tpair, local=False):
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    # flux_weak = make_conserved(
-    #     dim, q=lfr_flux(cv_tpair=cv_tpair, flux_func=euler_flux,
-    #                     normal=normal, lam=lam)
-    # )
     flux_weak = lfr_flux(cv_tpair=cv_tpair, flux_func=euler_flux,
                          normal=normal, lam=lam)
 
