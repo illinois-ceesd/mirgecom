@@ -38,7 +38,6 @@ from grudge.shortcuts import make_visualizer
 
 
 from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import split_conserved
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -212,14 +211,13 @@ def main(ctx_factory=cl.create_some_context):
         )
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        tagged_cells = smoothness_indicator(discr, cv.mass, s0=s0, kappa=kappa)
+        tagged_cells = smoothness_indicator(discr, state.mass, s0=s0, kappa=kappa)
         viz_fields = [("tagged cells", tagged_cells)]
         return sim_checkpoint(
             discr,
             visualizer,
             eos,
-            q=state,
+            cv=state,
             vizname=casename,
             step=step,
             t=t,

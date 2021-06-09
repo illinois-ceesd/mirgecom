@@ -52,8 +52,8 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.fluid import split_conserved
 from mirgecom.inviscid import get_inviscid_cfl
+
 import cantera
 import pyrometheus as pyro
 
@@ -184,15 +184,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     # Inspection at physics debugging time
     if debug:
-        cv = split_conserved(dim, current_state)
         print("Initial MIRGE-Com state:")
-        print(f"{cv.mass=}")
-        print(f"{cv.energy=}")
-        print(f"{cv.momentum=}")
-        print(f"{cv.species_mass=}")
-        print(f"Initial Y: {cv.species_mass / cv.mass}")
-        print(f"Initial DV pressure: {eos.pressure(cv)}")
-        print(f"Initial DV temperature: {eos.temperature(cv)}")
+        print(f"{current_state=}")
+        print(f"Initial DV pressure: {eos.pressure(current_state)}")
+        print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -225,20 +220,19 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        cv = split_conserved(dim=dim, q=state)
-        return (euler_operator(discr, q=state, t=t,
+        return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(cv))
+                + eos.get_species_source_terms(state))
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        reaction_rates = eos.get_production_rates(cv)
-        local_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, q=state)
+        reaction_rates = eos.get_production_rates(state)
+        local_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, cv=state)
         viz_fields = [("reaction_rates", reaction_rates),
                       ("cfl", local_cfl)]
         from grudge.op import nodal_max
         max_cfl = nodal_max(discr, "vol", local_cfl)
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        viz_fields = [("reaction_rates", reaction_rates)]
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step, cfl=max_cfl,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               constant_cfl=constant_cfl, comm=comm,
