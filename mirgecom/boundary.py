@@ -216,7 +216,7 @@ class PrescribedInviscidBoundary(FluidBC):
 
     def s_boundary_flux(self, discr, btag, grad_cv, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
-        actx = grad_cv.array_context
+        actx = grad_cv.mass[0].array_context
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
         nhat = thaw(actx, discr.normal(btag))
@@ -450,9 +450,9 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
         return make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
                               momentum=ext_mom)
 
-    def exterior_grad_q(self, nodes, nhat, grad_q, **kwargs):
+    def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
         """Get the exterior solution on the boundary."""
-        return(-grad_q)
+        return(-grad_cv)
 
 
 class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):

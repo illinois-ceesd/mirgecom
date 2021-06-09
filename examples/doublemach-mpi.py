@@ -37,6 +37,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
+from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.artificial_viscosity import (
     av_operator,
@@ -207,10 +208,10 @@ def main(ctx_factory=cl.create_some_context):
     def my_rhs(t, state):
         return ns_operator(
             discr, cv=state, t=t, boundaries=boundaries, eos=eos
-        ) + av_operator(
+        ) + make_conserved(dim, q=av_operator(
             discr, q=state.join(), boundaries=boundaries,
             boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
-            s0=s0, kappa=kappa
+            s0=s0, kappa=kappa)
         )
 
     def my_checkpoint(step, t, dt, state):
@@ -251,12 +252,13 @@ def main(ctx_factory=cl.create_some_context):
     #    if current_t != checkpoint_t:
     if rank == 0:
         logger.info("Checkpointing final state ...")
-        my_checkpoint(
-            current_step,
-            t=current_t,
-            dt=(current_t - checkpoint_t),
-            state=current_state,
-        )
+
+    my_checkpoint(
+        current_step,
+        t=current_t,
+        dt=(current_t - checkpoint_t),
+        state=current_state,
+    )
 
     if current_t - t_final < 0:
         raise ValueError("Simulation exited abnormally")
