@@ -209,12 +209,10 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     q_bnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
                   + sum(_facial_flux_q(discr, q_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, q)))
-    q_bnd_flux2 = sum(bnd.q_boundary_flux(discr, btag, q=q, **boundary_kwargs)
+    q_bnd_flux2 = sum(bnd.soln_gradient_flux(discr, btag, soln=q, **boundary_kwargs)
                       for btag, bnd in boundaries.items())
-    if isinstance(q, np.ndarray):
-        q_bnd_flux2 = np.stack(q_bnd_flux2)
-    if isinstance(q_bnd_flux2, ConservedVars):
-        q_bnd_flux2 = q_bnd_flux2.join()
+    # if isinstance(q, np.ndarray):
+    #     q_bnd_flux2 = np.stack(q_bnd_flux2)
     q_bnd_flux = q_bnd_flux + q_bnd_flux2
 
     # Compute R
@@ -228,7 +226,7 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     r_bnd_flux = (_facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
                   + sum(_facial_flux_r(discr, r_tpair=pb_tpair)
                     for pb_tpair in cross_rank_trace_pairs(discr, r))
-                  + sum(bnd.s_boundary_flux(discr, btag, grad_q=r, **boundary_kwargs)
+                  + sum(bnd.av_flux(discr, btag, diffusion=r, **boundary_kwargs)
                         for btag, bnd in boundaries.items()))
 
     # Return the AV RHS term

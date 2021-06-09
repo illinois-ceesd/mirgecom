@@ -129,6 +129,8 @@ class PrescribedInviscidBoundary(FluidBC):
     .. automethod:: __init__
     .. automethod:: boundary_pair
     .. automethod:: inviscid_boundary_flux
+    .. automethod:: soln_gradient_flux
+    .. automethod:: av_flux
     """
 
     def __init__(self, inviscid_boundary_flux_func=None, boundary_pair_func=None,
@@ -207,6 +209,11 @@ class PrescribedInviscidBoundary(FluidBC):
         return self._boundary_quantity(discr, btag=btag, quantity=flux_weak,
                                        **kwargs)
 
+    def soln_gradient_flux(self, discr, btag, soln, **kwargs):
+        """Get the flux for solution gradient with AV API."""
+        cv = make_conserved(discr.dim, q=soln)
+        return self.q_boundary_flux(discr, btag, cv, **kwargs).join()
+
     def s_boundary_flux(self, discr, btag, grad_cv, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
         actx = grad_cv.array_context
@@ -226,6 +233,11 @@ class PrescribedInviscidBoundary(FluidBC):
             discr, btag, self._fluid_soln_grad_flux_func(bnd_grad_pair, nhat),
             **kwargs
         )
+
+    def av_flux(self, discr, btag, diffusion, **kwargs):
+        """Get the diffusive fluxes for the AV operator API."""
+        diff_cv = make_conserved(discr.dim, q=diffusion)
+        return self.s_boundary_flux(discr, btag, diff_cv, **kwargs).join()
 
     def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
@@ -378,6 +390,21 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
         ext_cv = make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
                                 momentum=ext_mom, species_mass=int_cv.species_mass)
         return TracePair(btag, interior=int_cv, exterior=ext_cv)
+
+    def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
+        """Get the exterior grad(Q) on the boundary."""
+        # Grab some boundary-relevant data
+        num_equations, dim = grad_cv.mass.shape
+
+        # Subtract 2*wall-normal component of q
+        # to enforce q=0 on the wall
+        s_mom_normcomp = np.outer(nhat, np.dot(grad_cv.momentum, nhat))
+        s_mom_flux = grad_cv.momentum - 2*s_mom_normcomp
+
+        # flip components to set a neumann condition
+        return make_conserved(dim, mass=-grad_cv.mass, energy=-grad_cv.energy,
+                              momentum=-s_mom_flux,
+                              species_mass=-grad_cv.species_mass)
 
 
 class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):

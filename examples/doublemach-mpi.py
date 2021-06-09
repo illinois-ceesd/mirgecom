@@ -38,7 +38,6 @@ from grudge.shortcuts import make_visualizer
 
 
 from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import split_conserved
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -54,7 +53,10 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary, PrescribedBoundary
+from mirgecom.boundary import (
+    AdiabaticNoslipMovingBoundary,
+    PrescribedBoundary
+)
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -138,8 +140,8 @@ def main(ctx_factory=cl.create_some_context):
         DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
         DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
         DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("wall"): AdiabaticSlipBoundary(),
-        DTAG_BOUNDARY("out"): AdiabaticSlipBoundary(),
+        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
+        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
     }
     constant_cfl = False
     nstatus = 10
@@ -212,14 +214,13 @@ def main(ctx_factory=cl.create_some_context):
         )
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        tagged_cells = smoothness_indicator(discr, cv.mass, s0=s0, kappa=kappa)
+        tagged_cells = smoothness_indicator(discr, state.mass, s0=s0, kappa=kappa)
         viz_fields = [("tagged cells", tagged_cells)]
         return sim_checkpoint(
             discr,
             visualizer,
             eos,
-            q=state,
+            cv=state,
             vizname=casename,
             step=step,
             t=t,
