@@ -113,7 +113,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     order = 3
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                    mpi_communicator=comm)
+                                  mpi_communicator=comm)
 
     if local_mesh.dim == 2:
         # no deep meaning here, just a fudge factor
@@ -139,7 +139,17 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         t = restart_data["t"]
         istep = restart_step
         assert istep == restart_step
-        fields = restart_data["fields"]
+        restart_fields = restart_data["fields"]
+        old_order = restart_data["order"]
+        if old_order != order:
+            old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
+                                              mpi_communicator=comm)
+            from meshmode.discretization.connection import make_same_mesh_connection
+            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
+                                                   old_discr.discr_from_dd("vol"))
+            fields = connection(restart_fields)
+        else:
+            fields = restart_fields
 
     vis = make_visualizer(discr)
 
@@ -155,6 +165,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
                 with open(snapshot_pattern.format(step=istep, rank=rank), "wb") as f:
                     pickle.dump({
                         "local_mesh": local_mesh,
+                        "order": order,
                         "fields": fields,
                         "t": t,
                         "step": istep,
