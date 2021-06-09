@@ -50,7 +50,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
-from mirgecom.exceptions import SynchronizedError, SimulationHealthError
+from mirgecom.exceptions import SimulationHealthError, SynchronizedException
 
 logger = logging.getLogger(__name__)
 
@@ -157,10 +157,9 @@ def sim_visualization(discr, eos, state, visualizer, vizname,
         )
 
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, viz_fields=None, overwrite=False,
-                   vis_timer=None):
+def sim_checkpoint(discr, visualizer, eos, q, exact_soln=None,
+                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, healthcheck_callback=None,
+                   nviz=-1, vis_callback=None, exittol=1e-16, constant_cfl=False):
     """Checkpoint the simulation status.
 
     Checkpoints the simulation status by reporting relevant diagnostic
@@ -182,67 +181,41 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     nviz: int
         An integer denoting the step frequency for writing vtk output.
     """
-    exception = None
     comm = discr.mpi_communicator
     rank = 0
     if comm is not None:
         rank = comm.Get_rank()
 
-    try:
-        # Status checks
-        if check_step(step=step, interval=nstatus):
-            from mirgecom.fluid import split_conserved
+    # Status checks
+    if check_step(step=step, interval=nstatus):
+        from mirgecom.fluid import split_conserved
 
-            #        if constant_cfl is False:
-            #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-            #                                           eos=eos, dt=dt)
+        #        if constant_cfl is False:
+        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
+        #                                           eos=eos, dt=dt)
 
-            cv = split_conserved(discr.dim, q)
-            dependent_vars = eos.dependent_vars(cv)
-            msg = make_status_message(discr=discr,
-                                    t=t, step=step, dt=dt, cfl=cfl,
-                                    dependent_vars=dependent_vars)
-            if rank == 0:
-                logger.info(msg)
-
-            # Check the health of the simulation
-            sim_healthcheck(discr, eos, q, step=step, t=t)
-
-            # Compare with exact solution, if provided
-            if exact_soln is not None:
-                compare_with_analytic_solution(
-                    discr, eos, q, exact_soln,
-                    step=step, t=t, exittol=exittol
-                )
-
-        # Visualization
-        if check_step(step=step, interval=nviz):
-            sim_visualization(
-                discr, eos, q, visualizer, vizname,
-                step=step, t=t,
-                exact_soln=exact_soln, viz_fields=viz_fields,
-                overwrite=overwrite, vis_timer=vis_timer
-            )
-    except SynchronizedError as err:
-        exception = err
-
-    terminate = True if exception is not None else False
-
-    if comm is not None:
-        from mpi4py import MPI
-
-        terminate = comm.allreduce(terminate, MPI.LOR)
-
-    if terminate:
+        cv = split_conserved(discr.dim, q)
+        dependent_vars = eos.dependent_vars(cv)
+        msg = make_status_message(discr=discr,
+                                t=t, step=step, dt=dt, cfl=cfl,
+                                dependent_vars=dependent_vars)
         if rank == 0:
-            logger.info("Visualizing crashed state ...")
+            logger.info(msg)
 
-        # Write out crashed field
-        sim_visualization(discr, eos, q,
-                          visualizer, vizname=vizname,
-                          step=step, t=t,
-                          viz_fields=viz_fields)
-        raise exception
+        # Check the health of the simulation
+        if healthcheck_callback is not None:
+            healthcheck_callback(step, t, q)
+
+        # Compare with exact solution, if provided
+        if exact_soln is not None:
+            compare_with_analytic_solution(
+                discr, eos, q, exact_soln,
+                step=step, t=t, exittol=exittol
+            )
+
+    # Visualization
+    if check_step(step=step, interval=nviz) and vis_callback is not None:
+        vis_callback(step, t, q)
 
 
 def sim_healthcheck(discr, eos, state, step=0, t=0):
@@ -274,28 +247,34 @@ def sim_healthcheck(discr, eos, state, step=0, t=0):
     pressure = dependent_vars.pressure
     temperature = dependent_vars.temperature
 
+    exception = None
+
     # Check for NaN
     if (np.isnan(op.nodal_sum_loc(discr, "vol", pressure))
             or np.isnan(op.nodal_sum_loc(discr, "vol", temperature))):
-        raise SimulationHealthError(
+        exception = SimulationHealthError(
             message=("Simulation exited abnormally; detected a NaN.")
         )
-
     # Check for non-positivity
-    if (op.nodal_min_loc(discr, "vol", pressure) < 0
+    elif (op.nodal_min_loc(discr, "vol", pressure) < 0
             or op.nodal_min_loc(discr, "vol", temperature) < 0):
-        raise SimulationHealthError(
+        exception = SimulationHealthError(
             message=("Simulation exited abnormally; "
                         "found non-positive values for pressure or temperature.")
         )
-
     # Check for blow-up
-    if (op.nodal_sum_loc(discr, "vol", pressure) == np.inf
+    elif (op.nodal_sum_loc(discr, "vol", pressure) == np.inf
             or op.nodal_sum_loc(discr, "vol", temperature) == np.inf):
-        raise SimulationHealthError(
+        exception = SimulationHealthError(
             message=("Simulation exited abnormally; "
                         "derived quantities are not finite.")
         )
+
+    from mirgecom.mpi import bcast_from_lowest_rank
+    exception = bcast_from_lowest_rank(discr.mpi_communicator, exception)
+
+    if exception is not None:
+        raise SynchronizedException(exception)
 
 
 def compare_with_analytic_solution(discr, eos, state, exact_soln,
@@ -304,7 +283,8 @@ def compare_with_analytic_solution(discr, eos, state, exact_soln,
 
     Computes the infinite norm of the residual with respect to a specified
     exact solution *exact_soln*. If the error is larger than *exittol*,
-    raises a :class:`mirgecom.exceptions.SimulationHealthError`.
+    raises a :class:`mirgecom.exceptions.SynchronizedException` containing
+    a :class:`mirgecom.exceptions.SimulationHealthError`.
 
     Parameters
     ----------
@@ -346,9 +326,10 @@ def compare_with_analytic_solution(discr, eos, state, exact_soln,
         logger.info(statusmesg)
 
     if max(norms) > exittol:
-        raise SimulationHealthError(
-            message=("Simulation exited abnormally; "
-                        "solution doesn't agree with analytic result.")
+        raise SynchronizedException(
+            SimulationHealthError(
+                message=("Simulation exited abnormally; "
+                            "solution doesn't agree with analytic result."))
         )
 
 

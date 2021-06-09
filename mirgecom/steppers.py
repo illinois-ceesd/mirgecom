@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
+from mirgecom.exceptions import SynchronizedException
 
 
 def _advance_state_stepper_func(rhs, timestepper, get_timestep,
@@ -37,6 +38,7 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
+                                exception_callback=None,
                                 logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
@@ -71,6 +73,12 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
         An optional user-defined function, with signature:
         ``state = post_step_callback(state, step, t, dt)``,
         to be called after the timestepper is called for that particular step.
+    exception_callback
+        An optional user-defined function, with signature:
+        ``state, stop = exception_callback(step, t, state, exception)``,
+        to be called when an exception is caught. Note: only exceptions that are
+        guaranteed to be raised on all MPI ranks (i.e., those contained in a
+        :class:`mirgecom.exceptions.SynchronizedException`) will be caught.
 
     Returns
     -------
@@ -84,30 +92,39 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
         return istep, t, state
 
     while t < t_final:
+        try:
+            if logmgr:
+                logmgr.tick_before()
 
-        if logmgr:
-            logmgr.tick_before()
+            dt = get_timestep(state=state)
+            if dt < 0:
+                raise SynchronizedException(RuntimeError(f"Invalid timestep {dt}."))
 
-        dt = get_timestep(state=state)
-        if dt < 0:
-            return istep, t, state
+            if pre_step_callback is not None:
+                state = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if pre_step_callback is not None:
-            state = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+            state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
-        state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
+            t += dt
 
-        t += dt
+            if post_step_callback is not None:
+                state = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if post_step_callback is not None:
-            state = post_step_callback(state=state, step=istep, t=t, dt=dt)
+            istep += 1
 
-        istep += 1
+            if logmgr:
+                set_dt(logmgr, dt)
+                set_sim_state(logmgr, dim, state, eos)
+                logmgr.tick_after()
 
-        if logmgr:
-            set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
-            logmgr.tick_after()
+        except SynchronizedException as synced_exception:
+            if exception_callback is not None:
+                state, stop = exception_callback(istep, t, state,
+                    synced_exception.exception)
+                if stop:
+                    break
+            else:
+                raise
 
     return istep, t, state
 
@@ -118,6 +135,7 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
                         t=0.0, istep=0,
                         pre_step_callback=None,
                         post_step_callback=None,
+                        exception_callback=None,
                         logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
@@ -152,6 +170,12 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
         An optional user-defined function, with signature:
         ``state = post_step_callback(state, step, t, dt)``,
         to be called after the timestepper is called for that particular step.
+    exception_callback
+        An optional user-defined function, with signature:
+        ``state, stop = exception_callback(step, t, state, exception)``,
+        to be called when an exception is caught. Note: only exceptions that are
+        guaranteed to be raised on all MPI ranks (i.e., those contained in a
+        :class:`mirgecom.exceptions.SynchronizedException`) will be caught.
 
     Returns
     -------
@@ -164,41 +188,60 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
     if t_final <= t:
         return istep, t, state
 
-    # Generate code for Leap method.
-    dt = get_timestep(state=state)
-    stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
-                                                    rhs, t, dt, state)
-    while t < t_final:
-
-        if logmgr:
-            logmgr.tick_before()
-
+    try:
+        # Generate code for Leap method.
         dt = get_timestep(state=state)
-        if dt < 0:
-            return istep, t, state
+        stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
+                                                        rhs, t, dt, state)
+    except SynchronizedException as synced_exception:
+        if exception_callback is not None:
+            state, stop = exception_callback(istep, t, state,
+                synced_exception.exception)
+            if stop:
+                return istep, t, state
+        else:
+            raise
 
-        if pre_step_callback is not None:
-            state = pre_step_callback(state=state,
-                                      step=istep,
-                                      t=t, dt=dt)
+    while t < t_final:
+        try:
+            if logmgr:
+                logmgr.tick_before()
 
-        # Leap interface here is *a bit* different.
-        for event in stepper_cls.run(t_end=t+dt):
-            if isinstance(event, stepper_cls.StateComputed):
-                state = event.state_component
-                t += dt
+            dt = get_timestep(state=state)
+            if dt < 0:
+                raise SynchronizedException(RuntimeError(f"Invalid timestep {dt}."))
 
-                if post_step_callback is not None:
-                    state = post_step_callback(state=state,
-                                               step=istep,
-                                               t=t, dt=dt)
+            if pre_step_callback is not None:
+                state = pre_step_callback(state=state,
+                                          step=istep,
+                                          t=t, dt=dt)
 
-                istep += 1
+            # Leap interface here is *a bit* different.
+            for event in stepper_cls.run(t_end=t+dt):
+                if isinstance(event, stepper_cls.StateComputed):
+                    state = event.state_component
+                    t += dt
 
-                if logmgr:
-                    set_dt(logmgr, dt)
-                    set_sim_state(logmgr, dim, state, eos)
-                    logmgr.tick_after()
+                    if post_step_callback is not None:
+                        state = post_step_callback(state=state,
+                                                   step=istep,
+                                                   t=t, dt=dt)
+
+                    istep += 1
+
+                    if logmgr:
+                        set_dt(logmgr, dt)
+                        set_sim_state(logmgr, dim, state, eos)
+                        logmgr.tick_after()
+
+        except SynchronizedException as synced_exception:
+            if exception_callback is not None:
+                state, stop = exception_callback(istep, t, state,
+                    synced_exception.exception)
+                if stop:
+                    break
+            else:
+                raise
 
     return istep, t, state
 
@@ -247,6 +290,7 @@ def advance_state(rhs, timestepper, get_timestep, state, t_final,
                   t=0.0, istep=0,
                   pre_step_callback=None,
                   post_step_callback=None,
+                  exception_callback=None,
                   logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
@@ -287,6 +331,12 @@ def advance_state(rhs, timestepper, get_timestep, state, t_final,
         An optional user-defined function, with signature:
         ``state = post_step_callback(state, step, t, dt)``,
         to be called after the timestepper is called for that particular step.
+    exception_callback
+        An optional user-defined function, with signature:
+        ``state, stop = exception_callback(step, t, state, exception)``,
+        to be called when an exception is caught. Note: only exceptions that are
+        guaranteed to be raised on all MPI ranks (i.e., those contained in a
+        :class:`mirgecom.exceptions.SynchronizedException`) will be caught.
 
     Returns
     -------
@@ -316,6 +366,7 @@ def advance_state(rhs, timestepper, get_timestep, state, t_final,
                 t=t, t_final=t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
+                exception_callback=exception_callback,
                 component_id=component_id,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim
             )
@@ -327,6 +378,7 @@ def advance_state(rhs, timestepper, get_timestep, state, t_final,
                 t=t, t_final=t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
+                exception_callback=exception_callback,
                 istep=istep,
                 logmgr=logmgr, eos=eos, dim=dim
             )

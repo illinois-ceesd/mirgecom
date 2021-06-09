@@ -29,17 +29,23 @@ THE SOFTWARE.
 """
 
 
-class SynchronizedError(Exception):
-    """Exception base class which must be globally synchronized.
-
-    .. attribute:: message
-
-        A :class:`str` describing the message for the global exception.
-    """
+class SimulationHealthError(Exception):
+    """Exception class for an unphysical simulation."""
 
     def __init__(self, message):
         super().__init__(message)
 
 
-class SimulationHealthError(SynchronizedError):
-    """Exception class for an unphysical simulation."""
+class SynchronizedException(Exception):
+    """Exception class wrapping an exception which has been globally synchronized.
+
+    .. attribute:: exception
+
+        The wrapped exception.
+    """
+
+    def __init__(self, exception):
+        super().__init__(
+            f"({exception.__class__.__module__}.{exception.__class__.__name__}) "
+            + exception.__str__())
+        self.exception = exception

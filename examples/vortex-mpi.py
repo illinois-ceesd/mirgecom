@@ -40,6 +40,8 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
+    sim_healthcheck,
+    sim_visualization,
     sim_checkpoint,
     generate_and_distribute_mesh
 )
@@ -171,22 +173,39 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                            dt=current_dt, cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
 
+    def healthcheck(step, t, state):
+        return sim_healthcheck(discr, eos, state, step=step, t=t)
+
+    def write_vis(step, t, state):
+        return sim_visualization(discr, eos, state,
+                                 visualizer, vizname=casename,
+                                 step=step, t=t,
+                                 vis_timer=vis_timer)
+
     def my_rhs(t, state):
         return euler_operator(discr, q=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
         sim_checkpoint(discr, visualizer, eos, q=state,
-                       exact_soln=initializer, vizname=casename, step=step,
-                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+                       exact_soln=initializer, step=step,
+                       t=t, dt=dt, nstatus=nstatus, healthcheck_callback=healthcheck,
+                       nviz=nviz, vis_callback=write_vis,
                        exittol=exittol, constant_cfl=constant_cfl)
         return state
+
+    def handle_exception(step, t, state, exception):
+        if rank == 0:
+            logger.info("Visualizing crashed state ...")
+        write_vis(step, t, state)
+        raise
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_checkpoint,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final,
+                      exception_callback=handle_exception,
                       logmgr=logmgr, eos=eos, dim=dim)
 
     if rank == 0:

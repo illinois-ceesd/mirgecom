@@ -1,6 +1,7 @@
 """MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
+.. autofunction:: bcast_from_lowest_rank
 """
 
 __copyright__ = """
@@ -154,3 +155,29 @@ def mpi_entry_point(func):
         func(*args, **kwargs)
 
     return wrapped_func
+
+
+def bcast_from_lowest_rank(comm, obj):
+    """
+    Synchronize an object across an MPI communicator.
+
+    Returns *obj* from the lowest rank on which it is not None. If *obj*
+    is None on all ranks, returns None.
+    """
+    if comm is not None:
+        from mpi4py import MPI
+
+        min_obj_rank = comm.Get_size()
+        if obj is not None:
+            min_obj_rank = comm.Get_rank()
+
+        min_obj_rank = comm.allreduce(min_obj_rank, MPI.MIN)
+
+        if min_obj_rank < comm.Get_size():
+            obj = comm.bcast(obj, root=min_obj_rank)
+            return obj
+        else:
+            return None
+
+    else:
+        return obj
