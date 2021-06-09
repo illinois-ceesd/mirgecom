@@ -237,7 +237,7 @@ class PrescribedInviscidBoundary(FluidBC):
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
         diff_cv = make_conserved(discr.dim, q=diffusion)
-        return self.s_boundary_flux(discr, btag, diff_cv, **kwargs).join()
+        return self.s_boundary_flux(discr, btag, grad_cv=diff_cv, **kwargs).join()
 
     def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
