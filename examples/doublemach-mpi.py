@@ -50,7 +50,7 @@ from mirgecom.simutil import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-
+from mirgecom.fluid import make_conserved
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
@@ -207,10 +207,10 @@ def main(ctx_factory=cl.create_some_context):
     def my_rhs(t, state):
         return ns_operator(
             discr, cv=state, t=t, boundaries=boundaries, eos=eos
-        ) + av_operator(
+        ) + make_conserved(dim, q=av_operator(
             discr, q=state.join(), boundaries=boundaries,
             boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
-            s0=s0, kappa=kappa
+            s0=s0, kappa=kappa)
         )
 
     def my_checkpoint(step, t, dt, state):
