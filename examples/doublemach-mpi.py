@@ -206,9 +206,9 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         return ns_operator(
-            discr, q=state, t=t, boundaries=boundaries, eos=eos
+            discr, cv=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
-            discr, q=state, boundaries=boundaries,
+            discr, q=state.join(), boundaries=boundaries,
             boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa
         )
