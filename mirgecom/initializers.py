@@ -42,8 +42,8 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-from mirgecom.fluid import split_conserved, join_conserved
 from numbers import Number
+from mirgecom.fluid import make_conserved
 
 
 def make_pulse(amp, r0, w, r):
@@ -171,7 +171,7 @@ class Vortex2D:
 
         energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return join_conserved(dim=2, mass=mass, energy=energy,
+        return make_conserved(dim=2, mass=mass, energy=energy,
                               momentum=momentum)
 
 
@@ -265,7 +265,7 @@ class SodShock1D:
             ]
         )
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
 
 
@@ -374,9 +374,10 @@ class Lump:
         mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
-    def exact_rhs(self, discr, q, time=0.0):
+    def exact_rhs(self, discr, cv, time=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
@@ -392,7 +393,7 @@ class Lump:
             Time at which RHS is desired
         """
         t = time
-        actx = q[0].array_context
+        actx = cv.array_context
         nodes = thaw(actx, discr.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
@@ -415,7 +416,7 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs)
 
 
@@ -552,10 +553,10 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, time=0.0):
+    def exact_rhs(self, discr, cv, time=0.0):
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
@@ -571,7 +572,7 @@ class MulticomponentLump:
             Time at which RHS is desired
         """
         t = time
-        actx = q[0].array_context
+        actx = cv.array_context
         nodes = thaw(actx, discr.nodes())
         loc_update = t * self._velocity
 
@@ -592,7 +593,7 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=specrhs)
 
 
@@ -644,7 +645,7 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, q, eos=None, **kwargs):
+    def __call__(self, x_vec, cv, eos=None, **kwargs):
         """
         Create the acoustic pulse at locations *x_vec*.
 
@@ -660,11 +661,10 @@ class AcousticPulse:
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        cv = split_conserved(self._dim, q)
         return cv.replace(
             energy=cv.energy + make_pulse(
                 amp=self._amp, w=self._width, r0=self._center, r=x_vec)
-            ).join()
+        )
 
 
 class Uniform:
@@ -747,10 +747,10 @@ class Uniform:
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
         species_mass = self._mass_fracs * mass
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, discr, cv, time=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
@@ -762,7 +762,7 @@ class Uniform:
         t: float
             Time at which RHS is desired (unused)
         """
-        actx = q[0].array_context
+        actx = cv.array_context
         nodes = thaw(actx, discr.nodes())
         mass = nodes[0].copy()
         mass[:] = 1.0
@@ -771,7 +771,7 @@ class Uniform:
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
         yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=yrhs)
 
 
@@ -854,7 +854,7 @@ class MixtureInitializer:
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
 
 
@@ -988,5 +988,5 @@ class PlanarDiscontinuity:
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
