@@ -31,7 +31,7 @@ THE SOFTWARE.
 """
 
 
-def lfr_flux(q_tpair, flux_func, normal, lam):
+def lfr_flux(cv_tpair, flux_func, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -72,6 +72,7 @@ def lfr_flux(q_tpair, flux_func, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    flux_avg = 0.5*(flux_func(q_tpair.int)
-                    + flux_func(q_tpair.ext))
-    return flux_avg @ normal - 0.5*lam*(q_tpair.ext - q_tpair.int)
+    flux_avg = 0.5*(flux_func(cv_tpair.int)
+                    + flux_func(cv_tpair.ext))
+    return flux_avg @ normal - 0.5*lam*(cv_tpair.ext
+                                        - cv_tpair.int)
