@@ -68,9 +68,6 @@ def test_slipwall_identity(actx_factory, dim):
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
     nhat = thaw(actx, discr.normal(BTAG_ALL))
-    #    normal_mag = actx.np.sqrt(np.dot(normal, normal))
-    #    nhat_mult = 1.0 / normal_mag
-    #    nhat = normal * make_obj_array([nhat_mult])
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -89,8 +86,6 @@ def test_slipwall_identity(actx_factory, dim):
 
             bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
                                           eos=eos, cv=uniform_state)
-            # bnd_cv_int = split_conserved(dim, bnd_pair.int)
-            # bnd_cv_ext = split_conserved(dim, bnd_pair.ext)
 
             # check that mass and energy are preserved
             mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
