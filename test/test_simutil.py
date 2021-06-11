@@ -59,15 +59,17 @@ def test_basic_cfd_healthcheck(actx_factory):
 
     # Let's make a very bad state (negative mass)
     mass = -1*ones
-    energy = zeros + 2.5
     velocity = 2 * nodes
     mom = mass * velocity
+    energy = zeros + .5*np.dot(mom, mom)/mass
 
     eos = IdealSingleGas()
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    pressure = eos.pressure(cv)
 
     from mirgecom.simutil import check_range_local
     assert check_range_local(discr, "vol", mass)
+    assert check_range_local(discr, "vol", pressure, min_value=1e-6)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
