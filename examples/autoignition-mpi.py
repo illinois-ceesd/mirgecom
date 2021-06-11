@@ -243,15 +243,17 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             if rank == 0:
                 logger.info(status_msg)
 
-        errors = 0
+        errored = False
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", dv.pressure) \
                or check_range_local(discr, "vol", dv.pressure):
-                errors = 1
+                errored = True
                 message = "Invalid pressure data found.\n"
-            errors = discr.mpi_communicator.allreduce(errors, op=MPI.SUM)
-            if errors > 0:
+            comm = discr.mpi_communicator
+            if comm is not None:
+                errored = comm.allreduce(errored, op=MPI.LOR)
+            if errored:
                 if rank == 0:
                     logger.info("Fluid solution failed health check.")
                 logger.info(message)   # do this on all ranks
