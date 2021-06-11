@@ -380,7 +380,7 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
+                                       for i in range(cv.dim)])
     grad_v = np.empty(shape=(discr.dim, discr.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_v[idx] = v
@@ -438,6 +438,5 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
     actx = cv.array_context
-
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)

@@ -116,6 +116,14 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
     return make_conserved(discr.dim, q=q)
 
 
+def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+    """Interface :function:`euler_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call inviscid_operator; it is now called euler_operator. This"
+         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
+    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
+
+
 # By default, run unitless
 NAME_TO_UNITS = {
     "mass": "",

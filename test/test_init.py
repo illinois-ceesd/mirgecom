@@ -212,6 +212,7 @@ def test_shock_init(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     initr = SodShock1D()
+
     initsoln = initr(time=0.0, x_vec=nodes)
     print("Sod Soln:", initsoln)
 
