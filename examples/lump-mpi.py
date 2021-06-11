@@ -65,7 +65,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     dim = 3
     nel_1d = 16
     order = 3
-    exittol = .09
     t_final = 0.01
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
@@ -158,30 +157,32 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             if rank == 0:
                 logger.info(status_msg)
 
-        errors = 0
+        errored = False
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", dv.pressure) \
                or check_range_local(discr, "vol", dv.pressure):
-                errors = 1
+                errored = True
                 message = "Invalid pressure data found.\n"
-            if np.max(component_errors) > exittol:
-                errors = errors + 1
-                message += "Solution errors exceed tolerance.\n"
-            errors = discr.mpi_communicator.allreduce(errors, op=MPI.SUM)
-            if errors > 0:
+            exittol = .09
+            if max(component_errors) > exittol:
+                errored = True
+                message += "Solution diverged from exact_mix.\n"
+            comm = discr.mpi_communicator
+            if comm is not None:
+                errored = comm.allreduce(errored, op=MPI.LOR)
+            if errored:
                 if rank == 0:
                     logger.info("Fluid solution failed health check.")
                 logger.info(message)   # do this on all ranks
 
-        if do_viz or errors > 0:
+        if do_viz or errored > 0:
             from mirgecom.simutil import sim_visualization
             sim_visualization(discr, io_fields, visualizer, vizname=casename,
                               step=step, t=t, overwrite=True)
 
-        if errors > 0:
-            a = 1/0
-            print(f"{a=}")
+        if errored:
+            raise RuntimeError("Error detected by user checkpoint, exiting.")
 
         return state
 

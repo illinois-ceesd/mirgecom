@@ -264,8 +264,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               step=step, t=t, overwrite=True)
 
         if errored:
-            a = 1/0
-            print(f"{a=}")
+            raise RuntimeError("Error detected by user checkpoint, exiting.")
 
         return state
 

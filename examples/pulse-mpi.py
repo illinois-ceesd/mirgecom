@@ -165,32 +165,34 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         if do_status:  # This is bad, logging already completely replaces this
             from mirgecom.io import make_status_message
             dv = eos.dependent_vars(state)
+            # this is also bad - no option for user customization, field selection
             status_msg = make_status_message(discr=discr, t=t, step=step, dt=dt,
                                              cfl=current_cfl, dependent_vars=dv)
             if rank == 0:
                 logger.info(status_msg)
 
-        errors = 0
+        errored = False
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", pressure) \
                or check_range_local(discr, "vol", pressure):
-                errors = 1
+                errored = True
                 message = "Invalid pressure data found.\n"
-            errors = discr.mpi_communicator.allreduce(errors, op=MPI.SUM)
-            if errors > 0:
+            comm = discr.mpi_communicator
+            if comm is not None:
+                errored = comm.allreduce(errored, op=MPI.LOR)
+            if errored:
                 if rank == 0:
                     logger.info("Fluid solution failed health check.")
                 logger.info(message)   # do this on all ranks
 
-        if do_viz or errors > 0:
+        if do_viz or errored:
             from mirgecom.simutil import sim_visualization
             sim_visualization(discr, io_fields, visualizer, vizname=casename,
                               step=step, t=t, overwrite=True)
 
-        if errors > 0:
-            a = 1/0
-            print(f"{a=}")
+        if errored:
+            raise RuntimeError("Error detected by user checkpoint, exiting.")
 
         return state
 
