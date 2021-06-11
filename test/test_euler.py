@@ -38,12 +38,16 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.dof_array import DOFArray, thaw
+from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import euler_operator
-from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.fluid import (
+    split_conserved,
+    join_conserved,
+    make_conserved
+)
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
@@ -126,23 +130,16 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     for i in range(nspecies):
         expected_flux[dim+2+i] = mom * mass_fractions[i]
 
+    expected_flux = split_conserved(dim, expected_flux)
+
     # }}}
 
-    flux = inviscid_flux(discr, eos, q)
+    flux = inviscid_flux(discr, eos, cv)
     flux_resid = flux - expected_flux
 
     for i in range(numeq, dim):
         for j in range(dim):
             assert (la.norm(flux_resid[i, j].get())) == 0.0
-
-
-class MyDiscr:
-    def __init__(self, dim, nnodes):
-        self.dim = dim
-        self.nnodes = nnodes
-
-    def zeros(self, actx, dtype=np.float64):
-        return DOFArray(actx, (actx.zeros((1, self.nnodes), dtype=dtype),))
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -165,6 +162,18 @@ def test_inviscid_flux_components(actx_factory, dim):
 
     p0 = 1.0
 
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 3
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    eos = IdealSingleGas()
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
     # === this next block tests 1,2,3 dimensions,
     # with single and multiple nodes/states. The
     # purpose of this block is to ensure that when
@@ -172,37 +181,24 @@ def test_inviscid_flux_components(actx_factory, dim):
     # the expected values (and p0 within tolerance)
     # === with V = 0, fixed P = p0
     tolerance = 1e-15
-    for ntestnodes in [1, 10]:
-        discr = MyDiscr(dim, ntestnodes)
-        mass = discr.zeros(actx)
-        mass_values = np.empty((1, ntestnodes), dtype=np.float64)
-        mass_values[0] = np.linspace(1., ntestnodes, ntestnodes, dtype=np.float64)
-        mass[0].set(mass_values)
-        mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
-        p = discr.zeros(actx) + p0
-        energy = p / 0.4 + 0.5 * np.dot(mom, mom) / mass
-        q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-        cv = split_conserved(dim, q)
-        p = eos.pressure(cv)
-        flux = inviscid_flux(discr, eos, q)
+    nodes = thaw(actx, discr.nodes())
+    mass = discr.zeros(actx) + np.dot(nodes, nodes) + 1.0
+    mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
+    p_exact = discr.zeros(actx) + p0
+    energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    p = eos.pressure(cv)
+    flux = inviscid_flux(discr, eos, cv)
+    assert discr.norm(p - p_exact, np.inf) < tolerance
+    logger.info(f"{dim}d flux = {flux}")
 
-        logger.info(f"{dim}d flux = {flux}")
+    # for velocity zero, these components should be == zero
+    assert discr.norm(flux.mass, 2) == 0.0
+    assert discr.norm(flux.energy, 2) == 0.0
 
-        # for velocity zero, these components should be == zero
-        for i in range(2):
-            for j in range(dim):
-                assert (flux[i, j][0].get() == 0.0).all()
-
-        # The momentum diagonal should be p
-        # Off-diagonal should be identically 0
-        for i in range(dim):
-            for j in range(dim):
-                print(f"(i,j) = ({i},{j})")
-                if i != j:
-                    assert (flux[2 + i, j][0].get() == 0.0).all()
-                else:
-                    assert (flux[2 + i, j] == p)[0].get().all()
-                    assert (np.abs(flux[2 + i, j][0].get() - p0) < tolerance).all()
+    # The momentum diagonal should be p
+    # Off-diagonal should be identically 0
+    assert discr.norm(flux.momentum - p0*np.identity(dim), np.inf) < tolerance
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -225,75 +221,42 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 
     p0 = 1.0
 
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 3
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+
     tolerance = 1e-15
     for livedim in range(dim):
-        for ntestnodes in [1, 10]:
-            discr = MyDiscr(dim, ntestnodes)
-            mass = discr.zeros(actx)
-            mass_values = np.empty((1, ntestnodes), dtype=np.float64)
-            mass_values[0] = np.linspace(1., ntestnodes, ntestnodes,
-                        dtype=np.float64)
-            mass[0].set(mass_values)
-            mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
-            mom[livedim] = mass
-            p = discr.zeros(actx) + p0
-            energy = (
-                p / (eos.gamma() - 1.0)
-                + 0.5 * np.dot(mom, mom) / mass
-            )
-            q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-            cv = split_conserved(dim, q)
-            p = eos.pressure(cv)
+        mass = discr.zeros(actx) + 1.0 + np.dot(nodes, nodes)
+        mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
+        mom[livedim] = mass
+        p_exact = discr.zeros(actx) + p0
+        energy = (
+            p_exact / (eos.gamma() - 1.0)
+            + 0.5 * np.dot(mom, mom) / mass
+        )
+        cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+        p = eos.pressure(cv)
+        assert discr.norm(p - p_exact, np.inf) < tolerance
+        flux = inviscid_flux(discr, eos, cv)
+        logger.info(f"{dim}d flux = {flux}")
+        vel_exact = mom / mass
 
-            flux = inviscid_flux(discr, eos, q)
+        # first two components should be nonzero in livedim only
+        assert discr.norm(flux.mass - mom, np.inf) == 0
+        eflux_exact = (energy + p_exact)*vel_exact
+        assert discr.norm(flux.energy - eflux_exact, np.inf) == 0
 
-            logger.info(f"{dim}d flux = {flux}")
-
-            # first two components should be nonzero in livedim only
-            expected_flux = mom
-            logger.info("Testing continuity")
-            for i in range(dim):
-                assert la.norm((flux[0, i] - expected_flux[i])[0].get()) == 0.0
-                if i != livedim:
-                    assert la.norm(flux[0, i][0].get()) == 0.0
-                else:
-                    assert la.norm(flux[0, i][0].get()) > 0.0
-
-            logger.info("Testing energy")
-            expected_flux = mom * (energy + p) / mass
-            for i in range(dim):
-                assert la.norm((flux[1, i] - expected_flux[i])[0].get()) == 0.0
-                if i != livedim:
-                    assert la.norm(flux[1, i][0].get()) == 0.0
-                else:
-                    assert la.norm(flux[1, i][0].get()) > 0.0
-
-            logger.info("Testing momentum")
-            xpmomflux = make_obj_array(
-                [
-                    (mom[i] * mom[j] / mass + (p if i == j else 0))
-                    for i in range(dim)
-                    for j in range(dim)
-                ]
-            )
-
-            for i in range(dim):
-                expected_flux = xpmomflux[i * dim: (i + 1) * dim]
-                for j in range(dim):
-                    assert la.norm((flux[2+i, j] - expected_flux[j])[0].get()) == 0
-                    if i == j:
-                        if i == livedim:
-                            assert (
-                                la.norm(flux[2+i, j][0].get())
-                                > 0.0
-                            )
-                        else:
-                            # just for sanity - make sure the flux recovered the
-                            # prescribed value of p0 (within fp tol)
-                            assert (np.abs(flux[2 + i, j][0].get() - p0)
-                                < tolerance).all()
-                    else:
-                        assert la.norm(flux[2+i, j][0].get()) == 0.0
+        logger.info("Testing momentum")
+        xpmomflux = mass*np.outer(vel_exact, vel_exact) + p_exact*np.identity(dim)
+        assert discr.norm(flux.momentum - xpmomflux, np.inf) < tolerance
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
@@ -340,14 +303,15 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         )
         species_mass_input = mass_input * mass_frac_input
 
-        fields = join_conserved(
+        cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
         from mirgecom.euler import _facial_flux
 
+        # Check the boundary facial fluxes as called on an interior boundary
         interior_face_flux = _facial_flux(
-            discr, eos=IdealSingleGas(), q_tpair=interior_trace_pair(discr, fields))
+            discr, eos=IdealSingleGas(), cv_tpair=interior_trace_pair(discr, cv))
 
         def inf_norm(data):
             if len(data) > 0:
@@ -355,10 +319,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             else:
                 return 0.0
 
-        iff_split = split_conserved(dim, interior_face_flux)
-        assert inf_norm(iff_split.mass) < tolerance
-        assert inf_norm(iff_split.energy) < tolerance
-        assert inf_norm(iff_split.species_mass) < tolerance
+        # iff_split = split_conserved(dim, interior_face_flux)
+        assert inf_norm(interior_face_flux.mass) < tolerance
+        assert inf_norm(interior_face_flux.energy) < tolerance
+        assert inf_norm(interior_face_flux.species_mass) < tolerance
 
         # The expected pressure is 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
@@ -371,40 +335,37 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        # generate the exact answer: just p0*nhat for the given boundary
         nhat = thaw(actx, discr.normal("int_faces"))
         mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
-
-        momerr = inf_norm(iff_split.momentum - mom_flux_exact)
+        print(f"{mom_flux_exact=}")
+        print(f"{interior_face_flux.momentum=}")
+        momerr = inf_norm(interior_face_flux.momentum - mom_flux_exact)
         assert momerr < tolerance
-
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
-        # Check the boundary facial fluxes as called on a boundary
+        # Check the boundary facial fluxes as called on a domain boundary
         dir_mass = discr.project("vol", BTAG_ALL, mass_input)
         dir_e = discr.project("vol", BTAG_ALL, energy_input)
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
-        dir_bval = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                  species_mass=dir_mf)
-        dir_bc = join_conserved(dim, mass=dir_mass, energy=dir_e, momentum=dir_mom,
-                                species_mass=dir_mf)
+
+        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
+                                  momentum=dir_mom, species_mass=dir_mf)
+        dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
+                                momentum=dir_mom, species_mass=dir_mf)
 
         boundary_flux = _facial_flux(
             discr, eos=IdealSingleGas(),
-            q_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
+            cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
         )
 
-        bf_split = split_conserved(dim, boundary_flux)
-        assert inf_norm(bf_split.mass) < tolerance
-        assert inf_norm(bf_split.energy) < tolerance
-        assert inf_norm(bf_split.species_mass) < tolerance
+        assert inf_norm(boundary_flux.mass) < tolerance
+        assert inf_norm(boundary_flux.energy) < tolerance
+        assert inf_norm(boundary_flux.species_mass) < tolerance
 
-        # generate the exact answer: just p0*nhat for the given boundary
         nhat = thaw(actx, discr.normal(BTAG_ALL))
         mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
-
-        momerr = inf_norm(bf_split.momentum - mom_flux_exact)
+        momerr = inf_norm(boundary_flux.momentum - mom_flux_exact)
         assert momerr < tolerance
 
         eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
@@ -463,31 +424,31 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             [ones / ((i + 1) * 10) for i in range(nspecies)]
         )
         species_mass_input = mass_input * mass_frac_input
+        num_equations = dim + 2 + len(species_mass_input)
 
-        fields = join_conserved(
+        cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        expected_rhs = make_obj_array(
-            [discr.zeros(actx) for i in range(len(fields))]
+        expected_rhs = split_conserved(
+            dim, make_obj_array([discr.zeros(actx)
+                                 for i in range(num_equations)])
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, q=fields, t=0.0)
+                                      boundaries=boundaries, cv=cv, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
-        resid_split = split_conserved(dim, rhs_resid)
-        rho_resid = resid_split.mass
-        rhoe_resid = resid_split.energy
-        mom_resid = resid_split.momentum
-        rhoy_resid = resid_split.species_mass
+        rho_resid = rhs_resid.mass
+        rhoe_resid = rhs_resid.energy
+        mom_resid = rhs_resid.momentum
+        rhoy_resid = rhs_resid.species_mass
 
-        rhs_split = split_conserved(dim, inviscid_rhs)
-        rho_rhs = rhs_split.mass
-        rhoe_rhs = rhs_split.energy
-        rhov_rhs = rhs_split.momentum
-        rhoy_rhs = rhs_split.species_mass
+        rho_rhs = inviscid_rhs.mass
+        rhoe_rhs = inviscid_rhs.energy
+        rhov_rhs = inviscid_rhs.momentum
+        rhoy_rhs = inviscid_rhs.species_mass
 
         logger.info(
             f"rho_rhs  = {rho_rhs}\n"
@@ -510,20 +471,19 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         for i in range(len(mom_input)):
             mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
-        fields = join_conserved(
+        cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, q=fields, t=0.0)
+                                      boundaries=boundaries, cv=cv, t=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
-        resid_split = split_conserved(dim, rhs_resid)
-        rho_resid = resid_split.mass
-        rhoe_resid = resid_split.energy
-        mom_resid = resid_split.momentum
-        rhoy_resid = resid_split.species_mass
+        rho_resid = rhs_resid.mass
+        rhoe_resid = rhs_resid.energy
+        mom_resid = rhs_resid.momentum
+        rhoy_resid = rhs_resid.species_mass
 
         assert discr.norm(rho_resid, np.inf) < tolerance
         assert discr.norm(rhoe_resid, np.inf) < tolerance
@@ -586,9 +546,9 @@ def test_vortex_rhs(actx_factory, order):
 
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
-            q=vortex_soln, t=0.0)
+            cv=vortex_soln, t=0.0)
 
-        err_max = discr.norm(inviscid_rhs, np.inf)
+        err_max = discr.norm(inviscid_rhs.join(), np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -639,10 +599,10 @@ def test_lump_rhs(actx_factory, dim, order):
         lump_soln = lump(nodes)
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
+        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, t=0)
 
-        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
+        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -707,11 +667,11 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, q=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, lump_soln, 0)
+            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
+        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, t=0)
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
-        err_max = discr.norm(inviscid_rhs-expected_rhs, np.inf)
+        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -759,8 +719,9 @@ def _euler_flow_stepper(actx, parameters):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-    fields = initializer(nodes)
-    sdt = cfl * get_inviscid_timestep(discr, eos=eos, q=fields)
+
+    cv = initializer(nodes)
+    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -773,13 +734,12 @@ def _euler_flow_stepper(actx, parameters):
         f"EOS:             {eosname}"
     )
 
-    vis = make_visualizer(discr, order + 3 if dim == 2 else order)
+    vis = make_visualizer(discr, order)
 
-    def write_soln(write_status=True):
-        cv = split_conserved(dim, fields)
-        dv = eos.dependent_vars(cv)
+    def write_soln(state, write_status=True):
+        dv = eos.dependent_vars(cv=state)
         expected_result = initializer(nodes, t=t)
-        result_resid = fields - expected_result
+        result_resid = (state - expected_result).join()
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -794,7 +754,7 @@ def _euler_flow_stepper(actx, parameters):
             )
             logger.info(statusmsg)
 
-        io_fields = ["cv", split_conserved(dim, fields)]
+        io_fields = ["cv", state]
         io_fields += eos.split_fields(dim, dv)
         io_fields.append(("exact_soln", expected_result))
         io_fields.append(("residual", result_resid))
@@ -805,7 +765,7 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return euler_operator(discr, eos=eos, boundaries=boundaries, q=q, t=t)
+        return euler_operator(discr, eos=eos, boundaries=boundaries, cv=q, t=t)
 
     filter_order = 8
     eta = .5
@@ -831,23 +791,24 @@ def _euler_flow_stepper(actx, parameters):
 
         if nstepstatus > 0:
             if istep % nstepstatus == 0:
-                write_soln()
+                write_soln(state=cv)
 
-        fields = rk4_step(fields, t, dt, rhs)
-        fields = filter_modally(discr, "vol", cutoff,
-                                frfunc, fields)
+        cv = rk4_step(cv, t, dt, rhs)
+        cv = split_conserved(
+            dim, filter_modally(discr, "vol", cutoff, frfunc, cv.join())
+        )
 
         t += dt
         istep += 1
 
-        sdt = cfl * get_inviscid_timestep(discr, eos=eos, q=fields)
+        sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
-        maxerr = max(write_soln(False))
+        maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, t=t)
-        maxerr = discr.norm(fields - expected_result, np.inf)
+        maxerr = discr.norm((cv - expected_result).join(), np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
