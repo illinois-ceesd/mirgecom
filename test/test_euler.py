@@ -348,8 +348,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
         dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                 momentum=dir_mom, species_mass=dir_mf)
-        dir_bval =  make_conserved(dim, mass=dir_mass, energy=dir_e,
-                                momentum=dir_mom, species_mass=dir_mf)
+        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
+                                  momentum=dir_mom, species_mass=dir_mf)
         boundary_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(),
             cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
