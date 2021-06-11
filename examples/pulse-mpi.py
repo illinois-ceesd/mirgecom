@@ -40,7 +40,6 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    sim_checkpoint,
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
@@ -71,8 +70,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     dim = 2
     nel_1d = 16
     order = 1
-    exittol = 2e-2
-    exittol = 100.0
     t_final = 0.1
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
@@ -127,7 +124,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
-    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
+    current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     visualizer = make_visualizer(discr)
 
@@ -148,14 +145,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
+        return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        sim_checkpoint(discr, visualizer, eos, q=state,
-                       exact_soln=initializer, vizname=casename, step=step,
-                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                       exittol=exittol, constant_cfl=constant_cfl)
         return state
 
     current_step, current_t, current_state = \

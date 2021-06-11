@@ -10,8 +10,6 @@ Diagnostic callbacks
 --------------------
 
 .. autofunction:: sim_visualization
-.. autofunction:: sim_checkpoint
-.. autofunction:: sim_healthcheck
 .. autofunction:: compare_with_analytic_solution
 
 Mesh utilities
@@ -50,7 +48,6 @@ import numpy as np
 # from meshmode.dof_array import thaw
 # from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
-from mirgecom.exceptions import SimulationHealthError
 import grudge.op as op
 
 logger = logging.getLogger(__name__)
@@ -82,7 +79,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     """Return the maximum stable dt."""
     mydt = dt
     if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
+        mydt = get_inviscid_timestep(discr=discr, cv=state,
                                      cfl=cfl, eos=eos)
     if (t + mydt) > t_final:
         mydt = t_final - t
@@ -106,19 +103,6 @@ def sim_visualization(discr, io_fields, visualizer, vizname,
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    # io_fields = [
-    #     ("cv", cv),
-    #     ("dv", dependent_vars)
-    # ]
-    # if exact_soln is not None:
-    #     exact_list = [
-    #         ("exact_soln", exact_soln),
-    #     ]
-    #     io_fields.extend(exact_list)
-
-    # if viz_fields is not None:
-    #     io_fields.extend(viz_fields)
-
     comm = discr.mpi_communicator
     rank = 0
     if comm is not None:
@@ -141,97 +125,12 @@ def sim_visualization(discr, io_fields, visualizer, vizname,
         )
 
 
-# def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
-#                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-#                   constant_cfl=False, viz_fields=None, overwrite=False,
-#                    vis_timer=None):
-#    """Checkpoint the simulation status.
-#
-#    Checkpoints the simulation status by reporting relevant diagnostic
-#     quantities, such as pressure/temperature, and visualization.
-#
-#     Parameters
-#     ----------
-#    eos: mirgecom.eos.GasEOS
-#        Implementing the pressure and temperature functions for
-#         returning pressure and temperature as a function of the state *q*.
-#     q
-#         State array which expects at least the conserved quantities
-#         (mass, energy, momentum) for the fluid at each point. For multi-component
-#         fluids, the conserved quantities should include
-#         (mass, energy, momentum, species_mass), where *species_mass* is a vector
-#         of species masses.
-#     nstatus: int
-#         An integer denoting the step frequency for performing status checks.
-#     nviz: int
-#         An integer denoting the step frequency for writing vtk output.
-#     """
-#     exception = None
-#     comm = discr.mpi_communicator
-#     rank = 0
-#     if comm is not None:
-#         rank = comm.Get_rank()
-#
-#     try:
-#         # Status checks
-#         if check_step(step=step, interval=nstatus):
-#            from mirgecom.fluid import split_conserved
-#
-#             #        if constant_cfl is False:
-#             #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-#             #                                           eos=eos, dt=dt)
-#
-#             cv = split_conserved(discr.dim, q)
-#             dependent_vars = eos.dependent_vars(cv)
-#             msg = make_status_message(discr=discr,
-#  #                                    t=t, step=step, dt=dt, cfl=cfl,
-#                                    dependent_vars=dependent_vars)
-#             if rank == 0:
-#                 logger.info(msg)
-#
-#             # Check the health of the simulation
-#             sim_healthcheck(discr, eos, q, step=step, t=t)
-#
-#             # Compare with exact solution, if provided
-#             if exact_soln is not None:
-#                 compare_with_analytic_solution(
-#                     discr, eos, q, exact_soln,
-#                     step=step, t=t, exittol=exittol
-#                 )
-#
-#         # Visualization
-#         if check_step(step=step, interval=nviz):
-#             sim_visualization(
-#                 discr, eos, q, visualizer, vizname,
-#                step=step, t=t,
-#                 exact_soln=exact_soln, viz_fields=viz_fields,
-#                 overwrite=overwrite, vis_timer=vis_timer
-#             )
-#     except SynchronizedError as err:
-#         exception = err
-#
-#     terminate = True if exception is not None else False
-#
-#     if comm is not None:
-#         from mpi4py import MPI
-#
-#        terminate = comm.allreduce(terminate, MPI.LOR)
-#
-#     if terminate:
-#        if rank == 0:
-#            logger.info("Visualizing crashed state ...")
-#
-#         # Write out crashed field
-#         sim_visualization(discr, eos, q,
-#                           visualizer, vizname=vizname,
-#                           step=step, t=t,
-#                           viz_fields=viz_fields)
-#         raise exception
-
-
-def check_negative_local(discr, dd, field):
+def check_range_local(discr, dd, field, min_value=0, max_value=np.inf):
     """Check for any negative values."""
-    return op.nodal_min_loc(discr, dd, field) < 0
+    return (
+        op.nodal_min_local(discr, dd, field) < min_value
+        or op.nodal_max_local(discr, dd, field) > max_value
+    )
 
 
 def check_naninf_local(discr, dd, field):
@@ -240,88 +139,10 @@ def check_naninf_local(discr, dd, field):
     return np.isnan(s) or (s == np.inf)
 
 
-def sim_healthcheck(discr, eos, cv):
-    """Check the global health of the fluids state.
-
-    Determine the health of a state by inspecting for unphyiscal
-    values of pressure and temperature.
-
-    Parameters
-    ----------
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state.
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        The fluid conserved variables
-    """
-    # NOTE: Derived quantities are functions of the conserved variables.
-    # Therefore is it sufficient to check for unphysical values of
-    # pressure.  Temperature is not needed.
-    from mpi4py import MPI
-    errors = 0
-    pressure = eos.pressure(cv)
-    if check_naninf_local(discr, "vol", pressure) \
-       or check_negative_local(discr, "vol", pressure):
-        errors = 1
-        message = "Invalid data found in dependent variables."
-    if discr.mpi_communicator.allreduce(errors, op=MPI.SUM) > 0:
-        raise SimulationHealthError(message=message)
-
-
 def compare_fluid_solutions(discr, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component."""
     resid = red_state - blue_state
     return [discr.norm(v, np.inf) for v in resid.join()]
-
-
-# def compare_with_analytic_solution(discr, eos, state, exact_soln,
-#                                    step=0, t=0, exittol=None):
-#     """Compute the infinite norm of the problem residual.
-#
-#     Computes the infinite norm of the residual with respect to a specified
-#     exact solution *exact_soln*. If the error is larger than *exittol*,
-#     raises a :class:`mirgecom.exceptions.SimulationHealthError`.
-#
-#     Parameters
-#     ----------
-#     eos: mirgecom.eos.GasEOS
-#         Implementing the pressure and temperature functions for
-#        returning pressure and temperature as a function of the state.
-#     state: :class:`ConservedVars`
-#         Fluid solution
-#     exact_soln:
-#         A callable for the exact solution with signature:
-#         ``exact_soln(x_vec, eos, t)`` where `x_vec` are the nodes,
-#         `t` is time, and `eos` is a :class:`mirgecom.eos.GasEOS`.
-#     """
-#     if exittol is None:
-#         exittol = 1e-16
-
-#    actx = discr._setup_actx
-#     nodes = thaw(actx, discr.nodes())
-#     expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-#     exp_resid = state - expected_state
-#     norms = [discr.norm(v, np.inf) for v in exp_resid]
-
-#     comm = discr.mpi_communicator
-#     rank = 0
-#     if comm is not None:
-#         rank = comm.Get_rank()
-
-#     statusmesg = (
-#         f"Errors: {step=} {t=}\n"
-#         f"------- errors = "
-#         + ", ".join("%.3g" % err_norm for err_norm in norms)
-#     )
-
-#     if rank == 0:
-#         logger.info(statusmesg)
-
-#     if max(norms) > exittol:
-#         raise SimulationHealthError(
-#             message=("Simulation exited abnormally; "
-#                         "solution doesn't agree with analytic result.")
-#        )
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

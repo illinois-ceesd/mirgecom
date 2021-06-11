@@ -39,11 +39,9 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    sim_checkpoint,
     check_step,
     generate_and_distribute_mesh
 )
-from mirgecom.fluid import split_conserved
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -182,15 +180,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     # Inspection at physics debugging time
     if debug:
-        cv = split_conserved(dim, current_state)
         print("Initial MIRGE-Com state:")
-        print(f"{cv.mass=}")
-        print(f"{cv.energy=}")
-        print(f"{cv.momentum=}")
-        print(f"{cv.species_mass=}")
-        print(f"Initial Y: {cv.species_mass / cv.mass}")
-        print(f"Initial DV pressure: {eos.pressure(cv)}")
-        print(f"Initial DV temperature: {eos.temperature(cv)}")
+        print(f"{current_state=}")
+        print(f"Initial DV pressure: {eos.pressure(current_state)}")
+        print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -223,28 +216,20 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        cv = split_conserved(dim=dim, q=state)
-        return (euler_operator(discr, q=state, t=t,
+        return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(cv))
+                + eos.get_species_source_terms(state))
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        reaction_rates = eos.get_production_rates(cv)
+        reaction_rates = eos.get_production_rates(state)
         viz_fields = [("reaction_rates", reaction_rates)]
-        # Perform status checkpointing
-        sim_checkpoint(discr, visualizer, eos, q=state,
-                       vizname=casename, step=step,
-                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                       constant_cfl=constant_cfl,
-                       viz_fields=viz_fields)
-        return state
+        print(f"{viz_fields=}")
 
-    current_step, current_t, current_state = \
+    (current_step, current_t, current_state) = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=my_checkpoint,
+                      checkpoint=my_checkpoint,
                       get_timestep=get_timestep, state=current_state,
-                      t=current_t, t_final=t_final, eos=eos, dim=dim)
+                      t=current_t, t_final=t_final)
 
     if not check_step(current_step, nviz):  # If final step not an output step
         if rank == 0:

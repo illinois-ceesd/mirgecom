@@ -40,7 +40,6 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    sim_checkpoint,
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
@@ -172,14 +171,10 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
+        return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        sim_checkpoint(discr, visualizer, eos, q=state,
-                       exact_soln=initializer, vizname=casename, step=step,
-                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                       exittol=exittol, constant_cfl=constant_cfl)
         return state
 
     current_step, current_t, current_state = \
