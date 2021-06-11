@@ -102,6 +102,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     constant_cfl = False
     nstatus = 10
     nviz = 10
+    nhealth = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -175,14 +176,63 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        from mirgecom.simutil import check_step
+        do_status = check_step(step=step, interval=nstatus)
+        do_viz = check_step(step=step, interval=nviz)
+        do_health = check_step(step=step, interval=nhealth)
+
+        if do_status or do_viz or do_health:
+            from mirgecom.simutil import compare_fluid_solutions
+            dv = eos.dependent_vars(state)
+            vortex_exact = initializer(x_vec=nodes, eos=eos, t=t)
+            component_errors = compare_fluid_solutions(discr, state, vortex_exact)
+            resid = state - vortex_exact
+            io_fields = [
+                ("cv", state),
+                ("dv", dv),
+                ("vortex_exact", vortex_exact),
+                ("resid", resid)
+            ]
+
+        if do_status:
+            status_msg = (
+                "\n------- errors="
+                + ", ".join("%.3g" % en for en in component_errors))
+            if rank == 0:
+                logger.info(status_msg)
+
+        errors = 0
+        if do_health:
+            from mirgecom.simutil import check_naninf_local, check_range_local
+            if check_naninf_local(discr, "vol", dv.pressure) \
+               or check_range_local(discr, "vol", dv.pressure):
+                errors = 1
+                message = "Invalid pressure data found.\n"
+            if np.max(component_errors) > exittol:
+                errors = errors + 1
+                message += "Solution errors exceed tolerance.\n"
+            errors = discr.mpi_communicator.allreduce(errors, op=MPI.SUM)
+            if errors > 0:
+                if rank == 0:
+                    logger.info("Fluid solution failed health check.")
+                logger.info(message)   # do this on all ranks
+
+        if do_viz or errors > 0:
+            from mirgecom.simutil import sim_visualization
+            sim_visualization(discr, io_fields, visualizer, vizname=casename,
+                              step=step, t=t, overwrite=True)
+
+        if errors > 0:
+            a = 1/0
+            print(f"{a=}")
+
         return state
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_checkpoint,
                       get_timestep=get_timestep, state=current_state,
-                      t=current_t, t_final=t_final,
-                      logmgr=logmgr, eos=eos, dim=dim)
+                      t=current_t, t_final=t_final, eos=eos, dim=dim)
 
     if rank == 0:
         logger.info("Checkpointing final state ...")

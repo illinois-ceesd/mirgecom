@@ -80,6 +80,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     constant_cfl = False
     nstatus = 1
     nviz = 5
+    nhealth = 1
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -221,15 +222,56 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 + eos.get_species_source_terms(state))
 
     def my_checkpoint(step, t, dt, state):
-        reaction_rates = eos.get_production_rates(state)
-        viz_fields = [("reaction_rates", reaction_rates)]
-        print(f"{viz_fields=}")
+        from mirgecom.simutil import check_step
+        do_status = check_step(step=step, interval=nstatus)
+        do_viz = check_step(step=step, interval=nviz)
+        do_health = check_step(step=step, interval=nhealth)
 
-    (current_step, current_t, current_state) = \
+        if do_status or do_viz or do_health:
+            dv = eos.dependent_vars(state)
+            reaction_rates = eos.get_production_rates(state)
+            io_fields = [
+                ("cv", state),
+                ("dv", dv),
+                ("reaction_rates", reaction_rates)
+            ]
+
+        if do_status:  # This is bad, logging already completely replaces this
+            from mirgecom.io import make_status_message
+            status_msg = make_status_message(discr=discr, t=t, step=step, dt=dt,
+                                             cfl=current_cfl, dependent_vars=dv)
+            if rank == 0:
+                logger.info(status_msg)
+
+        errors = 0
+        if do_health:
+            from mirgecom.simutil import check_naninf_local, check_range_local
+            if check_naninf_local(discr, "vol", dv.pressure) \
+               or check_range_local(discr, "vol", dv.pressure):
+                errors = 1
+                message = "Invalid pressure data found.\n"
+            errors = discr.mpi_communicator.allreduce(errors, op=MPI.SUM)
+            if errors > 0:
+                if rank == 0:
+                    logger.info("Fluid solution failed health check.")
+                logger.info(message)   # do this on all ranks
+
+        if do_viz or errors > 0:
+            from mirgecom.simutil import sim_visualization
+            sim_visualization(discr, io_fields, visualizer, vizname=casename,
+                              step=step, t=t, overwrite=True)
+
+        if errors > 0:
+            a = 1/0
+            print(f"{a=}")
+
+        return state
+
+    current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      checkpoint=my_checkpoint,
+                      pre_step_callback=my_checkpoint,
                       get_timestep=get_timestep, state=current_state,
-                      t=current_t, t_final=t_final)
+                      t=current_t, t_final=t_final, eos=eos, dim=dim)
 
     if not check_step(current_step, nviz):  # If final step not an output step
         if rank == 0:

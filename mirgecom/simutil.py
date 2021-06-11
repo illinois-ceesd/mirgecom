@@ -5,12 +5,14 @@ General utilities
 
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
+.. autofunction:: sim_visualization
 
-Diagnostic callbacks
+Diagnostic utilities
 --------------------
 
-.. autofunction:: sim_visualization
-.. autofunction:: compare_with_analytic_solution
+.. autofunction:: compare_fluid_solutions
+.. autofunction:: check_naninf_local
+.. autofunction:: check_range_local
 
 Mesh utilities
 --------------
@@ -45,8 +47,6 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-# from meshmode.dof_array import thaw
-# from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 import grudge.op as op
 
@@ -128,14 +128,14 @@ def sim_visualization(discr, io_fields, visualizer, vizname,
 def check_range_local(discr, dd, field, min_value=0, max_value=np.inf):
     """Check for any negative values."""
     return (
-        op.nodal_min_local(discr, dd, field) < min_value
-        or op.nodal_max_local(discr, dd, field) > max_value
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
     )
 
 
 def check_naninf_local(discr, dd, field):
     """Check for any NANs or Infs in the field."""
-    s = op.nodal_sum_local(discr, dd, field)
+    s = op.nodal_sum_loc(discr, dd, field)
     return np.isnan(s) or (s == np.inf)
 
 

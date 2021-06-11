@@ -150,7 +150,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        from mirgecom.simutils import check_step
+        from mirgecom.simutil import check_step
         do_status = check_step(step=step, interval=nstatus)
         do_viz = check_step(step=step, interval=nviz)
         do_health = check_step(step=step, interval=nhealth)
@@ -159,7 +159,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             from mirgecom.simutil import compare_fluid_solutions
             dv = eos.dependent_vars(state)
             exact_mix = initializer(x_vec=nodes, eos=eos, t=t)
-            component_errors = compare_fluid_solutions(state, exact_mix)
+            component_errors = compare_fluid_solutions(discr, state, exact_mix)
             resid = state - exact_mix
             io_fields = [
                 ("cv", state),
@@ -170,7 +170,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
         if do_status:  # This is bad, logging already completely replaces this
             from mirgecom.io import make_status_message
-            status_msg = make_status_message(discr, t=t, step=step, dt=dt,
+            status_msg = make_status_message(discr=discr, t=t, step=step, dt=dt,
                                              cfl=current_cfl, dependent_vars=dv)
             status_msg += (
                 "\n------- errors="
@@ -178,10 +178,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             if rank == 0:
                 logger.info(status_msg)
 
+        errors = 0
         if do_health:
-            from mirgecom.simutils import check_naninf_local, check_negative_local
+            from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", dv.pressure) \
-               or check_negative_local(discr, "vol", dv.pressure):
+               or check_range_local(discr, "vol", dv.pressure):
                 errors = 1
                 message = "Invalid pressure data found.\n"
             if np.max(component_errors) > exittol:
@@ -194,7 +195,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 logger.info(message)   # do this on all ranks
 
         if do_viz or errors > 0:
-            from mirgecom.simutils import sim_visualization
+            from mirgecom.simutil import sim_visualization
             sim_visualization(discr, io_fields, visualizer, vizname=casename,
                               step=step, t=t, overwrite=True)
 
