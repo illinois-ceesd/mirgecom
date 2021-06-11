@@ -187,12 +187,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        sim_checkpoint(discr, visualizer, eos, q=state,
-                       exact_soln=initializer, step=step,
-                       t=t, dt=dt, nstatus=nstatus, healthcheck_callback=healthcheck,
-                       nviz=nviz, vis_callback=write_vis,
-                       exittol=exittol, constant_cfl=constant_cfl)
-        return state
+        return sim_checkpoint(discr, visualizer, eos, q=state,
+                              exact_soln=initializer, step=step,
+                              t=t, dt=dt, nstatus=nstatus,
+                              healthcheck_callback=healthcheck,
+                              nviz=nviz, vis_callback=write_vis,
+                              exittol=exittol, constant_cfl=constant_cfl)
 
     def handle_exception(step, t, state, exception):
         if rank == 0:

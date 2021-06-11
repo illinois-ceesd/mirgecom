@@ -101,14 +101,18 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
                 raise SynchronizedException(RuntimeError(f"Invalid timestep {dt}."))
 
             if pre_step_callback is not None:
-                state = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+                state, stop = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+                if stop:
+                    break
 
             state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
             t += dt
 
             if post_step_callback is not None:
-                state = post_step_callback(state=state, step=istep, t=t, dt=dt)
+                state, stop = post_step_callback(state=state, step=istep, t=t, dt=dt)
+                if stop:
+                    break
 
             istep += 1
 
@@ -212,9 +216,11 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
                 raise SynchronizedException(RuntimeError(f"Invalid timestep {dt}."))
 
             if pre_step_callback is not None:
-                state = pre_step_callback(state=state,
-                                          step=istep,
-                                          t=t, dt=dt)
+                state, stop = pre_step_callback(state=state,
+                                                step=istep,
+                                                t=t, dt=dt)
+                if stop:
+                    break
 
             # Leap interface here is *a bit* different.
             for event in stepper_cls.run(t_end=t+dt):
@@ -223,9 +229,11 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
                     t += dt
 
                     if post_step_callback is not None:
-                        state = post_step_callback(state=state,
-                                                   step=istep,
-                                                   t=t, dt=dt)
+                        state, stop = post_step_callback(state=state,
+                                                         step=istep,
+                                                         t=t, dt=dt)
+                        if stop:
+                            break
 
                     istep += 1
 

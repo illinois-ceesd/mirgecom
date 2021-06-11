@@ -217,6 +217,8 @@ def sim_checkpoint(discr, visualizer, eos, q, exact_soln=None,
     if check_step(step=step, interval=nviz) and vis_callback is not None:
         vis_callback(step, t, q)
 
+    return q, False
+
 
 def sim_healthcheck(discr, eos, state, step=0, t=0):
     """Check the global health of the fluids state.
