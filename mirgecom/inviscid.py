@@ -86,7 +86,8 @@ def get_inviscid_timestep(discr, eos, cv):
     from grudge.dt_utils import characteristic_lengthscales
     from mirgecom.fluid import compute_wavespeed
     return (
-        characteristic_lengthscales(discr)/compute_wavespeed(discr, eos, cv)
+        characteristic_lengthscales(cv.array_context, discr)
+        / compute_wavespeed(discr, eos, cv)
     )
 
 
