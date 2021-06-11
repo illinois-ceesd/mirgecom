@@ -33,7 +33,7 @@ from arraycontext import (  # noqa
     as pytest_generate_tests
 )
 
-from mirgecom.fluid import join_conserved
+from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import EagerDGDiscretization
@@ -65,12 +65,13 @@ def test_basic_cfd_healthcheck(actx_factory):
     mom = mass * velocity
 
     eos = IdealSingleGas()
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     from mirgecom.exceptions import SimulationHealthError
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q)
+        sim_healthcheck(discr, eos, cv)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
@@ -78,10 +79,10 @@ def test_basic_cfd_healthcheck(actx_factory):
     velocity = np.nan * nodes
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q)
+        sim_healthcheck(discr, eos, cv)
 
     # Let's make one last very bad state (inf)
     mass = 1*ones
@@ -89,10 +90,10 @@ def test_basic_cfd_healthcheck(actx_factory):
     velocity = 2 * nodes
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q)
+        sim_healthcheck(discr, eos, cv)
 
 
 def test_analytic_comparison(actx_factory):
@@ -120,9 +121,9 @@ def test_analytic_comparison(actx_factory):
     velocity = 2 * nodes
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
     from mirgecom.exceptions import SimulationHealthError
 
     with pytest.raises(SimulationHealthError):
-        compare_with_analytic_solution(discr, eos, q, Vortex2D())
+        compare_with_analytic_solution(discr, eos, cv, Vortex2D())

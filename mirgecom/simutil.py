@@ -81,14 +81,14 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     """Return the maximum stable dt."""
     mydt = dt
     if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
+        mydt = get_inviscid_timestep(discr=discr, cv=state,
                                      cfl=cfl, eos=eos)
     if (t + mydt) > t_final:
         mydt = t_final - t
     return mydt
 
 
-def sim_visualization(discr, eos, state, visualizer, vizname,
+def sim_visualization(discr, eos, cv, visualizer, vizname,
                       step=0, t=0,
                       exact_soln=None, viz_fields=None,
                       overwrite=False, vis_timer=None):
@@ -102,21 +102,16 @@ def sim_visualization(discr, eos, state, visualizer, vizname,
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state.
-    state
-        State array which expects at least the conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
+    cv: mirgecom.fluid.ConservedVars
+        a :class:`mirgecom.fluid.ConservedVars` with quantities corresponding
+        to the canonical conserved quantities.
     visualizer:
         A :class:`meshmode.discretization.visualization.Visualizer`
         VTK output object.
     """
     from contextlib import nullcontext
-    from mirgecom.fluid import split_conserved
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    cv = split_conserved(discr.dim, state)
     dependent_vars = eos.dependent_vars(cv)
 
     io_fields = [
@@ -157,7 +152,7 @@ def sim_visualization(discr, eos, state, visualizer, vizname,
         )
 
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
                    constant_cfl=False, viz_fields=None, overwrite=False,
                    vis_timer=None):
@@ -170,13 +165,10 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     ----------
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state *q*.
-    q
-        State array which expects at least the conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
+        returning pressure and temperature as a function of the state.
+    cv: mirgecom.fluid.ConservedVars
+        a :class:`mirgecom.fluid.ConservedVars` with quantities corresponding
+        to the canonical conserved quantities.
     nstatus: int
         An integer denoting the step frequency for performing status checks.
     nviz: int
@@ -191,13 +183,10 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     try:
         # Status checks
         if check_step(step=step, interval=nstatus):
-            from mirgecom.fluid import split_conserved
+            # if constant_cfl is False:
+            #     current_cfl = get_inviscid_cfl(discr=discr, q=q,
+            #                                    eos=eos, dt=dt)
 
-            #        if constant_cfl is False:
-            #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-            #                                           eos=eos, dt=dt)
-
-            cv = split_conserved(discr.dim, q)
             dependent_vars = eos.dependent_vars(cv)
             msg = make_status_message(discr=discr,
                                     t=t, step=step, dt=dt, cfl=cfl,
@@ -206,19 +195,19 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                 logger.info(msg)
 
             # Check the health of the simulation
-            sim_healthcheck(discr, eos, q, step=step, t=t)
+            sim_healthcheck(discr, eos, cv, step=step, t=t)
 
             # Compare with exact solution, if provided
             if exact_soln is not None:
                 compare_with_analytic_solution(
-                    discr, eos, q, exact_soln,
+                    discr, eos, cv, exact_soln,
                     step=step, t=t, exittol=exittol
                 )
 
         # Visualization
         if check_step(step=step, interval=nviz):
             sim_visualization(
-                discr, eos, q, visualizer, vizname,
+                discr, eos, cv, visualizer, vizname,
                 step=step, t=t,
                 exact_soln=exact_soln, viz_fields=viz_fields,
                 overwrite=overwrite, vis_timer=vis_timer
@@ -238,14 +227,14 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
             logger.info("Visualizing crashed state ...")
 
         # Write out crashed field
-        sim_visualization(discr, eos, q,
+        sim_visualization(discr, eos, cv,
                           visualizer, vizname=vizname,
                           step=step, t=t,
                           viz_fields=viz_fields)
         raise exception
 
 
-def sim_healthcheck(discr, eos, state, step=0, t=0):
+def sim_healthcheck(discr, eos, cv, step=0, t=0):
     """Check the global health of the fluids state.
 
     Determine the health of a state by inspecting for unphyiscal
@@ -256,20 +245,15 @@ def sim_healthcheck(discr, eos, state, step=0, t=0):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state.
-    state
-        State array which expects at least the conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
+    cv: mirgecom.fluid.ConservedVars
+        a :class:`mirgecom.fluid.ConservedVars` with quantities corresponding
+        to the canonical conserved quantities.
     """
-    from mirgecom.fluid import split_conserved
     import grudge.op as op
 
     # NOTE: Derived quantities are functions of the conserved variables.
     # Therefore is it sufficient to check for unphysical values of
     # temperature and pressure.
-    cv = split_conserved(discr.dim, state)
     dependent_vars = eos.dependent_vars(cv)
     pressure = dependent_vars.pressure
     temperature = dependent_vars.temperature
@@ -298,7 +282,7 @@ def sim_healthcheck(discr, eos, state, step=0, t=0):
         )
 
 
-def compare_with_analytic_solution(discr, eos, state, exact_soln,
+def compare_with_analytic_solution(discr, eos, cv, exact_soln,
                                    step=0, t=0, exittol=None):
     """Compute the infinite norm of the problem residual.
 
@@ -311,12 +295,9 @@ def compare_with_analytic_solution(discr, eos, state, exact_soln,
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state.
-    state
-        State array which expects at least the conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
+    cv: mirgecom.fluid.ConservedVars
+        a :class:`mirgecom.fluid.ConservedVars` with quantities corresponding
+        to the canonical conserved quantities.
     exact_soln:
         A callable for the exact solution with signature:
         ``exact_soln(x_vec, t, eos)`` where `x_vec` are the nodes,
@@ -325,11 +306,11 @@ def compare_with_analytic_solution(discr, eos, state, exact_soln,
     if exittol is None:
         exittol = 1e-16
 
-    actx = discr._setup_actx
+    actx = cv.array_context
     nodes = thaw(actx, discr.nodes())
     expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-    exp_resid = state - expected_state
-    norms = [discr.norm(v, np.inf) for v in exp_resid]
+    exp_resid = cv - expected_state
+    norms = [discr.norm(v, np.inf) for v in exp_resid.join()]
 
     comm = discr.mpi_communicator
     rank = 0
