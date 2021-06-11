@@ -39,7 +39,6 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    sim_checkpoint,
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
@@ -77,6 +76,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     current_t = 0
     constant_cfl = False
     nstatus = 1
+    nhealth = 1
     nviz = 1
     rank = 0
     checkpoint_t = current_t
@@ -150,10 +150,58 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        sim_checkpoint(discr, visualizer, eos, q=state,
-                       exact_soln=initializer, vizname=casename, step=step,
-                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                       exittol=exittol, constant_cfl=constant_cfl)
+        from mirgecom.simutils import check_step
+        do_status = check_step(step=step, interval=nstatus)
+        do_viz = check_step(step=step, interval=nviz)
+        do_health = check_step(step=step, interval=nhealth)
+
+        if do_status or do_viz or do_health:
+            from mirgecom.simutil import compare_fluid_solutions
+            dv = eos.dependent_vars(state)
+            exact_mix = initializer(x_vec=nodes, eos=eos, t=t)
+            component_errors = compare_fluid_solutions(state, exact_mix)
+            resid = state - exact_mix
+            io_fields = [
+                ("cv", state),
+                ("dv", dv),
+                ("exact_mix", exact_mix),
+                ("resid", resid)
+            ]
+
+        if do_status:  # This is bad, logging already completely replaces this
+            from mirgecom.io import make_status_message
+            status_msg = make_status_message(discr, t=t, step=step, dt=dt,
+                                             cfl=current_cfl, dependent_vars=dv)
+            status_msg += (
+                "\n------- errors="
+                + ", ".join("%.3g" % en for en in component_errors))
+            if rank == 0:
+                logger.info(status_msg)
+
+        if do_health:
+            from mirgecom.simutils import check_naninf_local, check_negative_local
+            if check_naninf_local(discr, "vol", dv.pressure) \
+               or check_negative_local(discr, "vol", dv.pressure):
+                errors = 1
+                message = "Invalid pressure data found.\n"
+            if np.max(component_errors) > exittol:
+                errors = errors + 1
+                message += "Solution errors exceed tolerance.\n"
+            errors = discr.mpi_communicator.allreduce(errors, op=MPI.SUM)
+            if errors > 0:
+                if rank == 0:
+                    logger.info("Fluid solution failed health check.")
+                logger.info(message)   # do this on all ranks
+
+        if do_viz or errors > 0:
+            from mirgecom.simutils import sim_visualization
+            sim_visualization(discr, io_fields, visualizer, vizname=casename,
+                              step=step, t=t, overwrite=True)
+
+        if errors > 0:
+            a = 1/0
+            print(f"{a=}")
+
         return state
 
     current_step, current_t, current_state = \
