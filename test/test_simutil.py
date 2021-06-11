@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import pytest
+import pytest  # noqa
 
 from arraycontext import (  # noqa
     thaw,
@@ -33,15 +33,14 @@ from arraycontext import (  # noqa
     as pytest_generate_tests
 )
 
-from mirgecom.fluid import join_conserved
+from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import EagerDGDiscretization
 
 
 def test_basic_cfd_healthcheck(actx_factory):
-    from mirgecom.simutil import sim_healthcheck
-
+    """Quick test of some health checking utilities."""
     actx = actx_factory()
     nel_1d = 4
     dim = 2
@@ -65,12 +64,10 @@ def test_basic_cfd_healthcheck(actx_factory):
     mom = mass * velocity
 
     eos = IdealSingleGas()
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
 
-    from mirgecom.exceptions import SimulationHealthError
-
-    with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q)
+    from mirgecom.simutil import check_range_local
+    assert check_range_local(discr, "vol", mass)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
@@ -78,10 +75,11 @@ def test_basic_cfd_healthcheck(actx_factory):
     velocity = np.nan * nodes
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    pressure = eos.pressure(cv)
 
-    with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q)
+    from mirgecom.simutil import check_naninf_local
+    assert check_naninf_local(discr, "vol", pressure)
 
     # Let's make one last very bad state (inf)
     mass = 1*ones
@@ -89,15 +87,24 @@ def test_basic_cfd_healthcheck(actx_factory):
     velocity = 2 * nodes
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    pressure = eos.pressure(cv)
 
-    with pytest.raises(SimulationHealthError):
-        sim_healthcheck(discr, eos, q)
+    assert check_naninf_local(discr, "vol", pressure)
+
+    # What the hey, test a good one
+    energy = 2.5 + .5*np.dot(mom, mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    pressure = eos.pressure(cv)
+
+    assert not check_naninf_local(discr, "vol", pressure)
+    assert not check_range_local(discr, "vol", pressure)
 
 
 def test_analytic_comparison(actx_factory):
+    """Quick test of state comparison routine."""
     from mirgecom.initializers import Vortex2D
-    from mirgecom.simutil import compare_with_analytic_solution
+    from mirgecom.simutil import compare_fluid_solutions
 
     actx = actx_factory()
     nel_1d = 4
@@ -114,15 +121,19 @@ def test_analytic_comparison(actx_factory):
     nodes = thaw(discr.nodes(), actx)
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
-    eos = IdealSingleGas()
     mass = ones
     energy = ones
     velocity = 2 * nodes
     mom = mass * velocity
+    vortex_init = Vortex2D()
+    vortex_soln = vortex_init(x_vec=nodes, eos=IdealSingleGas())
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    resid = vortex_soln - cv
+    expected_errors = [discr.norm(v, np.inf) for v in resid.join()]
 
-    from mirgecom.exceptions import SimulationHealthError
+    errors = compare_fluid_solutions(discr, cv, cv)
+    assert max(errors) == 0
 
-    with pytest.raises(SimulationHealthError):
-        compare_with_analytic_solution(discr, eos, q, Vortex2D())
+    errors = compare_fluid_solutions(discr, cv, vortex_soln)
+    assert errors == expected_errors
