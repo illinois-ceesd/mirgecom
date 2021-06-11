@@ -380,7 +380,7 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
+                                       for i in range(cv.dim)])
     grad_v = np.empty(shape=(discr.dim, discr.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_v[idx] = v

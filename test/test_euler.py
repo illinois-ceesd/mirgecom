@@ -346,12 +346,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_e = discr.project("vol", BTAG_ALL, energy_input)
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
-
-        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
-                                  momentum=dir_mom, species_mass=dir_mf)
         dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                 momentum=dir_mom, species_mass=dir_mf)
-
+        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
+                                  momentum=dir_mom, species_mass=dir_mf)
         boundary_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(),
             cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
@@ -675,6 +673,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
+
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
         err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
@@ -799,6 +798,7 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
+
         cv = make_conserved(
             dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
         )
