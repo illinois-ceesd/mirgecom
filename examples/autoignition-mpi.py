@@ -243,28 +243,24 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             if rank == 0:
                 logger.info(status_msg)
 
-        errored = False
+        exception = None
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
-            if check_naninf_local(discr, "vol", dv.pressure) \
-               or check_range_local(discr, "vol", dv.pressure):
-                errored = True
-                message = "Invalid pressure data found.\n"
-            comm = discr.mpi_communicator
-            if comm is not None:
-                errored = comm.allreduce(errored, op=MPI.LOR)
-            if errored:
-                if rank == 0:
-                    logger.info("Fluid solution failed health check.")
-                logger.info(message)   # do this on all ranks
+            from mirgecom.exceptions import SimulationHealthError
+            if check_naninf_local(discr, "vol", dv.pressure):
+                exception = SimulationHealthError("NaNs detected in pressure.")
+            elif check_range_local(discr, "vol", dv.pressure):
+                exception = SimulationHealthError("Pressure out of expected range.")
+            from mirgecom.mpi import bcast_from_lowest_rank
+            exception = bcast_from_lowest_rank(discr.mpi_communicator, exception)
 
-        if do_viz or errored:
+        if do_viz or exception is not None:
             from mirgecom.simutil import sim_visualization
             sim_visualization(discr, io_fields, visualizer, vizname=casename,
                               step=step, t=t, overwrite=True)
 
-        if errored:
-            raise RuntimeError("Error detected by user checkpoint, exiting.")
+        if exception is not None:
+            raise exception
 
         return state
 
