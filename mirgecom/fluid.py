@@ -381,10 +381,13 @@ def velocity_gradient(discr, cv, grad_cv):
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
                                        for i in range(discr.dim)])
-    grad_v = np.empty(shape=(discr.dim, discr.dim), dtype=object)
+    grad_v = np.empty(shape=(discr.dim, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_v[idx] = v
     return grad_v
+=======
+                                       for i in range(cv.dim)])
+>>>>>>> main
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):

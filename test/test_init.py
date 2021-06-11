@@ -259,7 +259,7 @@ def test_uniform(ctx_factory, dim):
     assert discr.norm(initsoln.mass - 1.0, np.inf) < tol
     assert discr.norm(initsoln.energy - 2.5, np.inf) < tol
 
-    print(f"Uniform Soln:{initsoln}")
+    print(f"Uniform Soln:{cv}")
     eos = IdealSingleGas()
     p = eos.pressure(initsoln)
     print(f"Press:{p}")

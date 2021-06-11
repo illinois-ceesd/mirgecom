@@ -138,7 +138,7 @@ def lfr_flux(cv_tpair, f_tpair, normal, lam):
 
     Parameters
     ----------
-    q_tpair: :class:`grudge.trace_pair.TracePair`
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 

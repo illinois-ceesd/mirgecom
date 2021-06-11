@@ -756,9 +756,8 @@ class Uniform:
 
         Parameters
         ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point. (unused)
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
         t: float
             Time at which RHS is desired (unused)
         """
@@ -989,4 +988,6 @@ class PlanarDiscontinuity:
         energy = mass * (internal_energy + kinetic_energy)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
+=======
+>>>>>>> main
                               momentum=mom, species_mass=specmass)

@@ -113,6 +113,8 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
 
     return flux_weak
+=======
+>>>>>>> main
 
 
 def get_inviscid_timestep(discr, eos, cfl, cv):
