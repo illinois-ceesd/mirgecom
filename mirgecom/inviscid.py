@@ -113,8 +113,6 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
 
     return flux_weak
-=======
->>>>>>> main
 
 
 def get_inviscid_timestep(discr, eos, cfl, cv):
@@ -132,12 +130,6 @@ def get_inviscid_timestep(discr, eos, cfl, cv):
     # This roughly reproduces the timestep AK used in wave toy
     dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
     return cfl * dt
-
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = compute_wavespeed(w,eos=eos)
-#    max_v = clmath.max(wavespeeds)
-#    return c*dt_ngf*dt_gf/max_v
 
 
 def get_inviscid_cfl(discr, eos, dt, cv):

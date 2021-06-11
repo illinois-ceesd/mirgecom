@@ -51,7 +51,6 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import inviscid_facial_flux
-from mirgecom.fluid import make_conserved
 
 from abc import ABCMeta, abstractmethod
 
@@ -632,11 +631,3 @@ class PrescribedViscousBoundary(FluidBC):
             return viscous_facial_flux(discr, eos, cv_tpair=cv_tpair,
                                        grad_cv_tpair=s_tpair, t_tpair=t_tpair,
                                        grad_t_tpair=grad_t_tpair)
-=======
-        bndry_cv = make_conserved(dim=dim, mass=int_cv.mass,
-                                  energy=int_cv.energy,
-                                  momentum=ext_mom,
-                                  species_mass=int_cv.species_mass)
-
-        return TracePair(btag, interior=int_cv, exterior=bndry_cv)
->>>>>>> main

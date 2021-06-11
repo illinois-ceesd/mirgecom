@@ -988,6 +988,4 @@ class PlanarDiscontinuity:
         energy = mass * (internal_energy + kinetic_energy)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
-=======
->>>>>>> main
                               momentum=mom, species_mass=specmass)

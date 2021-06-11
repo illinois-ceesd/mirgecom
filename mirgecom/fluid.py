@@ -380,14 +380,11 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
-    grad_v = np.empty(shape=(discr.dim, cv.dim), dtype=object)
+                                       for i in range(cv.dim)])
+    grad_v = np.empty(shape=(cv.dim, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_v[idx] = v
     return grad_v
-=======
-                                       for i in range(cv.dim)])
->>>>>>> main
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -423,7 +420,7 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
                                        - y[i]*grad_cv.mass
                                        for i in range(nspecies)])
-    grad_y = np.empty(shape=(nspecies, discr.dim), dtype=object)
+    grad_y = np.empty(shape=(nspecies, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_y[idx] = v
     return grad_y
@@ -441,6 +438,5 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
     actx = cv.array_context
-
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
