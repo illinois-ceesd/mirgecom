@@ -681,7 +681,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
             maxxerr = err_max
 
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-    logger.info(f"Max error: {maxxerr}")
+
+        logger.info(f"Max error: {maxxerr}")
 
     logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"

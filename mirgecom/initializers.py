@@ -872,9 +872,8 @@ class Uniform:
 
         Parameters
         ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point. (unused)
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
         t: float
             Time at which RHS is desired (unused)
         """
