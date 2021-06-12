@@ -100,8 +100,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
-    assert not check_naninf_local(discr, "vol", pressure, min_value=0,
-                                  max_value=np.inf)
+    assert not check_naninf_local(discr, "vol", pressure)
     assert not check_range_local(discr, "vol", pressure, min_value=0,
                                  max_value=np.inf)
 
