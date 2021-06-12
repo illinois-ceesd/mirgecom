@@ -123,6 +123,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
+            sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
             conda install sphinx graphviz
             pip install sphinx-math-dollar sphinx-copybutton furo
@@ -141,7 +142,7 @@ jobs:
         - uses: actions/checkout@v2
         - name: Install emirge
           run: |
-            [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
