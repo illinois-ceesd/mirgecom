@@ -121,13 +121,8 @@ def get_inviscid_timestep(discr, eos, cv):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
-    q: numpy.ndarray
-        State array which expects at least the canonical conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
-
+    cv: :class:`ConservedVars`
+        Fluid solution
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`

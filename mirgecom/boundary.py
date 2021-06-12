@@ -306,6 +306,7 @@ class PrescribedBoundary(PrescribedInviscidBoundary):
             least one parameter that specifies the coordinates at which to prescribe
             the solution.
         """
+
         from warnings import warn
         warn("Do not use PrescribedBoundary; use PrescribedInvscidBoundary. This"
              "boundary type  will disappear soon.", DeprecationWarning, stacklevel=2)

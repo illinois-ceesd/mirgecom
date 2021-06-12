@@ -114,6 +114,40 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
     )
     q = -dg_div(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
     return make_conserved(discr.dim, q=q)
+=======
+    vol_weak = discr.weak_div(inviscid_flux(discr=discr, eos=eos, cv=cv).join())
+
+    boundary_flux = (
+        _facial_flux(discr=discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
+        + sum(
+            _facial_flux(
+                discr, eos=eos,
+                cv_tpair=TracePair(
+                    part_pair.dd,
+                    interior=split_conserved(discr.dim, part_pair.int),
+                    exterior=split_conserved(discr.dim, part_pair.ext)))
+            for part_pair in cross_rank_trace_pairs(discr, cv.join()))
+        + sum(
+            _facial_flux(
+                discr=discr, eos=eos,
+                cv_tpair=boundaries[btag].boundary_pair(
+                    discr, eos=eos, btag=btag, t=t, cv=cv)
+            )
+            for btag in boundaries)
+    ).join()
+
+    return split_conserved(
+        discr.dim, discr.inverse_mass(vol_weak - discr.face_mass(boundary_flux))
+    )
+
+
+def inviscid_operator(discr, eos, boundaries, q, t=0.0):
+    """Interface :function:`euler_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call inviscid_operator; it is now called euler_operator. This"
+         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
+    return euler_operator(discr, eos, boundaries, split_conserved(discr.dim, q), t)
+>>>>>>> main
 
 
 # By default, run unitless

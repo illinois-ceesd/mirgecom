@@ -53,7 +53,6 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.inviscid import get_inviscid_cfl
-
 import cantera
 import pyrometheus as pyro
 
