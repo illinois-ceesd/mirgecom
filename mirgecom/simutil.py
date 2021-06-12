@@ -5,7 +5,7 @@ General utilities
 
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
-.. autofunction:: sim_visualization
+.. autofunction:: write_visfile
 
 Diagnostic utilities
 --------------------
@@ -86,11 +86,9 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     return mydt
 
 
-def sim_visualization(discr, io_fields, visualizer, vizname,
-                      step=0, t=0, overwrite=False, vis_timer=None):
-    """Visualize the simulation fields.
-
-    Write VTK output for the specified fields.
+def write_visfile(discr, io_fields, visualizer, vizname,
+                  step=0, t=0, overwrite=False, vis_timer=None):
+    """Write VTK output for the fields specified in *io_fields*.
 
     Parameters
     ----------
