@@ -135,6 +135,7 @@ def get_inviscid_timestep(discr, eos, cv):
         / compute_wavespeed(eos, cv)
     )
 
+
 def get_inviscid_cfl(discr, eos, dt, cv):
     """Calculate and return node-local CFL based on current state and timestep.
 
