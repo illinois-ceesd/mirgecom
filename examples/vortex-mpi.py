@@ -139,8 +139,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
-        logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
-                            "min_temperature", "L2_norm_momentum1"])
+        logmgr.add_watches(["step.max", "t_step.max",
+                            "min_pressure", "max_pressure"])
 
         try:
             logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
@@ -205,7 +205,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", dv.pressure) \
-               or check_range_local(discr, "vol", dv.pressure):
+               or check_range_local(discr, "vol", dv.pressure, .2, 1.02):
                 errored = True
                 message = "Invalid pressure data found.\n"
             if np.max(component_errors) > exittol:
@@ -229,7 +229,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=my_checkpoint,
+                      pre_step_callback=my_checkpoint, logmgr=logmgr,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 

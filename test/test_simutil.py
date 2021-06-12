@@ -68,8 +68,9 @@ def test_basic_cfd_healthcheck(actx_factory):
     pressure = eos.pressure(cv)
 
     from mirgecom.simutil import check_range_local
-    assert check_range_local(discr, "vol", mass)
-    assert check_range_local(discr, "vol", pressure, min_value=1e-6)
+    assert check_range_local(discr, "vol", mass, min_value=0, max_value=np.inf)
+    assert check_range_local(discr, "vol", pressure, min_value=1e-6,
+                             max_value=np.inf)
 
     # Let's make another very bad state (nans)
     mass = 1*ones
@@ -99,8 +100,10 @@ def test_basic_cfd_healthcheck(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
-    assert not check_naninf_local(discr, "vol", pressure)
-    assert not check_range_local(discr, "vol", pressure)
+    assert not check_naninf_local(discr, "vol", pressure, min_value=0,
+                                  max_value=np.inf)
+    assert not check_range_local(discr, "vol", pressure, min_value=0,
+                                 max_value=np.inf)
 
 
 def test_analytic_comparison(actx_factory):

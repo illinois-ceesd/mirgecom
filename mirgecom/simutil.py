@@ -125,7 +125,7 @@ def sim_visualization(discr, io_fields, visualizer, vizname,
         )
 
 
-def check_range_local(discr, dd, field, min_value=0, max_value=np.inf):
+def check_range_local(discr, dd, field, min_value, max_value):
     """Check for any negative values."""
     return (
         op.nodal_min_loc(discr, dd, field) < min_value

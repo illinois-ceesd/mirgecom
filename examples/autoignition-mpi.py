@@ -244,16 +244,20 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             health_message = ""
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", dv.pressure) \
-               or check_range_local(discr, "vol", dv.pressure):
+               or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
                 errored = True
                 health_message += "Invalid pressure data found.\n"
+            if check_range_local(discr, "vol", dv.temperature, 1.4e3, 3.3e3):
+                errored = True
+                health_message += "Temperature data exceeded healthy range.\n"
             comm = discr.mpi_communicator
             if comm is not None:
                 errored = comm.allreduce(errored, op=MPI.LOR)
             if errored:
                 if rank == 0:
                     logger.info("Fluid solution failed health check.")
-                logger.info(health_message)   # do this on all ranks to capture all
+                if health_message:  # capture any rank's health message
+                    logger.info(f"{rank=}:{health_message}")
 
         if do_viz or errored:
             reaction_rates = eos.get_production_rates(state)

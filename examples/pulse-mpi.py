@@ -175,7 +175,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", pressure) \
-               or check_range_local(discr, "vol", pressure):
+               or check_range_local(discr, "vol", pressure, min_value=.8,
+                                    max_value=1.5):
                 errored = True
                 message = "Invalid pressure data found.\n"
             comm = discr.mpi_communicator
