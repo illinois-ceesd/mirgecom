@@ -37,6 +37,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
+from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.artificial_viscosity import (
     av_operator,
