@@ -40,7 +40,8 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     check_step,
-    generate_and_distribute_mesh
+    generate_and_distribute_mesh,
+    sim_visualization
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -221,20 +222,15 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
-    def my_checkpoint(step, t, dt, state):
+    def my_checkpoint(step, t, dt, state, force=False):
         from mirgecom.simutil import check_step
-        do_status = check_step(step=step, interval=nstatus)
-        do_viz = check_step(step=step, interval=nviz)
-        do_health = check_step(step=step, interval=nhealth)
+        do_status = force or check_step(step=step, interval=nstatus)
+        do_viz = force or check_step(step=step, interval=nviz)
+        do_health = force or check_step(step=step, interval=nhealth)
 
         if do_status or do_viz or do_health:
             dv = eos.dependent_vars(state)
             reaction_rates = eos.get_production_rates(state)
-            io_fields = [
-                ("cv", state),
-                ("dv", dv),
-                ("reaction_rates", reaction_rates)
-            ]
 
         if do_status:  # This is bad, logging already completely replaces this
             from mirgecom.io import make_status_message
@@ -245,21 +241,27 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
         errored = False
         if do_health:
+            health_message = ""
             from mirgecom.simutil import check_naninf_local, check_range_local
             if check_naninf_local(discr, "vol", dv.pressure) \
                or check_range_local(discr, "vol", dv.pressure):
                 errored = True
-                message = "Invalid pressure data found.\n"
+                health_message += "Invalid pressure data found.\n"
             comm = discr.mpi_communicator
             if comm is not None:
                 errored = comm.allreduce(errored, op=MPI.LOR)
             if errored:
                 if rank == 0:
                     logger.info("Fluid solution failed health check.")
-                logger.info(message)   # do this on all ranks
+                logger.info(health_message)   # do this on all ranks to capture all
 
         if do_viz or errored:
-            from mirgecom.simutil import sim_visualization
+            reaction_rates = eos.get_production_rates(state)
+            io_fields = [
+                ("cv", state),
+                ("dv", dv),
+                ("reaction_rates", reaction_rates)
+            ]
             sim_visualization(discr, io_fields, visualizer, vizname=casename,
                               step=step, t=t, overwrite=True)
 
@@ -275,11 +277,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
     if not check_step(current_step, nviz):  # If final step not an output step
-        if rank == 0:
+        if rank == 0:                       # Then likely something went wrong
             logger.info("Checkpointing final state ...")
         my_checkpoint(current_step, t=current_t,
                       dt=(current_t - checkpoint_t),
-                      state=current_state)
+                      state=current_state, force=True)
 
 
 if __name__ == "__main__":
