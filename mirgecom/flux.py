@@ -122,7 +122,6 @@ def central_vector_flux(trace_pair, normal):
 
 
 def lfr_flux(cv_tpair, f_tpair, normal, lam):
-
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:

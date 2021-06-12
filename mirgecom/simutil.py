@@ -141,7 +141,7 @@ def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
         expected_state = exact_soln(x_vec=nodes, eos=eos, time=t)
         exp_resid = cv - expected_state
         err_norms = [discr.norm(v, np.inf) for v in exp_resid.join()]
-        maxerr = discr.norm(ex_resid.join(), np.inf())
+        maxerr = discr.norm(exp_resid.join(), np.inf())
 
     if do_viz:
         io_fields = [

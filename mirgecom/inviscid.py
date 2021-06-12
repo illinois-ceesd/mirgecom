@@ -121,19 +121,18 @@ def get_inviscid_timestep(discr, eos, cv):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
-    cv: :class:`ConservedVars`
+    cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
         The maximum stable timestep at each node.
     """
-    from grudge.dt_utils import (dt_non_geometric_factor,
-                                 dt_geometric_factors)
+    from grudge.dt_utils import characteristic_length_scales
     from mirgecom.fluid import compute_wavespeed
 
     return (
-        dt_non_geometric_factor(discr) * dt_geometric_factors(discr)
+        characteristic_length_scales(cv.array_context, discr)
         / compute_wavespeed(eos, cv)
     )
 
