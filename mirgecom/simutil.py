@@ -67,8 +67,8 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     """Return the maximum stable dt."""
     mydt = dt
     dt_left = t_final - t
-    if dt_left < 0:
-        return 0.0
+    if t_remaining < dt:
+        return max(0, t_remaining)
     if constant_cfl is True:
         from grudge.op import nodal_min
         mydt = cfl * nodal_min(
