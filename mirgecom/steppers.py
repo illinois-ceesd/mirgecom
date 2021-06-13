@@ -27,7 +27,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
@@ -98,11 +97,10 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
         t += dt
+        istep += 1
 
         if post_step_callback is not None:
             state = post_step_callback(state=state, step=istep, t=t, dt=dt)
-
-        istep += 1
 
         if logmgr:
             set_dt(logmgr, dt)
@@ -170,9 +168,6 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
                                                     rhs, t, dt, state)
     while t < t_final:
 
-        if logmgr:
-            logmgr.tick_before()
-
         dt = get_timestep(state=state)
         if dt < 0:
             return istep, t, state
@@ -194,11 +189,6 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
                                                t=t, dt=dt)
 
                 istep += 1
-
-                if logmgr:
-                    set_dt(logmgr, dt)
-                    set_sim_state(logmgr, dim, state, eos)
-                    logmgr.tick_after()
 
     return istep, t, state
 

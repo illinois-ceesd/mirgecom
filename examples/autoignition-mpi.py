@@ -30,18 +30,23 @@ import pyopencl.tools as cl_tools
 from functools import partial
 
 from meshmode.array_context import PyOpenCLArrayContext
+
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
+from logpyle import IntervalTimer, set_dt
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     check_step,
     generate_and_distribute_mesh,
-    sim_visualization
+    write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -52,6 +57,14 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_many_discretization_quantities,
+    logmgr_add_device_name,
+    logmgr_add_device_memory_usage,
+    set_sim_state
+)
+
 import cantera
 import pyrometheus as pyro
 
@@ -59,11 +72,30 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_leap=False):
+def main(ctx_factory=cl.create_some_context, use_logmgr=False,
+         use_leap=False, use_profiling=False, casename=None):
     """Drive example."""
     cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
+
+    if casename is None:
+        casename = "mirgecom"
+
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
@@ -94,10 +126,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     box_ur = 0.005
     debug = False
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                             b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
@@ -108,6 +136,19 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
+
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                             extract_vars_for_logging, units_for_logging)
+
+        logmgr.add_watches(["step.max", "t_step.max",
+                            "min_pressure", "max_pressure",
+                            "min_temperature", "max_temperature"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
 
     # {{{  Set up initial state using Cantera
 
@@ -160,7 +201,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    casename = "autoignition"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism,
                              temperature_guess=init_temperature)
@@ -222,22 +262,29 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
+    def post_step_stuff(step, t, dt, state):
+        if logmgr:
+            set_dt(logmgr, dt)
+            set_sim_state(logmgr, dim, state, eos)
+            logmgr.tick_after()
+        return state
+
     def my_checkpoint(step, t, dt, state, force=False):
         from mirgecom.simutil import check_step
         do_status = force or check_step(step=step, interval=nstatus)
         do_viz = force or check_step(step=step, interval=nviz)
         do_health = force or check_step(step=step, interval=nhealth)
 
+        if logmgr:
+            logmgr.tick_before()
+
         if do_status or do_viz or do_health:
             dv = eos.dependent_vars(state)
             reaction_rates = eos.get_production_rates(state)
 
-        if do_status:  # This is bad, logging already completely replaces this
-            from mirgecom.io import make_status_message
-            status_msg = make_status_message(discr=discr, t=t, step=step, dt=dt,
-                                             cfl=current_cfl, dependent_vars=dv)
+        if do_status:  # wish to control watch quantities output, too
             if rank == 0:
-                logger.info(status_msg)
+                logger.info(f"time={t}: {dt=},{current_cfl=}\n")
 
         errored = False
         if do_health:
@@ -266,8 +313,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 ("dv", dv),
                 ("reaction_rates", reaction_rates)
             ]
-            sim_visualization(discr, io_fields, visualizer, vizname=casename,
-                              step=step, t=t, overwrite=True)
+            write_visfile(discr, io_fields, visualizer, vizname=casename,
+                          step=step, t=t, overwrite=True)
 
         if errored:
             raise RuntimeError("Error detected by user checkpoint, exiting.")
@@ -277,6 +324,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_checkpoint,
+                      post_step_callback=post_step_stuff,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
@@ -289,7 +337,13 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    main(use_leap=False)
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    use_profiling = True
+    use_logging = True
+    use_leap = False
+    casename = "autoignition"
+
+    main(use_profiling=use_profiling, use_logmgr=use_logging, use_leap=use_leap,
+         casename=casename)
 
 # vim: foldmethod=marker

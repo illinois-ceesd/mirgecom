@@ -175,9 +175,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                 logger.info(message)   # do this on all ranks
 
         if do_viz or errored:
-            from mirgecom.simutil import sim_visualization
-            sim_visualization(discr, io_fields, visualizer, vizname=casename,
-                              step=step, t=t, overwrite=True)
+            from mirgecom.simutil import write_visfile
+            write_visfile(discr, io_fields, visualizer, vizname=casename,
+                          step=step, t=t, overwrite=True)
 
         if errored:
             raise RuntimeError("Error detected by user checkpoint, exiting.")

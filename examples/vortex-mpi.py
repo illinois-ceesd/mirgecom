@@ -51,13 +51,16 @@ from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 
-from logpyle import IntervalTimer
+from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
-from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
-    logmgr_add_device_memory_usage)
-
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_many_discretization_quantities,
+    logmgr_add_device_name,
+    logmgr_add_device_memory_usage,
+    set_sim_state
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,11 +178,21 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
+    def post_step_stuff(step, t, dt, state):
+        if logmgr:
+            set_dt(logmgr, dt)
+            set_sim_state(logmgr, dim, state, eos)
+            logmgr.tick_after()
+        return state
+
     def my_checkpoint(step, t, dt, state):
         from mirgecom.simutil import check_step
         do_status = check_step(step=step, interval=nstatus)
         do_viz = check_step(step=step, interval=nviz)
         do_health = check_step(step=step, interval=nhealth)
+
+        if logmgr:
+            logmgr.tick_before()
 
         if do_status or do_viz or do_health:
             from mirgecom.simutil import compare_fluid_solutions
@@ -195,11 +208,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
             ]
 
         if do_status:
-            status_msg = (
-                "\n------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
             if rank == 0:
-                logger.info(status_msg)
+                logger.info(
+                    f"time={t}: \n"
+                    "---- errors=" + ",".join("%.3g" % en for en
+                                              in component_errors)
+                )
 
         errored = False
         if do_health:
@@ -218,9 +232,9 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                 logger.info(message)   # do this on all ranks
 
         if do_viz or errored:
-            from mirgecom.simutil import sim_visualization
-            sim_visualization(discr, io_fields, visualizer, vizname=casename,
-                              step=step, t=t, overwrite=True)
+            from mirgecom.simutil import write_visfile
+            write_visfile(discr, io_fields, visualizer, vizname=casename,
+                          step=step, t=t, overwrite=True)
 
         if errored:
             raise RuntimeError("Error detected by user checkpoint, exiting.")
@@ -229,7 +243,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=my_checkpoint, logmgr=logmgr,
+                      pre_step_callback=my_checkpoint,
+                      post_step_callback=post_step_stuff,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
@@ -247,7 +262,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    use_profiling = True
+    use_profiling = False
     use_logging = True
     use_leap = False
 
