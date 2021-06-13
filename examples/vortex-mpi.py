@@ -40,7 +40,8 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    generate_and_distribute_mesh
+    generate_and_distribute_mesh,
+    check_step
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -106,6 +107,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     nstatus = 10
     nviz = 10
     nhealth = 10
+    nlog = 10
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -142,8 +144,14 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
-        logmgr.add_watches(["step.max", "t_step.max",
-                            "min_pressure", "max_pressure"])
+        logmgr.add_watches([
+            ("step.max", "step = {value}, "),
+            ("t_sim.max", "sim time: {value:1.6e} s\n"),
+            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("max_pressure",    "{value:1.9e})\n"),
+            ("t_step.max", "------- step walltime: {value:6g} s, "),
+            ("t_log.max", "log walltime: {value:6g} s")
+        ])
 
         try:
             logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
@@ -179,47 +187,40 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def post_step_stuff(step, t, dt, state):
-        if logmgr:
+        do_log = check_step(step=(step-1), interval=nlog)
+        if do_log and logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state
 
     def my_checkpoint(step, t, dt, state):
-        from mirgecom.simutil import check_step
         do_status = check_step(step=step, interval=nstatus)
         do_viz = check_step(step=step, interval=nviz)
         do_health = check_step(step=step, interval=nhealth)
+        do_log = check_step(step=step, interval=nlog)
 
-        if logmgr:
+        if do_log and logmgr:
             logmgr.tick_before()
 
         if do_status or do_viz or do_health:
             from mirgecom.simutil import compare_fluid_solutions
-            dv = eos.dependent_vars(state)
+            pressure = eos.pressure(state)
             vortex_exact = initializer(x_vec=nodes, eos=eos, t=t)
             component_errors = compare_fluid_solutions(discr, state, vortex_exact)
-            resid = state - vortex_exact
-            io_fields = [
-                ("cv", state),
-                ("dv", dv),
-                ("vortex_exact", vortex_exact),
-                ("resid", resid)
-            ]
 
         if do_status:
             if rank == 0:
                 logger.info(
-                    f"time={t}: \n"
-                    "---- errors=" + ",".join("%.3g" % en for en
-                                              in component_errors)
+                    "------- errors=" + ",".join("%.3g" % en for en
+                                                 in component_errors)
                 )
 
         errored = False
         if do_health:
             from mirgecom.simutil import check_naninf_local, check_range_local
-            if check_naninf_local(discr, "vol", dv.pressure) \
-               or check_range_local(discr, "vol", dv.pressure, .2, 1.02):
+            if check_naninf_local(discr, "vol", pressure) \
+               or check_range_local(discr, "vol", pressure, .2, 1.02):
                 errored = True
                 message = "Invalid pressure data found.\n"
             if np.max(component_errors) > exittol:
@@ -232,6 +233,13 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                 logger.info(message)   # do this on all ranks
 
         if do_viz or errored:
+            resid = state - vortex_exact
+            io_fields = [
+                ("cv", state),
+                ("pressure", pressure),
+                ("vortex_exact", vortex_exact),
+                ("resid", resid)
+            ]
             from mirgecom.simutil import write_visfile
             write_visfile(discr, io_fields, visualizer, vizname=casename,
                           step=step, t=t, overwrite=True)

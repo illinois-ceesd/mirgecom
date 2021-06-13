@@ -114,6 +114,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     nstatus = 1
     nviz = 5
     nhealth = 1
+    nlog = 1
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -143,9 +144,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
-        logmgr.add_watches(["step.max", "t_step.max",
-                            "min_pressure", "max_pressure",
-                            "min_temperature", "max_temperature"])
+        logmgr.add_watches([
+            ("step.max", "step = {value}, "),
+            ("t_sim.max", "sim time: {value:1.6e} s\n"),
+            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("max_pressure",    "{value:1.9e})\n"),
+            ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+            ("max_temperature",    "{value:7g})\n"),
+            ("t_step.max", "------- step walltime: {value:6g} s, "),
+            ("t_log.max", "log walltime: {value:6g} s")
+        ])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -263,7 +271,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 + eos.get_species_source_terms(state))
 
     def post_step_stuff(step, t, dt, state):
-        if logmgr:
+        do_logend = check_step(step=(step-1), interval=nlog)
+
+        if do_logend and logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
@@ -271,20 +281,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     def my_checkpoint(step, t, dt, state, force=False):
         from mirgecom.simutil import check_step
-        do_status = force or check_step(step=step, interval=nstatus)
         do_viz = force or check_step(step=step, interval=nviz)
         do_health = force or check_step(step=step, interval=nhealth)
+        do_logstart = force or check_step(step=step, interval=nlog)
 
-        if logmgr:
+        if do_logstart and logmgr:
             logmgr.tick_before()
 
-        if do_status or do_viz or do_health:
+        if do_viz or do_health:
             dv = eos.dependent_vars(state)
             reaction_rates = eos.get_production_rates(state)
-
-        if do_status:  # wish to control watch quantities output, too
-            if rank == 0:
-                logger.info(f"time={t}: {dt=},{current_cfl=}\n")
 
         errored = False
         if do_health:
