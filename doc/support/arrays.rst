@@ -25,6 +25,50 @@ Frozen and thawed arrays
 All array contexts have a notion of *thawed* and *frozen* arrays that is important
 to understand, see :ref:`arraycontext:freeze-thaw` for more details.
 
+You might be wondering whether a given function or method will return frozen or
+thawed data. In general, the documentation should state that, however since
+a fair bit of functionality predates these concepts, we are still catching up
+in terms of updating the documentation. (Help welcome!)
+
+In the meantime, these rules of thumb should cover most cases:
+
+* If you did not provide an array context to the function
+  (explicitly or implicitly via an input array), you will receive frozen data.
+* Any data that is cached/long-lived/"at rest" is going to be frozen.
+
+To demonstrate the effect of this, first we need some setup:
+
+.. doctest::
+
+   >>> # setup
+   >>> import pyopencl as cl
+   >>> from arraycontext import PyOpenCLArrayContext, thaw
+   >>> ctx = cl.create_some_context()
+   >>> queue = cl.CommandQueue(ctx)
+   >>> actx = PyOpenCLArrayContext(queue)
+   >>> from meshmode.mesh.generation import generate_regular_rect_mesh
+   >>> mesh = generate_regular_rect_mesh(a=(0, 0), b=(1, 1), nelements_per_axis=(10, 10))
+   >>> from grudge import DiscretizationCollection
+   >>> dcoll = DiscretizationCollection(actx, mesh, order=5)
+
+Now this is what will happen if you attempt to operate on frozen data:
+
+.. doctest::
+
+   >>> dcoll.nodes() * 5
+   Traceback (most recent call last):
+    ...
+   AttributeError: 'NoneType' object has no attribute 'device'
+
+(That error message is not ideal; it is being`worked on
+<https://github.com/inducer/pyopencl/pull/486>`__.)
+Fortunately, recovering from this is straightforward:
+
+.. doctest::
+
+   >>> nodes = thaw(dcoll.nodes(), actx)
+   >>> result = nodes * 5
+
 Array Containers
 ----------------
 
