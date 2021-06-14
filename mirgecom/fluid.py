@@ -6,6 +6,7 @@ State Vector Handling
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
+.. autofunction:: make_conserved
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
@@ -290,11 +291,8 @@ def split_conserved(dim, q):
                          species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum,
-        # empty: immutable
-        species_mass=None):
-    """Create agglomerated array from quantities for each conservation eqn."""
-    if species_mass is None:
+def _join_conserved(dim, mass, energy, momentum, species_mass=None):
+    if species_mass is None:  # empty: immutable
         species_mass = np.empty((0,), dtype=object)
 
     nspec = len(species_mass)
@@ -314,6 +312,25 @@ def join_conserved(dim, mass, energy, momentum,
     result[dim+2:] = species_mass
 
     return result
+
+
+def join_conserved(dim, mass, energy, momentum, species_mass=None):
+    """Create agglomerated array from quantities for each conservation eqn."""
+    return _join_conserved(dim, mass=mass, energy=energy,
+                           momentum=momentum, species_mass=species_mass)
+
+
+def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
+                   q=None):
+    """Create :class:`ConservedVars` from separated conserved quantities."""
+    if q is not None:
+        return split_conserved(dim, q=q)
+    if mass is None or energy is None or momentum is None:
+        raise ValueError("Must have one of *q* or *mass, energy, momentum*.")
+    return split_conserved(
+        dim, _join_conserved(dim, mass=mass, energy=energy,
+                             momentum=momentum, species_mass=species_mass)
+    )
 
 
 def velocity_gradient(discr, cv, grad_cv):
@@ -363,8 +380,8 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
-    grad_v = np.empty(shape=(discr.dim, discr.dim), dtype=object)
+                                       for i in range(cv.dim)])
+    grad_v = np.empty(shape=(cv.dim, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_v[idx] = v
     return grad_v
@@ -403,13 +420,13 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
                                        - y[i]*grad_cv.mass
                                        for i in range(nspecies)])
-    grad_y = np.empty(shape=(nspecies, discr.dim), dtype=object)
+    grad_y = np.empty(shape=(nspecies, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_y[idx] = v
     return grad_y
 
 
-def compute_wavespeed(dim, eos, cv: ConservedVars):
+def compute_wavespeed(eos, cv: ConservedVars):
     r"""Return the wavespeed in the flow.
 
     The wavespeed is calculated as:
@@ -420,7 +437,6 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
-    actx = cv.mass.array_context
-
+    actx = cv.array_context
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)

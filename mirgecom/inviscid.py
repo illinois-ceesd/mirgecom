@@ -38,18 +38,15 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved
-)
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
 from mirgecom.flux import lfr_flux
+from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(discr, eos, q):
-    r"""Compute the inviscid flux vectors from flow solution *q*.
+def inviscid_flux(discr, eos, cv):
+    r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
     $(\rho\vec{V},(\rho{E}+p)\vec{V},\rho(\vec{V}\otimes\vec{V})
@@ -57,31 +54,24 @@ def inviscid_flux(discr, eos, q):
 
     .. note::
 
-        The fluxes are returned as a 2D object array with shape:
-        ``(num_equations, ndim)``.  Each entry in the
-        flux array is a :class:`~meshmode.dof_array.DOFArray`.  This
-        form and shape for the flux data is required by the built-in
-        state data handling mechanism in :mod:`mirgecom.fluid`. That
-        mechanism is used by at least
-        :class:`mirgecom.fluid.ConservedVars`, and
-        :func:`mirgecom.fluid.join_conserved`, and
-        :func:`mirgecom.fluid.split_conserved`.
+        The fluxes are returned as a :class:`mirgecom.fluid.ConservedVars`
+        object with a *dim-vector* for each conservation equation. See
+        :class:`mirgecom.fluid.ConservedVars` for more information about
+        how the fluxes are represented.
     """
-    dim = discr.dim
-    cv = split_conserved(dim, q)
+    dim = cv.dim
     p = eos.pressure(cv)
 
     mom = cv.momentum
 
-    return join_conserved(dim,
-            mass=mom,
-            energy=mom * (cv.energy + p) / cv.mass,
-            momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-            species_mass=(  # reshaped: (nspecies, dim)
-                (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+    return make_conserved(
+        dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
+        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+        species_mass=(  # reshaped: (nspecies, dim)
+            (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
-def inviscid_facial_flux(discr, eos, q_tpair, local=False):
+def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     """Return the flux across a face given the solution on both sides *q_tpair*.
 
     Parameters
@@ -99,27 +89,29 @@ def inviscid_facial_flux(discr, eos, q_tpair, local=False):
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
     """
-    actx = q_tpair[0].int.array_context
-    dim = discr.dim
-    flux_tpair = TracePair(q_tpair.dd,
-                           interior=inviscid_flux(discr, eos, q_tpair.int),
-                           exterior=inviscid_flux(discr, eos, q_tpair.ext))
+    actx = cv_tpair.int.array_context
+
+    flux_tpair = TracePair(cv_tpair.dd,
+                           interior=inviscid_flux(discr, eos, cv_tpair.int),
+                           exterior=inviscid_flux(discr, eos, cv_tpair.ext))
 
     lam = actx.np.maximum(
-        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.int)),
-        compute_wavespeed(dim, eos=eos, cv=split_conserved(dim, q_tpair.ext))
+        compute_wavespeed(eos=eos, cv=cv_tpair.int),
+        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
     )
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+
+    normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    flux_weak = lfr_flux(q_tpair, flux_tpair, normal=normal, lam=lam)
+    flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
-        return discr.project(q_tpair.dd, "all_faces", flux_weak)
+        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+
     return flux_weak
 
 
-def get_inviscid_timestep(discr, eos, q):
+def get_inviscid_timestep(discr, eos, cv):
     """Routine returns the node-local maximum stable inviscid timestep.
 
     Parameters
@@ -129,13 +121,8 @@ def get_inviscid_timestep(discr, eos, q):
     eos: mirgecom.eos.GasEOS
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
-    q: numpy.ndarray
-        State array which expects at least the canonical conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
-
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid solution
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
@@ -143,17 +130,13 @@ def get_inviscid_timestep(discr, eos, q):
     """
     from grudge.dt_utils import characteristic_lengthscales
     from mirgecom.fluid import compute_wavespeed
-
-    dim = discr.dim
-    cv = split_conserved(dim, q)
-    actx = cv.mass.array_context
     return (
-        characteristic_lengthscales(actx, discr)
-        / compute_wavespeed(dim, eos, cv)
+        characteristic_lengthscales(cv.array_context, discr)
+        / compute_wavespeed(eos, cv)
     )
 
 
-def get_inviscid_cfl(discr, eos, dt, q):
+def get_inviscid_cfl(discr, eos, dt, cv):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
@@ -165,16 +148,12 @@ def get_inviscid_cfl(discr, eos, dt, q):
         returning pressure and temperature as a function of the state q.
     dt: float or :class:`~meshmode.dof_array.DOFArray`
         A constant scalar dt or node-local dt
-    q: numpy.ndarray
-        State array which expects at least the canonical conserved quantities
-        (mass, energy, momentum) for the fluid at each point. For multi-component
-        fluids, the conserved quantities should include
-        (mass, energy, momentum, species_mass), where *species_mass* is a vector
-        of species masses.
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        The fluid conserved variables
 
     Returns
     -------
     :class:`meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
-    return dt / get_inviscid_timestep(discr, eos=eos, q=q)
+    return dt / get_inviscid_timestep(discr, eos=eos, cv=cv)

@@ -33,8 +33,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from pytools.obj_array import make_obj_array
+from meshmode.dof_array import DOFArray
 from mirgecom.operators import jump
+from mirgecom.fluid import (
+    ConservedVars,
+    make_conserved
+)
 
 
 def central_scalar_flux(trace_pair, normal):
@@ -67,12 +71,23 @@ def central_scalar_flux(trace_pair, normal):
         for each scalar component.
     """
     tp_avg = trace_pair.avg
-    ncomp = 1
-    if isinstance(tp_avg, np.ndarray):
-        ncomp = len(tp_avg)
+    if isinstance(tp_avg, DOFArray):
+        return tp_avg*normal
+    elif isinstance(tp_avg, ConservedVars):
+        tp_join = tp_avg.join()
+    elif isinstance(tp_avg, np.ndarray):
+        tp_join = tp_avg
+
+    ncomp = len(tp_join)
     if ncomp > 1:
-        return make_obj_array([tp_avg[i]*normal for i in range(ncomp)])
-    return trace_pair.avg*normal
+        result = np.empty((ncomp, len(normal)), dtype=object)
+        for i in range(ncomp):
+            result[i] = tp_join[i] * normal
+    else:
+        result = tp_join*normal
+    if isinstance(tp_avg, ConservedVars):
+        return make_conserved(tp_avg.dim, q=result)
+    return result
 
 
 def central_vector_flux(trace_pair, normal):
@@ -106,7 +121,7 @@ def central_vector_flux(trace_pair, normal):
     return trace_pair.avg@normal
 
 
-def lfr_flux(q_tpair, f_tpair, normal, lam):
+def lfr_flux(cv_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -123,7 +138,7 @@ def lfr_flux(q_tpair, f_tpair, normal, lam):
 
     Parameters
     ----------
-    q_tpair: :class:`grudge.trace_pair.TracePair`
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 
@@ -147,4 +162,4 @@ def lfr_flux(q_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg @ normal - lam*jump(q_tpair)/2
+    return f_tpair.avg@normal - lam*jump(cv_tpair)/2

@@ -125,7 +125,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
-    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
+    current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     visualizer = make_visualizer(discr)
 
@@ -146,11 +146,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
+        return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)
