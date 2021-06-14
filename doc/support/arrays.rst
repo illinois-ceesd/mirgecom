@@ -57,12 +57,11 @@ if one wanted to grab the nodes of the mesh or normals of a named surface in the
 
 .. doctest::
 
-   >>> from grudge.dof_desc import DTAG_BOUNDARY
+   >>> from grudge.dof_desc import DOFDesc
    >>> nodes = thaw(dcoll.nodes(), actx)
-   >>> dd = DTAG_BOUNDARY("all_faces")
+   >>> dd = DOFDesc("all_faces")
    >>> nhat = thaw(dcoll.normal(dd), actx)
 
-   
 What can go wrong?  Attempts to operate on frozen data will yield errors similar to
 the following:
 
