@@ -35,6 +35,8 @@ In the meantime, these rules of thumb should cover most cases:
 * If you did not provide an array context to the function
   (explicitly or implicitly via an input array), you will receive frozen data.
 * Any data that is cached/long-lived/"at rest" is going to be frozen.
+* If the data is the result of a `memoized` function, then it will likely
+  be frozen.
 
 To demonstrate the effect of this, first we need some setup:
 
@@ -51,7 +53,19 @@ To demonstrate the effect of this, first we need some setup:
    >>> from grudge import DiscretizationCollection
    >>> dcoll = DiscretizationCollection(actx, mesh, order=5)
 
-Now this is what will happen if you attempt to operate on frozen data:
+Most quantities that are maintained by the discretization will be frozen. For example,
+if one wanted to grab the nodes of the mesh or normals of a named surface in the mesh:
+
+.. doctest::
+
+   >>> from grudge.dof_desc import DTAG_BOUNDARY
+   >>> nodes = thaw(dcoll.nodes(), actx)
+   >>> dd = DTAG_BOUNDARY("my_surface")
+   >>> nhat = thaw(dcoll.normal(dd), actx)
+
+   
+What can go wrong?  Attempts to operate on frozen data will yield errors similar to
+the following:
 
 .. doctest::
 
