@@ -42,7 +42,6 @@ To demonstrate the effect of this, first we need some setup:
 
 .. doctest::
 
-   >>> # setup
    >>> import pyopencl as cl
    >>> from arraycontext import PyOpenCLArrayContext, thaw
    >>> ctx = cl.create_some_context()
