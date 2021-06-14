@@ -60,7 +60,7 @@ if one wanted to grab the nodes of the mesh or normals of a named surface in the
 
    >>> from grudge.dof_desc import DTAG_BOUNDARY
    >>> nodes = thaw(dcoll.nodes(), actx)
-   >>> dd = DTAG_BOUNDARY("my_surface")
+   >>> dd = DTAG_BOUNDARY("all_faces")
    >>> nhat = thaw(dcoll.normal(dd), actx)
 
    
