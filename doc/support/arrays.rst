@@ -72,7 +72,7 @@ the following:
     ...
    AttributeError: 'NoneType' object has no attribute 'device'
 
-(That error message is not ideal; it is being`worked on
+(That error message is not ideal; it is being `worked on
 <https://github.com/inducer/pyopencl/pull/486>`__.)
 Fortunately, recovering from this is straightforward:
 
