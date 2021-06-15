@@ -1,9 +1,25 @@
 """Provide some utilities for building simulation applications.
 
+General utilities
+-----------------
+
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
 .. autoexception:: ExactSolutionMismatch
+.. autofunction:: write_visfile
 .. autofunction:: sim_checkpoint
+.. autofunction:: write_restart_file
+
+Diagnostic utilities
+--------------------
+
+.. autofunction:: compare_fluid_solutions
+.. autofunction:: check_naninf_local
+.. autofunction:: check_range_local
+
+Mesh utilities
+--------------
+
 .. autofunction:: generate_and_distribute_mesh
 """
 
@@ -30,40 +46,26 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
-
+import pickle
 import numpy as np
+
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
+from meshmode.dof_array import thaw, flatten, unflatten  # noqa
+from mirgecom.fluid import ConservedVars
 
 logger = logging.getLogger(__name__)
 
 
-class MIRGEComParameters:
-    """Simple parameters object."""
-
-    def __init__(self, **kwargs):
-        """Initialize parameters object."""
-        self._parameters = kwargs
-
-    @property
-    def parameters(self):
-        """Grab the parameters."""
-        return self._parameters
-
-    def update(self, **kwargs):
-        """Update parameters with new or replacement parameters or values."""
-        self._parameters.update(kwargs)
-
-    def read(self, file_path):
-        """Read new or replacement values from a file at system path *file_path*."""
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("user_parameters", file_path)
-        foo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(foo)
-        self._parameters.update(foo.mirgecom_parameters.parameters)
+def write_restart_file(actx, restart_dictionary, filename):
+    from pytools.obj_array import obj_array_vectorize
+    state = restart_dictionary["state"].join()
+    restart_dictionary["state"] = obj_array_vectorize(actx.to_numpy,
+                                                      flatten(state))
+    with open(filename, "wb") as f:
+        pickle.dump(restart_dictionary, f)
 
 
 def check_step(step, interval):
@@ -103,7 +105,6 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
 
 class ExactSolutionMismatch(Exception):
     """Exception class for solution mismatch.
-
     .. attribute:: step
     .. attribute:: t
     .. attribute:: state
@@ -114,6 +115,43 @@ class ExactSolutionMismatch(Exception):
         self.step = step
         self.t = t
         self.state = state
+
+
+def write_visfile(discr, io_fields, visualizer, vizname,
+                  step=0, t=0, overwrite=False, vis_timer=None):
+    """Write VTK output for the fields specified in *io_fields*.
+
+    Parameters
+    ----------
+    visualizer:
+        A :class:`meshmode.discretization.visualization.Visualizer`
+        VTK output object.
+    io_fields:
+        List of tuples indicating the (name, data) for each field to write.
+    """
+    from contextlib import nullcontext
+    from mirgecom.io import make_rank_fname, make_par_fname
+
+    comm = discr.mpi_communicator
+    rank = 0
+    if comm is not None:
+        rank = comm.Get_rank()
+
+    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+
+    if vis_timer:
+        ctm = vis_timer.start_sub_timer()
+    else:
+        ctm = nullcontext()
+
+    with ctm:
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields,
+            overwrite=overwrite,
+            par_manifest_filename=make_par_fname(
+                basename=vizname, step=step, t=t
+            )
+        )
 
 
 def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
@@ -185,6 +223,28 @@ def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
 
     if maxerr > exittol:
         raise ExactSolutionMismatch(step, t=t, state=cv)
+
+
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    from grudge.op import nodal_min_loc, nodal_max_loc
+    return (
+        nodal_min_loc(discr, dd, field) < min_value
+        or nodal_max_loc(discr, dd, field) > max_value
+    )
+
+
+def check_naninf_local(discr, dd, field):
+    """Check for any NANs or Infs in the field."""
+    from grudge.op import nodal_sum_loc
+    s = nodal_sum_loc(discr, dd, field)
+    return np.isnan(s) or (s == np.inf)
+
+
+def compare_fluid_solutions(discr, red_state, blue_state):
+    """Return inf norm of (*red_state* - *blue_state*) for each component."""
+    resid = red_state - blue_state
+    return [discr.norm(v, np.inf) for v in resid.join()]
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
