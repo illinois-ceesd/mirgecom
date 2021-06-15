@@ -54,12 +54,13 @@ from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 from meshmode.dof_array import thaw, flatten, unflatten  # noqa
-from mirgecom.fluid import ConservedVars
+from mirgecom.fluid import ConservedVars  # noqa
 
 logger = logging.getLogger(__name__)
 
 
 def write_restart_file(actx, restart_dictionary, filename):
+    """Pickle the simulation data into a file for use in restarting."""
     from pytools.obj_array import obj_array_vectorize
     state = restart_dictionary["state"].join()
     restart_dictionary["state"] = obj_array_vectorize(actx.to_numpy,
@@ -105,6 +106,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
 
 class ExactSolutionMismatch(Exception):
     """Exception class for solution mismatch.
+
     .. attribute:: step
     .. attribute:: t
     .. attribute:: state
