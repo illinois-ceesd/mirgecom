@@ -87,7 +87,7 @@ jobs:
               export PYOPENCL_TEST=port:pthread
             fi
 
-            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples ${{ matrix.os }}
