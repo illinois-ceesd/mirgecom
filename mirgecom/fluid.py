@@ -320,7 +320,7 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
                            momentum=momentum, species_mass=species_mass)
 
 
-def make_conserved(dim, mass, energy, momentum, species_mass=None,
+def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
                    scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
     if scalar_quantities:
