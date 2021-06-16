@@ -209,7 +209,7 @@ class StateConsumer:
     """Base class for quantities that require a state for logging.
 
     .. automethod:: __init__
-    .. automethod:: set_state_vars
+    .. automethod:: set_state
     """
 
     def __init__(self, extract_vars_for_logging: Optional[Callable]) -> None:
@@ -302,7 +302,7 @@ class LogCFL(LogQuantity, StateConsumer, DtConsumer):
         self.eos = eos
 
     def __call__(self) -> float:
-        """Returns the value of cfl."""
+        """Return the value of cfl."""
         if self.state is None:
             return None
 
