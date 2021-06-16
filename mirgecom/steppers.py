@@ -94,7 +94,7 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state, eos)
             logmgr.tick_after()
 
     return istep, t, state
@@ -167,7 +167,7 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
                 istep += 1
                 if logmgr:
                     set_dt(logmgr, dt)
-                    set_sim_state(logmgr, dim, state, eos)
+                    set_sim_state(logmgr, state, eos)
                     logmgr.tick_after()
 
     return istep, t, state
