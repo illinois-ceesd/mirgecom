@@ -321,8 +321,12 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
 
 
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
-                   q=None):
+                   q=None, scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
+    if scalar_quantities is not None:
+        return split_conserved(dim, q=scalar_quantities)
+    if vector_quantities is not None:
+        return split_conserved(dim, q=vector_quantities)
     if q is not None:
         return split_conserved(dim, q=q)
     if mass is None or energy is None or momentum is None:
