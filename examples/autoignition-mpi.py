@@ -111,7 +111,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
             + restart_file_pattern.format(casename=restart_name,
                                           step=restart_step, rank=rank)
         )
-        from mirgecom.simutil import read_restart_data
+        from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
@@ -203,8 +203,8 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
         current_t = restart_data["t"]
         current_step = restart_step
         restart_discr = discr.discr_from_dd("vol")
-        from mirgecom.simutil import make_fluid_restart_state
-        current_state = make_fluid_restart_state(actx, restart_discr,
+        from mirgecom.restart import make_fluid_state
+        current_state = make_fluid_state(actx, restart_discr,
                                                  restart_data["state"])
     else:
         # Set the current state from time 0
@@ -267,7 +267,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
                 "global_nelements": global_nelements,
                 "num_parts": nproc
             }
-            from mirgecom.simutil import write_restart_file
+            from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_filename, comm)
 
         # awful - computes potentially expensive viz quantities

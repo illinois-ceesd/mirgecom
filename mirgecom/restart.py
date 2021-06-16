@@ -42,7 +42,7 @@ def read_restart_data(filename):
     return restart_data
 
 
-def make_fluid_restart_state(actx, discr, restart_q):
+def make_fluid_state(actx, discr, restart_q):
     """Make a :class:`~mirgecom.fluid.ConservedVars` from pickled restart data."""
     from pytools.obj_array import obj_array_vectorize
     q = unflatten(actx, discr, obj_array_vectorize(actx.from_numpy, restart_q))
