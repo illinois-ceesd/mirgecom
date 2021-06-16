@@ -176,11 +176,20 @@ def set_sim_state(mgr: LogManager, state, eos) -> None:
         The :class:`logpyle.LogManager` whose :class:`StateConsumer` quantities
         will receive *state*.
     """
+    state_vars = {}
+
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
             if isinstance(gd.quantity, StateConsumer):
-                gd.quantity.set_state(state, eos)
+                esv_func = gd.quantity.extract_state_vars
+                if esv_func not in state_vars:
+                    if esv_func is not None:
+                        state_vars[esv_func] = esv_func(state, eos)
+                    else:
+                        state_vars[esv_func] = None
+
+                gd.quantity.set_state(state, state_vars[esv_func])
 
 
 def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
@@ -203,7 +212,7 @@ class StateConsumer:
     .. automethod:: set_state_vars
     """
 
-    def __init__(self, extract_vars_for_logging: Optional[Callable]):
+    def __init__(self, extract_vars_for_logging: Optional[Callable]) -> None:
         """Store the function to extract state variables.
 
         Parameters
@@ -216,11 +225,10 @@ class StateConsumer:
         self.state = None
         self.state_vars = None
 
-    def set_state(self, state: np.ndarray, eos) -> None:
+    def set_state(self, state: np.ndarray, state_vars) -> None:
         """Update the state vector of the object."""
         self.state = state
-        if self.extract_state_vars is not None:
-            self.state_vars = self.extract_state_vars(state, eos)
+        self.state_vars = state_vars
 
 # }}}
 
