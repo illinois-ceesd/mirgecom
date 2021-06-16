@@ -265,8 +265,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             if rank == 0:
                 logger.info(f"\nStep:{step}, Time:{t}, DT:{current_dt},"
                             f"CFL:{current_cfl}\n"
-                            f"---- P({min_pressure}, {max_pressure}) "
-                            f"T({min_temperature}, {max_temperature})\n")
+                            f"---- P({min_pressure}, {max_pressure})\n"
+                            f"---- T({min_temperature}, {max_temperature})\n")
 
         # this exit is safe, errors(current_dt) is already collective
         if errors:
