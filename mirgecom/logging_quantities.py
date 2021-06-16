@@ -39,8 +39,8 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
-from logpyle import (DtConsumer, LogQuantity, LogManager, MultiLogQuantity, add_run_info,
-    add_general_quantities, add_simulation_quantities)
+from logpyle import (DtConsumer, LogQuantity, LogManager, MultiLogQuantity,
+    add_run_info, add_general_quantities, add_simulation_quantities)
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
@@ -175,8 +175,6 @@ def set_sim_state(mgr: LogManager, state, eos) -> None:
         The :class:`logpyle.LogManager` whose :class:`StateConsumer` quantities
         will receive *state*.
     """
-    state_vars = {}
-
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
@@ -282,6 +280,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         return self._discr_reduction(quantity)
 
 # }}}
+
 
 class LogCFL(LogQuantity, StateConsumer, DtConsumer):
     """Logging support for CFL."""
