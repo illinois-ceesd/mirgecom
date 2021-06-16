@@ -27,6 +27,7 @@ THE SOFTWARE.
 __doc__ = """
 .. autoclass:: StateConsumer
 .. autoclass:: DiscretizationBasedQuantity
+.. autoclass:: LogCFL
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
 .. autoclass:: DeviceMemoryUsage
