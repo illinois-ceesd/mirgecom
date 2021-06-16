@@ -64,18 +64,51 @@ def check_step(step, interval):
 
 def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
                           t_final, constant_cfl=False):
-    """Return the maximum stable dt."""
+    """Return the maximum stable dt for inviscid fluid simulation.
+
+    This routine returns *dt*, the users defined constant timestep, or
+    *max_dt*, the maximum domain-wide stability-limited
+    timestep for an inviscid fluid simulation. It calls the collective:
+    :func:`~grudge.op.nodal_min` on the inside which makes it
+    domain-wide regardless of parallel decomposition.
+
+    Two modes are supported:
+        - Constant DT mode: returns the minimum of (t_final-t, dt)
+        - Constant CFL mode: returns (cfl * max_dt)
+
+    Parameters
+    ----------
+    discr
+        Grudge discretization or discretization collection?
+    state: :class:`~mirgecom.fluid.ConservedVars`
+        The fluid state.
+    t: float
+        Current time
+    t_final: float
+        Final time
+    dt: float
+        The current timestep
+    cfl: float
+        The current CFL number
+    eos: :class:`~mirgecom.eos.GasEOS`
+        Gas equation-of-state supporting speed_of_sound
+    constant_cfl: bool
+        True if running constant CFL mode
+
+    Returns
+    -------
+    float
+        The maximum stable DT based on inviscid fluid acoustic wavespeed.
+    """
     mydt = dt
-    t_remaining = t_final - t
-    if t_remaining < dt:
-        return max(0, t_remaining)
-    if constant_cfl is True:
+    t_remaining = max(0, t_final - t)
+    if constant_cfl:
         from grudge.op import nodal_min
         mydt = cfl * nodal_min(
             discr, "vol",
             get_inviscid_timestep(discr=discr, eos=eos, cv=state)
         )
-    return mydt
+    return min(t_remaining, mydt)
 
 
 class ExactSolutionMismatch(Exception):
