@@ -84,7 +84,8 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
         if dt < 0:
             return istep, t, state
 
-        checkpoint(state=state, step=istep, t=t, dt=dt)
+        if checkpoint:
+            checkpoint(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 

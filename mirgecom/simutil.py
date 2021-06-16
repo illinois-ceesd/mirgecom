@@ -67,7 +67,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     """Return the maximum stable dt."""
     mydt = dt
     if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
+        mydt = get_inviscid_timestep(discr=discr, cv=state,
                                      cfl=cfl, eos=eos)
     if (t + mydt) > t_final:
         mydt = t_final - t
@@ -89,7 +89,7 @@ class ExactSolutionMismatch(Exception):
         self.state = state
 
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
+def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
                    constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
                    vis_timer=None):
@@ -99,8 +99,6 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if do_viz is False and do_status is False:
         return 0
 
-    from mirgecom.fluid import split_conserved
-    cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 
     rank = 0
@@ -112,9 +110,9 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
         actx = cv.mass.array_context
         nodes = thaw(actx, discr.nodes())
         expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-        exp_resid = q - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
-        maxerr = max(err_norms)
+        exp_resid = cv - expected_state
+        err_norms = [discr.norm(v, np.inf) for v in exp_resid.join()]
+        maxerr = discr.norm(exp_resid.join(), np.inf)
 
     if do_viz:
         io_fields = [
@@ -159,7 +157,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
             logger.info(statusmesg)
 
     if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=q)
+        raise ExactSolutionMismatch(step, t=t, state=cv)
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

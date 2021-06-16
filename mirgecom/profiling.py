@@ -103,6 +103,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
 
+    def clone(self):
+        """Return a semantically equivalent but distinct version of *self*."""
+        return type(self)(self.queue, self.allocator, self.logmgr)
+
     def __del__(self):
         """Release resources and undo monkey patching."""
         del self.profile_events[:]
