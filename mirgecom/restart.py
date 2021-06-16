@@ -7,7 +7,7 @@
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -46,7 +46,7 @@ def make_fluid_restart_state(actx, discr, restart_q):
     """Make a :class:`~mirgecom.fluid.ConservedVars` from pickled restart data."""
     from pytools.obj_array import obj_array_vectorize
     q = unflatten(actx, discr, obj_array_vectorize(actx.from_numpy, restart_q))
-    return make_conserved(discr.dim, q=q)
+    return make_conserved(discr.dim, scalar_quantities=q)
 
 
 def write_restart_file(actx, restart_data, filename, comm=None):
