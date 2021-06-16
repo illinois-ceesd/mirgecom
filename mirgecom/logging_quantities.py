@@ -284,9 +284,10 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
 class LogCFL(LogQuantity, StateConsumer, DtConsumer):
     """Logging support for CFL."""
-    def __init__(self, discr, eos, name="cfl"):
+    def __init__(self, discr, eos, name="cfl", dt: float = 0):
         LogQuantity.__init__(self, name, "1")
         StateConsumer.__init__(self, None)
+        DtConsumer.__init__(self, dt)
         self.discr = discr
         self.eos = eos
 
