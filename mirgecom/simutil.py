@@ -32,6 +32,7 @@ THE SOFTWARE.
 """
 
 import logging
+
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
