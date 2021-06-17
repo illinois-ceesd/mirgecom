@@ -59,7 +59,7 @@ from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (
-    LogUserQuantity, LogCFL, initialize_logmgr,
+    LogUserQuantity, initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_device_name, logmgr_add_device_memory_usage, )
 
@@ -134,16 +134,15 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     )
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(nodes)
-    current_cfl = get_inviscid_cfl(discr, dt=current_dt, eos=eos, cv=current_state)
+
     vis_timer = None
 
-    my_log_quantity = LogUserQuantity(name="my_cfl", value=current_cfl)
+    my_log_quantity = LogUserQuantity(name="cfl", value=current_cfl)
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
-        logmgr.add_quantity(LogCFL(discr, eos))
         logmgr.add_quantity(my_log_quantity)
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "L2_norm_momentum1", "cfl.max"])
@@ -185,8 +184,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         current_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, cv=state)
         viz_flds = [("cfl", current_cfl)]
         from grudge.op import nodal_max
-        sim_cfl = nodal_max(discr, "vol", current_cfl)
-        my_log_quantity.set_quantity(nodal_max(discr, "vol", sim_cfl))
+        max_cfl = nodal_max(discr, "vol", current_cfl)
+        my_log_quantity.set_quantity(max_cfl)
         return sim_checkpoint(discr, visualizer, eos, cv=state, viz_fields=viz_flds,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
