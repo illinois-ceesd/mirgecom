@@ -310,6 +310,25 @@ class LogCFL(LogQuantity, StateConsumer, DtConsumer):
         return get_inviscid_cfl(self.discr, eos=self.eos, dt=self.dt, cv=self.state)
 
 
+class LogUserQuantity(LogQuantity):
+    """Logging support for arbitrary user quantities."""
+
+    def __init__(self, name="user_quantity", value=None, user_function=None) -> None:
+        LogQuantity.__init__(self, name, "1")
+        self._value = value
+        self._uf = user_function
+
+    def set_quantity(self, value) -> None:
+        """Set the user quantity to be used in calculating the logged value."""
+        self._value = value
+
+    def __call__(self) -> float:
+        """Return the value of cfl."""
+        if self._uf:
+            return self._uf(self._value)
+        return self._value
+
+
 # {{{ Kernel profile quantities
 
 class KernelProfile(MultiLogQuantity):

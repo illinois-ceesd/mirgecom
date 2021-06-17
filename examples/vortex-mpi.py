@@ -38,6 +38,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from mirgecom.euler import euler_operator
+from mirgecom.inviscid import get_inviscid_cfl
+
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
@@ -56,9 +58,10 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
-from mirgecom.logging_quantities import (LogCFL, initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
-    logmgr_add_device_memory_usage)
+from mirgecom.logging_quantities import (
+    LogUserQuantity, LogCFL, initialize_logmgr,
+    logmgr_add_many_discretization_quantities,
+    logmgr_add_device_name, logmgr_add_device_memory_usage, )
 
 
 logger = logging.getLogger(__name__)
@@ -131,16 +134,17 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     )
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(nodes)
-
+    current_cfl = get_inviscid_cfl(discr, dt=current_dt, eos=eos, cv=current_state)
     vis_timer = None
 
+    my_log_quantity = LogUserQuantity(name="my_cfl", value=current_cfl)
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
         logmgr.add_quantity(LogCFL(discr, eos))
-
+        logmgr.add_quantity(my_log_quantity)
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "L2_norm_momentum1", "cfl.max"])
 
@@ -178,7 +182,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, cv=state,
+        current_cfl = get_inviscid_cfl(discr, eos=eos, dt=current_dt, cv=state)
+        viz_flds = [("cfl", current_cfl)]
+        from grudge.op import nodal_max
+        sim_cfl = nodal_max(discr, "vol", current_cfl)
+        my_log_quantity.set_quantity(nodal_max(discr, "vol", sim_cfl))
+        return sim_checkpoint(discr, visualizer, eos, cv=state, viz_fields=viz_flds,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
