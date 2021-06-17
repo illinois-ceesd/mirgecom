@@ -112,7 +112,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
                                           step=restart_step, rank=rank)
         )
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(rst_filename)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
@@ -202,10 +202,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
     if restart_step:
         current_t = restart_data["t"]
         current_step = restart_step
-        restart_discr = discr.discr_from_dd("vol")
-        from mirgecom.restart import make_fluid_state
-        current_state = make_fluid_state(actx, restart_discr,
-                                                 restart_data["state"])
+        current_state = restart_data["state"]
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes, t=0)

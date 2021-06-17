@@ -31,22 +31,15 @@ THE SOFTWARE.
 """
 
 import pickle
-from meshmode.dof_array import unflatten, flatten
-from mirgecom.fluid import make_conserved
+from meshmode.dof_array import array_context_for_pickling
 
 
-def read_restart_data(filename):
+def read_restart_data(actx, filename):
     """Read the raw restart data dictionary from the given pickle restart file."""
-    with open(filename, "rb") as f:
-        restart_data = pickle.load(f)
+    with array_context_for_pickling(actx):
+        with open(filename, "rb") as f:
+            restart_data = pickle.load(f)
     return restart_data
-
-
-def make_fluid_state(actx, discr, restart_q):
-    """Make a :class:`~mirgecom.fluid.ConservedVars` from pickled restart data."""
-    from pytools.obj_array import obj_array_vectorize
-    q = unflatten(actx, discr, obj_array_vectorize(actx.from_numpy, restart_q))
-    return make_conserved(discr.dim, scalar_quantities=q)
 
 
 def write_restart_file(actx, restart_data, filename, comm=None):
@@ -58,11 +51,9 @@ def write_restart_file(actx, restart_data, filename, comm=None):
         import os
         rst_dir = os.path.dirname(filename)
         if not os.path.exists(rst_dir):
-            os.mkdir(rst_dir)
-    comm.barrier()
-    from pytools.obj_array import obj_array_vectorize
-    state = restart_data["state"].join()
-    restart_data["state"] = obj_array_vectorize(actx.to_numpy,
-                                                      flatten(state))
-    with open(filename, "wb") as f:
-        pickle.dump(restart_data, f)
+            os.makedirs(rst_dir)
+    if comm:
+        comm.barrier()
+    with array_context_for_pickling(actx):
+        with open(filename, "wb") as f:
+            pickle.dump(restart_data, f)
