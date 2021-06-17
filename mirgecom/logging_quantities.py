@@ -315,18 +315,14 @@ class LogUserQuantity(LogQuantity):
 
     def __init__(self, name="user_quantity", value=None, user_function=None) -> None:
         LogQuantity.__init__(self, name, "1")
-        self._value = value
+        self._quantity_value = value
         self._uf = user_function
 
-    def set_quantity(self, value) -> None:
-        """Set the user quantity to be used in calculating the logged value."""
-        self._value = value
-
     def __call__(self) -> float:
-        """Return the value of cfl."""
+        """Return the actual logged quantity."""
         if self._uf:
-            return self._uf(self._value)
-        return self._value
+            return self._uf(self._quantity_value)
+        return self._quantity_value
 
 
 # {{{ Kernel profile quantities

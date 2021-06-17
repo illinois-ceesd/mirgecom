@@ -185,7 +185,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         viz_flds = [("cfl", current_cfl)]
         from grudge.op import nodal_max
         max_cfl = nodal_max(discr, "vol", current_cfl)
-        my_log_quantity.set_quantity(max_cfl)
+        logmgr.set_quantity_value("cfl", max_cfl)
+        # my_log_quantity.set_quantity(max_cfl)
         return sim_checkpoint(discr, visualizer, eos, cv=state, viz_fields=viz_flds,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
