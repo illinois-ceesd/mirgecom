@@ -67,8 +67,8 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     """Return the maximum stable dt."""
     mydt = dt
     if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, cv=state,
-                                     cfl=cfl, eos=eos)
+        mydt = cfl * get_inviscid_timestep(discr=discr, cv=state,
+                                           eos=eos)
     if (t + mydt) > t_final:
         mydt = t_final - t
     return mydt
