@@ -137,13 +137,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     vis_timer = None
 
-    my_log_quantity = LogUserQuantity(name="cfl", value=current_cfl)
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
-        logmgr.add_quantity(my_log_quantity)
+        logmgr.add_quantity(LogUserQuantity(name="cfl", value=current_cfl))
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
                             "min_temperature", "L2_norm_momentum1", "cfl.max"])
 
@@ -186,7 +185,6 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         from grudge.op import nodal_max
         max_cfl = nodal_max(discr, "vol", current_cfl)
         logmgr.set_quantity_value("cfl", max_cfl)
-        # my_log_quantity.set_quantity(max_cfl)
         return sim_checkpoint(discr, visualizer, eos, cv=state, viz_fields=viz_flds,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,

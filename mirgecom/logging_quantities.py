@@ -40,6 +40,7 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
+from typing import Any
 from logpyle import (DtConsumer, LogQuantity, LogManager, MultiLogQuantity,
     add_run_info, add_general_quantities, add_simulation_quantities)
 from meshmode.array_context import PyOpenCLArrayContext
@@ -323,6 +324,10 @@ class LogUserQuantity(LogQuantity):
         if self._uf:
             return self._uf(self._quantity_value)
         return self._quantity_value
+
+    def set_quantity_value(self, value: Any) -> None:
+        """Set the value of the logged quantity."""
+        self._quantity_value = value
 
 
 # {{{ Kernel profile quantities

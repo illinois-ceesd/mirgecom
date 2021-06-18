@@ -19,4 +19,4 @@ psutil
 --editable git+https://github.com/inducer/grudge.git#egg=grudge
 --editable git+https://github.com/inducer/pytato.git#egg=pytato
 --editable git+https://github.com/ecisneros8/pyrometheus.git#egg=pyrometheus
---editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
+--editable git+https://github.com/MTCam/logpyle.git@user-quantities#egg=logpyle
