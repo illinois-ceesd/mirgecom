@@ -38,8 +38,7 @@ def read_restart_data(actx, filename):
     """Read the raw restart data dictionary from the given pickle restart file."""
     with array_context_for_pickling(actx):
         with open(filename, "rb") as f:
-            restart_data = pickle.load(f)
-    return restart_data
+            return pickle.load(f)
 
 
 def write_restart_file(actx, restart_data, filename, comm=None):
