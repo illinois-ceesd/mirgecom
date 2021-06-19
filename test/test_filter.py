@@ -62,7 +62,7 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -154,7 +154,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
 
     logger = logging.getLogger(__name__)
     filter_order = 1
-    nel_1d = 2
+    nel_1d = 1
     eta = .5   # filter half the modes
     # Alpha value suggested by:
     # JSH/TW Nodal DG Methods, Seciton 5.3
@@ -164,7 +164,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(0.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
+        a=(0.0,) * dim, b=(1.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -174,7 +174,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
     nummodes = int(1)
-    for i in range(dim):
+    for _ in range(dim):
         nummodes *= int(order + dim + 1)
     nummodes /= math.factorial(int(dim))
     cutoff = int(eta * order)
@@ -182,15 +182,11 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     from mirgecom.filter import exponential_mode_response_function as xmrfunc
     frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
 
-    vol_discr = discr.discr_from_dd("vol")
-    groups = vol_discr.groups
-    group = groups[0]
-
     # First test a uniform field, which should pass through
     # the filter unharmed.
     from mirgecom.initializers import Uniform
     initr = Uniform(dim=dim)
-    uniform_soln = initr(t=0, x_vec=nodes)
+    uniform_soln = initr(t=0, x_vec=nodes).join()
 
     from mirgecom.filter import filter_modally
     filtered_soln = filter_modally(discr, "vol", cutoff,
@@ -243,20 +239,20 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         field = polyfn(coeff=coeff)
         filtered_field = filter_modally(discr, "vol", cutoff,
                                         frfunc, field)
-        for group in vol_discr.groups:
-            unfiltered_spectrum = modal_map(field)
-            filtered_spectrum = modal_map(filtered_field)
-            if do_viz is True:
-                spectrum_resid = unfiltered_spectrum - filtered_spectrum
-                io_fields = [
-                    ("unfiltered", field),
-                    ("filtered", filtered_field),
-                    ("unfiltered_spectrum", unfiltered_spectrum),
-                    ("filtered_spectrum", filtered_spectrum),
-                    ("residual", spectrum_resid)
-                ]
-                vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
-            field_resid = unfiltered_spectrum - filtered_spectrum
-            max_errors = [discr.norm(v, np.inf) for v in field_resid]
-            # fields should be different, but not too different
-            assert(tol > np.max(max_errors) > threshold)
+
+        unfiltered_spectrum = modal_map(field)
+        filtered_spectrum = modal_map(filtered_field)
+        if do_viz is True:
+            spectrum_resid = unfiltered_spectrum - filtered_spectrum
+            io_fields = [
+                ("unfiltered", field),
+                ("filtered", filtered_field),
+                ("unfiltered_spectrum", unfiltered_spectrum),
+                ("filtered_spectrum", filtered_spectrum),
+                ("residual", spectrum_resid)
+            ]
+            vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
+        field_resid = unfiltered_spectrum - filtered_spectrum
+        max_errors = [discr.norm(v, np.inf) for v in field_resid]
+        # fields should be different, but not too different
+        assert(tol > np.max(max_errors) > threshold)

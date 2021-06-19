@@ -24,7 +24,7 @@ jobs:
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
-            python -m pip install flake8 pep8-naming flake8-quotes
+            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py && echo "Flake8 found no errors."
 
     pylint:
@@ -87,7 +87,7 @@ jobs:
               export PYOPENCL_TEST=port:pthread
             fi
 
-            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples ${{ matrix.os }}
@@ -123,10 +123,13 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
+            sudo apt-get update
+            sudo apt-get install texlive-latex-extra latexmk
             conda install sphinx graphviz
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
+            make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     emirge:
         name: Emirge installation
@@ -139,7 +142,7 @@ jobs:
         - uses: actions/checkout@v2
         - name: Install emirge
           run: |
-            [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
@@ -153,4 +156,3 @@ jobs:
             source emirge/config/activate_env.sh
             cd mirgecom/examples
             python -m mpi4py ./wave-eager-mpi.py
-

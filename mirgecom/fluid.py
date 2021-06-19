@@ -6,6 +6,7 @@ State Vector Handling
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
 .. autofunction:: join_conserved
+.. autofunction:: make_conserved
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
@@ -42,8 +43,17 @@ import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
+from arraycontext import (
+    dataclass_array_container,
+    with_container_arithmetic,
+)
 
 
+@with_container_arithmetic(bcast_obj_array=False,
+                           bcast_container_types=(DOFArray, np.ndarray),
+                           matmul=True,
+                           rel_comparison=True)
+@dataclass_array_container
 @dataclass(frozen=True)
 class ConservedVars:
     r"""Store and resolve quantities according to the fluid conservation equations.
@@ -107,12 +117,12 @@ class ConservedVars:
 
         with the `ndim`-vector components of fluid velocity ($v_i$), and the
         `nspecies`-vector of species mass fractions ($Y_\alpha$). In total, the
-        fluid system has $N_\mbox{eq}$ = (`ndim + 2 + nspecies`) equations.
+        fluid system has $N_{\text{eq}}$ = (`ndim + 2 + nspecies`) equations.
 
         Internally to `MIRGE-Com`, $\mathbf{Q}$ is stored as an object array
         (:class:`numpy.ndarray`) of :class:`~meshmode.dof_array.DOFArray`, one for
         each component of the fluid $\mathbf{Q}$, i.e. a flat object array of
-        $N_\mbox{eq}$ :class:`~meshmode.dof_array.DOFArray`.
+        $N_{\text{eq}}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
         $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
@@ -140,7 +150,7 @@ class ConservedVars:
         fluid conserved quantities (CV).
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
-        `nspecies`, and $N_\mbox{eq}$.
+        `nspecies`, and $N_{\text{eq}}$.
 
         Often, a user starts with the fluid conserved quantities like mass and
         energy densities, and it is desired to glom those quantities together into
@@ -158,7 +168,7 @@ class ConservedVars:
 
             q = join_conserved(ndim, mass=rho, energy=rho*e, momentum=rho*v)
 
-        after which *q* will be an obj array of $N_\mbox{eq}$ DOFArrays containing
+        after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
         the fluid conserved state data.
 
         Examples of this sort of use for `join_conserved` can be found in:
@@ -170,7 +180,7 @@ class ConservedVars:
         Use `ConservedVars` to access a vector quantity for each fluid equation.
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
-        `nspecies`, and $N_\mbox{eq}$.
+        `nspecies`, and $N_{\text{eq}}$.
 
         Suppose the user wants to access the gradient of the fluid state,
         $\nabla\mathbf{Q}$, in a fluid-specific way. For a fluid $\mathbf{Q}$,
@@ -182,7 +192,7 @@ class ConservedVars:
             \begin{bmatrix}(\nabla\rho)_j\\(\nabla\rho{E})_j\\(\nabla\rho{v}_{i})_j
             \\(\nabla\rho{Y}_{\alpha})_j\end{bmatrix},
 
-        where $1 \le j \le \mbox{ndim}$, such that the first component of
+        where $1 \le j \le \text{ndim}$, such that the first component of
         $\mathbf{Q}$ is an `ndim`-vector corresponding to the gradient of the fluid
         density, i.e. object array of `ndim` `DOFArray`. Similarly for the energy
         term. The momentum part of $\nabla\mathbf{Q}$ is a 2D array with shape
@@ -218,6 +228,11 @@ class ConservedVars:
     energy: DOFArray
     momentum: np.ndarray
     species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
+
+    @property
+    def array_context(self):
+        """Return an array context for the :class:`ConservedVars` object."""
+        return self.mass.array_context
 
     @property
     def dim(self):
@@ -276,10 +291,10 @@ def split_conserved(dim, q):
                          species_mass=q[2+dim:2+dim+nspec])
 
 
-def join_conserved(dim, mass, energy, momentum,
-        # empty: immutable
-        species_mass=np.empty((0,), dtype=object)):
-    """Create agglomerated array from quantities for each conservation eqn."""
+def _join_conserved(dim, mass, energy, momentum, species_mass=None):
+    if species_mass is None:  # empty: immutable
+        species_mass = np.empty((0,), dtype=object)
+
     nspec = len(species_mass)
     aux_shapes = [
         _aux_shape(mass, ()),
@@ -297,6 +312,20 @@ def join_conserved(dim, mass, energy, momentum,
     result[dim+2:] = species_mass
 
     return result
+
+
+def join_conserved(dim, mass, energy, momentum, species_mass=None):
+    """Create agglomerated array from quantities for each conservation eqn."""
+    return _join_conserved(dim, mass=mass, energy=energy,
+                           momentum=momentum, species_mass=species_mass)
+
+
+def make_conserved(dim, mass, energy, momentum, species_mass=None):
+    """Create :class:`ConservedVars` from separated conserved quantities."""
+    return split_conserved(
+        dim, _join_conserved(dim, mass=mass, energy=energy,
+                             momentum=momentum, species_mass=species_mass)
+    )
 
 
 def velocity_gradient(discr, cv, grad_cv):
@@ -346,7 +375,7 @@ def velocity_gradient(discr, cv, grad_cv):
     velocity = cv.momentum / cv.mass
     return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
-                                       for i in range(discr.dim)])
+                                       for i in range(cv.dim)])
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -395,7 +424,7 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
-    actx = cv.mass.array_context
+    actx = cv.array_context
 
     v = cv.momentum / cv.mass
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)

@@ -78,10 +78,13 @@ intersphinx_mapping = {
     "https://numpy.org/doc/stable/": None,
     "https://documen.tician.de/pyopencl/": None,
     "https://documen.tician.de/modepy/": None,
+    "arraycontext": ("https://documen.tician.de/arraycontext/", None),
     "https://documen.tician.de/meshmode/": None,
     "https://documen.tician.de/grudge/": None,
     "https://documen.tician.de/pytato/": None,
     "https://documen.tician.de/loopy/": None,
+    "https://documen.tician.de/dagrt/": None,
+    "https://documen.tician.de/leap/": None,
     "https://documen.tician.de/pymbolic/": None,
     "https://documen.tician.de/pytools/": None,
     "https://pyrometheus.readthedocs.io/en/latest": None,
@@ -95,9 +98,13 @@ todo_include_todos = True
 
 nitpicky = True
 
-mathjax_config = {
+mathjax3_config = {
     "tex2jax": {
         "inlineMath": [["\\(", "\\)"]],
         "displayMath": [["\\[", "\\]"]],
     },
 }
+
+rst_prolog = """
+.. |mirgecom| replace:: *MIRGE-Com*
+"""

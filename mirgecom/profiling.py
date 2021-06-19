@@ -68,7 +68,7 @@ class ProfileEvent:
     """Holds a profile event that has not been collected by the profiler yet."""
 
     cl_event: cl._cl.Event
-    program: lp.kernel.LoopKernel
+    translation_unit: lp.TranslationUnit
     args_tuple: tuple
 
 
@@ -80,7 +80,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     .. automethod:: get_profiling_data_for_kernel
     .. automethod:: reset_profiling_data_for_kernel
 
-    Inherits from :class:`meshmode.array_context.PyOpenCLArrayContext`.
+    Inherits from :class:`arraycontext.PyOpenCLArrayContext`.
     """
 
     def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:
@@ -102,6 +102,10 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.logmgr = logmgr
 
         cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
+
+    def clone(self):
+        """Return a semantically equivalent but distinct version of *self*."""
+        return type(self)(self.queue, self.allocator, self.logmgr)
 
     def __del__(self):
         """Release resources and undo monkey patching."""
@@ -148,12 +152,14 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         # Then, collect all events and store them
         for t in self.profile_events:
-            program = t.program
-            if hasattr(program, "name"):
-                name = program.name
+            t_unit = t.translation_unit
+            if isinstance(t_unit, lp.TranslationUnit):
+                name = t_unit.default_entrypoint.name
             else:
-                name = program.function_name
-            r = self._get_kernel_stats(program, t.args_tuple)
+                # It's actually a cl.Kernel
+                name = t_unit.function_name
+
+            r = self._get_kernel_stats(t_unit, t.args_tuple)
             time = t.cl_event.profile.end - t.cl_event.profile.start
 
             new = SingleCallKernelProfile(time, r.flops, r.bytes_accessed,
@@ -270,11 +276,11 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         return tbl
 
-    def _get_kernel_stats(self, program: lp.kernel.LoopKernel, args_tuple: tuple) \
+    def _get_kernel_stats(self, t_unit: lp.TranslationUnit, args_tuple: tuple) \
       -> SingleCallKernelProfile:
-        return self.kernel_stats[program][args_tuple]
+        return self.kernel_stats[t_unit][args_tuple]
 
-    def _cache_kernel_stats(self, program: lp.kernel.LoopKernel, kwargs: dict) \
+    def _cache_kernel_stats(self, t_unit: lp.TranslationUnit, kwargs: dict) \
       -> tuple:
         """Generate the kernel stats for a program with its args."""
         args_tuple = tuple(
@@ -283,20 +289,21 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
         # Are kernel stats already in the cache?
         try:
-            self.kernel_stats[program][args_tuple]
+            self.kernel_stats[t_unit][args_tuple]
             return args_tuple
         except KeyError:
             # If not, calculate and cache the stats
-            executor = program.target.get_kernel_executor(program, self.queue)
-            info = executor.kernel_info(executor.arg_to_dtype_set(kwargs))
+            ep_name = t_unit.default_entrypoint.name
+            executor = t_unit.target.get_kernel_executor(t_unit, self.queue,
+                    entrypoint=ep_name)
+            info = executor.translation_unit_info(
+                ep_name, executor.arg_to_dtype_set(kwargs))
 
-            kernel = executor.get_typed_and_scheduled_kernel(
-                executor.arg_to_dtype_set(kwargs))
+            typed_t_unit = executor.get_typed_and_scheduled_translation_unit(
+                ep_name, executor.arg_to_dtype_set(kwargs))
+            kernel = typed_t_unit[ep_name]
 
             idi = info.implemented_data_info
-
-            types = {k: v for k, v in kwargs.items()
-                if hasattr(v, "dtype") and not v.dtype == object}
 
             param_dict = kwargs.copy()
             param_dict.update({k: None for k in kernel.arg_dict.keys()
@@ -314,7 +321,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             wrapper.generate_integer_arg_finding_from_offsets(gen, kernel, idi)
             wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
-            param_names = program.all_params()
+            param_names = kernel.all_params()
             gen("return {%s}" % ", ".join(
                 f"{repr(name)}: {name}" for name in param_names))
 
@@ -322,39 +329,45 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             domain_params = gen.get_picklable_function()(**param_dict)
 
             # Get flops/memory statistics
-            kernel = lp.add_and_infer_dtypes(kernel, types)
-            op_map = lp.get_op_map(kernel, subgroup_size="guess")
-            bytes_accessed = lp.get_mem_access_map(kernel, subgroup_size="guess") \
-              .to_bytes().eval_and_sum(domain_params)
+            op_map = lp.get_op_map(typed_t_unit, subgroup_size="guess")
+            bytes_accessed = lp.get_mem_access_map(
+                typed_t_unit, subgroup_size="guess") \
+                            .to_bytes().eval_and_sum(domain_params)
 
             flops = op_map.filter_by(dtype=[np.float32, np.float64]).eval_and_sum(
                 domain_params)
 
-            try:
-                footprint = lp.gather_access_footprint_bytes(kernel)
-                footprint_bytes = sum(footprint[k].eval_with_dict(domain_params)
-                    for k in footprint)
+            # Footprint gathering is not yet available in loopy with
+            # kernel callables:
+            # https://github.com/inducer/loopy/issues/399
+            if 0:
+                try:
+                    footprint = lp.gather_access_footprint_bytes(typed_t_unit)
+                    footprint_bytes = sum(footprint[k].eval_with_dict(domain_params)
+                        for k in footprint)
 
-            except lp.symbolic.UnableToDetermineAccessRange:
+                except lp.symbolic.UnableToDetermineAccessRange:
+                    footprint_bytes = None
+            else:
                 footprint_bytes = None
 
             res = SingleCallKernelProfile(
                 time=0, flops=flops, bytes_accessed=bytes_accessed,
                 footprint_bytes=footprint_bytes)
 
-            self.kernel_stats.setdefault(program, {})[args_tuple] = res
+            self.kernel_stats.setdefault(t_unit, {})[args_tuple] = res
 
             if self.logmgr:
-                if f"{program.name}_time" not in self.logmgr.quantity_data:
-                    self.logmgr.add_quantity(KernelProfile(self, program.name))
+                if f"{ep_name}_time" not in self.logmgr.quantity_data:
+                    self.logmgr.add_quantity(KernelProfile(self, ep_name))
 
             return args_tuple
 
     def call_loopy(self, program, **kwargs) -> dict:
         """Execute the loopy kernel and profile it."""
         program = self.transform_loopy_program(program)
-        assert program.options.return_dict
-        assert program.options.no_numpy
+        assert program.default_entrypoint.options.return_dict
+        assert program.default_entrypoint.options.no_numpy
 
         evt, result = program(self.queue, **kwargs, allocator=self.allocator)
 

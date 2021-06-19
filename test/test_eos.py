@@ -47,7 +47,6 @@ from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
 )
-from mirgecom.fluid import split_conserved
 from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -79,7 +78,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 4
@@ -183,7 +182,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 4
@@ -235,9 +234,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
                                          pressure=pyro_p, temperature=pyro_t,
                                          massfractions=y0s, velocity=velocity)
 
-        q = initializer(eos=eos, t=0, x_vec=nodes)
-        cv = split_conserved(dim, q)
-
+        cv = initializer(eos=eos, t=0, x_vec=nodes)
         p = eos.pressure(cv)
         temperature = eos.temperature(cv)
         internal_energy = eos.get_internal_energy(tin, yin)
@@ -279,7 +276,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 4
@@ -321,7 +318,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     reactor = cantera.IdealGasConstPressureReactor(cantera_soln)
     sim = cantera.ReactorNet([reactor])
     time = 0.0
-    for step in range(50):
+    for _ in range(50):
         time += 1.0e-6
         sim.advance(time)
 
@@ -351,12 +348,11 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
         print(f"pyro_r = {pyro_r}")
         abs_diff = discr.norm(pyro_r - can_r, np.inf)
         if abs_diff > 1e-14:
-            for i, rate in enumerate(can_r):
-                min_r = (np.abs(can_r)).min()
-                if min_r > 0:
-                    assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
-                else:
-                    assert discr.norm(pyro_r, np.inf) < rate_tol
+            min_r = (np.abs(can_r)).min()
+            if min_r > 0:
+                assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
+            else:
+                assert discr.norm(pyro_r, np.inf) < rate_tol
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
@@ -384,7 +380,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -399,9 +395,8 @@ def test_idealsingle_lump(ctx_factory, dim):
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
     eos = IdealSingleGas()
-    lump_soln = lump(nodes)
+    cv = lump(nodes)
 
-    cv = split_conserved(dim, lump_soln)
     p = eos.pressure(cv)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
@@ -413,7 +408,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     te = eos.total_energy(cv, p)
     terr = discr.norm(te - cv.energy, np.inf)
 
-    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
@@ -437,7 +432,7 @@ def test_idealsingle_vortex(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -448,8 +443,8 @@ def test_idealsingle_vortex(ctx_factory):
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()
-    vortex_soln = vortex(nodes)
-    cv = split_conserved(dim, vortex_soln)
+    cv = vortex(nodes)
+
     gamma = eos.gamma()
     p = eos.pressure(cv)
     exp_p = cv.mass ** gamma
@@ -462,7 +457,7 @@ def test_idealsingle_vortex(ctx_factory):
     te = eos.total_energy(cv, p)
     terr = discr.norm(te - cv.energy, np.inf)
 
-    logger.info(f"vortex_soln = {vortex_soln}")
+    logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15

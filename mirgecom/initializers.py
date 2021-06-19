@@ -41,7 +41,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.fluid import make_conserved
 
 
 def make_pulse(amp, r0, w, r):
@@ -113,7 +113,7 @@ class Vortex2D:
     """
 
     def __init__(
-        self, *, beta=5, center=[0, 0], velocity=[0, 0],
+        self, *, beta=5, center=(0, 0), velocity=(0, 0),
     ):
         """Initialize vortex parameters.
 
@@ -130,7 +130,7 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=None):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
@@ -147,6 +147,8 @@ class Vortex2D:
         eos: mirgecom.eos.IdealSingleGas
             Equation of state class to supply method for gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
@@ -166,7 +168,7 @@ class Vortex2D:
 
         energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return join_conserved(dim=2, mass=mass, energy=energy,
+        return make_conserved(dim=2, mass=mass, energy=energy,
                               momentum=momentum)
 
 
@@ -223,7 +225,7 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=None):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -236,6 +238,8 @@ class SodShock1D:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
@@ -258,7 +262,7 @@ class SodShock1D:
             ]
         )
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
 
 
@@ -328,7 +332,7 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=None):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
@@ -344,6 +348,8 @@ class Lump:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
@@ -364,9 +370,10 @@ class Lump:
         mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, discr, cv, t=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
@@ -381,7 +388,7 @@ class Lump:
         t: float
             Time at which RHS is desired
         """
-        actx = q[0].array_context
+        actx = cv.array_context
         nodes = thaw(actx, discr.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
@@ -404,7 +411,7 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs)
 
 
@@ -498,7 +505,7 @@ class MulticomponentLump:
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=None):
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
@@ -515,6 +522,8 @@ class MulticomponentLump:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             print(f"len(x_vec) = {len(x_vec)}")
             print(f"self._dim = {self._dim}")
@@ -538,10 +547,10 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, discr, cv, t=0.0):
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
@@ -556,7 +565,7 @@ class MulticomponentLump:
         t: float
             Time at which RHS is desired
         """
-        actx = q[0].array_context
+        actx = cv.array_context
         nodes = thaw(actx, discr.nodes())
         loc_update = t * self._velocity
 
@@ -577,7 +586,7 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=specrhs)
 
 
@@ -629,7 +638,7 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+    def __call__(self, x_vec, cv, eos=None):
         """
         Create the acoustic pulse at locations *x_vec*.
 
@@ -642,14 +651,15 @@ class AcousticPulse:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
+        if eos is None:
+            eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        cv = split_conserved(self._dim, q)
         return cv.replace(
             energy=cv.energy + make_pulse(
                 amp=self._amp, w=self._width, r0=self._center, r=x_vec)
-            ).join()
+        )
 
 
 class Uniform:
@@ -712,7 +722,7 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=None):
         """
         Create a uniform flow solution at locations *x_vec*.
 
@@ -725,16 +735,19 @@ class Uniform:
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
+
         gamma = eos.gamma()
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
         species_mass = self._mass_fracs * mass
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, discr, cv, t=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
@@ -746,7 +759,7 @@ class Uniform:
         t: float
             Time at which RHS is desired (unused)
         """
-        actx = q[0].array_context
+        actx = cv.array_context
         nodes = thaw(actx, discr.nodes())
         mass = nodes[0].copy()
         mass[:] = 1.0
@@ -755,7 +768,7 @@ class Uniform:
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
         yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return join_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=yrhs)
 
 
@@ -838,5 +851,5 @@ class MixtureInitializer:
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)

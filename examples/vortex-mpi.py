@@ -65,7 +65,8 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False):
+def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=False,
+         use_leap=False):
     """Drive the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -88,7 +89,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     dim = 2
     nel_1d = 16
     order = 3
-    exittol = .09
+    exittol = .1
     t_final = 0.1
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
@@ -106,7 +107,11 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = rk4_step
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
 
@@ -117,7 +122,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, n=(nel_1d,) * dim)
+                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
     local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
     local_nelements = local_mesh.nelements
 
@@ -149,7 +154,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+    visualizer = make_visualizer(discr)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -168,11 +173,11 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
+        return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
@@ -181,10 +186,10 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, logmgr=logmgr, eos=eos,
-                          dim=dim)
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final, logmgr=logmgr,
+                eos=eos, dim=dim)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -210,7 +215,8 @@ if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     use_profiling = True
     use_logging = True
+    use_leap = False
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging)
+    main(use_profiling=use_profiling, use_logmgr=use_logging, use_leap=use_leap)
 
 # vim: foldmethod=marker

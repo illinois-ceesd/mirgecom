@@ -32,7 +32,7 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from meshmode.dof_array import thaw, DOFArray
-from grudge.dof_desc import DTAG_BOUNDARY, QTAG_NONE
+from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, DISCR_TAG_QUAD
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -88,8 +88,8 @@ def get_box_mesh(dim, a, b, n):
         boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
         boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
+    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
+        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
 
 # 1D: u(x,t) = exp(-alpha*t)*cos(x)
@@ -230,11 +230,11 @@ def sym_diffusion(dim, sym_alpha, sym_u):
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
     [
-        (get_decaying_trig_truncated_domain(1, 2.), 50, 5.e-5, [8, 12, 16]),
+        (get_decaying_trig_truncated_domain(1, 2.), 50, 5.e-5, [8, 16, 24]),
         (get_decaying_trig_truncated_domain(2, 2.), 50, 5.e-5, [8, 12, 16]),
         (get_decaying_trig_truncated_domain(3, 2.), 50, 5.e-5, [8, 10, 12]),
-        (get_static_trig_var_diff(1), 50, 5.e-5, [8, 12, 16]),
-        (get_static_trig_var_diff(2), 50, 5.e-5, [8, 12, 16]),
+        (get_static_trig_var_diff(1), 50, 5.e-5, [8, 16, 24]),
+        (get_static_trig_var_diff(2), 50, 5.e-5, [12, 14, 16]),
         (get_static_trig_var_diff(3), 50, 5.e-5, [8, 10, 12]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
@@ -264,11 +264,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         from meshmode.discretization.poly_element import \
                 QuadratureSimplexGroupFactory, \
                 PolynomialWarpAndBlendGroupFactory
-        discr = EagerDGDiscretization(actx, mesh,
-                quad_tag_to_group_factory={
-                    QTAG_NONE: PolynomialWarpAndBlendGroupFactory(order),
-                    "quad": QuadratureSimplexGroupFactory(3*order),
-                    })
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
+            }
+        )
 
         nodes = thaw(actx, discr.nodes())
 
@@ -278,12 +280,12 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         alpha = sym_eval(p.sym_alpha, 0.)
 
         if isinstance(alpha, DOFArray):
-            quad_tag = "quad"
+            discr_tag = DISCR_TAG_QUAD
         else:
-            quad_tag = QTAG_NONE
+            discr_tag = DISCR_TAG_BASE
 
         def get_rhs(t, u):
-            return (diffusion_operator(discr, quad_tag=quad_tag, alpha=alpha,
+            return (diffusion_operator(discr, quad_tag=discr_tag, alpha=alpha,
                     boundaries=p.get_boundaries(discr, actx, t), u=u)
                 + sym_eval(sym_f, t))
 
@@ -293,7 +295,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         from mirgecom.integrators import rk4_step
 
-        for istep in range(nsteps):
+        for _ in range(nsteps):
             u = rk4_step(u, t, dt, get_rhs)
             t += dt
 
@@ -331,7 +333,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     n = 8
 
-    mesh = get_box_mesh(1, -1, 1, n+1)
+    mesh = get_box_mesh(1, -1, 1, n)
 
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(actx, mesh, order=order)
@@ -369,7 +371,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     def get_rhs(t, u):
         return diffusion_operator(
-            discr, quad_tag=QTAG_NONE, alpha=alpha, boundaries=boundaries, u=u)
+            discr, quad_tag=DISCR_TAG_BASE, alpha=alpha, boundaries=boundaries, u=u)
 
     rhs = get_rhs(0, u_steady)
 
@@ -401,7 +403,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     from mirgecom.integrators import rk4_step
 
-    for istep in range(50):
+    for _ in range(50):
         u = rk4_step(u, t, dt, get_rhs)
         t += dt
 
@@ -459,7 +461,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             u_mirgecom = sym_eval_mirgecom(p.sym_u)
 
             diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
-                quad_tag=QTAG_NONE, alpha=discr_mirgecom.zeros(actx)+1.,
+                quad_tag=DISCR_TAG_BASE, alpha=discr_mirgecom.zeros(actx)+1.,
                 boundaries=p.get_boundaries(discr_mirgecom, actx, t), u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
@@ -528,7 +530,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     boundaries = p.get_boundaries(discr, actx, t)
 
-    diffusion_u1 = diffusion_operator(discr, quad_tag=QTAG_NONE, alpha=alpha,
+    diffusion_u1 = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
         boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
@@ -542,8 +544,10 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
-    diffusion_u_vector = diffusion_operator(discr, quad_tag=QTAG_NONE, alpha=alpha,
-        boundaries=boundaries_vector, u=u_vector)
+    diffusion_u_vector = diffusion_operator(
+        discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
+        boundaries=boundaries_vector, u=u_vector
+    )
 
     assert isinstance(diffusion_u_vector, np.ndarray)
     assert diffusion_u_vector.shape == (2,)

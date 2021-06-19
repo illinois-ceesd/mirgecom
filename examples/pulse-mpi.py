@@ -61,7 +61,7 @@ from mirgecom.eos import IdealSingleGas
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context):
+def main(ctx_factory=cl.create_some_context, use_leap=False):
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -94,7 +94,11 @@ def main(ctx_factory=cl.create_some_context):
     rank = 0
     checkpoint_t = current_t
     current_step = 0
-    timestepper = rk4_step
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
     box_ll = -0.5
     box_ur = 0.5
 
@@ -107,12 +111,13 @@ def main(ctx_factory=cl.create_some_context):
     from meshmode.mesh.generation import generate_regular_rect_mesh
     if num_parts > 1:
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                                b=(box_ur,) * dim, n=(nel_1d,) * dim)
+                                b=(box_ur,) * dim,
+                                nelements_per_axis=(nel_1d,) * dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
     else:
         local_mesh = generate_regular_rect_mesh(
-            a=(box_ll,) * dim, b=(box_ur,) * dim, n=(nel_1d,) * dim
+            a=(box_ll,) * dim, b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
         global_nelements = local_mesh.nelements
     local_nelements = local_mesh.nelements
@@ -124,9 +129,9 @@ def main(ctx_factory=cl.create_some_context):
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
-    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
+    current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+    visualizer = make_visualizer(discr)
 
     initname = "pulse"
     eosname = eos.__class__.__name__
@@ -145,11 +150,11 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
+        return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)
@@ -157,9 +162,9 @@ def main(ctx_factory=cl.create_some_context):
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final)
+                checkpoint=my_checkpoint,
+                get_timestep=get_timestep, state=current_state,
+                t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
@@ -179,6 +184,6 @@ def main(ctx_factory=cl.create_some_context):
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
-    main()
+    main(use_leap=False)
 
 # vim: foldmethod=marker
