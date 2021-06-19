@@ -98,7 +98,7 @@ todo_include_todos = True
 
 nitpicky = True
 
-mathjax_config = {
+mathjax3_config = {
     "tex2jax": {
         "inlineMath": [["\\(", "\\)"]],
         "displayMath": [["\\[", "\\]"]],
