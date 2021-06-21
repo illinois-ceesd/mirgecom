@@ -29,8 +29,7 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw, array_context_for_pickling
+from meshmode.array_context import thaw, PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -39,8 +38,8 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
+
 import pyopencl.tools as cl_tools
-import pickle
 
 
 def bump(actx, discr, t=0):
@@ -101,11 +100,10 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         fields = None
 
     else:
-        with array_context_for_pickling(actx):
-            with open(snapshot_pattern.format(step=restart_step, rank=rank), "rb") \
-                    as f:
-                restart_data = pickle.load(f)
-
+        from mirgecom.restart import read_restart_data
+        restart_data = read_restart_data(
+            actx, snapshot_pattern.format(step=restart_step, rank=rank)
+        )
         local_mesh = restart_data["local_mesh"]
         nel_1d = restart_data["nel_1d"]
         assert comm.Get_size() == restart_data["num_parts"]
@@ -161,17 +159,19 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         if istep % 100 == 0 and (
                 # Do not overwrite the restart file that we just read.
                 istep != restart_step):
-            with array_context_for_pickling(actx):
-                with open(snapshot_pattern.format(step=istep, rank=rank), "wb") as f:
-                    pickle.dump({
-                        "local_mesh": local_mesh,
-                        "order": order,
-                        "fields": fields,
-                        "t": t,
-                        "step": istep,
-                        "nel_1d": nel_1d,
-                        "num_parts": num_parts,
-                        }, f)
+            from mirgecom.restart import write_restart_file
+            write_restart_file(
+                actx, restart_data={
+                    "local_mesh": local_mesh,
+                    "order": order,
+                    "fields": fields,
+                    "t": t,
+                    "step": istep,
+                    "nel_1d": nel_1d,
+                    "num_parts": num_parts},
+                filename=snapshot_pattern.format(step=istep, rank=rank),
+                comm=comm
+            )
 
         if istep % 10 == 0:
             print(istep, t, discr.norm(fields[0]))
