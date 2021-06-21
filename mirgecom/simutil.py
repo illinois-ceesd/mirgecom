@@ -8,9 +8,6 @@ General utilities
 .. autoexception:: ExactSolutionMismatch
 .. autofunction:: write_visfile
 .. autofunction:: sim_checkpoint
-.. autofunction:: write_restart_file
-.. autofunction:: make_fluid_restart_state
-.. autofunction:: read_restart_data
 
 Diagnostic utilities
 --------------------
@@ -49,40 +46,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import pickle
 import numpy as np
 
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
-from meshmode.dof_array import thaw, flatten, unflatten  # noqa
-from mirgecom.fluid import make_conserved
 
 logger = logging.getLogger(__name__)
-
-
-def read_restart_data(filename):
-    """Read the raw restart data dictionary from the given pickle restart file."""
-    with open(filename, "rb") as f:
-        restart_data = pickle.load(f)
-    return restart_data
-
-
-def make_fluid_restart_state(actx, discr, restart_q):
-    """Make a :class:`~mirgecom.fluid.ConservedVars` from pickled restart data."""
-    from pytools.obj_array import obj_array_vectorize
-    q = unflatten(actx, discr, obj_array_vectorize(actx.from_numpy, restart_q))
-    return make_conserved(discr.dim, q=q)
-
-
-def write_restart_file(actx, restart_dictionary, filename):
-    """Pickle the simulation data into a file for use in restarting."""
-    from pytools.obj_array import obj_array_vectorize
-    state = restart_dictionary["state"].join()
-    restart_dictionary["state"] = obj_array_vectorize(actx.to_numpy,
-                                                      flatten(state))
-    with open(filename, "wb") as f:
-        pickle.dump(restart_dictionary, f)
 
 
 def check_step(step, interval):
