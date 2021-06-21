@@ -239,9 +239,9 @@ def main(ctx_factory=cl.create_some_context):
             inviscid_dt = (
                 current_cfl * get_inviscid_timestep(discr=discr, eos=eos, cv=state)
             )
-            viscous_dt = get_viscous_timestep(discr=discr, eos=eos,
-                                              transport_model=transport_model,
-                                              cfl=current_cfl, cv=state)
+            viscous_dt = (
+                current_cfl * get_viscous_timestep(discr=discr, eos=eos, cv=state)
+            )
             next_dt = min([next_dt, inviscid_dt, viscous_dt])
         # else:
         #     inviscid_cfl = get_inviscid_cfl(discr=discr, eos=eos,
