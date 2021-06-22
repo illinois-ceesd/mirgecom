@@ -456,7 +456,6 @@ class PyrometheusMixture(GasEOS):
         c2 = (self.gamma(cv) * self.pressure(cv)) / cv.mass
         return actx.np.sqrt(c2)
 
-        
     def temperature(self, cv: ConservedVars):
         r"""Get the thermodynamic temperature of the gas.
 

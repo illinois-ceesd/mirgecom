@@ -259,7 +259,6 @@ class ConservedVars:
         return replace(self, **kwargs)
 
 
-
 def _aux_shape(ary, leading_shape):
     """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
     from meshmode.dof_array import DOFArray
