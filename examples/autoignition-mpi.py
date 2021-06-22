@@ -74,7 +74,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 1e-8
+    t_final = 3e-9
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
