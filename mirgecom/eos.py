@@ -178,7 +178,10 @@ class IdealSingleGas(GasEOS):
 
             p = (\gamma - 1)e
         """
-        return self.internal_energy(cv) * (self._gamma - 1.0)
+        @memoize_in(cv, (IdealSingleGas.pressure, "pressarry"))
+        def get():
+            return self.internal_energy(cv) * (self._gamma - 1.0)
+        return get()
 
     def sound_speed(self, cv: ConservedVars):
         r"""Get the speed of sound in the gas.
@@ -191,9 +194,12 @@ class IdealSingleGas(GasEOS):
         """
         actx = cv.mass.array_context
 
-        p = self.pressure(cv)
-        c2 = self._gamma / cv.mass * p
-        return actx.np.sqrt(c2)
+        @memoize_in(cv, (IdealSingleGas.sound_speed, "sosarry"))
+        def get():
+            p = self.pressure(cv)
+            c2 = self._gamma / cv.mass * p
+            return actx.np.sqrt(c2)
+        return get()
 
     def temperature(self, cv: ConservedVars):
         r"""Get the thermodynamic temperature of the gas.
@@ -206,10 +212,13 @@ class IdealSingleGas(GasEOS):
 
             T = \frac{(\gamma - 1)e}{R\rho}
         """
-        return (
-            (((self._gamma - 1.0) / self._gas_const)
-            * self.internal_energy(cv) / cv.mass)
-        )
+        @memoize_in(cv, (IdealSingleGas.temperature, "temparry"))
+        def get():
+            return (
+                (((self._gamma - 1.0) / self._gas_const)
+                 * self.internal_energy(cv) / cv.mass)
+            )
+        return get()
 
     def total_energy(self, cv, pressure):
         r"""
@@ -422,9 +431,13 @@ class PyrometheusMixture(GasEOS):
 
             c = \sqrt{\frac{\gamma_{\mathtt{mix}}{p}}{\rho}}
         """
-        actx = cv.mass.array_context
-        c2 = (self.gamma(cv) * self.pressure(cv)) / cv.mass
-        return actx.np.sqrt(c2)
+        @memoize_in(cv, (PyrometheusMixture.sound_speed,
+                         type(self._pyrometheus_mech)))
+        def get():
+            actx = cv.mass.array_context
+            c2 = (self.gamma(cv) * self.pressure(cv)) / cv.mass
+            return actx.np.sqrt(c2)
+        return get()
 
     def temperature(self, cv: ConservedVars):
         r"""Get the thermodynamic temperature of the gas.
