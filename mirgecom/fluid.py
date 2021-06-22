@@ -248,6 +248,11 @@ class ConservedVars:
             momentum=self.momentum,
             species_mass=self.species_mass)
 
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return(ConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(ConservedVars)))
+
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
         from dataclasses import replace

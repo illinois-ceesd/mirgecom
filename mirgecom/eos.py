@@ -38,6 +38,7 @@ THE SOFTWARE.
 
 from dataclasses import dataclass
 import numpy as np
+from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import ConservedVars, make_conserved
 
@@ -398,9 +399,19 @@ class PyrometheusMixture(GasEOS):
 
             p = (\gamma_{\mathtt{mix}} - 1)e
         """
-        temperature = self.temperature(cv)
-        y = self.species_fractions(cv)
-        return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
+        @memoize_in(cv, (PyrometheusMixture.pressure,
+                         type(self._pyrometheus_mech)))
+        def get():
+            temperature = self.temperature(cv)
+            y = self.species_fractions(cv)
+            press = self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
+            # from meshmode.dof_array import freeze
+            # return freeze(cv.array_context, press)
+            return press
+
+        # from meshmode.dof_array import thaw
+        # return thaw(cv.array_context, get())
+        return get()
 
     def sound_speed(self, cv: ConservedVars):
         r"""Get the speed of sound in the gas.
@@ -426,9 +437,20 @@ class PyrometheusMixture(GasEOS):
 
             T = \frac{(\gamma_{\mathtt{mix}} - 1)e}{R_s \rho}
         """
-        y = self.species_fractions(cv)
-        e = self.internal_energy(cv) / cv.mass
-        return self._pyrometheus_mech.get_temperature(e, self._tguess, y, True)
+        @memoize_in(cv, (PyrometheusMixture.temperature,
+                         type(self._pyrometheus_mech)))
+        def get():
+            y = self.species_fractions(cv)
+            e = self.internal_energy(cv) / cv.mass
+            tmptr = self._pyrometheus_mech.get_temperature(e, self._tguess,
+                                                           y, True)
+            # from meshmode.dof_array import freeze
+            # return freeze(cv.array_context, tmptr)
+            return tmptr
+
+        # from meshmode.dof_array import thaw
+        # return thaw(cv.array_context, get())
+        return get()
 
     def total_energy(self, cv, pressure):
         r"""
