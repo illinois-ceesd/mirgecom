@@ -42,7 +42,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
