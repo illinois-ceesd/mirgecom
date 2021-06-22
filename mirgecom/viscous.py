@@ -225,6 +225,8 @@ def get_inv_length_weighted_viscosity(discr, eos, cv):
     """Get the local viscosity weighted by 1/dx. Used for viscous timestep
        calculation. TODO: change to a better name
     """
+    from grudge.dt_utils import characteristic_lengthscales
+    
     transport = eos.transport_model()
     mu = transport.viscosity(eos, cv)
 
