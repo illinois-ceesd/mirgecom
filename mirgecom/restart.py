@@ -50,7 +50,7 @@ def write_restart_file(actx, restart_data, filename, comm=None):
         import os
         rst_dir = os.path.dirname(filename)
         if rst_dir:
-            os.makedirs(rst_dir)
+            os.makedirs(rst_dir, exist_ok=True)
     if comm:
         comm.barrier()
     with array_context_for_pickling(actx):
