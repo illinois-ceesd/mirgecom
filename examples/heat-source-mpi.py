@@ -37,7 +37,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
+    NeumannDiffusionBoundary,
+    RobinDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
@@ -66,8 +67,9 @@ def main():
             b=(0.5,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
             boundary_tag_to_face={
-                "dirichlet": ["+x", "-x"],
-                "neumann": ["+y", "-y"]
+                "dirichlet": ["-x"],
+                "robin": ["+x"],
+                "neumann": ["+y", "-y"],
                 }
             )
 
@@ -99,6 +101,7 @@ def main():
 
     boundaries = {
         DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
+        DTAG_BOUNDARY("robin"): RobinDiffusionBoundary(1., 0.002),
         DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
     }
 
@@ -116,7 +119,7 @@ def main():
     rank = comm.Get_rank()
 
     t = 0
-    t_final = 0.01
+    t_final = 0.05
     istep = 0
 
     while True:
