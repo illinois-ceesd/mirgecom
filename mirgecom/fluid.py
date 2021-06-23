@@ -62,9 +62,9 @@ class ConservedVars:
     for the canonical conserved quantities (mass, energy, momentum,
     and species masses) per unit volume: $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.  This data structure is intimately
-    related to helper functions :func:`join_conserved` and :func:`split_conserved`,
-    which pack and unpack (respectively) quantities to-and-from flat object
-    array representations of the data.
+    related to helper functions :func:`join_conserved`, :func:`split_conserved`,
+    and :func:`make_conserved`, which pack and unpack quantities to-and-from flat
+    object array representations of the data.
 
     .. note::
 
@@ -117,19 +117,20 @@ class ConservedVars:
 
         with the `ndim`-vector components of fluid velocity ($v_i$), and the
         `nspecies`-vector of species mass fractions ($Y_\alpha$). In total, the
-        fluid system has $N_{\text{eq}}$ = (`ndim + 2 + nspecies`) equations.
+        fluid system has $N_{\text{eq}}$ = (`ndim + 2 + nspecies`) equations, and
+        thus has $N_{\text{eq}}$ scalar components.
 
         Internally to `MIRGE-Com`, $\mathbf{Q}$ is stored as an object array
         (:class:`numpy.ndarray`) of :class:`~meshmode.dof_array.DOFArray`, one for
-        each component of the fluid $\mathbf{Q}$, i.e. a flat object array of
+        each scalar component of the fluid $\mathbf{Q}$, i.e. a flat object array of
         $N_{\text{eq}}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
-        $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
+        $\mathbf{Q}$, one can call :func:`make_conserved` to get a `ConservedVars`
         dataclass object that resolves the fluid CV associated with each conservation
         equation::
 
-            fluid_cv = split_conserved(ndim, Q),
+            fluid_cv = make_conserved(ndim, scalar_quantities=Q),
 
         after which::
 
@@ -147,7 +148,8 @@ class ConservedVars:
     :example::
 
         Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
-        fluid conserved quantities (CV).
+        fluid conserved quantities (CV).  This may be useful for users who need to
+        interact with non-fluid simulation components.
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
         `nspecies`, and $N_{\text{eq}}$.
@@ -204,11 +206,11 @@ class ConservedVars:
 
         Presuming that `grad_q` is the agglomerated *MIRGE* data structure with the
         gradient data, this dataclass can be used to get a fluid CV-specific view on
-        the content of $\nabla\mathbf{Q}$. One can call :func:`split_conserved` to
+        the content of $\nabla\mathbf{Q}$. One can call :func:`make_conserved` to
         get a `ConservedVars` dataclass object that resolves the vector quantity
         associated with each conservation equation::
 
-            grad_cv = split_conserved(ndim, grad_q),
+            grad_cv = make_conserved(ndim, vector_quantities=grad_q),
 
         after which::
 
@@ -320,8 +322,13 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
                            momentum=momentum, species_mass=species_mass)
 
 
-def make_conserved(dim, mass, energy, momentum, species_mass=None):
-    """Create :class:`ConservedVars` from separated conserved quantities."""
+def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
+                   scalar_quantities=None, vector_quantities=None):
+    """Create :class:`ConservedVars` from separated or joined quantities."""
+    if scalar_quantities:
+        return split_conserved(dim, q=scalar_quantities)
+    if vector_quantities:
+        return split_conserved(dim, q=vector_quantities)
     return split_conserved(
         dim, _join_conserved(dim, mass=mass, energy=energy,
                              momentum=momentum, species_mass=species_mass)

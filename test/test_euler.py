@@ -43,11 +43,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import euler_operator
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved,
-    make_conserved
-)
+from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
@@ -108,9 +104,8 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     mass_fractions = make_obj_array([rand() for _ in range(nspecies)])
     species_mass = mass * mass_fractions
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                        species_mass=species_mass)
-    cv = split_conserved(dim, q)
 
     # {{{ create the expected result
 
@@ -130,7 +125,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     for i in range(nspecies):
         expected_flux[dim+2+i] = mom * mass_fractions[i]
 
-    expected_flux = split_conserved(dim, expected_flux)
+    expected_flux = make_conserved(dim, vector_quantities=expected_flux)
 
     # }}}
 
@@ -319,7 +314,6 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             else:
                 return 0.0
 
-        # iff_split = split_conserved(dim, interior_face_flux)
         assert inf_norm(interior_face_flux.mass) < tolerance
         assert inf_norm(interior_face_flux.energy) < tolerance
         assert inf_norm(interior_face_flux.species_mass) < tolerance
@@ -430,9 +424,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        expected_rhs = split_conserved(
-            dim, make_obj_array([discr.zeros(actx)
-                                 for i in range(num_equations)])
+        expected_rhs = make_conserved(
+            dim, scalar_quantities=make_obj_array([discr.zeros(actx)
+                                                   for i in range(num_equations)])
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -793,8 +787,9 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-        cv = split_conserved(
-            dim, filter_modally(discr, "vol", cutoff, frfunc, cv.join())
+        cv = make_conserved(
+            dim, scalar_quantities=filter_modally(discr, "vol", cutoff, frfunc,
+                                                  cv.join())
         )
 
         t += dt
