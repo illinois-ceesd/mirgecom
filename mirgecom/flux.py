@@ -33,12 +33,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from meshmode.dof_array import DOFArray
 from mirgecom.operators import jump
-from mirgecom.fluid import (
-    ConservedVars,
-    make_conserved
-)
 
 
 def central_scalar_flux(trace_pair, normal):
@@ -70,24 +65,8 @@ def central_scalar_flux(trace_pair, normal):
         object array of `meshmode.dof_array.DOFArray` with the central scalar flux
         for each scalar component.
     """
-    tp_avg = trace_pair.avg
-    if isinstance(tp_avg, DOFArray):
-        return tp_avg*normal
-    elif isinstance(tp_avg, ConservedVars):
-        tp_join = tp_avg.join()
-    elif isinstance(tp_avg, np.ndarray):
-        tp_join = tp_avg
-
-    ncomp = len(tp_join)
-    if ncomp > 1:
-        result = np.empty((ncomp, len(normal)), dtype=object)
-        for i in range(ncomp):
-            result[i] = tp_join[i] * normal
-    else:
-        result = tp_join*normal
-    if isinstance(tp_avg, ConservedVars):
-        return make_conserved(tp_avg.dim, q=result)
-    return result
+    from mirgecom.utils import outer
+    return outer(trace_pair.avg, normal)
 
 
 def central_vector_flux(trace_pair, normal):
