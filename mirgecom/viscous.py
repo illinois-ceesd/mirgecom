@@ -41,7 +41,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from mirgecom.fluid import (
     velocity_gradient,
     species_mass_fraction_gradient,
@@ -77,17 +76,12 @@ def diffusive_flux(discr, eos, cv, grad_cv):
     with species diffusivities ${d}_{\alpha}$, and species mass
     fractions ${Y}_{\alpha}$.
     """
-    nspecies = len(cv.species_mass)
     transport = eos.transport_model()
 
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
 
-    # TODO: Better way?
-    obj_ary = -make_obj_array([cv.mass*d[i]*grad_y[i] for i in range(nspecies)])
-    diffusive_flux = np.empty(shape=(nspecies, discr.dim), dtype=object)
-    for idx, v in enumerate(obj_ary):
-        diffusive_flux[idx] = v
+    diffusive_flux = -cv.mass*d[:, np.newaxis]*grad_y
 
     return diffusive_flux
 
