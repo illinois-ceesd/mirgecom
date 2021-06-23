@@ -267,10 +267,10 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_filename, comm)
 
-        # awful - computes potentially expensive viz quantities
-        #         regardless of whether it is time to viz
-        reaction_rates = eos.get_production_rates(state)
-        viz_fields = [("reaction_rates", reaction_rates)]
+        viz_fields = None
+        if check_step(step, nviz):
+            reaction_rates = eos.get_production_rates(state)
+            viz_fields = [("reaction_rates", reaction_rates)]
         return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
