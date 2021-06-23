@@ -84,7 +84,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    nproc = comm.Get_size()
 
+    restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
@@ -128,11 +130,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     box_ll = -0.005
     box_ur = 0.005
     debug = False
-
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    nproc = comm.Get_size()
 
     restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
     restart_path = "restart_data/"
@@ -316,8 +313,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         do_viz = force or check_step(step=step, interval=nviz)
         do_health = force or check_step(step=step, interval=nhealth)
         do_logstart = force or check_step(step=step, interval=nlog)
-        do_restart = (force or check_step(step, nrestart) and
-                      step != restart) 
+        do_restart = (force or check_step(step, nrestart)
+                      and step != restart_step)
         if do_logstart and logmgr:
             logmgr.tick_before()
 
@@ -336,7 +333,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 "num_parts": nproc
             }
             from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_filename, comm)
+            write_restart_file(actx, rst_data, rst_filename,
+                               comm=discr.mpi_communicator)
 
         if do_viz or do_health:
             dv = eos.dependent_vars(state)
