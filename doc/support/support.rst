@@ -4,6 +4,7 @@ Simulation Support
 
 .. toctree::
 
+   arrays
    time-integrators
    integration-loops
    filter
