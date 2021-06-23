@@ -73,7 +73,8 @@ logger = logging.getLogger(__name__)
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=False,
-         use_leap=False, use_profiling=False, casename=None):
+         use_leap=False, use_profiling=False, casename=None,
+         restart_step=None, restart_name=None):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -105,7 +106,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 3e-9
+    t_final = 1e-8
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
@@ -115,6 +116,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     nviz = 5
     nhealth = 1
     nlog = 1
+    nrestart = 5
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -127,11 +129,34 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     box_ur = 0.005
     debug = False
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
-    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
-    local_nelements = local_mesh.nelements
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    nproc = comm.Get_size()
+
+    restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
+    restart_path = "restart_data/"
+    if restart_step:
+        if not restart_name:
+            restart_name = casename
+        rst_filename = (
+            restart_path
+            + restart_file_pattern.format(casename=restart_name,
+                                          step=restart_step, rank=rank)
+        )
+        from mirgecom.restart import read_restart_data
+        restart_data = read_restart_data(actx, rst_filename)
+        local_mesh = restart_data["local_mesh"]
+        local_nelements = local_mesh.nelements
+        global_nelements = restart_data["global_nelements"]
+        assert restart_data["nparts"] == nproc
+    else:
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
+                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    generate_mesh)
+        local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
@@ -226,7 +251,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
-    current_state = initializer(eos=eos, x_vec=nodes, t=0)
+
+    if restart_step:
+        current_t = restart_data["t"]
+        current_step = restart_step
+        current_state = restart_data["state"]
+    else:
+        # Set the current state from time 0
+        current_state = initializer(eos=eos, x_vec=nodes, t=0)
 
     # Inspection at physics debugging time
     if debug:
@@ -284,9 +316,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         do_viz = force or check_step(step=step, interval=nviz)
         do_health = force or check_step(step=step, interval=nhealth)
         do_logstart = force or check_step(step=step, interval=nlog)
-
+        do_restart = (force or check_step(step, nrestart) and
+                      step != restart) 
         if do_logstart and logmgr:
             logmgr.tick_before()
+
+        if do_restart:
+            rst_filename = (
+                restart_path
+                + restart_file_pattern.format(casename=casename, step=step,
+                                              rank=rank)
+            )
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": current_state,
+                "t": t,
+                "step": step,
+                "global_nelements": global_nelements,
+                "num_parts": nproc
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_filename, comm)
 
         if do_viz or do_health:
             dv = eos.dependent_vars(state)
