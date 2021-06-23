@@ -34,7 +34,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 from meshmode.dof_array import thaw, freeze
-from meshmode.array_context import PytatoArrayContext, PyOpenCLArrayContext
+from arraycontext import PytatoPyOpenCLArrayContext, PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
@@ -72,7 +72,7 @@ def main(use_profiling: bool, lazy_eval: bool):
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy_eval:
-            actx = PytatoArrayContext(queue)
+            actx = PytatoPyOpenCLArrayContext(queue)
         else:
             actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
@@ -116,7 +116,7 @@ def main(use_profiling: bool, lazy_eval: bool):
         return wave_operator(discr, c=1, w=w)
 
     if lazy_eval:
-        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
+        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
 
     t = 0
     t_final = 3

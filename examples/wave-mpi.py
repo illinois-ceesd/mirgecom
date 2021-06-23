@@ -1,5 +1,6 @@
 """Demonstrate wave MPI example."""
 
+from arraycontext import thaw, PyOpenCLArrayContext, PytatoArrayContext
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
@@ -29,7 +30,7 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
+from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContextArrayContext
 from meshmode.dof_array import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -39,6 +40,7 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
+
 import pyopencl.tools as cl_tools
 
 
@@ -62,7 +64,7 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
+def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None, ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -73,38 +75,49 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
-    from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-    mesh_dist = MPIMeshDistributor(comm)
+    if restart_step is None:
 
-    dim = 2
-    nel_1d = 16
+        from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
+        mesh_dist = MPIMeshDistributor(comm)
 
-    if mesh_dist.is_mananger_rank():
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(-0.5,)*dim,
-            b=(0.5,)*dim,
-            nelements_per_axis=(nel_1d,)*dim)
+        dim = 2
+        nel_1d = 16
 
-        print("%d elements" % mesh.nelements)
+        if mesh_dist.is_mananger_rank():
+            from meshmode.mesh.generation import generate_regular_rect_mesh
+            mesh = generate_regular_rect_mesh(
+                a=(-0.5,)*dim, b=(0.5,)*dim,
+                nelements_per_axis=(nel_1d,)*dim)
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            print("%d elements" % mesh.nelements)
+            part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
 
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+            del mesh
 
-        del mesh
+        else:
+            local_mesh = mesh_dist.receive_mesh_part()
+
+        fields = None
 
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        from mirgecom.restart import read_restart_data
+        restart_data = read_restart_data(
+            actx, snapshot_pattern.format(step=restart_step, rank=rank)
+        )
+        local_mesh = restart_data["local_mesh"]
+        nel_1d = restart_data["nel_1d"]
+        assert comm.Get_size() == restart_data["num_parts"]
 
     order = 3
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                    mpi_communicator=comm)
+                                  mpi_communicator=comm)
 
-    if dim == 2:
+    if local_mesh.dim == 2:
         # no deep meaning here, just a fudge factor
         dt = 0.7 / (nel_1d*order**2)
     elif dim == 3:
@@ -113,10 +126,32 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
-    fields = flat_obj_array(
-        bump(actx, discr),
-        [discr.zeros(actx) for i in range(discr.dim)]
-        )
+    t_final = 3
+
+    if restart_step is None:
+        t = 0
+        istep = 0
+
+        fields = flat_obj_array(
+            bump(actx, discr),
+            [discr.zeros(actx) for i in range(discr.dim)]
+            )
+
+    else:
+        t = restart_data["t"]
+        istep = restart_step
+        assert istep == restart_step
+        restart_fields = restart_data["fields"]
+        old_order = restart_data["order"]
+        if old_order != order:
+            old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
+                                              mpi_communicator=comm)
+            from meshmode.discretization.connection import make_same_mesh_connection
+            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
+                                                   old_discr.discr_from_dd("vol"))
+            fields = connection(restart_fields)
+        else:
+            fields = restart_fields
 
     vis = make_visualizer(discr)
 
@@ -126,16 +161,24 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
     if lazy_eval:
         compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
 
-    rank = comm.Get_rank()
-
-    t = 0
-    t_final = 3
-    istep = 0
     while t < t_final:
-        if lazy_eval:
-            fields = compiled_rhs(fields)
-        else:
-            fields = rk4_step(fields, t, dt, rhs)
+        # restart must happen at beginning of step
+        if istep % 100 == 0 and (
+                # Do not overwrite the restart file that we just read.
+                istep != restart_step):
+            from mirgecom.restart import write_restart_file
+            write_restart_file(
+                actx, restart_data={
+                    "local_mesh": local_mesh,
+                    "order": order,
+                    "fields": fields,
+                    "t": t,
+                    "step": istep,
+                    "nel_1d": nel_1d,
+                    "num_parts": num_parts},
+                filename=snapshot_pattern.format(step=istep, rank=rank),
+                comm=comm
+            )
 
         if istep % 10 == 0:
             if lazy_eval:
@@ -148,6 +191,11 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
                         ("u", fields[0]),
                         ("v", fields[1:]),
                         ])
+
+        if lazy_eval:
+            fields = compiled_rhs(fields)
+        else:
+            fields = rk4_step(fields, t, dt, rhs)
 
         t += dt
         istep += 1

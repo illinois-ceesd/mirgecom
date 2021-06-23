@@ -36,7 +36,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair
-from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.fluid import make_conserved
 
 
 class PrescribedBoundary:
@@ -59,14 +59,14 @@ class PrescribedBoundary:
         """
         self._userfunc = userfunc
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, discr, cv, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        actx = q[0].array_context
+        actx = cv.array_context
 
         boundary_discr = discr.discr_from_dd(btag)
         nodes = thaw(actx, boundary_discr.nodes())
         ext_soln = self._userfunc(nodes, **kwargs)
-        int_soln = discr.project("vol", btag, q)
+        int_soln = discr.project("vol", btag, cv)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
 
@@ -76,9 +76,9 @@ class DummyBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, discr, cv, btag, **kwargs):
         """Get the interior and exterior solution on the boundary."""
-        dir_soln = discr.project("vol", btag, q)
+        dir_soln = discr.project("vol", btag, cv)
         return TracePair(btag, interior=dir_soln, exterior=dir_soln)
 
 
@@ -100,7 +100,7 @@ class AdiabaticSlipBoundary:
     .. automethod:: boundary_pair
     """
 
-    def boundary_pair(self, discr, q, btag, **kwargs):
+    def boundary_pair(self, discr, cv, btag, **kwargs):
         """Get the interior and exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -113,15 +113,13 @@ class AdiabaticSlipBoundary:
         """
         # Grab some boundary-relevant data
         dim = discr.dim
-        cv = split_conserved(dim, q)
         actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
         nhat = thaw(actx, discr.normal(btag))
 
         # Get the interior/exterior solns
-        int_soln = discr.project("vol", btag, q)
-        int_cv = split_conserved(dim, int_soln)
+        int_cv = discr.project("vol", btag, cv)
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to
@@ -132,9 +130,9 @@ class AdiabaticSlipBoundary:
         ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
         # Form the external boundary solution with the new momentum
-        bndry_soln = join_conserved(dim=dim, mass=int_cv.mass,
-                                    energy=int_cv.energy,
-                                    momentum=ext_mom,
-                                    species_mass=int_cv.species_mass)
+        bndry_cv = make_conserved(dim=dim, mass=int_cv.mass,
+                                  energy=int_cv.energy,
+                                  momentum=ext_mom,
+                                  species_mass=int_cv.species_mass)
 
-        return TracePair(btag, interior=int_soln, exterior=bndry_soln)
+        return TracePair(btag, interior=int_cv, exterior=bndry_cv)

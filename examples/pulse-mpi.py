@@ -31,7 +31,7 @@ from functools import partial
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 
-from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
+from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -130,7 +130,7 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext,
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
                                    center=orig)
-    current_state = acoustic_pulse(x_vec=nodes, q=uniform_state, eos=eos)
+    current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     visualizer = make_visualizer(discr)
 
@@ -151,11 +151,11 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext,
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
+        return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm)
@@ -191,7 +191,7 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext,
+    main(actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext,
          use_leap=False)
 
 # vim: foldmethod=marker
