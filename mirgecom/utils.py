@@ -1,6 +1,7 @@
 """Useful bits and bobs.
 
 .. autofunction:: asdict_shallow
+.. autofunction:: outer
 """
 
 __copyright__ = """
@@ -30,9 +31,11 @@ THE SOFTWARE.
 __doc__ = """
 .. autoclass:: StatisticsAccumulator
 .. autofunction:: asdict_shallow
+.. autofunction:: outer
 """
 
 from typing import Optional
+import numpy as np
 
 
 def asdict_shallow(dc_instance) -> dict:
@@ -115,16 +118,39 @@ class StatisticsAccumulator:
         return self._min * self.scale_factor
 
 
-def outer(a, b):
+def outer(a, b, scalar_types=None):
     """
     Compute the outer product of *a* and *b*.
 
-    Tweaks the behavior of :function:`numpy.outer` to return a lower-dimensional
-    object if either/both of *a* and *b* are scalars (whereas
-    :function:`numpy.outer` always returns a matrix).
+    Tweaks the behavior of :func:`numpy.outer` to return a lower-dimensional
+    object if either/both of *a* and *b* are scalars (whereas :func:`numpy.outer`
+    always returns a matrix).
+
+    Parameters
+    ----------
+    a
+        A scalar, :class:`numpy.ndarray`, or :class:`arraycontext.ArrayContainer`.
+    b
+        A scalar, :class:`numpy.ndarray`, or :class:`arraycontext.ArrayContainer`.
+    scalar_types
+        A :class:`list` of types that should be treated as scalars. Defaults to
+        [:class:`numbers.Number`, :class:`meshmode.dof_array.DOFArray`].
     """
-    import numpy as np
-    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+    if scalar_types is None:
+        from numbers import Number
+        from meshmode.dof_array import DOFArray
+        scalar_types = [Number, DOFArray]
+
+    def is_scalar(x):
+        for t in scalar_types:
+            if isinstance(x, t):
+                return True
+        return False
+
+    if is_scalar(a) or is_scalar(b):
+        return a*b
+    elif isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
         return np.outer(a, b)
     else:
-        return a*b
+        from arraycontext import map_array_container
+        return map_array_container(lambda x: outer(x, b), a)
