@@ -29,10 +29,6 @@ import numpy.random
 import logging
 import pytest
 from pytools.obj_array import make_obj_array
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved,
-)
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -54,26 +50,23 @@ def test_restart_cv(actx_factory, nspecies):
     )
     order = 3
     discr = EagerDGDiscretization(actx, mesh, order=order)
+    from meshmode.dof_array import thaw
+    nodes = thaw(actx, discr.nodes())
 
-    def rand():
-        ary = discr.zeros(actx)
-        for grp_ary in ary:
-            grp_ary.set(np.random.rand(*grp_ary.shape))
-        return ary
-
-    mass = rand()
-    energy = rand()
-    mom = make_obj_array([rand() for _ in range(dim)])
+    mass = nodes[0]
+    energy = nodes[1]
+    mom = make_obj_array([nodes[2]*(i+3) for i in range(dim)])
 
     species_mass = None
     if nspecies > 0:
-        mass_fractions = make_obj_array([rand() for _ in range(nspecies)])
+        mass_fractions = make_obj_array([i*nodes[0] for i in range(nspecies)])
         species_mass = mass * mass_fractions
+
     rst_filename = f"test_{nspecies}.pkl"
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       species_mass=species_mass)
-    test_state = split_conserved(dim, q)
+    from mirgecom.fluid import make_conserved
+    test_state = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                                species_mass=species_mass)
 
     rst_data = {"state": test_state}
     from mirgecom.restart import write_restart_file
