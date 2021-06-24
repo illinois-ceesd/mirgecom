@@ -229,8 +229,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             local_dt = get_inviscid_timestep(discr, eos=eos, cv=state)
             from grudge.op import nodal_min
             current_dt = current_cfl * nodal_min(discr, "vol", local_dt)
-        elif do_viz:   # only if visualizing
-            local_cfl = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
+        else:
+            # constant dt
+            if do_viz:   # only if visualizing
+                local_cfl = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
         if do_viz:  # extend viz field if viz time
             dv = eos.dependent_vars(state)
             viz_fields.append(("dv", dv))
