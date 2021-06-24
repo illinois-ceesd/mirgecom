@@ -51,10 +51,9 @@ def compile_timestepper(actx, timestepper, state, rhs):
 def compile_rhs(actx, rhs, state):
     """Create lazy evaluation version of the rhs."""
     @memoize_in(actx, ("mirgecom_compiled_rhs",
-                       rhs,
-                       tuple(len(el) for el in state)))
+                       rhs))
     def get():
-        return actx.compile(rhs, [np.float64(0), state])
+        return actx.compile(rhs)
 
     return get()
 
@@ -104,7 +103,7 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
     if t_final <= t:
         return istep, t, state
 
-    actx = state[0].array_context
+    actx = state.array_context
     compiled_rhs = compile_rhs(actx, rhs, state)
 
     while t < t_final:
