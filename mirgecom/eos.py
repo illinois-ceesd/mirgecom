@@ -414,12 +414,8 @@ class PyrometheusMixture(GasEOS):
             temperature = self.temperature(cv)
             y = self.species_fractions(cv)
             press = self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
-            # from meshmode.dof_array import freeze
-            # return freeze(cv.array_context, press)
             return press
 
-        # from meshmode.dof_array import thaw
-        # return thaw(cv.array_context, get())
         return get()
 
     def sound_speed(self, cv: ConservedVars):

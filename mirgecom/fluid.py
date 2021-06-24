@@ -259,7 +259,7 @@ class ConservedVars:
 
     def __reduce__(self):
         """Return a tuple reproduction of self for pickling."""
-        return(ConservedVars, tuple(getattr(self, f.name)
+        return (ConservedVars, tuple(getattr(self, f.name)
                                     for f in fields(ConservedVars)))
 
     def replace(self, **kwargs):
