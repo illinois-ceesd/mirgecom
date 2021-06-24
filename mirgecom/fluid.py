@@ -330,6 +330,8 @@ def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None
     if vector_quantities is not None:
         return split_conserved(dim, q=vector_quantities)
     return split_conserved(
+        # Going through _join_conserved here to inherit its input
+        # validation.
         dim, _join_conserved(dim, mass=mass, energy=energy,
                              momentum=momentum, species_mass=species_mass)
     )
