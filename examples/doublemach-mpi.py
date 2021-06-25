@@ -36,7 +36,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import inviscid_operator
+from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -195,7 +195,7 @@ def main(ctx_factory=cl.create_some_context):
     )
 
     def my_rhs(t, state):
-        return inviscid_operator(
+        return euler_operator(
             discr, cv=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
             discr, q=state.join(), boundaries=boundaries,
@@ -210,7 +210,7 @@ def main(ctx_factory=cl.create_some_context):
             discr,
             visualizer,
             eos,
-            state=state,
+            cv=state,
             vizname=casename,
             step=step,
             t=t,
