@@ -43,7 +43,6 @@ To demonstrate the effect of this, first we need some setup:
 .. doctest::
 
    >>> import pyopencl as cl
-   >>> import pytest
    >>> from arraycontext import PyOpenCLArrayContext, thaw
    >>> ctx = cl.create_some_context()
    >>> queue = cl.CommandQueue(ctx)
@@ -67,9 +66,9 @@ What can go wrong?  Attempts to operate on frozen data will yield errors similar
 the following:
 
 
-   >>> dcoll.nodes() * 5
+   > dcoll.nodes() * 5  # wrong, don't do this
    Traceback (most recent call last):
-    ...
+   ...
    AttributeError: 'NoneType' object has no attribute 'device'
 
 (That error message is not ideal; it is being `worked on
