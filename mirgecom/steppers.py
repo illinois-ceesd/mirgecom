@@ -83,11 +83,12 @@ def _advance_state_stepper_func(rhs, timestepper, t_final, state, t=0.0, istep=0
 
         if get_timestep:
             dt = get_timestep(state=state)
-            if dt < 0:
-                return istep, t, state
 
         if checkpoint:
-            state, dt = checkpoint(state=state, step=istep, t=t, dt=dt)
+            dt = checkpoint(state=state, step=istep, t=t, dt=dt)
+
+        if dt < 0:
+            return istep, t, state
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
@@ -102,9 +103,10 @@ def _advance_state_stepper_func(rhs, timestepper, t_final, state, t=0.0, istep=0
     return istep, t, state
 
 
-def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, component_id="state", t=0.0, istep=0,
-                  logmgr=None, eos=None, dim=None):
+def _advance_state_leap(rhs, timestepper, checkpoint, state, t_final, dt=0,
+                        component_id="state", t=0.0, istep=0,
+                        logmgr=None, eos=None, dim=None, checkpoint=None,
+                        get_timestep=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -147,7 +149,8 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         return istep, t, state
 
     # Generate code for Leap method.
-    dt = get_timestep(state=state)
+    if get_timestep:
+        dt = get_timestep(state=state)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
                                                     rhs, t, dt, state)
     while t < t_final:
@@ -155,11 +158,16 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
         if logmgr:
             logmgr.tick_before()
 
-        dt = get_timestep(state=state)
+        if get_timestep:
+            dt = get_timestep(state=state)
+
+        if checkpoint:
+            dt = checkpoint(state=state, step=istep, t=t, dt=dt)
+
         if dt < 0:
             return istep, t, state
 
-        checkpoint(state=state, step=istep, t=t, dt=dt)
+        stepper_cls.dt = dt
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
@@ -276,8 +284,8 @@ def advance_state(rhs, timestepper, state, t_final, dt=0,
     if leap_timestepper:
         (current_step, current_t, current_state) = \
             _advance_state_leap(rhs=rhs, timestepper=timestepper,
-                        checkpoint=checkpoint,
-                        get_timestep=get_timestep, state=state,
+                                checkpoint=checkpoint,dt=0,
+                                get_timestep=get_timestep, state=state,
                         t=t, t_final=t_final, component_id=component_id,
                         istep=istep, logmgr=logmgr, eos=eos, dim=dim)
     else:
