@@ -70,10 +70,8 @@ the following:
    >>> dcoll.nodes() * 5
    Traceback (most recent call last):
     ...
-   AttributeError: 'NoneType' object has no attribute 'device'
+   ValueError: PyOpenCL array has no queue; call .with_queue() to add one in order to be able to perform operations
 
-(That error message is not ideal; it is being `worked on
-<https://github.com/inducer/pyopencl/pull/486>`__.)
 Fortunately, recovering from this is straightforward:
 
 .. doctest::
