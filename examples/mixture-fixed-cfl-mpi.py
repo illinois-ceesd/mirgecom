@@ -225,15 +225,15 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         viz_fields = [("cv", state)]
         current_dt = dt
 
-        if constant_cfl:  # no matter what
+        if constant_cfl:
             local_dt = get_inviscid_timestep(discr, eos=eos, cv=state)
             from grudge.op import nodal_min
             current_dt = current_cfl * nodal_min(discr, "vol", local_dt)
-        else:
-            # constant dt
-            if do_viz:   # only if visualizing
+        else:  # constant dt mode
+            if do_viz:   # calculate cfl field only if visualizing
                 local_cfl = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
         if do_viz:  # extend viz field if viz time
+            # Calculate DV only if needed for visualization
             dv = eos.dependent_vars(state)
             viz_fields.append(("dv", dv))
             # only if vizzing, calculate reaction rates
@@ -241,12 +241,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             viz_fields.append(("reaction_rates", reaction_rates))
             if constant_cfl:
                 viz_fields.append(("dt", local_dt))
-            else:
+            else:  # constant dt mode
                 viz_fields.append(("cfl", local_cfl))
 
         errors = current_dt < 0 or np.isnan(current_dt) or current_dt == np.inf
 
-        if do_viz or errors:
+        if do_viz or errors:  # write viz at viztime, or if there were errors
             from mirgecom.io import make_rank_fname, make_par_fname
             rank_fn = make_rank_fname(basename=casename, rank=rank, step=step, t=t)
             visualizer.write_parallel_vtk_file(
@@ -257,7 +257,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             )
 
         if check_step(step, nstatus) or errors:
-            if not do_viz:
+            if not do_viz:  # we already have dv on viz steps
                 dv = eos.dependent_vars(state)
             from grudge.op import nodal_max
             min_temperature = nodal_min(discr, "vol", dv.temperature)
@@ -277,7 +277,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             sys.exit()
 
         t_remaining = max(0, t_final - t)
-        return state, min(t_remaining, current_dt)
+        return min(t_remaining, current_dt)
 
     try:
         (current_step, current_t, current_state) = \
