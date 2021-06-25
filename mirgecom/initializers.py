@@ -380,7 +380,7 @@ class DoubleMachReflection:
         mom = mass * vel
         energy = rhoe + .5*mass*np.dot(vel, vel)
 
-        return join_conserved(dim=2, mass=mass, energy=energy, momentum=mom)
+        return make_conserved(dim=2, mass=mass, energy=energy, momentum=mom)
 
 
 class Lump:
