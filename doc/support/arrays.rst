@@ -68,6 +68,7 @@ the following:
 .. doctest::
 
    >>> dcoll.nodes() * 5
+
    Traceback (most recent call last):
     ...
    AttributeError: 'NoneType' object has no attribute 'device'
