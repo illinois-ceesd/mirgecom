@@ -49,8 +49,8 @@ def write_restart_file(actx, restart_data, filename, comm=None):
     if rank == 0:
         import os
         rst_dir = os.path.dirname(filename)
-        if rst_dir and not os.path.exists(rst_dir):
-            os.makedirs(rst_dir)
+        if rst_dir:
+            os.makedirs(rst_dir, exist_ok=True)
     if comm:
         comm.barrier()
     with array_context_for_pickling(actx):

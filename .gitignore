@@ -30,6 +30,7 @@ run-debug-*
 *.vtk
 *.silo
 *.dat
+*.pkl
 
 .cache
 .pytest_cache
