@@ -29,7 +29,7 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
+from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
 from meshmode.dof_array import thaw, freeze
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     use_leap = False
 
     main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext,
+         actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext,
          use_leap=use_leap)
 
 # vim: foldmethod=marker

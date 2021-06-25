@@ -1,6 +1,5 @@
 """Demonstrate wave MPI example."""
 
-from arraycontext import thaw, PyOpenCLArrayContext, PytatoArrayContext
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
@@ -30,7 +29,7 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContextArrayContext
+from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
 from meshmode.dof_array import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -71,7 +70,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     actx = actx_class(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    lazy_eval = isinstance(actx_class, PytatoArrayContext)
+    lazy_eval = isinstance(actx_class, PytatoPyOpenCLArrayContext)
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -210,7 +209,7 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext)
+    main(actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
 
 
 # vim: foldmethod=marker

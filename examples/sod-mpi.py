@@ -28,7 +28,7 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext, PytatoArrayContext
+from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -61,7 +61,7 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext,
     """Drive the example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
+    actx = actx_class(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 1
@@ -167,7 +167,7 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(actx_class=PytatoArrayContext if args.lazy else PyOpenCLArrayContext,
+    main(actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext,
          use_leap=False)
 
 # vim: foldmethod=marker
