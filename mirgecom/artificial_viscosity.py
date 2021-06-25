@@ -334,8 +334,8 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     indicator = actx.np.log10(indicator + 1.0e-12)
 
     # Compute artificial viscosity percentage based on indicator and set parameters
-    yesnol = indicator > (s0 - kappa)
-    yesnou = indicator > (s0 + kappa)
+    yesnol = actx.np.greater(indicator, (s0 - kappa))
+    yesnou = actx.np.greater(indicator, (s0 + kappa))
     sin_indicator = actx.np.where(
         yesnol,
         0.5 * (1.0 + actx.np.sin(np.pi * (indicator - s0) / (2.0 * kappa))),
