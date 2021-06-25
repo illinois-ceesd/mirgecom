@@ -74,7 +74,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 1e-8
+    t_final = 3e-9
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
@@ -205,7 +205,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
         current_state = restart_data["state"]
     else:
         # Set the current state from time 0
-        current_state = initializer(eos=eos, x_vec=nodes, t=0)
+        current_state = initializer(eos=eos, x_vec=nodes, time=0)
 
     # Inspection at physics debugging time
     if debug:
@@ -267,10 +267,10 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_filename, comm)
 
-        # awful - computes potentially expensive viz quantities
-        #         regardless of whether it is time to viz
-        reaction_rates = eos.get_production_rates(state)
-        viz_fields = [("reaction_rates", reaction_rates)]
+        viz_fields = None
+        if check_step(step, nviz):
+            reaction_rates = eos.get_production_rates(state)
+            viz_fields = [("reaction_rates", reaction_rates)]
         return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
