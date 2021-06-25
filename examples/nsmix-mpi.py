@@ -77,8 +77,8 @@ def main(ctx_factory=cl.create_some_context):
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 1e-6
-    current_cfl = .001
+    t_final = 5e-9
+    current_cfl = .0009
     velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
     current_t = 0
