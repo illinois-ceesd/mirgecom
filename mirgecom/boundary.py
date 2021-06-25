@@ -155,10 +155,10 @@ class AdiabaticSlipBoundary:
         ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
         # Form the external boundary solution with the new momentum
-        bndry_cv = make_conserved(dim=dim, mass=int_cv.mass,
-                                  energy=int_cv.energy,
-                                  momentum=ext_mom,
-                                  species_mass=int_cv.species_mass)
+        bndry_soln = make_conserved(dim=dim, mass=int_cv.mass,
+                                    energy=int_cv.energy,
+                                    momentum=ext_mom,
+                                    species_mass=int_cv.species_mass)
 
         return bndry_soln
 
@@ -180,6 +180,6 @@ class AdiabaticSlipBoundary:
         s_mom_flux = gradq_comp.momentum - 2*s_mom_normcomp
 
         # flip components to set a neumann condition
-        return join_conserved(dim, mass=-gradq_comp.mass, energy=-gradq_comp.energy,
+        return make_conserved(dim, mass=-gradq_comp.mass, energy=-gradq_comp.energy,
                               momentum=-s_mom_flux,
                               species_mass=-gradq_comp.species_mass)
