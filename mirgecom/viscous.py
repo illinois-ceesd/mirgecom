@@ -222,19 +222,6 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
     return flux_weak
 
 
-def get_inv_length_weighted_viscosity(discr, eos, cv):
-    """Get the local viscosity weighted by 1/dx.
-
-    Used for viscous timestep calculation. TODO: change to a better name
-    """
-    from grudge.dt_utils import characteristic_lengthscales
-
-    transport = eos.transport_model()
-    mu = transport.viscosity(eos, cv)
-
-    return (mu / characteristic_lengthscales(cv.array_context, discr))
-
-
 def get_viscous_timestep(discr, eos, cv):
     """Routine returns the the node-local maximum stable viscous timestep.
 
@@ -242,10 +229,18 @@ def get_viscous_timestep(discr, eos, cv):
     """
     from grudge.dt_utils import characteristic_lengthscales
     from mirgecom.fluid import compute_wavespeed
+
+    length_scales = characteristic_lengthscales(cv.array_context, discr)
+
+    mu = 0
+    transport = eos.transport_model()
+    if transport:
+        mu = transport.viscosity(eos, cv)
+
+    weighted_viscosity = (mu / length_scales)
+
     return (
-        characteristic_lengthscales(cv.array_context, discr)
-        / (compute_wavespeed(eos, cv)
-        + get_inv_length_weighted_viscosity(discr, eos, cv))
+        length_scales / (compute_wavespeed(eos, cv) + weighted_viscosity)
     )
 
 
