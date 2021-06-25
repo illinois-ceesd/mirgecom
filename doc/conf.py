@@ -78,7 +78,7 @@ intersphinx_mapping = {
     "https://numpy.org/doc/stable/": None,
     "https://documen.tician.de/pyopencl/": None,
     "https://documen.tician.de/modepy/": None,
-    "https://documen.tician.de/arraycontext/": None,
+    "arraycontext": ("https://documen.tician.de/arraycontext/", None),
     "https://documen.tician.de/meshmode/": None,
     "https://documen.tician.de/grudge/": None,
     "https://documen.tician.de/pytato/": None,
@@ -98,7 +98,7 @@ todo_include_todos = True
 
 nitpicky = True
 
-mathjax_config = {
+mathjax3_config = {
     "tex2jax": {
         "inlineMath": [["\\(", "\\)"]],
         "displayMath": [["\\[", "\\]"]],
