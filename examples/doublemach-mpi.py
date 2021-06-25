@@ -196,22 +196,21 @@ def main(ctx_factory=cl.create_some_context):
 
     def my_rhs(t, state):
         return inviscid_operator(
-            discr, q=state, t=t, boundaries=boundaries, eos=eos
+            discr, cv=state, t=t, boundaries=boundaries, eos=eos
         ) + av_operator(
-            discr, q=state, boundaries=boundaries,
+            discr, q=state.join(), boundaries=boundaries,
             boundary_kwargs={"t": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa
         )
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        tagged_cells = smoothness_indicator(discr, cv.mass, s0=s0, kappa=kappa)
+        tagged_cells = smoothness_indicator(discr, state.mass, s0=s0, kappa=kappa)
         viz_fields = [("tagged cells", tagged_cells)]
         return sim_checkpoint(
             discr,
             visualizer,
             eos,
-            q=state,
+            state=state,
             vizname=casename,
             step=step,
             t=t,
