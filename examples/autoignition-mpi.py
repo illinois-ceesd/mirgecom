@@ -52,7 +52,6 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.euler import split_conserved
 import cantera
 import pyrometheus as pyro
 
@@ -60,7 +59,8 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_leap=False):
+def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=False,
+         restart_step=None, restart_name=None):
     """Drive example."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -74,7 +74,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 3e-9
+    t_final = 1e-8
     current_cfl = 1.0
     velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
@@ -82,6 +82,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     constant_cfl = False
     nstatus = 1
     nviz = 5
+    nrestart = 5
     rank = 0
     checkpoint_t = current_t
     current_step = 0
@@ -98,12 +99,31 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    nproc = comm.Get_size()
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
-                            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,) * dim)
-    local_mesh, global_nelements = generate_and_distribute_mesh(comm, generate_mesh)
-    local_nelements = local_mesh.nelements
+    restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
+    restart_path = "restart_data/"
+    if restart_step:
+        if not restart_name:
+            restart_name = casename
+        rst_filename = (
+            restart_path
+            + restart_file_pattern.format(casename=restart_name,
+                                          step=restart_step, rank=rank)
+        )
+        from mirgecom.restart import read_restart_data
+        restart_data = read_restart_data(actx, rst_filename)
+        local_mesh = restart_data["local_mesh"]
+        local_nelements = local_mesh.nelements
+        global_nelements = restart_data["global_nelements"]
+        assert restart_data["nparts"] == nproc
+    else:
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
+                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    generate_mesh)
+        local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
@@ -161,7 +181,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    casename = "autoignition"
     pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism,
                              temperature_guess=init_temperature)
@@ -179,19 +198,21 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
-    current_state = initializer(eos=eos, x_vec=nodes, t=0)
+
+    if restart_step:
+        current_t = restart_data["t"]
+        current_step = restart_step
+        current_state = restart_data["state"]
+    else:
+        # Set the current state from time 0
+        current_state = initializer(eos=eos, x_vec=nodes, t=0)
 
     # Inspection at physics debugging time
     if debug:
-        cv = split_conserved(dim, current_state)
         print("Initial MIRGE-Com state:")
-        print(f"{cv.mass=}")
-        print(f"{cv.energy=}")
-        print(f"{cv.momentum=}")
-        print(f"{cv.species_mass=}")
-        print(f"Initial Y: {cv.species_mass / cv.mass}")
-        print(f"Initial DV pressure: {eos.pressure(cv)}")
-        print(f"Initial DV temperature: {eos.temperature(cv)}")
+        print(f"{current_state=}")
+        print(f"Initial DV pressure: {eos.pressure(current_state)}")
+        print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -224,16 +245,33 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        cv = split_conserved(dim=dim, q=state)
-        return (euler_operator(discr, q=state, t=t,
+        return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(cv))
+                + eos.get_species_source_terms(state))
 
     def my_checkpoint(step, t, dt, state):
-        cv = split_conserved(dim, state)
-        reaction_rates = eos.get_production_rates(cv)
+        if check_step(step, nrestart) and step != restart_step:
+            rst_filename = (
+                restart_path
+                + restart_file_pattern.format(casename=casename, step=step,
+                                              rank=rank)
+            )
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": current_state,
+                "t": t,
+                "step": step,
+                "global_nelements": global_nelements,
+                "num_parts": nproc
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_filename, comm)
+
+        # awful - computes potentially expensive viz quantities
+        #         regardless of whether it is time to viz
+        reaction_rates = eos.get_production_rates(state)
         viz_fields = [("reaction_rates", reaction_rates)]
-        return sim_checkpoint(discr, visualizer, eos, q=state,
+        return sim_checkpoint(discr, visualizer, eos, cv=state,
                               vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               constant_cfl=constant_cfl, comm=comm,

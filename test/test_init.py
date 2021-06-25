@@ -39,10 +39,7 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.initializers import MulticomponentLump
 
-from mirgecom.fluid import (
-    split_conserved,
-    get_num_species
-)
+from mirgecom.fluid import get_num_species
 
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
@@ -85,8 +82,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)])
 
     initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
-    init_soln = initializer(nodes)
-    cv = split_conserved(dim, init_soln)
+    cv = initializer(nodes)
 
     def inf_norm(data):
         if len(data) > 0:
@@ -142,14 +138,13 @@ def test_lump_init(ctx_factory):
     center[0] = 5
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
-    lump_soln = lump(nodes)
+    cv = lump(nodes)
 
-    cv = split_conserved(dim, lump_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
     errmax = discr.norm(p - exp_p, np.inf)
 
-    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
@@ -180,14 +175,13 @@ def test_vortex_init(ctx_factory):
 
     # Init soln with Vortex
     vortex = Vortex2D()
-    vortex_soln = vortex(nodes)
+    cv = vortex(nodes)
     gamma = 1.4
-    cv = split_conserved(dim, vortex_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
     errmax = discr.norm(p - exp_p, np.inf)
 
-    logger.info(f"vortex_soln = {vortex_soln}")
+    logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
@@ -218,14 +212,13 @@ def test_shock_init(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     initr = SodShock1D()
-    initsoln = initr(t=0.0, x_vec=nodes)
-    print("Sod Soln:", initsoln)
+    cv = initr(t=0.0, x_vec=nodes)
+    print("Sod Soln:", cv)
     xpl = 1.0
     xpr = 0.1
     tol = 1e-15
     nodes_x = nodes[0]
     eos = IdealSingleGas()
-    cv = split_conserved(dim, initsoln)
     p = eos.pressure(cv)
 
     assert discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol
@@ -259,16 +252,14 @@ def test_uniform(ctx_factory, dim):
 
     from mirgecom.initializers import Uniform
     initr = Uniform(dim=dim)
-    initsoln = initr(t=0.0, x_vec=nodes)
+    cv = initr(t=0.0, x_vec=nodes)
     tol = 1e-15
-    ssoln = split_conserved(dim, initsoln)
 
-    assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
-    assert discr.norm(ssoln.energy - 2.5, np.inf) < tol
+    assert discr.norm(cv.mass - 1.0, np.inf) < tol
+    assert discr.norm(cv.energy - 2.5, np.inf) < tol
 
-    print(f"Uniform Soln:{initsoln}")
+    print(f"Uniform Soln:{cv}")
     eos = IdealSingleGas()
-    cv = split_conserved(dim, initsoln)
     p = eos.pressure(cv)
     print(f"Press:{p}")
 
@@ -376,13 +367,11 @@ def test_multilump(ctx_factory, dim):
                               spec_centers=centers, velocity=velocity,
                               spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
-    lump_soln = lump(nodes)
-    numcvspec = get_num_species(dim, lump_soln)
+    cv = lump(nodes)
+    numcvspec = get_num_species(dim, cv.join())
     print(f"get_num_species = {numcvspec}")
 
-    assert get_num_species(dim, lump_soln) == nspecies
-
-    cv = split_conserved(dim, lump_soln)
+    assert get_num_species(dim, cv.join()) == nspecies
     assert discr.norm(cv.mass - rho0) == 0.0
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
@@ -404,7 +393,7 @@ def test_multilump(ctx_factory, dim):
 
     assert discr.norm(mass_resid, np.inf) == 0.0
 
-    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
