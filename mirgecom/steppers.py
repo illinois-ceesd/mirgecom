@@ -33,7 +33,8 @@ from mirgecom.logging_quantities import set_sim_state
 
 
 def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
-                  state, t_final, t=0.0, istep=0, logmgr=None, eos=None, dim=None):
+                                state, t_final, dt=0, t=0.0, istep=0, logmgr=None,
+                                eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -79,13 +80,13 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
 
         if logmgr:
             logmgr.tick_before()
+        if get_timestep:
+            dt = get_timestep(state=state)
+        if checkpoint:
+            dt = checkpoint(state=state, step=istep, t=t, dt=dt)
 
-        dt = get_timestep(state=state)
         if dt < 0:
             return istep, t, state
-
-        if checkpoint:
-            checkpoint(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
 
@@ -212,9 +213,9 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     return stepper_cls
 
 
-def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
-                    component_id="state", t=0.0, istep=0, logmgr=None,
-                    eos=None, dim=None):
+def advance_state(rhs, timestepper, checkpoint, state, t_final,
+                  component_id="state", get_timestep=None, dt=0, t=0.0,
+                  istep=0, logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -281,9 +282,9 @@ def advance_state(rhs, timestepper, checkpoint, get_timestep, state, t_final,
     else:
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(rhs=rhs, timestepper=timestepper,
-                        checkpoint=checkpoint,
-                        get_timestep=get_timestep, state=state,
-                        t=t, t_final=t_final, istep=istep,
-                        logmgr=logmgr, eos=eos, dim=dim)
+                                        checkpoint=checkpoint, dt=dt,
+                                        get_timestep=get_timestep, state=state,
+                                        t=t, t_final=t_final, istep=istep,
+                                        logmgr=logmgr, eos=eos, dim=dim)
 
     return current_step, current_t, current_state

@@ -35,13 +35,9 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.inviscid import (
-    get_inviscid_timestep
-)
 from mirgecom.transport import SimpleTransport
 from mirgecom.viscous import get_viscous_timestep
 from mirgecom.navierstokes import ns_operator
-# from mirgecom.heat import heat_operator
 
 from mirgecom.simutil import (
     sim_checkpoint,
@@ -81,12 +77,12 @@ def main(ctx_factory=cl.create_some_context):
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 3e-9
-    current_cfl = 1.0
+    t_final = 1e-6
+    current_cfl = .001
     velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
     current_t = 0
-    constant_cfl = False
+    constant_cfl = True
     nstatus = 1
     nviz = 5
     rank = 0
@@ -232,28 +228,6 @@ def main(ctx_factory=cl.create_some_context):
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def get_timestep(state):
-        next_dt = current_dt
-        t_end = t_final
-        if constant_cfl is True:
-            inviscid_dt = (
-                current_cfl * get_inviscid_timestep(discr=discr, eos=eos, cv=state)
-            )
-            viscous_dt = (
-                current_cfl * get_viscous_timestep(discr=discr, eos=eos, cv=state)
-            )
-            next_dt = min([next_dt, inviscid_dt, viscous_dt])
-        # else:
-        #     inviscid_cfl = get_inviscid_cfl(discr=discr, eos=eos,
-        #                                     dt=next_dt, state=state)
-        #     viscous_cfl = get_viscous_cfl(discr, eos=eos,
-        #                                   transport_model=transport_model,
-        #                                   dt=next_dt, state=state)
-        if(current_t + next_dt) > t_end:
-            next_dt = t_end - current_t
-
-        return next_dt
-
     def my_rhs(t, state):
         ns_rhs = ns_operator(discr, cv=state, t=t,
                              boundaries=visc_bnds, eos=eos)
@@ -263,8 +237,23 @@ def main(ctx_factory=cl.create_some_context):
     def my_checkpoint(step, t, dt, state):
         reaction_rates = eos.get_production_rates(state)
         viz_fields = [("reaction_rates", reaction_rates)]
+        t_remaining = max(0, t_final - t)
+        checkpoint_cfl = current_cfl
+        if constant_cfl is True:
+            dt = (
+                current_cfl * get_viscous_timestep(discr=discr, eos=eos, cv=state)
+            )
+            from grudge.op import nodal_min
+            dt = nodal_min(discr, "vol", dt)
+        else:
+            from mirgecom.viscous import get_viscous_cfl
+            cfl_field = get_viscous_cfl(discr, eos, dt, state)
+            viz_fields.append(("cfl", cfl_field))
+            from grudge.op import nodal_max
+            checkpoint_cfl = nodal_max(discr, "vol", cfl_field)
+        dt = min(dt, t_remaining)
         return sim_checkpoint(discr, visualizer, eos, cv=state,
-                              vizname=casename, step=step,
+                              vizname=casename, step=step, cfl=checkpoint_cfl,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               constant_cfl=constant_cfl, comm=comm,
                               viz_fields=viz_fields)
@@ -272,8 +261,8 @@ def main(ctx_factory=cl.create_some_context):
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
+                          checkpoint=my_checkpoint, dt=current_dt,
+                          state=current_state,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         error_state = True
