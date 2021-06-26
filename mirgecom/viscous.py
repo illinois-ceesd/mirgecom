@@ -229,8 +229,10 @@ def get_inv_length_weighted_viscosity(discr, eos, cv):
     """
     from grudge.dt_utils import characteristic_lengthscales
 
+    mu = 0
     transport = eos.transport_model()
-    mu = transport.viscosity(eos, cv)
+    if transport:
+        mu = transport.viscosity(eos, cv)
 
     return (mu / characteristic_lengthscales(cv.array_context, discr))
 
