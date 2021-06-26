@@ -237,10 +237,8 @@ def get_viscous_timestep(discr, eos, cv):
     if transport:
         mu = transport.viscosity(eos, cv)
 
-    weighted_viscosity = (mu / length_scales)
-
-    return (
-        length_scales / (compute_wavespeed(eos, cv) + weighted_viscosity)
+    return(
+        length_scales / (compute_wavespeed(eos, cv) + mu / length_scales)
     )
 
 
