@@ -225,7 +225,19 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
 def get_viscous_timestep(discr, eos, cv):
     """Routine returns the the node-local maximum stable viscous timestep.
 
-    Similar to get_inviscid_timestep but there's a viscosity term.
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        An equation of state implementing the speed_of_sound method
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid solution
+
+    Returns
+    -------
+    class:`~meshmode.dof_array.DOFArray`
+        The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
     from mirgecom.fluid import compute_wavespeed
