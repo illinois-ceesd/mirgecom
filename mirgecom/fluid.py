@@ -42,7 +42,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
@@ -238,6 +238,11 @@ class ConservedVars:
     def dim(self):
         """Return the number of physical dimensions."""
         return len(self.momentum)
+
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return(ConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(ConservedVars)))
 
     def join(self):
         """Call :func:`join_conserved` on *self*."""

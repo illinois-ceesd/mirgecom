@@ -199,6 +199,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
+
     if restart_step:
         current_t = restart_data["t"]
         current_step = restart_step
