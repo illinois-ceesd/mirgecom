@@ -240,10 +240,12 @@ def test_diffusive_heat_flux(actx_factory):
         assert discr.norm(j[ispec+1] - exact_j, np.inf) < tol
 
 
-def test_viscous_timestep(actx_factory):
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("mu", [-1, 0, 1, 2])
+@pytest.mark.parametrize("vel", [0, 1])
+def test_viscous_timestep(actx_factory, dim, mu, vel):
     """Test timestep size."""
     actx = actx_factory()
-    dim = 3
     nel_1d = 5
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -255,62 +257,41 @@ def test_viscous_timestep(actx_factory):
     order = 1
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
-    # assemble velocities for simple, unique grad components
-    velocity_x = nodes[0] + 2*nodes[1] + 3*nodes[2]
-    velocity_y = 4*nodes[0] + 5*nodes[1] + 6*nodes[2]
-    velocity_z = 7*nodes[0] + 8*nodes[1] + 9*nodes[2]
-    velocity = make_obj_array([velocity_x, velocity_y, velocity_z])
+    velocity = make_obj_array([zeros+vel for _ in range(dim)])
 
-    # assemble y so that each one has simple, but unique grad components
-    nspecies = 2*dim
-    y = make_obj_array([ones for _ in range(nspecies)])
-    for idim in range(dim):
-        ispec = 2*idim
-        y[ispec] = (ispec+1)*(idim*dim+1)*sum([(iidim+1)*nodes[iidim]
-                                               for iidim in range(dim)])
-        y[ispec+1] = -y[ispec]
-
-    massval = 2
+    massval = 1
     mass = massval*ones
-    energy = zeros + 2.5
+
+    # I *think* this energy should yield c=1.0
+    energy = zeros + 1.0 / (1.4*.4)
     mom = mass * velocity
-    species_mass = mass*y
+    species_mass = None
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
 
-    # grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    from grudge.dt_utils import characteristic_lengthscales
+    chlen = characteristic_lengthscales(actx, discr)
+    from grudge.op import nodal_min
+    chlen_min = nodal_min(discr, "vol", chlen)
 
-    mu_b = 1.0
-    mu = 0.5
-    kappa = 5.0
-    # assemble d_alpha so that every species has a unique j
-    d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
-
-    tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu,
-                               thermal_conductivity=kappa,
-                               species_diffusivity=d_alpha)
+    mu = mu*chlen_min
+    if mu < 0:
+        mu = 0
+        tv_model = None
+    else:
+        tv_model = SimpleTransport(viscosity=mu)
 
     eos = IdealSingleGas(transport_model=tv_model)
 
     from mirgecom.viscous import get_viscous_timestep
-    timestep = get_viscous_timestep(discr, eos, cv)
-
-    tol = 1e-9
-    # TODO: avoid using characteristic_lengthscales
-    from grudge.dt_utils import characteristic_lengthscales
+    dt_field = get_viscous_timestep(discr, eos, cv)
 
     speed_total = actx.np.sqrt(np.dot(velocity, velocity)) + eos.sound_speed(cv)
-    mu_arr = eos.transport_model()._make_array(mu, cv)
-    actual = characteristic_lengthscales(cv.array_context, discr) / (
-        speed_total + (
-            mu_arr / characteristic_lengthscales(cv.array_context, discr)
-        )
-    )
+    dt_expected = chlen / (speed_total + (mu / chlen))
 
-    for i in range(actual.shape[0]):
-        assert discr.norm(actual[i] - timestep[i], np.inf) < tol
+    error = (dt_expected - dt_field) / dt_expected
+    assert discr.norm(error, np.inf) == 0
