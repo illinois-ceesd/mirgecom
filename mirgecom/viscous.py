@@ -14,6 +14,7 @@ Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: get_viscous_timestep
+.. autofunction:: get_viscous_cfl
 """
 
 __copyright__ = """
@@ -221,23 +222,56 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
     return flux_weak
 
 
-def get_viscous_timestep(discr, eos, transport_model, cfl, cv):
-    """Routine (will) return the (local) maximum stable viscous timestep.
+def get_viscous_timestep(discr, eos, cv):
+    """Routine returns the the node-local maximum stable viscous timestep.
 
-    Currently, it's a hack waiting for the geometric_factor helpers port
-    from grudge.
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        An equation of state implementing the speed_of_sound method
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid solution
+
+    Returns
+    -------
+    class:`~meshmode.dof_array.DOFArray`
+        The maximum stable timestep at each node.
     """
-    dim = discr.dim
-    mesh = discr.mesh
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
-    nelements = mesh.nelements
-    nel_1d = nelements ** (1.0 / (1.0 * dim))
+    from grudge.dt_utils import characteristic_lengthscales
+    from mirgecom.fluid import compute_wavespeed
 
-    # This roughly reproduces the timestep AK used in wave toy
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return cfl * dt
-#    dt_ngf = dt_non_geometric_factor(discr.mesh)
-#    dt_gf  = dt_geometric_factor(discr.mesh)
-#    wavespeeds = compute_wavespeed(w,eos=eos)
-#    max_v = clmath.max(wavespeeds)
-#    return c*dt_ngf*dt_gf/max_v
+    length_scales = characteristic_lengthscales(cv.array_context, discr)
+
+    mu = 0
+    transport = eos.transport_model()
+    if transport:
+        mu = transport.viscosity(eos, cv)
+
+    return(
+        length_scales / (compute_wavespeed(eos, cv) + mu / length_scales)
+    )
+
+
+def get_viscous_cfl(discr, eos, dt, cv):
+    """Calculate and return node-local CFL based on current state and timestep.
+
+    Parameters
+    ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    dt: float or :class:`~meshmode.dof_array.DOFArray`
+        A constant scalar dt or node-local dt
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        The fluid conserved variables
+
+    Returns
+    -------
+    :class:`meshmode.dof_array.DOFArray`
+        The CFL at each node.
+    """
+    return dt / get_viscous_timestep(discr, eos=eos, cv=cv)

@@ -158,7 +158,7 @@ def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
     do_viz = check_step(step=step, interval=nviz)
     do_status = check_step(step=step, interval=nstatus)
     if do_viz is False and do_status is False:
-        return 0
+        return dt
 
     dependent_vars = eos.dependent_vars(cv)
 
@@ -219,6 +219,8 @@ def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
 
     if maxerr > exittol:
         raise ExactSolutionMismatch(step, t=t, state=cv)
+
+    return dt
 
 
 def check_range_local(discr, dd, field, min_value, max_value):
