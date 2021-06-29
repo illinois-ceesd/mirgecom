@@ -81,7 +81,7 @@ def _advance_state_stepper_func(rhs, timestepper, checkpoint, get_timestep,
             logmgr.tick_before()
 
         dt = get_timestep(state=state)
-        if dt < 0:
+        if dt < 0.0:
             return istep, t, state
 
         if checkpoint:
@@ -154,7 +154,7 @@ def _advance_state_leap(rhs, timestepper, checkpoint, get_timestep,
             logmgr.tick_before()
 
         dt = get_timestep(state=state)
-        if dt < 0:
+        if dt < 0.0:
             return istep, t, state
 
         checkpoint(state=state, step=istep, t=t, dt=dt)
