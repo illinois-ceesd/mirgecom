@@ -41,11 +41,13 @@ from grudge.dof_desc import DTAG_BOUNDARY
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
-    inviscid_sim_timestep,
     sim_checkpoint,
     generate_and_distribute_mesh,
     ExactSolutionMismatch,
 )
+
+from mirgecom.viscous import get_viscous_timestep
+
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
@@ -87,12 +89,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     dim = 2
     order = 1
     exittol = 1.0
-    t_final = 1e-7
-    current_cfl = 1.0
+    t_final = 1e-6
+    current_cfl = 0.1
     current_dt = 1e-8
     current_t = 0
     casename = "poiseuille"
-    constant_cfl = False
+    constant_cfl = True
     nstatus = 1
     nviz = 1
     rank = 0
@@ -164,16 +166,30 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     if rank == 0:
         logger.info(init_message)
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
-                           t_final=t_final, constant_cfl=constant_cfl)
-
     def my_rhs(t, state):
         return ns_operator(discr, eos=eos, boundaries=boundaries, cv=state, t=t)
 
     def my_checkpoint(step, t, dt, state):
+        t_remaining = max(0, t_final - t)
+        checkpoint_cfl = current_cfl
+        viz_fields = []
+
+        if constant_cfl is True:
+            dt = (
+                current_cfl * get_viscous_timestep(discr=discr, eos=eos, cv=state)
+            )
+            from grudge.op import nodal_min
+            dt = nodal_min(discr, "vol", dt)
+        else:
+            from mirgecom.viscous import get_viscous_cfl
+            cfl_field = get_viscous_cfl(discr, eos, dt, state)
+            viz_fields.append(("cfl", cfl_field))
+            from grudge.op import nodal_max
+            checkpoint_cfl = nodal_max(discr, "vol", cfl_field)
+
+        dt = min(dt, t_remaining)
         return sim_checkpoint(discr, visualizer, eos, cv=state,
-                              vizname=casename, step=step,
+                              vizname=casename, step=step, cfl=checkpoint_cfl,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
                               exittol=exittol, constant_cfl=constant_cfl, comm=comm,
                               vis_timer=vis_timer, overwrite=True)
@@ -181,9 +197,8 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                          checkpoint=my_checkpoint,
-                          get_timestep=get_timestep, state=current_state,
-                          t=current_t, t_final=t_final, eos=eos,
+                          checkpoint=my_checkpoint, state=current_state,
+                          dt=current_dt, t=current_t, t_final=t_final, eos=eos,
                           dim=dim)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
