@@ -41,7 +41,6 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
-from pytools import memoize_in
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass, fields
 from arraycontext import (
@@ -243,10 +242,7 @@ class ConservedVars:
     @property
     def velocity(self):
         """Return the fluid velocity = momentum / mass."""
-        @memoize_in(self, "vel_arry")
-        def get():
-            return self.momentum / self.mass
-        return get()
+        return self.momentum / self.mass
 
     def join(self):
         """Call :func:`join_conserved` on *self*."""
@@ -438,9 +434,6 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
-    @memoize_in(cv, ("wvspd_arry", type(eos)))
-    def get():
-        actx = cv.array_context
-        v = cv.velocity
-        return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
-    return get()
+    actx = cv.array_context
+    v = cv.velocity
+    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
