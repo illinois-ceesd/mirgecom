@@ -128,7 +128,7 @@ if found:
                 return dt
 
             def my_checkpoint(state, step, t, dt):
-                return 0
+                return dt
 
             (step, t, state) = \
                 advance_state(rhs=rhs, timestepper=method,
