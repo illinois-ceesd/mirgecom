@@ -73,8 +73,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     order = 1
     exittol = 2e-2
     exittol = 100.0
-    t_final = 0.1
-    current_cfl = 1.0
+    t_final = .5
+    current_cfl = 0.38
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     #    vel[:dim] = 1.0
@@ -85,7 +85,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     casename = "pulse"
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
-    constant_cfl = False
+    constant_cfl = True
     nstatus = 10
     nviz = 10
     rank = 0
