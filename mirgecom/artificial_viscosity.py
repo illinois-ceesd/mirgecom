@@ -271,7 +271,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl"))
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
-        from array_context import make_loopy_program
+        from arraycontext import make_loopy_program
         return make_loopy_program([
             "{[iel]: 0 <= iel < nelements}",
             "{[idof]: 0 <= idof < ndiscr_nodes_in}",
