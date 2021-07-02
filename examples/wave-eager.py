@@ -88,7 +88,7 @@ def main(use_profiling=False):
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
     if not constant_cfl:
-        if local_mesh.dim == 2:
+        if dim == 2:
             # no deep meaning here, just a fudge factor
             dt = 0.7 / (nel_1d*order**2)
         elif dim == 3:
@@ -104,8 +104,6 @@ def main(use_profiling=False):
         dt = nodal_min(discr, "vol", dt)
 
     print("%d elements" % mesh.nelements)
-
-
 
     fields = flat_obj_array(
         bump(actx, discr),
