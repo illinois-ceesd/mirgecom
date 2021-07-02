@@ -44,7 +44,6 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
-    check_step,
     generate_and_distribute_mesh,
     write_visfile
 )
@@ -74,7 +73,7 @@ logger = logging.getLogger(__name__)
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=False,
          use_leap=False, use_profiling=False, casename=None,
-         restart_step=None, restart_name=None):
+         rst_step=None, rst_name=None):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -86,7 +85,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     rank = comm.Get_rank()
     nproc = comm.Get_size()
 
-    restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
@@ -101,54 +99,59 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    # Some discretization parameters
     dim = 2
     nel_1d = 8
     order = 1
 
+    # {{{ Time stepping control
+
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
     # To run to equlibrium, set t_final >= 40ms.
-    t_final = 1e-8
-    current_cfl = 1.0
-    velocity = np.zeros(shape=(dim,))
-    current_dt = 1e-9
-    current_t = 0
-    constant_cfl = False
-    nstatus = 1
-    nviz = 5
-    nhealth = 1
-    nlog = 1
-    nrestart = 5
-    rank = 0
-    checkpoint_t = current_t
-    current_step = 0
+
+    # Time stepper selection
     if use_leap:
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    box_ll = -0.005
-    box_ur = 0.005
+
+    # Time loop control parameters
+    current_step = 0
+    t_final = 1e-8
+    current_cfl = 1.0
+    current_dt = 1e-9
+    current_t = 0
+    constant_cfl = False
+
+    # i.o frequencies
+    nstatus = 1
+    nviz = 5
+    nhealth = 1
+    nrestart = 5
+
+    # }}}  Time stepping control
+
     debug = False
 
-    restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
-    restart_path = "restart_data/"
-    if restart_step:
-        if not restart_name:
-            restart_name = casename
-        rst_filename = (
-            restart_path
-            + restart_file_pattern.format(casename=restart_name,
-                                          step=restart_step, rank=rank)
-        )
+    rst_path = "restart_data/"
+    rst_pattern = (
+        rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
+    )
+    if rst_step:  # read the grid from restart data
+        rst_fname = rst_pattern.format(cname=casename, step=rst_step, rank=rank)
+
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_filename)
+        restart_data = read_restart_data(actx, rst_fname)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nproc
-    else:
+    else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
+        box_ll = -0.005
+        box_ur = 0.005
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
@@ -242,6 +245,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     # Initialize the fluid/gas state with Cantera-consistent data:
     # (density, pressure, temperature, mass_fractions)
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
+    velocity = np.zeros(shape=(dim,))
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
@@ -249,9 +253,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
-    if restart_step:
+    if rst_step:
         current_t = restart_data["t"]
-        current_step = restart_step
+        current_step = rst_step
         current_state = restart_data["state"]
     else:
         # Set the current state from time 0
@@ -294,100 +298,128 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                            dt=current_dt, cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
 
+    def my_graceful_exit(cv, step, t, do_viz=False, do_restart=False, message=None):
+        if rank == 0:
+            logger.info("Errors detected; attempting graceful exit.")
+        if do_viz:
+            my_write_viz(cv, step, t)
+        if do_restart:
+            my_write_restart(state=cv, step=step, t=t)
+        if message is None:
+            message = "Fatal simulation errors detected."
+        raise RuntimeError(message)
+
+    def my_write_viz(cv, step, t, dv=None, production_rates=None):
+        viz_fields = [("cv", cv)]
+        if dv is not None:
+            viz_fields.append([("dv", dv)])
+        if production_rates is not None:
+            viz_fields.append([("production_rates", production_rates)])
+        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+                      step=step, t=t, overwrite=True)
+
+    def my_write_restart(state, step, t):
+        rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
+        rst_data = {
+            "local_mesh": local_mesh,
+            "state": state,
+            "t": t,
+            "step": step,
+            "global_nelements": global_nelements,
+            "num_parts": nproc
+        }
+        from mirgecom.restart import write_restart_file
+        write_restart_file(actx, rst_data, rst_fname, comm)
+
+    def my_health_check(dv):
+        health_error = False
+        from mirgecom.simutil import check_naninf_local, check_range_local
+        if check_naninf_local(discr, "vol", dv.pressure) \
+           or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
+            health_error = True
+            logger.info(f"{rank=}: Invalid pressure data found.")
+
+        if check_range_local(discr, "vol", dv.temperature, 1.4e3, 3.3e3):
+            health_error = True
+            logger.info(f"{rank=}: Invalid temperature data found.")
+
+        return health_error
+
     def my_rhs(t, state):
         return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
-    def post_step_stuff(step, t, dt, state):
-        do_logend = check_step(step=(step-1), interval=nlog)
-
-        if do_logend and logmgr:
+    def my_post_step(step, t, dt, state):
+        # Logmgr needs to know about EOS, dt, dim?
+        # imo this is a design/scope flaw
+        if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
-        return state
+        return state, dt
 
-    def my_checkpoint(step, t, dt, state, force=False):
-        from mirgecom.simutil import check_step
-        do_viz = force or check_step(step=step, interval=nviz)
-        do_health = force or check_step(step=step, interval=nhealth)
-        do_logstart = force or check_step(step=step, interval=nlog)
-        do_restart = (force or check_step(step, nrestart)
-                      and step != restart_step)
-        if do_logstart and logmgr:
+    def my_pre_step(step, t, dt, state):
+        dv = None
+        pre_step_errors = False
+        if logmgr:
             logmgr.tick_before()
 
-        if do_restart:
-            rst_filename = (
-                restart_path
-                + restart_file_pattern.format(casename=casename, step=step,
-                                              rank=rank)
-            )
-            rst_data = {
-                "local_mesh": local_mesh,
-                "state": current_state,
-                "t": t,
-                "step": step,
-                "global_nelements": global_nelements,
-                "num_parts": nproc
-            }
-            from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_filename,
-                               comm=discr.mpi_communicator)
+        from mirgecom.simutil import check_step
+        do_viz = check_step(step=step, interval=nviz)
+        do_restart = check_step(step=step, interval=nrestart)
+        do_health = check_step(step=step, interval=nhealth)
 
-        if do_viz or do_health:
-            dv = eos.dependent_vars(state)
-            reaction_rates = eos.get_production_rates(state)
+        if step == rst_step:  # don't do viz or restart @ restart
+            do_viz = False
+            do_restart = False
 
-        errored = False
         if do_health:
-            health_message = ""
-            from mirgecom.simutil import check_naninf_local, check_range_local
-            if check_naninf_local(discr, "vol", dv.pressure) \
-               or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
-                errored = True
-                health_message += "Invalid pressure data found.\n"
-            if check_range_local(discr, "vol", dv.temperature, 1.4e3, 3.3e3):
-                errored = True
-                health_message += "Temperature data exceeded healthy range.\n"
-            comm = discr.mpi_communicator
+            dv = eos.dependent_vars(state)
+            local_health_error = my_health_check(dv)
+            health_errors = False
             if comm is not None:
-                errored = comm.allreduce(errored, op=MPI.LOR)
-            if errored:
-                if rank == 0:
-                    logger.info("Fluid solution failed health check.")
-                if health_message:  # capture any rank's health message
-                    logger.info(f"{rank=}:{health_message}")
+                health_errors = comm.allreduce(local_health_error, op=MPI.LOR)
+            if health_errors and rank == 0:
+                logger.info("Fluid solution failed health check.")
+            pre_step_errors = pre_step_errors or health_errors
 
-        if do_viz or errored:
-            reaction_rates = eos.get_production_rates(state)
-            io_fields = [
-                ("cv", state),
-                ("dv", dv),
-                ("reaction_rates", reaction_rates)
-            ]
-            write_visfile(discr, io_fields, visualizer, vizname=casename,
-                          step=step, t=t, overwrite=True)
+        if do_restart:
+            my_write_restart(state, step, t)
 
-        if errored:
-            raise RuntimeError("Error detected by user checkpoint, exiting.")
+        if do_viz:
+            production_rates = eos.get_production_rates(state)
+            if dv is None:
+                dv = eos.dependent_vars(state)
+            my_write_viz(cv=state, dv=dv, step=step, t=t,
+                         production_rates=production_rates)
 
-        return state
+        if pre_step_errors:
+            my_graceful_exit(cv=state, step=step, t=t,
+                             do_viz=(not do_viz), do_restart=(not do_restart),
+                             message="Error detected at prestep, exiting.")
+
+        return state, dt
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=my_checkpoint,
-                      post_step_callback=post_step_stuff,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
-    if not check_step(current_step, nviz):  # If final step not an output step
-        if rank == 0:                       # Then likely something went wrong
-            logger.info("Checkpointing final state ...")
-        my_checkpoint(current_step, t=current_t,
-                      dt=(current_t - checkpoint_t),
-                      state=current_state, force=True)
+    finish_tol = 1e-16
+    if np.abs(current_t - t_final) > finish_tol:
+        my_graceful_exit(cv=current_state, step=current_step, t=current_t,
+                         do_viz=True, do_restart=True,
+                         message="Simulation timestepping did not complete.")
+
+    # Dump the final data
+    final_dv = eos.dependent_vars(current_state)
+    final_dm = eos.get_production_rates(current_state)
+    my_write_viz(cv=current_state, dv=final_dv, production_rates=final_dm,
+                 step=current_step, t=current_t)
+    my_write_restart(current_state, current_step, current_t)
 
 
 if __name__ == "__main__":

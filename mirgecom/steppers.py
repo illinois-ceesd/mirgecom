@@ -31,9 +31,10 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 
 
-def _advance_state_stepper_func(rhs, timestepper, get_timestep,
-                                state, t_final,
+def _advance_state_stepper_func(rhs, timestepper,
+                                state, t_final, dt=0,
                                 t=0.0, istep=0,
+                                get_timestep=None,
                                 pre_step_callback=None,
                                 post_step_callback=None,
                                 logmgr=None, eos=None, dim=None):
@@ -87,20 +88,18 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
         if logmgr:
             logmgr.tick_before()
 
-        dt = get_timestep(state=state)
-        if dt < 0:
-            return istep, t, state
+        if get_timestep:
+            dt = get_timestep(state=state)
 
         if pre_step_callback is not None:
-            state = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+            state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=rhs)
-
         t += dt
         istep += 1
 
         if post_step_callback is not None:
-            state = post_step_callback(state=state, step=istep, t=t, dt=dt)
+            state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
         if logmgr:
             set_dt(logmgr, dt)
@@ -111,9 +110,10 @@ def _advance_state_stepper_func(rhs, timestepper, get_timestep,
 
 
 def _advance_state_leap(rhs, timestepper, get_timestep,
-                        state, t_final,
+                        state, t_final, dt=0,
                         component_id="state",
                         t=0.0, istep=0,
+                        get_timestep=None,
                         pre_step_callback=None,
                         post_step_callback=None,
                         logmgr=None, eos=None, dim=None):
@@ -163,7 +163,8 @@ def _advance_state_leap(rhs, timestepper, get_timestep,
         return istep, t, state
 
     # Generate code for Leap method.
-    dt = get_timestep(state=state)
+    if get_timestep:
+        dt = get_timestep(state=state)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
                                                     rhs, t, dt, state)
     while t < t_final:
@@ -232,9 +233,10 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     return stepper_cls
 
 
-def advance_state(rhs, timestepper, get_timestep, state, t_final,
+def advance_state(rhs, timestepper, state, t_final,
                   component_id="state",
-                  t=0.0, istep=0,
+                  t=0.0, istep=0, dt=0,
+                  get_timestep=None,
                   pre_step_callback=None,
                   post_step_callback=None,
                   logmgr=None, eos=None, dim=None):
@@ -303,7 +305,7 @@ def advance_state(rhs, timestepper, get_timestep, state, t_final,
             _advance_state_leap(
                 rhs=rhs, timestepper=timestepper,
                 get_timestep=get_timestep, state=state,
-                t=t, t_final=t_final,
+                t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
@@ -314,7 +316,7 @@ def advance_state(rhs, timestepper, get_timestep, state, t_final,
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
                 get_timestep=get_timestep, state=state,
-                t=t, t_final=t_final,
+                t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 istep=istep,
