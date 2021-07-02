@@ -155,6 +155,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
             dt = (
                 current_cfl * get_viscous_timestep(discr=discr, eos=eos, cv=state)
             )
+            viz_fields.append(("local_dt", dt))
             from grudge.op import nodal_min
             dt = nodal_min(discr, "vol", dt)
         else:
