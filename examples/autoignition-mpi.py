@@ -331,7 +331,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         from mirgecom.restart import write_restart_file
         write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(dv):
+    def my_health_check(dv, dt):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
@@ -342,6 +342,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         if check_range_local(discr, "vol", dv.temperature, 1.4e3, 3.3e3):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+
+        if dt < 0:
+            health_error = True
+            if rank == 0:
+                logger.info("Global DT is negative!")
 
         return health_error
 
@@ -377,7 +382,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
         if do_health:
             dv = eos.dependent_vars(state)
-            local_health_error = my_health_check(dv)
+            local_health_error = my_health_check(dv, dt)
             health_errors = False
             if comm is not None:
                 health_errors = comm.allreduce(local_health_error, op=MPI.LOR)
