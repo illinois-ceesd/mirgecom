@@ -107,8 +107,6 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
     nstatus = 10
     nviz = 10
     nhealth = 10
-    nlog = 10
-    rank = 0
     checkpoint_t = current_t
     current_step = 0
     if use_leap:
@@ -187,20 +185,18 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def post_step_stuff(step, t, dt, state):
-        do_log = check_step(step=(step-1), interval=nlog)
-        if do_log and logmgr:
+        if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
-        return state
+        return state, dt
 
     def my_checkpoint(step, t, dt, state):
         do_status = check_step(step=step, interval=nstatus)
         do_viz = check_step(step=step, interval=nviz)
         do_health = check_step(step=step, interval=nhealth)
-        do_log = check_step(step=step, interval=nlog)
 
-        if do_log and logmgr:
+        if logmgr:
             logmgr.tick_before()
 
         if do_status or do_viz or do_health:
@@ -247,7 +243,7 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         if errored:
             raise RuntimeError("Error detected by user checkpoint, exiting.")
 
-        return state
+        return state, dt
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,

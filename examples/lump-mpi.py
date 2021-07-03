@@ -184,7 +184,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
         if errored:
             raise RuntimeError("Error detected by user checkpoint, exiting.")
 
-        return state
+        return state, dt
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
