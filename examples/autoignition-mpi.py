@@ -312,9 +312,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     def my_write_viz(cv, step, t, dv=None, production_rates=None):
         viz_fields = [("cv", cv)]
         if dv is not None:
-            viz_fields.append([("dv", dv)])
+            viz_fields.append(("dv", dv))
         if production_rates is not None:
-            viz_fields.append([("production_rates", production_rates)])
+            viz_fields.append(("production_rates", production_rates))
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
@@ -362,6 +362,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     def my_pre_step(step, t, dt, state):
         dv = None
         pre_step_errors = False
+
         if logmgr:
             logmgr.tick_before()
 

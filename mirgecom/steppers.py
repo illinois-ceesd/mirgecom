@@ -109,8 +109,8 @@ def _advance_state_stepper_func(rhs, timestepper,
     return istep, t, state
 
 
-def _advance_state_leap(rhs, timestepper, get_timestep,
-                        state, t_final, dt=0,
+def _advance_state_leap(rhs, timestepper, state,
+                        t_final, dt=0,
                         component_id="state",
                         t=0.0, istep=0,
                         get_timestep=None,
