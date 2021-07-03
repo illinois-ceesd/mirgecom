@@ -151,10 +151,8 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
                 discr, eos=eos,
                 cv_tpair=TracePair(
                     part_pair.dd,
-                    interior=make_conserved(discr.dim,
-                                            scalar_quantities=part_pair.int),
-                    exterior=make_conserved(discr.dim,
-                                            scalar_quantities=part_pair.ext)))
+                    interior=make_conserved(discr.dim, q=part_pair.int),
+                    exterior=make_conserved(discr.dim, q=part_pair.ext)))
             for part_pair in cross_rank_trace_pairs(discr, cv.join()))
         + sum(
             _facial_flux(
@@ -166,9 +164,7 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
     ).join()
 
     return make_conserved(
-        discr.dim,
-        scalar_quantities=discr.inverse_mass(vol_weak
-                                             - discr.face_mass(boundary_flux))
+        discr.dim, q=discr.inverse_mass(vol_weak - discr.face_mass(boundary_flux))
     )
 
 
@@ -178,7 +174,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     warn("Do not call inviscid_operator; it is now called euler_operator. This"
          "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
     return euler_operator(discr, eos, boundaries,
-                          make_conserved(discr.dim, scalar_quantities=q), t)
+                          make_conserved(discr.dim, q), t)
 
 
 # By default, run unitless

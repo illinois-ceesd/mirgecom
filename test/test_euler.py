@@ -127,7 +127,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     for i in range(nspecies):
         expected_flux[dim+2+i] = mom * mass_fractions[i]
 
-    expected_flux = make_conserved(dim, vector_quantities=expected_flux)
+    expected_flux = make_conserved(dim, q=expected_flux)
 
     # }}}
 
@@ -427,8 +427,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             species_mass=species_mass_input)
 
         expected_rhs = make_conserved(
-            dim, scalar_quantities=make_obj_array([discr.zeros(actx)
-                                                   for i in range(num_equations)])
+            dim, q=make_obj_array([discr.zeros(actx)
+                                   for i in range(num_equations)])
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -789,9 +789,11 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
+
+        # Apply spectral filter
         cv = make_conserved(
-            dim, scalar_quantities=filter_modally(discr, "vol", cutoff, frfunc,
-                                                  cv.join())
+            dim, q=filter_modally(discr, "vol", cutoff, frfunc,
+                                  cv.join())
         )
 
         t += dt

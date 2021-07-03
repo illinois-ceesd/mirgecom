@@ -130,7 +130,7 @@ class ConservedVars:
         dataclass object that resolves the fluid CV associated with each conservation
         equation::
 
-            fluid_cv = make_conserved(ndim, scalar_quantities=Q),
+            fluid_cv = make_conserved(ndim, q=Q),
 
         after which::
 
@@ -210,7 +210,7 @@ class ConservedVars:
         get a `ConservedVars` dataclass object that resolves the vector quantity
         associated with each conservation equation::
 
-            grad_cv = make_conserved(ndim, vector_quantities=grad_q),
+            grad_cv = make_conserved(ndim, q=grad_q),
 
         after which::
 
@@ -323,12 +323,10 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
 
 
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
-                   scalar_quantities=None, vector_quantities=None):
+                   q=None):
     """Create :class:`ConservedVars` from separated or joined quantities."""
-    if scalar_quantities is not None:
-        return split_conserved(dim, q=scalar_quantities)
-    if vector_quantities is not None:
-        return split_conserved(dim, q=vector_quantities)
+    if q is not None:
+        return split_conserved(dim, q=q)
     return split_conserved(
         # Going through _join_conserved here to inherit its input
         # validation.
