@@ -72,7 +72,7 @@ def main(use_profiling=False):
 
     dim = 2
     nel_1d = 16
-    constant_cfl = True
+
     current_cfl = .485
     wave_speed = 1.0
 
@@ -87,21 +87,11 @@ def main(use_profiling=False):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    if not constant_cfl:
-        if dim == 2:
-            # no deep meaning here, just a fudge factor
-            dt = 0.7 / (nel_1d*order**2)
-        elif dim == 3:
-            # no deep meaning here, just a fudge factor
-            dt = 0.4 / (nel_1d*order**2)
-        else:
-            raise ValueError("don't have a stable time step guesstimate")
-    else:
-        from grudge.dt_utils import characteristic_lengthscales
-        dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
 
-        from grudge.op import nodal_min
-        dt = nodal_min(discr, "vol", dt)
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
 
     print("%d elements" % mesh.nelements)
 
