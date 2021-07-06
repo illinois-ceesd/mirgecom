@@ -31,6 +31,8 @@ from pytools.obj_array import flat_obj_array
 
 from meshmode.array_context import thaw, PyOpenCLArrayContext
 
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
@@ -74,8 +76,6 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -84,6 +84,16 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave-eager.sqlite", mode="wu", mpi_comm=comm)
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
 
@@ -173,8 +183,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         except KeyError:
             pass
 
-        # if use_profiling:
-        #   logmgr.add_watches(["multiply_time.max"])
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -224,7 +234,6 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
 
         if logmgr:
             set_dt(logmgr, dt)
-            # set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
 
 

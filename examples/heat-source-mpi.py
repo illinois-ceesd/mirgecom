@@ -19,14 +19,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+import logging
 
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from meshmode.array_context import thaw, PyOpenCLArrayContext
+
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -46,19 +47,30 @@ from mirgecom.logging_quantities import (initialize_logmgr,
     logmgr_add_device_memory_usage)
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from logpyle import IntervalTimer, set_dt
-import logging
 
 
 @mpi_entry_point
-def main(use_logmgr=False):
+def main(use_profiling=False, use_logmgr=False):
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
+
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = PyOpenCLArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
@@ -115,9 +127,6 @@ def main(use_logmgr=False):
 
     u = discr.zeros(actx)
 
-    logmgr = initialize_logmgr(use_logmgr,
-        filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
-
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
@@ -131,8 +140,8 @@ def main(use_logmgr=False):
         except KeyError:
             pass
 
-        # if use_profiling:
-        #   logmgr.add_watches(["multiply_time.max"])
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -165,14 +174,13 @@ def main(use_logmgr=False):
 
         if logmgr:
             set_dt(logmgr, dt)
-            # set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
 
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
+    use_profiling = True
     use_logging = True
-
-    main(use_logmgr=use_logging)
+    main(use_profiling=use_profiling, use_logmgr=use_logging)
 
 # vim: foldmethod=marker
