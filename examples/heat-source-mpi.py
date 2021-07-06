@@ -41,9 +41,16 @@ from mirgecom.diffusion import (
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
+from mirgecom.logging_quantities import (initialize_logmgr,
+    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
+    logmgr_add_device_memory_usage)
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from logpyle import IntervalTimer, set_dt
+import logging
+
 
 @mpi_entry_point
-def main():
+def main(use_logmgr=False):
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue,
@@ -58,6 +65,10 @@ def main():
 
     dim = 2
     nel_1d = 16
+
+    t = 0
+    t_final = 0.01
+    istep = 0
 
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -104,6 +115,28 @@ def main():
 
     u = discr.zeros(actx)
 
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
+
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                             extract_vars_for_logging, units_for_logging)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        # if use_profiling:
+        #   logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
     vis = make_visualizer(discr)
 
     def rhs(t, u):
@@ -115,11 +148,10 @@ def main():
 
     rank = comm.Get_rank()
 
-    t = 0
-    t_final = 0.01
-    istep = 0
+    while t < t_final:
+        if logmgr:
+            logmgr.tick_before()
 
-    while True:
         if istep % 10 == 0:
             print(istep, t, discr.norm(u))
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
@@ -127,15 +159,20 @@ def main():
                         ("u", u)
                         ])
 
-        if t >= t_final:
-            break
-
         u = rk4_step(u, t, dt, rhs)
         t += dt
         istep += 1
 
+        if logmgr:
+            set_dt(logmgr, dt)
+            # set_sim_state(logmgr, dim, state, eos)
+            logmgr.tick_after()
+
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    use_logging = True
+
+    main(use_logmgr=use_logging)
 
 # vim: foldmethod=marker
