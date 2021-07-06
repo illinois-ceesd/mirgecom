@@ -173,8 +173,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         except KeyError:
             pass
 
-        if use_profiling:
-            logmgr.add_watches(["multiply_time.max"])
+        # if use_profiling:
+        #   logmgr.add_watches(["multiply_time.max"])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
