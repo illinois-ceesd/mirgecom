@@ -165,7 +165,13 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    current_state = initializer(nodes)
+    if rst_step:
+        current_t = restart_data["t"]
+        current_step = rst_step
+        current_state = restart_data["state"]
+    else:
+        # Set the current state from time 0
+        current_state = initializer(nodes)
 
     visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
@@ -195,12 +201,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             message = "Fatal simulation errors detected."
         raise RuntimeError(message)
 
-    def my_write_viz(cv, step, t, dv=None, exact_mix=None, resid=None):
+    def my_write_viz(cv, step, t, dv=None, exact_lump=None, resid=None):
         viz_fields = [("cv", cv)]
         if dv is not None:
             viz_fields.append(("dv", dv))
-        if exact_mix is not None:
-            viz_fields.append(("exact", exact_mix))
+        if exact_lump is not None:
+            viz_fields.append(("exact", exact_lump))
         if resid is not None:
             viz_fields.append(("residual", resid))
         from mirgecom.simutil import write_visfile
@@ -220,7 +226,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         from mirgecom.restart import write_restart_file
         write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, dv, exact_mix):
+    def my_health_check(state, dv, exact_lump):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
@@ -229,12 +235,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"{rank=}: Invalid pressure data found.")
 
         from mirgecom.simutil import compare_fluid_solutions
-        component_errors = compare_fluid_solutions(discr, state, exact_mix)
+        component_errors = compare_fluid_solutions(discr, state, exact_lump)
         exittol = .09
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
-                logger.info("Solution diverged from exact_mix.")
+                logger.info("Solution diverged from exact_lump.")
 
         return health_error
 
@@ -253,7 +259,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_pre_step(step, t, dt, state):
         dv = None
-        exact_mix = None
+        exact_lump = None
         pre_step_errors = False
 
         if logmgr:
@@ -271,8 +277,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
         if do_health:
             dv = eos.dependent_vars(state)
-            exact_mix = initializer(x_vec=nodes, eos=eos, t=t)
-            local_health_error = my_health_check(state, dv, exact_mix)
+            exact_lump = initializer(x_vec=nodes, eos=eos, t=t)
+            local_health_error = my_health_check(state, dv, exact_lump)
             health_errors = False
             if comm is not None:
                 health_errors = comm.allreduce(local_health_error, op=MPI.LOR)
@@ -286,17 +292,17 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         if do_viz:
             if dv is None:
                 dv = eos.dependent_vars(state)
-            if exact_mix is None:
-                exact_mix = initializer(x_vec=nodes, eos=eos, t=t)
-            resid = state - exact_mix
+            if exact_lump is None:
+                exact_lump = initializer(x_vec=nodes, eos=eos, t=t)
+            resid = state - exact_lump
             my_write_viz(cv=state, dv=dv, step=step, t=t,
-                         exact_mix=exact_mix, resid=resid)
+                         exact_lump=exact_lump, resid=resid)
 
         if do_status:
-            if exact_mix is None:
-                exact_mix = initializer(x_vec=nodes, eos=eos, t=t)
+            if exact_lump is None:
+                exact_lump = initializer(x_vec=nodes, eos=eos, t=t)
             from mirgecom.simutil import compare_fluid_solutions
-            component_errors = compare_fluid_solutions(discr, state, exact_mix)
+            component_errors = compare_fluid_solutions(discr, state, exact_lump)
             status_msg = (
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
@@ -317,9 +323,22 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
-    #    if current_t != checkpoint_t:
+    finish_tol = 1e-16
+    if np.abs(current_t - t_final) > finish_tol:
+        my_graceful_exit(cv=current_state, step=current_step, t=current_t,
+                         do_viz=True, do_restart=True,
+                         message="Simulation timestepping did not complete.")
+
+    # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
+
+    final_dv = eos.dependent_vars(current_state)
+    final_exact = initializer(x_vec=nodes, eos=eos, t=current_t)
+    final_resid = current_state - final_exact
+    my_write_viz(cv=current_state, dv=final_dv, exact_lump=final_exact,
+                 resid=final_resid, step=current_step, t=current_t)
+    my_write_restart(current_state, current_step, current_t)
 
 
 if __name__ == "__main__":

@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=False,
-         use_leap=False, use_profiling=False, casename=None,
+         use_leap=False, use_profiling=False, casename="autoignition",
          rst_step=None, rst_name=None):
     """Drive example."""
     cl_ctx = ctx_factory()
