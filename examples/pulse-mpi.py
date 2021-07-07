@@ -39,11 +39,12 @@ from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
-    inviscid_sim_timestep,
     generate_and_distribute_mesh,
     sim_checkpoint,
     ExactSolutionMismatch,
 )
+
+from mirgecom.viscous import get_viscous_timestep
 
 from mirgecom.io import make_init_message
 
@@ -72,8 +73,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     order = 1
     exittol = 2e-2
     exittol = 100.0
-    t_final = 0.1
-    current_cfl = 1.0
+    t_final = .5
+    current_cfl = 0.38
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     #    vel[:dim] = 1.0
@@ -84,7 +85,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     casename = "pulse"
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
-    constant_cfl = False
+    constant_cfl = True
     nstatus = 10
     nviz = 10
     rank = 0
@@ -141,26 +142,41 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     if rank == 0:
         logger.info(init_message)
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
-                           t_final=t_final, constant_cfl=constant_cfl)
-
     def my_rhs(t, state):
         return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        t_remaining = max(0, t_final - t)
+        checkpoint_cfl = current_cfl
+        viz_fields = []
+
+        if constant_cfl is True:
+            dt = (
+                current_cfl * get_viscous_timestep(discr=discr, eos=eos, cv=state)
+            )
+            viz_fields.append(("local_dt", dt))
+            from grudge.op import nodal_min
+            dt = nodal_min(discr, "vol", dt)
+        else:
+            from mirgecom.viscous import get_viscous_cfl
+            cfl_field = get_viscous_cfl(discr, eos, dt, state)
+            viz_fields.append(("cfl", cfl_field))
+            from grudge.op import nodal_max
+            checkpoint_cfl = nodal_max(discr, "vol", cfl_field)
+
+        dt = min(dt, t_remaining)
         return sim_checkpoint(discr, visualizer, eos, cv=state,
-                              vizname=casename, step=step,
+                              vizname=casename, step=step, cfl=checkpoint_cfl,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm)
+                              exittol=exittol, constant_cfl=constant_cfl,
+                              comm=comm, viz_fields=viz_fields)
 
     try:
         (current_step, current_t, current_state) = \
             advance_state(rhs=my_rhs, timestepper=timestepper,
-                checkpoint=my_checkpoint,
-                get_timestep=get_timestep, state=current_state,
-                t=current_t, t_final=t_final)
+                checkpoint=my_checkpoint, state=current_state,
+                dt=current_dt, t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
         current_step = ex.step
         current_t = ex.t
