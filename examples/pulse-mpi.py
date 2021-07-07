@@ -71,15 +71,10 @@ logger = logging.getLogger(__name__)
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=False,
+def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename="pulse",
          rst_step=None, rst_name=None):
     """Drive the example."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
     cl_ctx = ctx_factory()
 
     if casename is None:
@@ -111,12 +106,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     current_cfl = 1.0
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    #    vel[:dim] = 1.0
     current_dt = .01
     current_t = 0
     eos = IdealSingleGas()
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    casename = "pulse"
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
@@ -201,9 +194,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     if rank == 0:
         logger.info(init_message)
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
-                           t_final=t_final, constant_cfl=constant_cfl)
+    get_timestep = partial(inviscid_sim_timestep, discr=discr,
+                           cfl=current_cfl, eos=eos, t_final=t_final,
+                           constant_cfl=constant_cfl)
 
     def my_graceful_exit(cv, step, t, do_viz=False, do_restart=False, message=None):
         if rank == 0:
@@ -262,7 +255,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     def my_pre_step(step, t, dt, state):
         dv = None
         pre_step_errors = False
-
+        print(f"{step=},{t=},{dt=}")
         if logmgr:
             logmgr.tick_before()
 
@@ -303,7 +296,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
-                      post_step_callback=my_post_step,
+                      post_step_callback=my_post_step, dt=current_dt,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
@@ -319,6 +312,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     final_dv = eos.dependent_vars(current_state)
     my_write_viz(cv=current_state, dv=final_dv, step=current_step, t=current_t)
     my_write_restart(current_state, current_step, current_t)
+
+    if logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
 
 
 if __name__ == "__main__":

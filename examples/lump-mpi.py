@@ -118,8 +118,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    box_ll = -5.0
-    box_ur = 5.0
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -135,6 +133,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
+        box_ll = -5.0
+        box_ur = 5.0
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
@@ -186,8 +186,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info(init_message)
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
+    get_timestep = partial(inviscid_sim_timestep, discr=discr,
+                           cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_graceful_exit(cv, step, t, do_viz=False, do_restart=False, message=None):
@@ -240,7 +240,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
-                logger.info("Solution diverged from exact_lump.")
+                logger.info("Solution diverged from exact soln.")
 
         return health_error
 
@@ -319,7 +319,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
-                      post_step_callback=my_post_step,
+                      post_step_callback=my_post_step, dt=current_dt,
                       get_timestep=get_timestep, state=current_state,
                       t=current_t, t_final=t_final, eos=eos, dim=dim)
 
@@ -339,6 +339,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     my_write_viz(cv=current_state, dv=final_dv, exact_lump=final_exact,
                  resid=final_resid, step=current_step, t=current_t)
     my_write_restart(current_state, current_step, current_t)
+
+    if logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
 
 
 if __name__ == "__main__":
