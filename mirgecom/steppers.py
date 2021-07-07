@@ -89,7 +89,7 @@ def _advance_state_stepper_func(rhs, timestepper,
             logmgr.tick_before()
 
         if get_timestep:
-            dt = get_timestep(state=state)
+            dt = get_timestep(state=state, t=t, dt=dt)
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
@@ -164,13 +164,14 @@ def _advance_state_leap(rhs, timestepper, state,
 
     # Generate code for Leap method.
     if get_timestep:
-        dt = get_timestep(state=state)
+        dt = get_timestep(state=state, t=t, dt=dt)
+
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
                                                     rhs, t, dt, state)
     while t < t_final:
 
         if get_timestep:
-            dt = get_timestep(state=state)
+            dt = get_timestep(state=state, t=t, dt=dt)
 
         if dt < 0:
             return istep, t, state
