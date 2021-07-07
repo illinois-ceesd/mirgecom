@@ -147,7 +147,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["nparts"] == nproc
+        assert restart_data["num_parts"] == nproc
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
         box_ll = -0.005
