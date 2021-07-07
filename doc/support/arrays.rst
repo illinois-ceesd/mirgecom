@@ -70,7 +70,7 @@ the following:
    >>> dcoll.nodes() * 5
    Traceback (most recent call last):
     ...
-   ValueError: PyOpenCL array has no queue; call .with_queue() to add one in order to be able to perform operations
+   ValueError: array containers with frozen arrays cannot be operated upon
 
 Fortunately, recovering from this is straightforward:
 
