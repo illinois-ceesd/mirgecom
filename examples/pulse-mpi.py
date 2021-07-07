@@ -220,7 +220,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         viz_fields = [("cv", cv)]
         if dv is not None:
             viz_fields.append(("dv", dv))
-        from mirgecom.simutils import write_visfile
+        from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
