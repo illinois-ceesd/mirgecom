@@ -169,7 +169,9 @@ def _advance_state_leap(rhs, timestepper, state,
                                                     rhs, t, dt, state)
     while t < t_final:
 
-        dt = get_timestep(state=state)
+        if get_timestep:
+            dt = get_timestep(state=state)
+
         if dt < 0:
             return istep, t, state
 
