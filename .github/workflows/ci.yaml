@@ -106,7 +106,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
-            python -m mpi4py examples/vortex-mpi.py
+            mpiexec -n 2 python -m mpi4py examples/vortex-mpi.py
 
     doc:
         name: Documentation
