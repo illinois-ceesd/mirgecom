@@ -201,30 +201,34 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                            cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
 
-    def my_graceful_exit(cv, step, t, do_viz=False, do_restart=False, message=None):
+    def my_graceful_exit(step, t, state, do_viz=False, do_restart=False,
+                         message=None):
         if rank == 0:
             logger.info("Errors detected; attempting graceful exit.")
         if do_viz:
-            my_write_viz(cv, step, t)
+            my_write_viz(step=step, t=t, state=state)
         if do_restart:
-            my_write_restart(state=cv, step=step, t=t)
+            my_write_restart(step=step, t=t, state=state)
         if message is None:
             message = "Fatal simulation errors detected."
         raise RuntimeError(message)
 
-    def my_write_viz(cv, step, t, dv=None, exact_lump=None, resid=None):
-        viz_fields = [("cv", cv)]
-        if dv is not None:
-            viz_fields.append(("dv", dv))
-        if exact_lump is not None:
-            viz_fields.append(("exact", exact_lump))
-        if resid is not None:
-            viz_fields.append(("residual", resid))
+    def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
+        if dv is None:
+            dv = eos.dependent_vars(state)
+        if exact is None:
+            exact = initializer(x_vec=nodes, eos=eos, t=t)
+        if resid is None:
+            resid = state - exact
+        viz_fields = [("cv", state),
+                      ("dv", dv),
+                      ("exact", exact),
+                      ("resid", resid)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
-    def my_write_restart(state, step, t):
+    def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         rst_data = {
             "local_mesh": local_mesh,
@@ -237,7 +241,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         from mirgecom.restart import write_restart_file
         write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, dv, exact_lump):
+    def my_health_check(state, dv, exact):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
@@ -246,12 +250,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"{rank=}: Invalid pressure data found.")
 
         from mirgecom.simutil import compare_fluid_solutions
-        component_errors = compare_fluid_solutions(discr, state, exact_lump)
+        component_errors = compare_fluid_solutions(discr, state, exact)
         exittol = .09
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
-                logger.info("Solution diverged from exact_lump.")
+                logger.info("Solution diverged from exact soln.")
 
         return health_error
 
@@ -266,7 +270,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_pre_step(step, t, dt, state):
         dv = None
-        exact_lump = None
+        exact = None
         pre_step_errors = False
 
         if logmgr:
@@ -284,32 +288,31 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
         if do_health:
             dv = eos.dependent_vars(state)
-            exact_lump = initializer(x_vec=nodes, eos=eos, t=t)
-            local_health_error = my_health_check(state, dv, exact_lump)
-            health_errors = False
+            exact = initializer(x_vec=nodes, eos=eos, t=t)
+            health_errors = my_health_check(state, dv, exact)
             if comm is not None:
-                health_errors = comm.allreduce(local_health_error, op=MPI.LOR)
+                health_errors = comm.allreduce(health_errors, op=MPI.LOR)
             if health_errors and rank == 0:
                 logger.info("Fluid solution failed health check.")
             pre_step_errors = pre_step_errors or health_errors
 
         if do_restart:
-            my_write_restart(state, step, t)
+            my_write_restart(step=step, t=t, state=state)
 
         if do_viz:
             if dv is None:
                 dv = eos.dependent_vars(state)
-            if exact_lump is None:
-                exact_lump = initializer(x_vec=nodes, eos=eos, t=t)
-            resid = state - exact_lump
-            my_write_viz(cv=state, dv=dv, step=step, t=t,
-                         exact_lump=exact_lump, resid=resid)
+            if exact is None:
+                exact = initializer(x_vec=nodes, eos=eos, t=t)
+            resid = state - exact
+            my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
+                         resid=resid)
 
         if do_status:
-            if exact_lump is None:
-                exact_lump = initializer(x_vec=nodes, eos=eos, t=t)
+            if exact is None:
+                exact = initializer(x_vec=nodes, eos=eos, t=t)
             from mirgecom.simutil import compare_fluid_solutions
-            component_errors = compare_fluid_solutions(discr, state, exact_lump)
+            component_errors = compare_fluid_solutions(discr, state, exact)
             status_msg = (
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
@@ -317,7 +320,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 logger.info(status_msg)
 
         if pre_step_errors:
-            my_graceful_exit(cv=state, step=step, t=t,
+            my_graceful_exit(step=step, t=t, state=state,
                              do_viz=(not do_viz), do_restart=(not do_restart),
                              message="Error detected at prestep, exiting.")
 
@@ -336,7 +339,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     finish_tol = 1e-16
     if np.abs(current_t - t_final) > finish_tol:
-        my_graceful_exit(cv=current_state, step=current_step, t=current_t,
+        my_graceful_exit(step=current_step, t=current_t, state=current_state,
                          do_viz=True, do_restart=True,
                          message="Simulation timestepping did not complete.")
 
@@ -347,9 +350,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     final_dv = eos.dependent_vars(current_state)
     final_exact = initializer(x_vec=nodes, eos=eos, t=current_t)
     final_resid = current_state - final_exact
-    my_write_viz(cv=current_state, dv=final_dv, exact_lump=final_exact,
-                 resid=final_resid, step=current_step, t=current_t)
-    my_write_restart(current_state, current_step, current_t)
+    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
+                 exact=final_exact, resid=final_resid)
+    my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()

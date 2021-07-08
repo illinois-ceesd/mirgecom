@@ -298,27 +298,30 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                            cfl=current_cfl, eos=eos,
                            t_final=t_final, constant_cfl=constant_cfl)
 
-    def my_graceful_exit(cv, step, t, do_viz=False, do_restart=False, message=None):
+    def my_graceful_exit(step, t, state, do_viz=False, do_restart=False,
+                         message=None):
         if rank == 0:
             logger.info("Errors detected; attempting graceful exit.")
         if do_viz:
-            my_write_viz(cv, step, t)
+            my_write_viz(step=step, t=t, state=state)
         if do_restart:
-            my_write_restart(state=cv, step=step, t=t)
+            my_write_restart(step=step, t=t, state=state)
         if message is None:
             message = "Fatal simulation errors detected."
         raise RuntimeError(message)
 
-    def my_write_viz(cv, step, t, dv=None, production_rates=None):
-        viz_fields = [("cv", cv)]
-        if dv is not None:
-            viz_fields.append(("dv", dv))
-        if production_rates is not None:
-            viz_fields.append(("production_rates", production_rates))
+    def my_write_viz(step, t, state, dv=None, production_rates=None):
+        if dv is None:
+            dv = eos.dependent_vars(state)
+        if production_rates is None:
+            production_rates = eos.get_production_rates(state)
+        viz_fields = [("cv", state),
+                      ("dv", dv),
+                      ("production_rates", production_rates)]
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
-    def my_write_restart(state, step, t):
+    def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         rst_data = {
             "local_mesh": local_mesh,
@@ -382,22 +385,21 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
         if do_health:
             dv = eos.dependent_vars(state)
-            local_health_error = my_health_check(dv, dt)
-            health_errors = False
+            health_errors = my_health_check(dv, dt)
             if comm is not None:
-                health_errors = comm.allreduce(local_health_error, op=MPI.LOR)
+                health_errors = comm.allreduce(health_errors, op=MPI.LOR)
             if health_errors and rank == 0:
                 logger.info("Fluid solution failed health check.")
             pre_step_errors = pre_step_errors or health_errors
 
         if do_restart:
-            my_write_restart(state, step, t)
+            my_write_restart(step=step, t=t, state=state)
 
         if do_viz:
             production_rates = eos.get_production_rates(state)
             if dv is None:
                 dv = eos.dependent_vars(state)
-            my_write_viz(cv=state, dv=dv, step=step, t=t,
+            my_write_viz(step=step, t=t, state=state, dv=dv,
                          production_rates=production_rates)
 
         if pre_step_errors:
@@ -423,9 +425,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     # Dump the final data
     final_dv = eos.dependent_vars(current_state)
     final_dm = eos.get_production_rates(current_state)
-    my_write_viz(cv=current_state, dv=final_dv, production_rates=final_dm,
-                 step=current_step, t=current_t)
-    my_write_restart(current_state, current_step, current_t)
+    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
+                 production_rates=final_dm)
+    my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()

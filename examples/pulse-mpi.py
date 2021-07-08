@@ -198,26 +198,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                            cfl=current_cfl, eos=eos, t_final=t_final,
                            constant_cfl=constant_cfl)
 
-    def my_graceful_exit(cv, step, t, do_viz=False, do_restart=False, message=None):
+    def my_graceful_exit(step, t, state, do_viz=False, do_restart=False,
+                         message=None):
         if rank == 0:
             logger.info("Errors detected; attempting graceful exit.")
         if do_viz:
-            my_write_viz(cv, step, t)
+            my_write_viz(step=step, t=t, state=state)
         if do_restart:
-            my_write_restart(state=cv, step=step, t=t)
+            my_write_restart(step=step, t=t, state=state)
         if message is None:
             message = "Fatal simulation errors detected."
         raise RuntimeError(message)
 
-    def my_write_viz(cv, step, t, dv=None):
-        viz_fields = [("cv", cv)]
-        if dv is not None:
-            viz_fields.append(("dv", dv))
+    def my_write_viz(step, t, state, dv=None):
+        if dv is None:
+            dv = eos.dependent_vars(state)
+        viz_fields = [("cv", state),
+                      ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
-    def my_write_restart(state, step, t):
+    def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         rst_data = {
             "local_mesh": local_mesh,
@@ -255,7 +257,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_pre_step(step, t, dt, state):
         dv = None
         pre_step_errors = False
-        print(f"{step=},{t=},{dt=}")
+
         if logmgr:
             logmgr.tick_before()
 
@@ -270,24 +272,23 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if do_health:
             dv = eos.dependent_vars(state)
-            local_health_error = my_health_check(dv, dt)
-            health_errors = False
+            health_errors = my_health_check(dv, dt)
             if comm is not None:
-                health_errors = comm.allreduce(local_health_error, op=MPI.LOR)
+                health_errors = comm.allreduce(health_errors, op=MPI.LOR)
             if health_errors and rank == 0:
                 logger.info("Fluid solution failed health check.")
             pre_step_errors = pre_step_errors or health_errors
 
         if do_restart:
-            my_write_restart(state, step, t)
+            my_write_restart(step=step, t=t, state=state)
 
         if do_viz:
             if dv is None:
                 dv = eos.dependent_vars(state)
-            my_write_viz(cv=state, dv=dv, step=step, t=t)
+            my_write_viz(step=step, t=t, state=state, dv=dv)
 
         if pre_step_errors:
-            my_graceful_exit(cv=state, step=step, t=t,
+            my_graceful_exit(step=step, t=t, state=state,
                              do_viz=(not do_viz), do_restart=(not do_restart),
                              message="Error detected at prestep, exiting.")
 
@@ -302,7 +303,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     finish_tol = 1e-16
     if np.abs(current_t - t_final) > finish_tol:
-        my_graceful_exit(cv=current_state, step=current_step, t=current_t,
+        my_graceful_exit(step=current_step, t=current_t, state=current_state,
                          do_viz=True, do_restart=True,
                          message="Simulation timestepping did not complete.")
 
@@ -310,8 +311,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
-    my_write_viz(cv=current_state, dv=final_dv, step=current_step, t=current_t)
-    my_write_restart(current_state, current_step, current_t)
+    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
+    my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()
