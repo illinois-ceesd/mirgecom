@@ -312,7 +312,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 logger.info(status_msg)
 
         if pre_step_errors:
-            my_graceful_exit(cv=state, step=step, t=t,
+            my_graceful_exit(step=step, t=t, state=state,
                              do_viz=(not do_viz), do_restart=(not do_restart),
                              message="Error detected at prestep, exiting.")
 
@@ -327,7 +327,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     finish_tol = 1e-16
     if np.abs(current_t - t_final) > finish_tol:
-        my_graceful_exit(cv=current_state, step=current_step, t=current_t,
+        my_graceful_exit(step=current_step, t=current_t, state=current_state,
                          do_viz=True, do_restart=True,
                          message="Simulation timestepping did not complete.")
 

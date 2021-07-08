@@ -348,7 +348,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     finish_tol = 1e-16
     if np.abs(current_t - t_final) > finish_tol:
-        my_graceful_exit(cv=current_state, step=current_step, t=current_t,
+        my_graceful_exit(step=current_step, t=current_t, state=current_state,
                          do_viz=True, do_restart=True,
                          message="Simulation timestepping did not complete.")
 
