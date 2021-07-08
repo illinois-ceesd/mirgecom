@@ -191,7 +191,7 @@ def units_for_logging(quantity: str) -> str:
     return NAME_TO_UNITS[quantity]
 
 
-def extract_vars_for_logging(dim: int, state, eos) -> dict:
+def extract_vars_for_logging(state, eos) -> dict:
     """Extract state vars."""
     dv = eos.dependent_vars(state)
 

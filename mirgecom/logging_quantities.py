@@ -27,6 +27,7 @@ THE SOFTWARE.
 __doc__ = """
 .. autoclass:: StateConsumer
 .. autoclass:: DiscretizationBasedQuantity
+.. autoclass:: LogCFL
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
 .. autoclass:: DeviceMemoryUsage
@@ -39,8 +40,8 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
-from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
-    add_general_quantities, add_simulation_quantities)
+from logpyle import (DtConsumer, LogQuantity, LogManager, MultiLogQuantity,
+    add_run_info, add_general_quantities, add_simulation_quantities)
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
@@ -166,7 +167,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> Non
 
 # {{{ State handling
 
-def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
+def set_sim_state(mgr: LogManager, state, eos) -> None:
     """Update the simulation state of all :class:`StateConsumer` of the log manager.
 
     Parameters
@@ -181,12 +182,14 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
             if isinstance(gd.quantity, StateConsumer):
-                extract_state_vars_func = gd.quantity.extract_state_vars
-                if extract_state_vars_func not in state_vars:
-                    state_vars[extract_state_vars_func] = \
-                        extract_state_vars_func(dim, state, eos)
+                esv_func = gd.quantity.extract_state_vars
+                if esv_func not in state_vars:
+                    if esv_func is not None:
+                        state_vars[esv_func] = esv_func(state, eos)
+                    else:
+                        state_vars[esv_func] = None
 
-                gd.quantity.set_state_vars(state_vars[extract_state_vars_func])
+                gd.quantity.set_state(state, state_vars[esv_func])
 
 
 def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
@@ -206,10 +209,10 @@ class StateConsumer:
     """Base class for quantities that require a state for logging.
 
     .. automethod:: __init__
-    .. automethod:: set_state_vars
+    .. automethod:: set_state
     """
 
-    def __init__(self, extract_vars_for_logging: Callable):
+    def __init__(self, extract_vars_for_logging: Optional[Callable]) -> None:
         """Store the function to extract state variables.
 
         Parameters
@@ -219,10 +222,12 @@ class StateConsumer:
             state.
         """
         self.extract_state_vars = extract_vars_for_logging
+        self.state = None
         self.state_vars = None
 
-    def set_state_vars(self, state_vars: np.ndarray) -> None:
+    def set_state(self, state: np.ndarray, state_vars) -> None:
         """Update the state vector of the object."""
+        self.state = state
         self.state_vars = state_vars
 
 # }}}
@@ -284,6 +289,25 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         return self._discr_reduction(quantity)
 
 # }}}
+
+
+class LogCFL(LogQuantity, StateConsumer, DtConsumer):
+    """Logging support for CFL."""
+
+    def __init__(self, discr, eos, name="cfl", dt: float = 0) -> None:
+        LogQuantity.__init__(self, name, "1")
+        StateConsumer.__init__(self, None)
+        DtConsumer.__init__(self, dt)
+        self.discr = discr
+        self.eos = eos
+
+    def __call__(self) -> float:
+        """Return the value of cfl."""
+        if self.state is None:
+            return None
+
+        from mirgecom.inviscid import get_inviscid_cfl
+        return get_inviscid_cfl(self.discr, eos=self.eos, dt=self.dt, cv=self.state)
 
 
 # {{{ Kernel profile quantities

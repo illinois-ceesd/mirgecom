@@ -56,7 +56,7 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import IntervalTimer
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
-from mirgecom.logging_quantities import (initialize_logmgr,
+from mirgecom.logging_quantities import (LogCFL, initialize_logmgr,
     logmgr_add_many_discretization_quantities, logmgr_add_device_name,
     logmgr_add_device_memory_usage)
 
@@ -139,9 +139,10 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
+        logmgr.add_quantity(LogCFL(discr, eos))
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
-                            "min_temperature", "L2_norm_momentum1"])
+                            "min_temperature", "L2_norm_momentum1", "cfl.max"])
 
         try:
             logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
