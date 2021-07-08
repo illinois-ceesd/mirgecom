@@ -121,7 +121,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
     if rst_step:  # read the grid from restart data
-        rst_fname = rst_pattern.format(cname=casename, step=rst_step, rank=rank)
+        rst_fname = rst_pattern.format(cname=rst_name, step=rst_step, rank=rank)
 
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, rst_fname)
