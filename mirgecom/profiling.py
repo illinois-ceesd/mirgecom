@@ -292,6 +292,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             self.kernel_stats[t_unit][args_tuple]
             return args_tuple
         except KeyError:
+            print("CACHE MISS", t_unit.default_entrypoint.name)
             # If not, calculate and cache the stats
             ep_name = t_unit.default_entrypoint.name
             executor = t_unit.target.get_kernel_executor(t_unit, self.queue,
