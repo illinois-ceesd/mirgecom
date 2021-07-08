@@ -179,6 +179,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         current_t = restart_data["t"]
         current_step = rst_step
         current_state = restart_data["state"]
+        if logmgr:
+            from logging_quantities import logmgr_set_time
+            logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
         current_state = initializer(nodes)
