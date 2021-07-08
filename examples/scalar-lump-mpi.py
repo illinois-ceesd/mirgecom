@@ -69,7 +69,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False):
     nel_1d = 16
     order = 3
     exittol = .09
-    t_final = 0.01
+    t_final = 0.005
     current_cfl = 1.0
     current_dt = .001
     current_t = 0
