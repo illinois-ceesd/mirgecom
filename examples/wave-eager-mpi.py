@@ -217,7 +217,6 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             )
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
             vis.write_parallel_vtk_file(
                 comm,
                 "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
@@ -239,7 +238,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    use_profiling = True
+    # Turn off profiling to not overwhelm CI
+    use_profiling = False
     use_logging = True
 
     main(use_profiling=use_profiling, use_logmgr=use_logging)

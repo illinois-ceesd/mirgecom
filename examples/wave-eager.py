@@ -26,16 +26,27 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-from pytools.obj_array import flat_obj_array
-from grudge.eager import EagerDGDiscretization
-from grudge.shortcuts import make_visualizer
-from mirgecom.wave import wave_operator
-from mirgecom.integrators import rk4_step
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
 
+from pytools.obj_array import flat_obj_array
+
+from grudge.eager import EagerDGDiscretization
+from grudge.shortcuts import make_visualizer
+
+from mirgecom.wave import wave_operator
+from mirgecom.integrators import rk4_step
+
+from meshmode.dof_array import thaw
+from meshmode.array_context import PyOpenCLArrayContext
+
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
+from logpyle import IntervalTimer, set_dt
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
+
+from mirgecom.logging_quantities import (initialize_logmgr,
+    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
+    logmgr_add_device_memory_usage)
 
 
 def bump(actx, discr, t=0):
@@ -57,9 +68,13 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False):
+def main(use_profiling=False, use_logmgr=False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="wave-eager.sqlite", mode="wu")
+
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -99,6 +114,25 @@ def main(use_profiling=False):
         [discr.zeros(actx) for i in range(discr.dim)]
         )
 
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                             extract_vars_for_logging, units_for_logging)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
     vis = make_visualizer(discr)
 
     def rhs(t, w):
@@ -108,12 +142,15 @@ def main(use_profiling=False):
     t_final = 3
     istep = 0
     while t < t_final:
+        if logmgr:
+            logmgr.tick_before()
+
         fields = rk4_step(fields, t, dt, rhs)
 
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, discr.norm(fields[0], np.inf))
+
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
@@ -123,14 +160,20 @@ def main(use_profiling=False):
         t += dt
         istep += 1
 
+        if logmgr:
+            set_dt(logmgr, dt)
+            logmgr.tick_after()
+
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
+    parser.add_argument("--logging", action="store_true",
+        help="enable logging")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile)
+    main(use_profiling=args.profile, use_logmgr=args.logging)
 
 # vim: foldmethod=marker
