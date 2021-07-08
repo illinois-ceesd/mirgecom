@@ -296,6 +296,13 @@ def advance_state(rhs, timestepper, state, t_final,
     # First, check if we have leap.
     import sys
     leap_timestepper = False
+
+    if ((logmgr is not None) or (dim is not None) or (eos is not None)):
+        from warnings import warn
+        warn("Passing logmgr, dim, or eos into the stepper is a deprecated stepper "
+             "signature. See the examples for the current and preferred usage.",
+             DeprecationWarning, stacklevel=2)
+
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
