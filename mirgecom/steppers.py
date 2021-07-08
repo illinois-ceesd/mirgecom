@@ -61,6 +61,8 @@ def _advance_state_stepper_func(rhs, timestepper,
         Simulated time at which to stop
     t: float
         Time at which to start
+    dt: float
+        Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
     pre_step_callback
@@ -140,6 +142,8 @@ def _advance_state_leap(rhs, timestepper, state,
         State id (required input for leap method generation)
     t: float
         Time at which to start
+    dt: float
+        Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
     pre_step_callback
@@ -272,6 +276,8 @@ def advance_state(rhs, timestepper, state, t_final,
         Simulated time at which to stop
     t: float
         Time at which to start
+    dt: float
+        Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
     pre_step_callback
@@ -301,6 +307,13 @@ def advance_state(rhs, timestepper, state, t_final,
         from warnings import warn
         warn("Passing logmgr, dim, or eos into the stepper is a deprecated stepper "
              "signature. See the examples for the current and preferred usage.",
+             DeprecationWarning, stacklevel=2)
+
+    if get_timestep is not None:
+        from warnings import warn
+        warn("Passing the get_timestep function into the stepper is deprecated. "
+             "Users should use the dt argument for constant timestep, and "
+             "perform any dt modification in the {pre,post}-step callbacks.",
              DeprecationWarning, stacklevel=2)
 
     if "leap" in sys.modules:
