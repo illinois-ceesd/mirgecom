@@ -118,7 +118,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nrestart = 5
     nviz = 10
     nhealth = 1
-    rank = 0
     current_step = 0
     if use_leap:
         from leap.rk import RK4MethodBuilder

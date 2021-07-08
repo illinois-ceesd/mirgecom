@@ -97,7 +97,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     dim = 3
     nel_1d = 16
     order = 3
-    t_final = 0.01
+    t_final = 0.005
     current_cfl = 1.0
     current_dt = .001
     current_t = 0
@@ -106,7 +106,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     nrestart = 5
     nviz = 1
     nhealth = 1
-    rank = 0
     current_step = 0
     if use_leap:
         from leap.rk import RK4MethodBuilder

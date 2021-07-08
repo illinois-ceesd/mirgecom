@@ -437,7 +437,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    use_profiling = True
+    use_profiling = False
     use_logging = True
     use_leap = False
     casename = "autoignition"

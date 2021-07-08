@@ -110,7 +110,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     nhealth = 1
     nrestart = 5
     nviz = 1
-    rank = 0
     current_step = 0
     if use_leap:
         from leap.rk import RK4MethodBuilder
@@ -319,7 +318,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             if exact is None:
                 exact = initializer(x_vec=nodes, eos=eos, t=t)
             resid = state - exact
-            my_write_viz(cv=state, dv=dv, step=step, t=t,
+            my_write_viz(step=step, t=t, state=state, dv=dv,
                          exact=exact, resid=resid)
 
         if do_status:
