@@ -388,7 +388,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
-                    raise
+                    raise RuntimeError("Failed health check.")
 
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
@@ -405,7 +405,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 logger.info("Errors detected; attempting graceful exit.")
             my_write_viz(step=step, t=t, state=state)
             my_write_restart(step=step, t=t, state=state)
-            raise RuntimeError
+            raise
 
         t_remaining = max(0, t_final - t)
         return state, min(dt, t_remaining)
