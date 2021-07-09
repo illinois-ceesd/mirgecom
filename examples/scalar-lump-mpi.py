@@ -287,7 +287,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
-                raise HealthCheckError()
+                    raise HealthCheckError()
 
             if step == rst_step:  # don't do viz or restart @ restart
                 do_viz = False
@@ -323,7 +323,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        return state, dt
+        t_remaining = max(0, t_final - t)
+        return state, min(dt, t_remaining)
 
     def my_rhs(t, state):
         return euler_operator(discr, cv=state, t=t,
@@ -352,7 +353,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         print(actx.tabulate_profiling_data())
 
     finish_tol = 1e-16
-    assert (current_t - t_final) > finish_tol
+    assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":

@@ -316,7 +316,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        return state, dt
+        t_remaining = max(0, t_final - t)
+        return state, min(dt, t_remaining)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -341,7 +342,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         print(actx.tabulate_profiling_data())
 
     finish_tol = 1e-16
-    assert (current_t - t_final) > finish_tol
+    assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
