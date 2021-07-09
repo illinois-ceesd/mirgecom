@@ -352,20 +352,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
         return health_error
 
-    def my_rhs(t, state):
-        return (euler_operator(discr, cv=state, t=t,
-                               boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(state))
-
-    def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
-        if logmgr:
-            set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
-            logmgr.tick_after()
-        return state, dt
-
     def my_pre_step(step, t, dt, state):
         try:
             dv = None
@@ -409,6 +395,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
         t_remaining = max(0, t_final - t)
         return state, min(dt, t_remaining)
+
+    def my_post_step(step, t, dt, state):
+        # Logmgr needs to know about EOS, dt, dim?
+        # imo this is a design/scope flaw
+        if logmgr:
+            set_dt(logmgr, dt)
+            set_sim_state(logmgr, dim, state, eos)
+            logmgr.tick_after()
+        return state, dt
+
+    def my_rhs(t, state):
+        return (euler_operator(discr, cv=state, t=t,
+                               boundaries=boundaries, eos=eos)
+                + eos.get_species_source_terms(state))
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
