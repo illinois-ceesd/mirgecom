@@ -67,11 +67,11 @@ def _advance_state_stepper_func(rhs, timestepper,
         Step number from which to start
     pre_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = pre_step_callback(state, step, t, dt)``,
+        ``state, dt = pre_step_callback(step, t, dt, state)``,
         to be called before the timestepper is called for that particular step.
     post_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = post_step_callback(state, step, t, dt)``,
+        ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
 
     Returns
@@ -148,11 +148,11 @@ def _advance_state_leap(rhs, timestepper, state,
         Step number from which to start
     pre_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = pre_step_callback(state, step, t, dt)``,
+        ``state, dt = pre_step_callback(step, t, dt, state)``,
         to be called before the timestepper is called for that particular step.
     post_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = post_step_callback(state, step, t, dt)``,
+        ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
 
     Returns
@@ -282,11 +282,11 @@ def advance_state(rhs, timestepper, state, t_final,
         Step number from which to start
     pre_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = pre_step_callback(state, step, t, dt)``,
+        ``state, dt = pre_step_callback(step, t, dt, state)``,
         to be called before the timestepper is called for that particular step.
     post_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = post_step_callback(state, step, t, dt)``,
+        ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
 
     Returns
