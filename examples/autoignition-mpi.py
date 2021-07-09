@@ -388,7 +388,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
-                    raise
+                    raise Exception
 
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
