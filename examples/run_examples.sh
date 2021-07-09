@@ -11,11 +11,16 @@ for example in $examples_dir/*.py
 do
     if [[ "$example" == *"-mpi.py" ]]
     then
-        echo "Running parallel example: $example"        
+        echo "Running parallel example: $example"
         mpiexec -n 2 python -m mpi4py ${example}
+
+        echo "Running parallel example lazily (with a single rank only): $example"
+        python -m mpi4py ${example} --lazy
     else
-        echo "Running serial example: $example"        
+        echo "Running serial example: $example"
         python ${example}
+        echo "Running serial example lazily: $example"
+        python ${example} --lazy
     fi
     if [[ $? -eq 0 ]]
     then

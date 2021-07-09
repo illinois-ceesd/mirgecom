@@ -34,7 +34,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 from meshmode.dof_array import thaw, freeze
-from arraycontext import PytatoPyOpenCLArrayContext, PyOpenCLArrayContext
+from meshmode.array_context import PytatoPyOpenCLArrayContext, PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
