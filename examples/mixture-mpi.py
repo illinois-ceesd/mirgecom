@@ -64,14 +64,8 @@ from mirgecom.logging_quantities import (
 logger = logging.getLogger(__name__)
 
 
-class MyError(Exception):
+class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
-
-    pass
-
-
-class HealthCheckError(MyError):
-    """Simple exception to indicate a health check error."""
 
     pass
 
@@ -288,7 +282,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
-                    raise HealthCheckError()
+                    raise MyRuntimeError("Failed simulation health check.")
 
             if step == rst_step:  # don't do viz or restart @ restart
                 do_viz = False
@@ -317,7 +311,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 if rank == 0:
                     logger.info(status_msg)
 
-        except MyError:
+        except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
             my_write_viz(step=step, t=t, state=state)
