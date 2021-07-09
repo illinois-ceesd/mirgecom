@@ -334,17 +334,21 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
-        rst_data = {
-            "local_mesh": local_mesh,
-            "state": state,
-            "t": t,
-            "step": step,
-            "order": order,
-            "global_nelements": global_nelements,
-            "num_parts": nproc
-        }
-        from mirgecom.restart import write_restart_file
-        write_restart_file(actx, rst_data, rst_fname, comm)
+        if rst_fname == rst_filename:
+            if rank == 0:
+                logger.info("Skipping overwrite of restart file.")
+        else:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": state,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": nproc
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(dv):
         health_error = False
@@ -386,10 +390,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
 
-            if step == rst_step:  # don't do viz or restart @ restart
-                do_viz = False
-                do_restart = False
-
             if do_health:
                 dv = eos.dependent_vars(state)
                 health_errors = my_health_check(dv)
@@ -427,6 +427,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                       state=current_state, t=current_t, t_final=t_final)
 
     # Dump the final data
+    if rank == 0:
+        logger.info("Checkpointing final state ...")
+
     final_dv = eos.dependent_vars(current_state)
     final_dm = eos.get_production_rates(current_state)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
