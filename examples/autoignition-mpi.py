@@ -382,8 +382,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 health_errors = my_health_check(dv)
                 if comm is not None:
                     health_errors = comm.allreduce(health_errors, op=MPI.LOR)
-                if step > 5:
-                    health_errors = True
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
@@ -406,7 +404,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        return state, dt
+        t_remaining = max(0, t_final - t)
+        return state, min(dt, t_remaining)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -427,7 +426,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         print(actx.tabulate_profiling_data())
 
     finish_tol = 1e-16
-    assert (current_t - t_final) > finish_tol
+    assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
