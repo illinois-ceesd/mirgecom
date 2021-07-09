@@ -84,7 +84,7 @@ class HealthCheckError(MyError):
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=False,
          use_leap=False, use_profiling=False, casename="autoignition",
-         rst_step=None, rst_name=None):
+         rst_filename=None):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -150,8 +150,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    if rst_step:  # read the grid from restart data
-        rst_fname = rst_pattern.format(cname=rst_name, step=rst_step, rank=rank)
+    restarting = rst_filename is not None
+    if restarting:  # read the grid from restart data
+        rst_fname = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, rst_fname)
@@ -159,6 +160,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == nproc
+        rst_time = restart_data["t"]
+        rst_step = restart_data["step"]
+        rst_order = restart_data["order"]
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
         box_ll = -0.005
@@ -264,13 +268,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
-    if rst_step:
-        current_t = restart_data["t"]
+    if restarting:
         current_step = rst_step
-        current_state = restart_data["state"]
+        current_t = rst_time
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
+        if order == rst_order:
+            current_state = restart_data["state"]
+        else:
+            rst_state = restart_data["state"]
+            old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
+                                              mpi_communicator=comm)
+            from meshmode.discretization.connection import make_same_mesh_connection
+            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
+                                                   old_discr.discr_from_dd("vol"))
+            current_state = connection(rst_state)
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes, t=0)
