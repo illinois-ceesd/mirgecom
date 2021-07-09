@@ -39,7 +39,6 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
-    inviscid_sim_timestep,
     generate_and_distribute_mesh,
     check_step
 )
@@ -64,6 +63,18 @@ from mirgecom.logging_quantities import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class MyError(Exception):
+    """Simple exception to kill the simulation."""
+
+    pass
+
+
+class HealthCheckError(MyError):
+    """Simple exception to indicate a health check error."""
+
+    pass
 
 
 @mpi_entry_point
@@ -205,18 +216,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-    def my_graceful_exit(step, t, state, do_viz=False, do_restart=False,
-                         message=None):
-        if rank == 0:
-            logger.info("Errors detected; attempting graceful exit.")
-        if do_viz:
-            my_write_viz(step=step, t=t, state=state)
-        if do_restart:
-            my_write_restart(step=step, t=t, state=state)
-        if message is None:
-            message = "Fatal simulation errors detected."
-        raise RuntimeError(message)
-
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
             dv = eos.dependent_vars(state)
@@ -239,17 +238,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             "state": state,
             "t": t,
             "step": step,
+            "order": order,
             "global_nelements": global_nelements,
             "num_parts": num_parts
         }
         from mirgecom.restart import write_restart_file
         write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, dv, exact):
+    def my_health_check(state, pressure, exact):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure) \
-           or check_range_local(discr, "vol", dv.pressure, .2, 1.02):
+        if check_naninf_local(discr, "vol", pressure) \
+           or check_range_local(discr, "vol", pressure, .2, 1.02):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -273,65 +273,64 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_pre_step(step, t, dt, state):
-        dv = None
-        exact = None
-        pre_step_errors = False
+        try:
+            dv = None
+            exact = None
 
-        if logmgr:
-            logmgr.tick_before()
+            if logmgr:
+                logmgr.tick_before()
 
-        do_viz = check_step(step=step, interval=nviz)
-        do_restart = check_step(step=step, interval=nrestart)
-        do_health = check_step(step=step, interval=nhealth)
-        do_status = check_step(step=step, interval=nstatus)
+            do_viz = check_step(step=step, interval=nviz)
+            do_restart = check_step(step=step, interval=nrestart)
+            do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
-        if step == rst_step:  # don't do viz or restart @ restart
-            do_viz = False
-            do_restart = False
-
-        if do_health:
-            dv = eos.dependent_vars(state)
-            exact = initializer(x_vec=nodes, eos=eos, t=t)
-            health_errors = my_health_check(state, dv, exact)
-            if comm is not None:
-                health_errors = comm.allreduce(health_errors, op=MPI.LOR)
-            if health_errors and rank == 0:
-                logger.info("Fluid solution failed health check.")
-            pre_step_errors = pre_step_errors or health_errors
-
-        if do_restart:
-            my_write_restart(step=step, t=t, state=state)
-
-        if do_viz:
-            if dv is None:
+            if do_health:
                 dv = eos.dependent_vars(state)
-            if exact is None:
                 exact = initializer(x_vec=nodes, eos=eos, t=t)
-            resid = state - exact
-            my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
-                         resid=resid)
+                health_errors = my_health_check(state, dv.pressure, exact)
+                if comm is not None:
+                    health_errors = comm.allreduce(health_errors, op=MPI.LOR)
+                if health_errors:
+                    if rank == 0:
+                        logger.info("Fluid solution failed health check.")
+                    raise HealthCheckError()
 
-        if do_status:
-            if exact is None:
-                exact = initializer(x_vec=nodes, eos=eos, t=t)
-            from mirgecom.simutil import compare_fluid_solutions
-            component_errors = compare_fluid_solutions(discr, state, exact)
-            status_msg = (
-                "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+            if step == rst_step:  # don't do viz or restart @ restart
+                do_viz = False
+                do_restart = False
+
+            if do_restart:
+                my_write_restart(step=step, t=t, state=state)
+
+            if do_viz:
+                if dv is None:
+                    dv = eos.dependent_vars(state)
+                if exact is None:
+                    exact = initializer(x_vec=nodes, eos=eos, t=t)
+                resid = state - exact
+                my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
+                             resid=resid)
+
+            if do_status:
+                if exact is None:
+                    exact = initializer(x_vec=nodes, eos=eos, t=t)
+                from mirgecom.simutil import compare_fluid_solutions
+                component_errors = compare_fluid_solutions(discr, state, exact)
+                status_msg = (
+                    "------- errors="
+                    + ", ".join("%.3g" % en for en in component_errors))
+                if rank == 0:
+                    logger.info(status_msg)
+
+        except MyError:
             if rank == 0:
-                logger.info(status_msg)
-
-        if pre_step_errors:
-            my_graceful_exit(step=step, t=t, state=state,
-                             do_viz=(not do_viz), do_restart=(not do_restart),
-                             message="Error detected at prestep, exiting.")
+                logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, state=state)
+            my_write_restart(step=step, t=t, state=state)
+            raise
 
         return state, dt
-
-    get_timestep = partial(inviscid_sim_timestep, discr=discr,
-                           cfl=current_cfl, eos=eos, t_final=t_final,
-                           constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
         return euler_operator(discr, cv=state, t=t,
@@ -341,14 +340,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      get_timestep=get_timestep, state=current_state,
-                      t=current_t, t_final=t_final, eos=eos, dim=dim)
-
-    finish_tol = 1e-16
-    if np.abs(current_t - t_final) > finish_tol:
-        my_graceful_exit(step=current_step, t=current_t, state=current_state,
-                         do_viz=True, do_restart=True,
-                         message="Simulation timestepping did not complete.")
+                      state=current_state, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
@@ -365,6 +357,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr.close()
     elif use_profiling:
         print(actx.tabulate_profiling_data())
+
+    finish_tol = 1e-16
+    assert (current_t - t_final) > finish_tol
 
 
 if __name__ == "__main__":
