@@ -363,17 +363,30 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             return args_tuple
 
-    def call_loopy(self, program, **kwargs) -> dict:
+    def call_loopy(self, t_unit, **kwargs) -> dict:
         """Execute the loopy kernel and profile it."""
-        program = self.transform_loopy_program(program)
-        assert program.default_entrypoint.options.return_dict
-        assert program.default_entrypoint.options.no_numpy
+        try:
+            t_unit = self._loopy_transform_cache[t_unit]
+        except KeyError:
+            orig_t_unit = t_unit
+            t_unit = self.transform_loopy_program(t_unit)
+            self._loopy_transform_cache[orig_t_unit] = t_unit
+            del orig_t_unit
 
-        evt, result = program(self.queue, **kwargs, allocator=self.allocator)
+        evt, result = t_unit(self.queue, **kwargs, allocator=self.allocator)
+
+        if self._wait_event_queue_length is not False:
+            prg_name = t_unit.default_entrypoint.name
+            wait_event_queue = self._kernel_name_to_wait_event_queue.setdefault(
+                prg_name, [])
+
+            wait_event_queue.append(evt)
+            if len(wait_event_queue) > self._wait_event_queue_length:
+                wait_event_queue.pop(0).wait()
 
         # Generate the stats here so we don't need to carry around the kwargs
-        args_tuple = self._cache_kernel_stats(program, kwargs)
+        args_tuple = self._cache_kernel_stats(t_unit, kwargs)
 
-        self.profile_events.append(ProfileEvent(evt, program, args_tuple))
+        self.profile_events.append(ProfileEvent(evt, t_unit, args_tuple))
 
         return result
