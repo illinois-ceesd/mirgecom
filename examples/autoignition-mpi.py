@@ -69,18 +69,6 @@ import pyrometheus as pyro
 logger = logging.getLogger(__name__)
 
 
-class MyError(Exception):
-    """Simple exception to kill the simulation."""
-
-    pass
-
-
-class HealthCheckError(MyError):
-    """Simple exception to indicate a health check error."""
-
-    pass
-
-
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=False,
          use_leap=False, use_profiling=False, casename="autoignition",
@@ -395,10 +383,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 health_errors = my_health_check(dv)
                 if comm is not None:
                     health_errors = comm.allreduce(health_errors, op=MPI.LOR)
+                if step == 5:   # quick test
+                    health_errors = True
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
-                    raise HealthCheckError()
+                    raise
 
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
@@ -410,12 +400,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 my_write_viz(step=step, t=t, state=state, dv=dv,
                              production_rates=production_rates)
 
-        except MyError:
+        except BaseException:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
             my_write_viz(step=step, t=t, state=state)
             my_write_restart(step=step, t=t, state=state)
-            raise
+            raise RuntimeError
 
         t_remaining = max(0, t_final - t)
         return state, min(dt, t_remaining)
