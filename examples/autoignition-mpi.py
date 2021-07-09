@@ -352,7 +352,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_range_local(discr, "vol", dv.temperature, 1.4e3, 3.3e3):
+        if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
 
@@ -372,9 +372,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
             if do_health:
                 dv = eos.dependent_vars(state)
-                health_errors = my_health_check(dv)
-                if comm is not None:
-                    health_errors = comm.allreduce(health_errors, op=MPI.LOR)
+                from mirgecom.simutil import allsync
+                health_errors = allsync(my_health_check(dv), comm, op=MPI.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")

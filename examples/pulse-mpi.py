@@ -245,9 +245,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 dv = eos.dependent_vars(state)
-                health_errors = my_health_check(dv.pressure)
-                if comm is not None:
-                    health_errors = comm.allreduce(health_errors, op=MPI.LOR)
+                from mirgecom.simutil import allsync
+                health_errors = allsync(my_health_check(dv.pressure), comm,
+                                        op=MPI.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")

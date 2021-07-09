@@ -6,6 +6,7 @@ General utilities
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
 .. autofunction:: write_visfile
+.. autofunction:: allsync
 
 Diagnostic utilities
 --------------------
@@ -120,6 +121,16 @@ def write_visfile(discr, io_fields, visualizer, vizname,
                 basename=vizname, step=step, t=t
             )
         )
+
+
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
 
 
 def check_range_local(discr, dd, field, min_value, max_value):
