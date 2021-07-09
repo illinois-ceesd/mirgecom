@@ -272,7 +272,10 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
         from arraycontext import make_loopy_program
-        return make_loopy_program([
+        from meshmode.transform_metadata import (ConcurrentElementInameTag,
+                                                 ConcurrentDOFInameTag)
+        import loopy as lp
+        t_unit = make_loopy_program([
             "{[iel]: 0 <= iel < nelements}",
             "{[idof]: 0 <= idof < ndiscr_nodes_in}",
             "{[jdof]: 0 <= jdof < ndiscr_nodes_in}",
@@ -288,6 +291,8 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
             """,
             name="smooth_comp",
         )
+        return lp.tag_inames(t_unit, {"iel": ConcurrentElementInameTag(),
+                                      "idof": ConcurrentDOFInameTag()})
 
     @keyed_memoize_in(actx, (smoothness_indicator,
                              "highest_mode"),
