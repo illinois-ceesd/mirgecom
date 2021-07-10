@@ -273,6 +273,10 @@ def get_local_max_species_diffusivity(transport, eos, cv):
     )
 
     # knl is callable and I have no idea why pylint says otherwise.
+<<<<<<< HEAD
     evt, (out,) = knl(queue, a=stacked_diffusivity)  # pylint: disable=E1102
+=======
+    evt, (out,) = knl(queue, a=stacked_diffusivity)  # pylint: disable E1102
+>>>>>>> de3352cb1b9efe36816995e67befd2d117cad3bd
 
     return out
