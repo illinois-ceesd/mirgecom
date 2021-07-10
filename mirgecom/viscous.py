@@ -258,7 +258,6 @@ def get_local_max_species_diffusivity(actx, transport, eos, cv):
     cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
     """
-
     species_diffusivity = transport.species_diffusivity(eos, cv)
     stacked_diffusivity = cl.array.stack([x[0] for x in species_diffusivity])
 
