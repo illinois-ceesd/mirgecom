@@ -274,6 +274,6 @@ def test_local_max_species_diffusivity(actx_factory, dim):
     eos = IdealSingleGas(transport_model=tv_model)
 
     from mirgecom.viscous import get_local_max_species_diffusivity
-    expected = get_local_max_species_diffusivity(tv_model, eos, cv)
+    expected = get_local_max_species_diffusivity(actx, tv_model, eos, cv)
 
     assert((expected == .3*ones[0]).all())

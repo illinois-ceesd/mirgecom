@@ -49,8 +49,8 @@ from mirgecom.fluid import (
 )
 from meshmode.dof_array import thaw
 
-import loopy as lp
 import pyopencl as cl
+import arraycontext
 
 
 def viscous_stress_tensor(discr, eos, cv, grad_cv):
@@ -246,7 +246,7 @@ def get_viscous_timestep(discr, eos, transport_model, cfl, cv):
 #    return c*dt_ngf*dt_gf/max_v
 
 
-def get_local_max_species_diffusivity(transport, eos, cv):
+def get_local_max_species_diffusivity(actx, transport, eos, cv):
     """Return the maximum species diffusivity at every point.
 
     Parameters
@@ -258,21 +258,17 @@ def get_local_max_species_diffusivity(transport, eos, cv):
     cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
     """
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
 
     species_diffusivity = transport.species_diffusivity(eos, cv)
     stacked_diffusivity = cl.array.stack([x[0] for x in species_diffusivity])
 
-    n_species, ni, nj = stacked_diffusivity.shape
+    n_species, ni1, ni0 = stacked_diffusivity.shape
 
-    knl = lp.make_kernel(
-        "{ [i,j,k]: 0<=i<ni and 0<=j<nj and 0<=k<n_species}",
-        "out[i,j] = max(k, a[k,i,j])",
-        lang_version=(2018, 2)
+    # fun fact: arraycontext needs these exact loop names to work (even though a
+    # loopy kernel can have whatever iterator names the user wants)
+    knl = arraycontext.make_loopy_program(
+        "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
+        "out[i1,i0] = max(i2, a[i1,i0,i2])"
     )
 
-    # knl is callable and I have no idea why pylint says otherwise.
-    evt, (out,) = knl(queue, a=stacked_diffusivity)  # pylint: disable=E1102
-
-    return out
+    return actx.call_loopy(knl, stacked_diffusivity)
