@@ -1,9 +1,23 @@
 """Provide some utilities for building simulation applications.
 
+General utilities
+-----------------
+
 .. autofunction:: check_step
 .. autofunction:: inviscid_sim_timestep
-.. autoexception:: ExactSolutionMismatch
-.. autofunction:: sim_checkpoint
+.. autofunction:: write_visfile
+.. autofunction:: allsync
+
+Diagnostic utilities
+--------------------
+
+.. autofunction:: compare_fluid_solutions
+.. autofunction:: check_naninf_local
+.. autofunction:: check_range_local
+
+Mesh utilities
+--------------
+
 .. autofunction:: generate_and_distribute_mesh
 """
 
@@ -34,9 +48,8 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-from meshmode.dof_array import thaw
-from mirgecom.io import make_status_message
 from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
+import grudge.op as op
 
 logger = logging.getLogger(__name__)
 
@@ -66,98 +79,78 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
                           t_final, constant_cfl=False):
     """Return the maximum stable dt."""
     mydt = dt
+    t_remaining = max(0, t_final - t)
     if constant_cfl is True:
         mydt = get_inviscid_timestep(discr=discr, cv=state,
                                      cfl=cfl, eos=eos)
-    if (t + mydt) > t_final:
-        mydt = t_final - t
-    return mydt
+    return min(t_remaining, mydt)
 
 
-class ExactSolutionMismatch(Exception):
-    """Exception class for solution mismatch.
+def write_visfile(discr, io_fields, visualizer, vizname,
+                  step=0, t=0, overwrite=False, vis_timer=None):
+    """Write VTK output for the fields specified in *io_fields*.
 
-    .. attribute:: step
-    .. attribute:: t
-    .. attribute:: state
+    Parameters
+    ----------
+    visualizer:
+        A :class:`meshmode.discretization.visualization.Visualizer`
+        VTK output object.
+    io_fields:
+        List of tuples indicating the (name, data) for each field to write.
     """
+    from contextlib import nullcontext
+    from mirgecom.io import make_rank_fname, make_par_fname
 
-    def __init__(self, step, t, state):
-        """Record the simulation state on creation."""
-        self.step = step
-        self.t = t
-        self.state = state
-
-
-def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
-                   vis_timer=None):
-    """Check simulation health, status, viz dumps, and restart."""
-    do_viz = check_step(step=step, interval=nviz)
-    do_status = check_step(step=step, interval=nstatus)
-    if do_viz is False and do_status is False:
-        return 0
-
-    dependent_vars = eos.dependent_vars(cv)
-
+    comm = discr.mpi_communicator
     rank = 0
     if comm is not None:
         rank = comm.Get_rank()
 
-    maxerr = 0.0
-    if exact_soln is not None:
-        actx = cv.mass.array_context
-        nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(x_vec=nodes, eos=eos, time=t)
-        exp_resid = cv - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid.join()]
-        maxerr = discr.norm(exp_resid.join(), np.inf)
+    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
-    if do_viz:
-        io_fields = [
-            ("cv", cv),
-            ("dv", dependent_vars)
-        ]
-        if exact_soln is not None:
-            exact_list = [
-                ("exact_soln", expected_state),
-            ]
-            io_fields.extend(exact_list)
-        if viz_fields is not None:
-            io_fields.extend(viz_fields)
+    if vis_timer:
+        ctm = vis_timer.start_sub_timer()
+    else:
+        ctm = nullcontext()
 
-        from mirgecom.io import make_rank_fname, make_par_fname
-        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+    with ctm:
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields,
+            overwrite=overwrite,
+            par_manifest_filename=make_par_fname(
+                basename=vizname, step=step, t=t
+            )
+        )
 
-        from contextlib import nullcontext
 
-        if vis_timer:
-            ctm = vis_timer.start_sub_timer()
-        else:
-            ctm = nullcontext()
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
 
-        with ctm:
-            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
-                overwrite=overwrite, par_manifest_filename=make_par_fname(
-                    basename=vizname, step=step, t=t))
 
-    if do_status is True:
-        #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-        #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
-                                         cfl=cfl, dependent_vars=dependent_vars)
-        if exact_soln is not None:
-            statusmesg += (
-                "\n------- errors="
-                + ", ".join("%.3g" % en for en in err_norms))
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    return (
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
+    )
 
-        if rank == 0:
-            logger.info(statusmesg)
 
-    if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=cv)
+def check_naninf_local(discr, dd, field):
+    """Check for any NANs or Infs in the field."""
+    s = op.nodal_sum_loc(discr, dd, field)
+    return np.isnan(s) or (s == np.inf)
+
+
+def compare_fluid_solutions(discr, red_state, blue_state):
+    """Return inf norm of (*red_state* - *blue_state*) for each component."""
+    resid = red_state - blue_state
+    return [discr.norm(v, np.inf) for v in resid.join()]
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
