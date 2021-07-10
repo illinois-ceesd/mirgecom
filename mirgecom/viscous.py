@@ -249,7 +249,6 @@ def get_viscous_timestep(discr, eos, transport_model, cfl, cv):
 def get_local_max_species_diffusivity(transport, eos, cv):
     """Return the maximum species diffusivity at every point.
 
-
     Parameters
     ----------
     transport: mirgecom.transport.TransportModel
@@ -269,9 +268,11 @@ def get_local_max_species_diffusivity(transport, eos, cv):
 
     knl = lp.make_kernel(
         "{ [i,j,k]: 0<=i<ni and 0<=j<nj and 0<=k<n_species}",
-        "out[i,j] = max(k, a[k,i,j])"
+        "out[i,j] = max(k, a[k,i,j])",
+        lang_version=(2018, 2)
     )
 
-    evt, (out,) = knl(queue, a=stacked_diffusivity)
+    # knl is callable and I have no idea why pylint says otherwise.
+    evt, (out,) = knl(queue, a=stacked_diffusivity)  # pylint: disable E1102
 
     return out
