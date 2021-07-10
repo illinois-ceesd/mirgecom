@@ -123,6 +123,37 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
         )
     return min(t_remaining, mydt)
 
+    if vis_timer:
+        ctm = vis_timer.start_sub_timer()
+    else:
+        ctm = nullcontext()
+
+    with ctm:
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields,
+            overwrite=overwrite,
+            par_manifest_filename=make_par_fname(
+                basename=vizname, step=step, t=t
+            )
+        )
+
+
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
+
+
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    return (
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
+    )
 
 def write_visfile(discr, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None):
