@@ -240,7 +240,7 @@ def test_diffusive_heat_flux(actx_factory):
         assert discr.norm(j[ispec+1] - exact_j, np.inf) < tol
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1,2,3])
 def test_local_max_species_diffusivity(actx_factory, dim):
     actx = actx_factory()
     nel_1d = 5

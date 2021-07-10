@@ -267,7 +267,7 @@ def get_local_max_species_diffusivity(actx, transport, eos, cv):
     # loopy kernel can have whatever iterator names the user wants)
     knl = arraycontext.make_loopy_program(
         "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
-        "out[i1,i0] = max(i2, a[i1,i0,i2])"
+        "out[i1,i0] = max(i2, a[i2,i1,i0])"
     )
 
-    return actx.call_loopy(knl, stacked_diffusivity)
+    return actx.call_loopy(knl, a=stacked_diffusivity)["out"]
