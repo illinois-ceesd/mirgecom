@@ -210,6 +210,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
+    def my_write_status(component_errors, cfl=None):
+        status_msg = ""
+        if cfl is not None:
+            status_msg = f"------ {cfl=}\n"
+        status_msg += (
+            "------- errors="
+            + ", ".join("%.3g" % en for en in component_errors))
+        if rank == 0:
+            logger.info(status_msg)
+
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
             dv = eos.dependent_vars(state)
@@ -239,7 +249,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from mirgecom.restart import write_restart_file
         write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, pressure, exact):
+    def my_health_check(state, pressure, exact, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", pressure) \
@@ -247,8 +257,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        from mirgecom.simutil import compare_fluid_solutions
-        component_errors = compare_fluid_solutions(discr, state, exact)
         exittol = .1
         if max(component_errors) > exittol:
             health_error = True
@@ -273,9 +281,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, t=t)
+                from mirgecom.simutil import compare_fluid_solutions
+                component_errors = compare_fluid_solutions(discr, state, exact)
                 from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(state, dv.pressure, exact),
-                                        comm, op=MPI.LOR)
+                health_errors = allsync(
+                    my_health_check(state, dv.pressure, exact, component_errors),
+                    comm, op=MPI.LOR
+                )
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
@@ -288,6 +300,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
+            if do_status:
+                if exact is None:
+                    exact = initializer(x_vec=nodes, eos=eos, t=t)
+                    from mirgecom.simutil import compare_fluid_solutions
+                    component_errors = compare_fluid_solutions(discr, state, exact)
+                my_write_status(component_errors)
+
             if do_viz:
                 if dv is None:
                     dv = eos.dependent_vars(state)
@@ -296,17 +315,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 resid = state - exact
                 my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
                              resid=resid)
-
-            if do_status:
-                if exact is None:
-                    exact = initializer(x_vec=nodes, eos=eos, t=t)
-                from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(discr, state, exact)
-                status_msg = (
-                    "------- errors="
-                    + ", ".join("%.3g" % en for en in component_errors))
-                if rank == 0:
-                    logger.info(status_msg)
 
         except MyRuntimeError:
             if rank == 0:

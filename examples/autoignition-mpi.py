@@ -314,7 +314,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_viz(step, t, state, ts_field, dv=None, production_rates=None):
+    def my_write_status(dt, cfl):
+        if constant_cfl:
+            status_msg = f"------ {dt=}"
+        else:
+            status_msg = f"------ {cfl=}"
+        if rank == 0:
+            logger.info(status_msg)
+
+    def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
+                     production_rates=None):
         if dv is None:
             dv = eos.dependent_vars(state)
         if production_rates is None:
@@ -322,6 +331,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         viz_fields = [("cv", state),
                       ("dv", dv),
                       ("production_rates", production_rates)]
+        if ts_field is None:
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
         if constant_cfl:
             viz_fields.append(("local_dt", ts_field))
         else:
@@ -388,6 +399,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
                 dv = eos.dependent_vars(state)
@@ -400,6 +412,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
             ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
 
+            if do_status:
+                my_write_status(dt, cfl)
+
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
@@ -407,7 +422,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 production_rates = eos.get_production_rates(state)
                 if dv is None:
                     dv = eos.dependent_vars(state)
-                my_write_viz(step=step, t=t, state=state, dv=dv,
+                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field)
 
@@ -418,8 +433,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        t_remaining = max(0, t_final - t)
-        return state, min(dt, t_remaining)
+        return state, dt
 
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
@@ -447,8 +461,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     final_dv = eos.dependent_vars(current_state)
     final_dm = eos.get_production_rates(current_state)
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
-                 production_rates=final_dm)
+    ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
+                                        state=current_state)
+    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+                 dv=final_dv, production_rates=final_dm, ts_field=ts_field)
+    my_write_status(dt=dt, cfl=cfl)
     my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
