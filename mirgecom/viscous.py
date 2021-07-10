@@ -255,7 +255,7 @@ def get_local_max_species_diffusivity(transport, eos, cv):
         A model representing thermo-diffusive transport
     eos: mirgecom.eos.GasEOS
         An equation of state implementing the speed_of_sound method
-    cv: :class:`~mirgecom.fluid.ConservedVars` 
+    cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
     """
     cl_ctx = cl.create_some_context()
