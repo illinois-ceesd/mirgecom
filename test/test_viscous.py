@@ -238,3 +238,42 @@ def test_diffusive_heat_flux(actx_factory):
         assert discr.norm(j[ispec] - exact_j, np.inf) < tol
         exact_j = massval * d_alpha[ispec+1] * exact_dy
         assert discr.norm(j[ispec+1] - exact_j, np.inf) < tol
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_local_max_species_diffusivity(actx_factory, dim):
+    actx = actx_factory()
+    nel_1d = 5
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 1
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    zeros = discr.zeros(actx)
+    ones = zeros + 1.0
+    vel = .32
+
+    velocity = make_obj_array([zeros+vel for _ in range(dim)])
+
+    massval = 1
+    mass = massval*ones
+
+    energy = zeros + 1.0 / (1.4*.4)
+    mom = mass * velocity
+    species_mass = np.array([1., 2., 3.], dtype=object)
+
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+
+    tv_model = SimpleTransport(species_diffusivity=np.array([.1, .2, .3]))
+    eos = IdealSingleGas(transport_model=tv_model)
+
+    from mirgecom.viscous import get_local_max_species_diffusivity
+    expected = get_local_max_species_diffusivity(tv_model, eos, cv)
+
+    assert((expected == .3*ones[0]).all())
