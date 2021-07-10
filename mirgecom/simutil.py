@@ -4,10 +4,9 @@ General utilities
 -----------------
 
 .. autofunction:: check_step
-.. autofunction:: inviscid_sim_timestep
-.. autoexception:: ExactSolutionMismatch
+.. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
-.. autofunction:: sim_checkpoint
+.. autofunction:: allsync
 
 Diagnostic utilities
 --------------------
@@ -47,10 +46,7 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-
-from meshmode.dof_array import thaw
-from mirgecom.io import make_status_message
-from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
+import grudge.op as op
 
 logger = logging.getLogger(__name__)
 
@@ -76,33 +72,35 @@ def check_step(step, interval):
     return False
 
 
-def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
-                          t_final, constant_cfl=False):
+def get_sim_timestep(discr, state, t, dt, cfl, eos,
+                     t_final, constant_cfl=False):
     """Return the maximum stable dt."""
+    t_remaining = max(0, t_final - t)
     mydt = dt
     if constant_cfl is True:
+        from mirgecom.viscous import get_viscous_timestep
+        dt_field = get_viscous_timestep(discr=discr, eos=eos, cv=state)
         from grudge.op import nodal_min
-        mydt = cfl * nodal_min(
-            discr, "vol",
-            get_inviscid_timestep(discr=discr, eos=eos, cv=state)
-        )
-    dt_remaining = max(0, t_final - t)
-    return min(mydt, dt_remaining)
+        mydt = cfl * nodal_min(discr, "vol", dt_field)
+    return min(t_remaining, mydt)
 
 
-class ExactSolutionMismatch(Exception):
-    """Exception class for solution mismatch.
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
 
-    .. attribute:: step
-    .. attribute:: t
-    .. attribute:: state
-    """
 
-    def __init__(self, step, t, state):
-        """Record the simulation state on creation."""
-        self.step = step
-        self.t = t
-        self.state = state
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    return (
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
+    )
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
@@ -150,92 +148,9 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         )
 
 
-def sim_checkpoint(discr, visualizer, eos, cv, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
-                   vis_timer=None):
-    """Check simulation health, status, viz dumps, and restart."""
-    do_viz = check_step(step=step, interval=nviz)
-    do_status = check_step(step=step, interval=nstatus)
-    if do_viz is False and do_status is False:
-        return dt
-
-    dependent_vars = eos.dependent_vars(cv)
-
-    rank = 0
-    if comm is not None:
-        rank = comm.Get_rank()
-
-    maxerr = 0.0
-    if exact_soln is not None:
-        actx = cv.mass.array_context
-        nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(x_vec=nodes, eos=eos, time=t)
-        exp_resid = cv - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid.join()]
-        maxerr = discr.norm(exp_resid.join(), np.inf)
-
-    if do_viz:
-        io_fields = [
-            ("cv", cv),
-            ("dv", dependent_vars)
-        ]
-        if exact_soln is not None:
-            exact_list = [
-                ("exact_soln", expected_state),
-            ]
-            io_fields.extend(exact_list)
-        if viz_fields is not None:
-            io_fields.extend(viz_fields)
-
-        from mirgecom.io import make_rank_fname, make_par_fname
-        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
-
-        from contextlib import nullcontext
-
-        if vis_timer:
-            ctm = vis_timer.start_sub_timer()
-        else:
-            ctm = nullcontext()
-
-        with ctm:
-            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
-                overwrite=overwrite, par_manifest_filename=make_par_fname(
-                    basename=vizname, step=step, t=t))
-
-    if do_status is True:
-        #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-        #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
-                                         cfl=cfl, dependent_vars=dependent_vars)
-        if exact_soln is not None:
-            statusmesg += (
-                "\n------- errors="
-                + ", ".join("%.3g" % en for en in err_norms))
-
-        if rank == 0:
-            logger.info(statusmesg)
-
-    if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=cv)
-
-    return dt
-
-
-def check_range_local(discr, dd, field, min_value, max_value):
-    """Check for any negative values."""
-    from grudge.op import nodal_min_loc, nodal_max_loc
-    return (
-        nodal_min_loc(discr, dd, field) < min_value
-        or nodal_max_loc(discr, dd, field) > max_value
-    )
-
-
 def check_naninf_local(discr, dd, field):
     """Check for any NANs or Infs in the field."""
-    from grudge.op import nodal_sum_loc
-    s = nodal_sum_loc(discr, dd, field)
+    s = op.nodal_sum_loc(discr, dd, field)
     return np.isnan(s) or (s == np.inf)
 
 

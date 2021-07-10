@@ -123,18 +123,10 @@ if found:
             t_final = 4
             step = 0
 
-            # Callables needed for advance_state and advance_state_leap
-            def get_timestep(state):
-                return dt
-
-            def my_checkpoint(state, step, t, dt):
-                return dt
-
             (step, t, state) = \
-                advance_state(rhs=rhs, timestepper=method,
-                            checkpoint=my_checkpoint,
-                            get_timestep=get_timestep, state=state,
-                            t=t, t_final=t_final, component_id="y")
+                advance_state(rhs=rhs, timestepper=method, dt=dt,
+                              state=state, t=t, t_final=t_final,
+                              component_id="y")
 
             error = np.abs(state - exact_soln(t)) / exact_soln(t)
             integrator_eoc.add_data_point(dt, error)
