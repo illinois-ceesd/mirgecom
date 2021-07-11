@@ -162,15 +162,15 @@ jobs:
             cd ../../
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            ./install.sh --branch=${GITHUB_REF##*/}
+            ./install.sh --branch=y1-production
             source config/activate_env.sh
             cd mirgecom
-            git remote add ceesd https://illinois-ceesd/mirgecom
-            git fetch ceesd
-            git checkout ceesd/y1-production
-            pip install -r requirements.txt
+            env
+            echo "GITHUB_REF: ${GITHUB_REF}"
+            echo "Testing Branch: ${GITHUB_REF##*/}"
             git checkout ${GITHUB_REF##*/}
-            git merge y1-production
+            git checkout y1-production
+            git merge ${GITHUB_REF##*/}
             git clone -b update-y1-callbacks https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
             cd y1-production-driver/smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
