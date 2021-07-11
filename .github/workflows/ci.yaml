@@ -156,3 +156,14 @@ jobs:
             source emirge/config/activate_env.sh
             cd mirgecom/examples
             python -m mpi4py ./wave-eager-mpi.py
+ 
+        - name: Run Y1 production test
+          run: |
+            cd ..
+            # source emirge/config/activate_env.sh
+            git checkout -b current_branch
+            git checkout y1-production
+            git merge current_branch
+            git clone -b update-y1-callbacks https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
+            cd y1-production-driver/smoke_test
+            python -m mpi4py ./nozzle.py -i run_params.yaml
