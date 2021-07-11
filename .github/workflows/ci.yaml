@@ -178,7 +178,7 @@ jobs:
             git config user.email "stupid@dumb.com"
             git config user.name "CI Runner"
             git checkout -b production-test
-            . ../../mirgecom/mirgecom/.ci-support/production-setup.sh
+            . ../../mirgecom/.ci-support/production-setup.sh
             git remote add changes https://github.com/${GITHUB_REPOSITORY_OWNER}/mirgecom
             git fetch changes
             git checkout changes/${GITHUB_HEAD_REF}
@@ -193,6 +193,6 @@ jobs:
             cd y1-production-driver
             git config user.email "stupid@dumb.com"
             git config user.name "CI Runner"
-            . ../mirgecom/mirgecom/.ci-support/production-driver-setup.sh
+            . ../mirgecom/.ci-support/production-driver-setup.sh
             cd y1-production-driver/smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
