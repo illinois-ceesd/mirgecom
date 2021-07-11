@@ -160,7 +160,6 @@ jobs:
         - name: Run Y1 production test
           run: |
             cd ../../
-            conda deactivate
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
             ./install.sh --branch=${GITHUB_REF##*/}
