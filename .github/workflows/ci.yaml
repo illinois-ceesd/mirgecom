@@ -171,16 +171,18 @@ jobs:
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
+            git config user.email "stupid@dumb.com"
+            git config user.name "CI Runner"
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
             ./install.sh --branch=y1-production
             cd mirgecom
+            git checkout -b production-test
+            . ../../mirgecom/mirgecom/.ci-support/production-setup.sh
             git remote add changes https://github.com/${GITHUB_REPOSITORY_OWNER}/mirgecom
             git fetch changes
             git checkout changes/${GITHUB_HEAD_REF}
-            git checkout y1-production
-            git config user.email "stupid@dumb.com"
-            git config user.name "CI Runner"
+            git checkout production-test
             git merge changes/${GITHUB_HEAD_REF} --no-edit
 
         - name: Run Y1 production test
@@ -188,5 +190,7 @@ jobs:
             cd ..
             source emirge.y1/config/activate_env.sh
             git clone -b update-y1-callbacks https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
+            cd y1-production-driver
+            . ../mirgecom/mirgecom/.ci-support/production-driver-setup.sh
             cd y1-production-driver/smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
