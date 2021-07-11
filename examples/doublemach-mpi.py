@@ -1,4 +1,4 @@
-"""Demonstrate combustive mixture with Pyrometheus."""
+"""Demonstrate double mach reflection."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -23,6 +23,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
 import logging
 import numpy as np
 import pyopencl as cl
@@ -32,28 +33,30 @@ from functools import partial
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.transport import SimpleTransport
-from mirgecom.simutil import get_sim_timestep
-from mirgecom.navierstokes import ns_operator
 
+from mirgecom.navierstokes import ns_operator
+from mirgecom.artificial_viscosity import (
+    av_operator,
+    smoothness_indicator
+)
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-
+from mirgecom.fluid import make_conserved
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (  # noqa
-    AdiabaticSlipBoundary,
-    IsothermalNoSlipBoundary,
+from mirgecom.boundary import (
+    AdiabaticNoslipMovingBoundary,
+    PrescribedBoundary
 )
-from mirgecom.initializers import MixtureInitializer
-from mirgecom.eos import PyrometheusMixture
-import cantera
-import pyrometheus as pyro
+from mirgecom.initializers import DoubleMachReflection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.transport import SimpleTransport
 
-from logpyle import IntervalTimer, set_dt
+from logpyle import set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.logging_quantities import (
@@ -73,11 +76,57 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+def get_doublemach_mesh():
+    """Generate or import a grid using `gmsh`.
+
+    Input required:
+        doubleMach.msh (read existing mesh)
+
+    This routine will generate a new grid if it does
+    not find the grid file (doubleMach.msh).
+    """
+    from meshmode.mesh.io import (
+        read_gmsh,
+        generate_gmsh,
+        ScriptSource,
+    )
+    import os
+    meshfile = "doubleMach.msh"
+    if not os.path.exists(meshfile):
+        mesh = generate_gmsh(
+            ScriptSource("""
+                x0=1.0/6.0;
+                setsize=0.025;
+                Point(1) = {0, 0, 0, setsize};
+                Point(2) = {x0,0, 0, setsize};
+                Point(3) = {4, 0, 0, setsize};
+                Point(4) = {4, 1, 0, setsize};
+                Point(5) = {0, 1, 0, setsize};
+                Line(1) = {1, 2};
+                Line(2) = {2, 3};
+                Line(5) = {3, 4};
+                Line(6) = {4, 5};
+                Line(7) = {5, 1};
+                Line Loop(8) = {-5, -6, -7, -1, -2};
+                Plane Surface(8) = {8};
+                Physical Surface('domain') = {8};
+                Physical Curve('ic1') = {6};
+                Physical Curve('ic2') = {7};
+                Physical Curve('ic3') = {1};
+                Physical Curve('wall') = {2};
+                Physical Curve('out') = {5};
+        """, "geo"), force_ambient_dim=2, dimensions=2, target_unit="M")
+    else:
+        mesh = read_gmsh(meshfile, force_ambient_dim=2)
+
+    return mesh
+
+
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_leap=False,
          use_profiling=False, rst_step=None, rst_name=None,
-         casename="nsmix", use_logmgr=True):
-    """Drive example."""
+         casename="doubleMach", use_logmgr=True):
+    """Drive the example."""
     cl_ctx = ctx_factory()
 
     if casename is None:
@@ -103,25 +152,40 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
-    nel_1d = 8
-    order = 1
-
-    # This example runs only 3 steps by default (to keep CI ~short)
-    # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
-    t_final = 3e-9
-    current_cfl = .0009
-    velocity = np.zeros(shape=(dim,))
-    current_dt = 1e-9
+    order = 3
+    # Too many steps for CI
+    # t_final = 1.0e-2
+    t_final = 1.0e-3
+    current_cfl = 0.1
+    current_dt = 1.0e-4
     current_t = 0
-    constant_cfl = True
-    nstatus = 1
-    nviz = 5
-    nrestart = 5
-    nhealth = 1
+    # {{{ Initialize simple transport model
+    kappa = 1e-5
+    sigma = 1e-5
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+    # }}}
+    eos = IdealSingleGas(transport_model=transport_model)
+    initializer = DoubleMachReflection()
+
+    boundaries = {
+        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
+        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
+    }
+    constant_cfl = False
+    nstatus = 10
+    nviz = 100
     current_step = 0
     timestepper = rk4_step
-    debug = False
+    nrestart = 100
+    nhealth = 1
+
+    s0 = -6.0
+    kappa = 1.0
+    alpha = 2.0e-2
+    from mpi4py import MPI
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -137,19 +201,13 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        box_ll = -0.005
-        box_ur = 0.005
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        gen_grid = partial(get_doublemach_mesh)
         from mirgecom.simutil import generate_and_distribute_mesh
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
-                                                                    generate_mesh)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
         local_nelements = local_mesh.nelements
 
-    discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    discr = EagerDGDiscretization(actx, local_mesh, order=order,
+                                  mpi_communicator=comm)
     nodes = thaw(actx, discr.nodes())
 
     if logmgr:
@@ -169,88 +227,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
-
-    # {{{  Set up initial state using Cantera
-
-    # Use Cantera for initialization
-    # -- Pick up a CTI for the thermochemistry config
-    # --- Note: Users may add their own CTI file by dropping it into
-    # ---       mirgecom/mechanisms alongside the other CTI files.
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
-
-    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
-    nspecies = cantera_soln.n_species
-
-    # Initial temperature, pressure, and mixutre mole fractions are needed to
-    # set up the initial state in Cantera.
-    init_temperature = 1500.0  # Initial temperature hot enough to burn
-    # Parameters for calculating the amounts of fuel, oxidizer, and inert species
-    equiv_ratio = 1.0
-    ox_di_ratio = 0.21
-    stoich_ratio = 3.0
-    # Grab the array indices for the specific species, ethylene, oxygen, and nitrogen
-    i_fu = cantera_soln.species_index("C2H4")
-    i_ox = cantera_soln.species_index("O2")
-    i_di = cantera_soln.species_index("N2")
-    x = np.zeros(nspecies)
-    # Set the species mole fractions according to our desired fuel/air mixture
-    x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
-    x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
-    x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
-    # Uncomment next line to make pylint fail when it can't find cantera.one_atm
-    one_atm = cantera.one_atm  # pylint: disable=no-member
-    # one_atm = 101325.0
-
-    # Let the user know about how Cantera is being initilized
-    print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
-    # Set Cantera internal gas temperature, pressure, and mole fractios
-    cantera_soln.TPX = init_temperature, one_atm, x
-    # Pull temperature, total density, mass fractions, and pressure from Cantera
-    # We need total density, and mass fractions to initialize the fluid/gas state.
-    can_t, can_rho, can_y = cantera_soln.TDY
-    can_p = cantera_soln.P
-    # *can_t*, *can_p* should not differ (significantly) from user's initial data,
-    # but we want to ensure that we use exactly the same starting point as Cantera,
-    # so we use Cantera's version of these data.
-
-    # }}}
-
-    # {{{ Create Pyrometheus thermochemistry object & EOS
-
-    # {{{ Initialize simple transport model
-    kappa = 1e-5
-    spec_diffusivity = 1e-5 * np.ones(nspecies)
-    sigma = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
-                                      species_diffusivity=spec_diffusivity)
-    # }}}
-
-    # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
-    # generates a set of methods to calculate chemothermomechanical properties and
-    # states for this particular mechanism.
-    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature,
-                             transport_model=transport_model)
-
-    # }}}
-
-    # {{{ MIRGE-Com state initialization
-
-    # Initialize the fluid/gas state with Cantera-consistent data:
-    # (density, pressure, temperature, mass_fractions)
-    print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
-    initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
-                                     pressure=can_p, temperature=can_t,
-                                     massfractions=can_y, velocity=velocity)
-
-    #    my_boundary = AdiabaticSlipBoundary()
-    my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
-    visc_bnds = {BTAG_ALL: my_boundary}
-
     if rst_step:
         current_t = restart_data["t"]
         current_step = rst_step
@@ -260,65 +236,40 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = initializer(x_vec=nodes, eos=eos)
+        current_state = initializer(nodes)
 
-    # Inspection at physics debugging time
-    if debug:
-        print("Initial MIRGE-Com state:")
-        print(f"{current_state.mass=}")
-        print(f"{current_state.energy=}")
-        print(f"{current_state.momentum=}")
-        print(f"{current_state.species_mass=}")
-        print(f"Initial Y: {current_state.species_mass / current_state.mass}")
-        print(f"Initial DV pressure: {eos.pressure(current_state)}")
-        print(f"Initial DV temperature: {eos.temperature(current_state)}")
+    visualizer = make_visualizer(discr,
+                                 discr.order if discr.dim == 2 else discr.order)
 
-    # }}}
-
-    visualizer = make_visualizer(discr, order + 3
-                                 if discr.dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order,
-                                     nelements=local_nelements,
-                                     global_nelements=global_nelements,
-                                     dt=current_dt, t_final=t_final,
-                                     nviz=nviz, cfl=current_cfl, nstatus=1,
-                                     constant_cfl=constant_cfl, initname=initname,
-                                     eosname=eosname, casename=casename)
-
-    # Cantera equilibrate calculates the expected end state @ chemical equilibrium
-    # i.e. the expected state after all reactions
-    cantera_soln.equilibrate("UV")
-    eq_temperature, eq_density, eq_mass_fractions = cantera_soln.TDY
-    eq_pressure = cantera_soln.P
-
-    # Report the expected final state to the user
+    init_message = make_init_message(
+        dim=dim,
+        order=order,
+        nelements=local_nelements,
+        global_nelements=global_nelements,
+        dt=current_dt,
+        t_final=t_final,
+        nstatus=nstatus,
+        nviz=nviz,
+        cfl=current_cfl,
+        constant_cfl=constant_cfl,
+        initname=initname,
+        eosname=eosname,
+        casename=casename,
+    )
     if rank == 0:
         logger.info(init_message)
-        logger.info(f"Expected equilibrium state:"
-                    f" {eq_pressure=}, {eq_temperature=},"
-                    f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_status(step, t, dt, state):
-        if rank == 0:
-            if constant_cfl:
-                cfl = current_cfl
-            else:
-                from mirgecom.viscous import get_viscous_cfl
-                cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
-                from grudge.op import nodal_max
-                cfl = nodal_max(discr, "vol", cfl_field)
-            logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
-
-    def my_write_viz(step, t, state, dv=None, production_rates=None):
+    def my_write_viz(step, t, state, dv=None, tagged_cells=None):
         if dv is None:
             dv = eos.dependent_vars(state)
-        if production_rates is None:
-            production_rates = eos.get_production_rates(state)
+        if tagged_cells is None:
+            tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
+                                                kappa=kappa)
         viz_fields = [("cv", state),
                       ("dv", dv),
-                      ("reaction_rates", production_rates)]
+                      ("tagged_cells", tagged_cells)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
@@ -338,8 +289,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(state, dv):
-        # Note: This health check is tuned to expected results
-        #       which effectively makes this example a CI test that
+        # Note: This health check is tuned s.t. it is a test that
         #       the case gets the expected solution.  If dt,t_final or
         #       other run parameters are changed, this check should
         #       be changed accordingly.
@@ -350,7 +300,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.06e5),
+        if allsync(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
@@ -362,8 +312,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(check_range_local(discr, "vol", dv.temperature, 1450, 1570),
-                   comm, op=MPI.LOR):
+        if allsync(
+                check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.071e-2),
+                comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             t_min = nodal_min(discr, "vol", dv.temperature)
@@ -383,7 +334,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
-            do_status = check_step(step, interval=nstatus)
 
             if do_health:
                 dv = eos.dependent_vars(state)
@@ -405,14 +355,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             if do_viz:
                 if dv is None:
                     dv = eos.dependent_vars(state)
-                production_rates = eos.get_production_rates(state)
+                tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
+                                                    kappa=kappa)
                 my_write_viz(step=step, t=t, state=state, dv=dv,
-                             production_rates=production_rates)
-
-            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
-                                  t_final, constant_cfl)
-            if do_status:
-                my_write_status(step, t, dt, state)
+                             tagged_cells=tagged_cells)
 
         except MyRuntimeError:
             if rank == 0:
@@ -421,7 +367,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        return state, dt
+        t_remaining = max(0, t_final - t)
+        return state, min(dt, t_remaining)
 
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
@@ -433,10 +380,13 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         return state, dt
 
     def my_rhs(t, state):
-        ns_rhs = ns_operator(discr, cv=state, t=t,
-                             boundaries=visc_bnds, eos=eos)
-        reaction_source = eos.get_species_source_terms(state)
-        return ns_rhs + reaction_source
+        return ns_operator(
+            discr, cv=state, t=t, boundaries=boundaries, eos=eos
+        ) + make_conserved(dim, q=av_operator(
+            discr, q=state.join(), boundaries=boundaries,
+            boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
+            s0=s0, kappa=kappa)
+        )
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -448,11 +398,8 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
-    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                current_cfl, eos, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
-    my_write_status(current_step, current_t, final_dt, current_state)
 
     if logmgr:
         logmgr.close()
@@ -464,7 +411,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
     main()
 
 # vim: foldmethod=marker

@@ -319,7 +319,6 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             else:
                 return 0.0
 
-        # iff_split = split_conserved(dim, interior_face_flux)
         assert inf_norm(interior_face_flux.mass) < tolerance
         assert inf_norm(interior_face_flux.energy) < tolerance
         assert inf_norm(interior_face_flux.species_mass) < tolerance
@@ -348,6 +347,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_e = discr.project("vol", BTAG_ALL, energy_input)
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
+
         dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                 momentum=dir_mom, species_mass=dir_mf)
         dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
@@ -683,7 +683,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
             maxxerr = err_max
 
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-    logger.info(f"Max error: {maxxerr}")
+
+        logger.info(f"Max error: {maxxerr}")
 
     logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
@@ -726,8 +727,9 @@ def _euler_flow_stepper(actx, parameters):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
+
     cv = initializer(nodes)
-    sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, cv=cv)
+    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -800,7 +802,6 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-
         cv = make_conserved(
             dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
         )
@@ -808,7 +809,7 @@ def _euler_flow_stepper(actx, parameters):
         t += dt
         istep += 1
 
-        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, cv=cv)
+        sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")

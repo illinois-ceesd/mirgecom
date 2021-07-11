@@ -69,6 +69,9 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     actx = PyOpenCLArrayContext(queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    current_cfl = .485
+    wave_speed = 1.0
+
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -113,14 +116,11 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
 
-    if local_mesh.dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.7 / (nel_1d*order**2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.4 / (nel_1d*order**2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
 
     t_final = 3
 
@@ -152,7 +152,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     vis = make_visualizer(discr)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(discr, c=wave_speed, w=w)
 
     while t < t_final:
         # restart must happen at beginning of step
