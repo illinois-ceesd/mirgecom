@@ -166,26 +166,27 @@ jobs:
 
         steps:
         - uses: actions/checkout@v2
-        - name: Install emirge
+        - name: Prepare Y1 environment
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
-            git clone https://github.com/illinois-ceesd/emirge
-            cd emirge
+            git clone https://github.com/illinois-ceesd/emirge emirge.y1
+            cd emirge.y1
             ./install.sh --branch=y1-production
-
-        - name: Run Y1 production test
-          run: |
-            env
-            cd ..
-            source emirge/config/activate_env.sh
-            cd emirge/mirgecom
-            git checkout ${GITHUB_HEAD_REF}
+            cd mirgecom
+            git remote add changes https://github.com/${GITHUB_REPOSITORY_OWNER}/mirgecom
+            git fetch changes
+            git checkout changes/${GITHUB_HEAD_REF}
             git checkout y1-production
             git config user.email "stupid@dumb.com"
             git config user.name "CI Runner"
-            git merge ${GITHUB_HEAD_REF} --no-edit
+            git merge changes/${GITHUB_HEAD_REF} --no-edit
+
+        - name: Run Y1 production test
+          run: |
+            cd ..
+            source emirge.y1/config/activate_env.sh
             git clone -b update-y1-callbacks https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
             cd y1-production-driver/smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
