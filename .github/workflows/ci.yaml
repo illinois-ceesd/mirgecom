@@ -189,10 +189,10 @@ jobs:
           run: |
             cd ..
             source emirge.y1/config/activate_env.sh
-            git clone -b update-y1-callbacks https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
+            git clone https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
             cd y1-production-driver
             git config user.email "stupid@dumb.com"
             git config user.name "CI Runner"
             . ../mirgecom/.ci-support/production-driver-setup.sh
-            cd y1-production-driver/smoke_test
+            cd smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
