@@ -177,11 +177,10 @@ jobs:
 
         - name: Run Y1 production test
           run: |
-            source config/activate_env.sh
-            cd mirgecom
             env
-            echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
-            echo "Testing Branch: ${GITHUB_HEAD_REF}"
+            cd ..
+            source emirge/config/activate_env.sh
+            cd emirge/mirgecom
             git checkout ${GITHUB_HEAD_REF}
             git checkout y1-production
             git config user.email "stupid@dumb.com"
