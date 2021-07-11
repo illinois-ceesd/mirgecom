@@ -306,7 +306,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 cfl = current_cfl
             else:
                 from mirgecom.viscous import get_viscous_cfl
-                cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
+                cfl_field = get_viscous_cfl(actx, discr, eos, dt, cv=state)
                 from grudge.op import nodal_max
                 cfl = nodal_max(discr, "vol", cfl_field)
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
@@ -409,7 +409,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 my_write_viz(step=step, t=t, state=state, dv=dv,
                              production_rates=production_rates)
 
-            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+            dt = get_sim_timestep(actx, discr, state, t, dt, current_cfl, eos,
                                   t_final, constant_cfl)
             if do_status:
                 my_write_status(step, t, dt, state)
@@ -448,7 +448,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
-    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    final_dt = get_sim_timestep(actx, discr, current_state, current_t, current_dt,
                                 current_cfl, eos, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)

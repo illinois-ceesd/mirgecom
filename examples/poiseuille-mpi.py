@@ -249,7 +249,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         else:
             from mirgecom.viscous import get_viscous_cfl
             cfl = nodal_max(discr, "vol",
-                            get_viscous_cfl(discr, eos, dt, state))
+                            get_viscous_cfl(actx, discr, eos, dt, state))
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
@@ -343,7 +343,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                     dv = eos.dependent_vars(state)
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
-            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+            dt = get_sim_timestep(actx, discr, state, t, dt, current_cfl, eos,
                                   t_final, constant_cfl)
 
             if do_status:  # needed because logging fails to make output
@@ -382,7 +382,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
-    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    final_dt = get_sim_timestep(actx, discr, current_state, current_t, current_dt,
                                 current_cfl, eos, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)

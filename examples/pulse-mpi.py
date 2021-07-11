@@ -269,7 +269,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             raise
 
         from mirgecom.simutil import get_sim_timestep
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+        dt = get_sim_timestep(actx, discr, state, t, dt, current_cfl, eos,
                               t_final, constant_cfl)
         return state, dt
 
