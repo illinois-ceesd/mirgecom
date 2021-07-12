@@ -74,14 +74,49 @@ def check_step(step, interval):
 
 def get_sim_timestep(discr, state, t, dt, cfl, eos,
                      t_final, constant_cfl=False):
-    """Return the maximum stable dt."""
+    """Return the maximum stable timestep for a typical fluid simulation.
+
+    This routine returns *dt*, the users defined constant timestep, or
+    *max_dt*, the maximum domain-wide stability-limited
+    timestep for a fluid simulation. It calls the collective:
+    :func:`~grudge.op.nodal_min` on the inside which makes it
+    domain-wide regardless of parallel decomposition.
+
+    Two modes are supported:
+        - Constant DT mode: returns the minimum of (t_final-t, dt)
+        - Constant CFL mode: returns (cfl * max_dt)
+
+    Parameters
+    ----------
+    discr
+        Grudge discretization or discretization collection?
+    state: :class:`~mirgecom.fluid.ConservedVars`
+        The fluid state.
+    t: float
+        Current time
+    t_final: float
+        Final time
+    dt: float
+        The current timestep
+    cfl: float
+        The current CFL number
+    eos: :class:`~mirgecom.eos.GasEOS`
+        Gas equation-of-state supporting speed_of_sound
+    constant_cfl: bool
+        True if running constant CFL mode
+
+    Returns
+    -------
+    float
+        The maximum stable DT based on inviscid fluid acoustic wavespeed.
+    """
     t_remaining = max(0, t_final - t)
     mydt = dt
-    if constant_cfl is True:
+    if constant_cfl:
         from mirgecom.viscous import get_viscous_timestep
-        dt_field = get_viscous_timestep(discr=discr, eos=eos, cv=state)
         from grudge.op import nodal_min
-        mydt = cfl * nodal_min(discr, "vol", dt_field)
+        mydt = cfl * nodal_min(discr, "vol",
+                               get_viscous_timestep(discr, eos, state))
     return min(t_remaining, mydt)
 
 
