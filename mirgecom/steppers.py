@@ -62,7 +62,7 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
-                                logmgr=None, eos=None, dim=None,
+                                logmgr=None,
                                 actx=None):
     """Advance state from some time (t) to some time (t_final).
 
@@ -133,7 +133,7 @@ def _advance_state_stepper_func(rhs, timestepper,
 
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state)
             logmgr.tick_after()
 
     return istep, t, state
@@ -145,7 +145,7 @@ def _advance_state_leap(rhs, timestepper, state,
                         t=0.0, istep=0,
                         pre_step_callback=None,
                         post_step_callback=None,
-                        logmgr=None, eos=None, dim=None,
+                        logmgr=None,
                         actx=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
@@ -346,8 +346,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                actx=actx
+                istep=istep, logmgr=logmgr, actx=actx
             )
     else:
         (current_step, current_t, current_state) = \
@@ -356,8 +355,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                actx=actx
+                istep=istep, logmgr=logmgr, actx=actx
             )
 
     return current_step, current_t, current_state

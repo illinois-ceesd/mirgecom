@@ -56,14 +56,13 @@ from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_device_name,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
+from mirgecom.fluid import logmgr_add_fluid_quantities
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +107,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     actx = actx_class(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
 
     # timestepping control
     if use_leap:
@@ -158,26 +161,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     nodes = thaw(actx, discr.nodes())
 
-    vis_timer = None
-
-    if logmgr:
-        logmgr_add_device_name(logmgr, queue)
-        logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
-
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
-
-        logmgr.add_watches([
-            ("step.max", "step = {value}, "),
-            ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
-            ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s")
-        ])
-
     initializer = SodShock1D(dim=dim)
     eos = IdealSingleGas()
     boundaries = {
@@ -193,6 +176,23 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_state = initializer(nodes)
+
+    vis_timer = None
+
+    if logmgr:
+        logmgr_add_fluid_quantities(logmgr, discr, eos)
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
+        logmgr.add_watches([
+            ("step.max", "step = {value}, "),
+            ("t_sim.max", "sim time: {value:1.6e} s\n"),
+            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("max_pressure",    "{value:1.9e})\n"),
+            ("t_step.max", "------- step walltime: {value:6g} s, "),
+            ("t_log.max", "log walltime: {value:6g} s")
+        ])
 
     visualizer = make_visualizer(discr)
 
@@ -321,11 +321,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state)
             logmgr.tick_after()
         return state, dt
 

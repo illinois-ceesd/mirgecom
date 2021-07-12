@@ -14,6 +14,7 @@ Helper Functions
 .. autofunction:: compute_wavespeed
 .. autofunction:: velocity_gradient
 .. autofunction:: species_mass_fraction_gradient
+.. autofunction:: logmgr_add_fluid_quantities
 """
 
 __copyright__ = """
@@ -449,3 +450,31 @@ def compute_wavespeed(eos, cv: ConservedVars):
     actx = cv.array_context
     v = cv.velocity
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
+
+
+def logmgr_add_fluid_quantities(logmgr, discr, eos, nspecies=0,
+        quantity_to_unit=None):
+    """Add fluid state quantities to the logmgr."""
+    def extract_vars_for_logging(state):
+        dv = eos.dependent_vars(state)
+        from mirgecom.utils import asdict_shallow
+        name_to_field = asdict_shallow(state)
+        name_to_field.update(asdict_shallow(dv))
+        return name_to_field
+
+    def units_for_logging(quantity):
+        return quantity_to_unit[quantity] if quantity_to_unit is not None else ""
+
+    from functools import partial
+    from mirgecom.logging_quantities import logmgr_add_discretization_quantity
+    add_quantity = partial(logmgr_add_discretization_quantity, logmgr, discr,
+        extract_vars_for_logging, units_for_logging)
+
+    add_quantity("mass")
+    add_quantity("energy")
+    for i in range(discr.dim):
+        add_quantity("momentum", axis=i)
+    for i in range(nspecies):
+        add_quantity("species_mass", axis=i)
+    add_quantity("temperature")
+    add_quantity("pressure")

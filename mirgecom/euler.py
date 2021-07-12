@@ -122,28 +122,3 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     warn("Do not call inviscid_operator; it is now called euler_operator. This"
          "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
     return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
-
-
-# By default, run unitless
-NAME_TO_UNITS = {
-    "mass": "",
-    "energy": "",
-    "momentum": "",
-    "temperature": "",
-    "pressure": ""
-}
-
-
-def units_for_logging(quantity: str) -> str:
-    """Return unit for quantity."""
-    return NAME_TO_UNITS[quantity]
-
-
-def extract_vars_for_logging(dim: int, state, eos) -> dict:
-    """Extract state vars."""
-    dv = eos.dependent_vars(state)
-
-    from mirgecom.utils import asdict_shallow
-    name_to_field = asdict_shallow(state)
-    name_to_field.update(asdict_shallow(dv))
-    return name_to_field
