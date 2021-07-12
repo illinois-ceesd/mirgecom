@@ -1,4 +1,7 @@
+#!/bin/bash
+
 set -x
+
 PRODUCTION_DRIVER_NAME="drivers_y1-nozzle"
 PRODUCTION_DRIVER_CHANGE_OWNER="illinois-ceesd"
 PRODUCTION_DRIVER_CHANGE_BRANCH="update-y1-callbacks"

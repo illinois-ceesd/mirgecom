@@ -1,4 +1,7 @@
+#!/bin/bash
+
 set -x
+
 PRODUCTION_CHANGE_OWNER="illinois-ceesd"
 PRODUCTION_CHANGE_BRANCH=""
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
