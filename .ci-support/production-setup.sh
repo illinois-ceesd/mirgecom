@@ -1,8 +1,8 @@
 #!/bin/bash
 
 set -x
-PRODUCTION_CHANGE_OWNER="illinois-ceesd"
-PRODUCTION_CHANGE_BRANCH=""
+PRODUCTION_CHANGE_OWNER="MTCam"
+PRODUCTION_CHANGE_BRANCH="y1-update-cfl-dt"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git config user.email "stupid@dumb.com"
 git config user.name "CI Runner"
