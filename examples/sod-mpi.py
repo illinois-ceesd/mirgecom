@@ -264,7 +264,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 from mirgecom.simutil import allsync
                 health_errors = allsync(
-                    my_health_check(dv.pressure, exact, component_errors),
+                    my_health_check(dv.pressure, component_errors),
                     comm, op=MPI.LOR
                 )
                 if health_errors:
