@@ -124,11 +124,11 @@ class ConservedVars:
         $N_{\text{eq}}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
-        $\mathbf{Q}$, one can call :func:`make_conserved` to get a `ConservedVars`
+        $\mathbf{Q}$, one can call FIXME to get a `ConservedVars`
         dataclass object that resolves the fluid CV associated with each conservation
         equation::
 
-            fluid_cv = make_conserved(ndim, q=Q),
+            fluid_cv = FIXME(ndim, q=Q),
 
         after which::
 
@@ -145,7 +145,7 @@ class ConservedVars:
 
     :example::
 
-        Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
+        Use FIXME to create an agglomerated $\mathbf{Q}$ array from the
         fluid conserved quantities (CV).  This may be useful for users who need to
         interact with non-fluid simulation components.
 
@@ -166,12 +166,12 @@ class ConservedVars:
         An agglomerated array of fluid independent variables can then be
         created with::
 
-            q = join_conserved(ndim, mass=rho, energy=rho*e, momentum=rho*v)
+            q = FIXME(ndim, mass=rho, energy=rho*e, momentum=rho*v)
 
         after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
         the fluid conserved state data.
 
-        Examples of this sort of use for `join_conserved` can be found in:
+        Examples of this sort of use for FIXME can be found in:
 
         - :mod:`~mirgecom.initializers`
 
@@ -204,11 +204,11 @@ class ConservedVars:
 
         Presuming that `grad_q` is the agglomerated *MIRGE* data structure with the
         gradient data, this dataclass can be used to get a fluid CV-specific view on
-        the content of $\nabla\mathbf{Q}$. One can call :func:`make_conserved` to
+        the content of $\nabla\mathbf{Q}$. One can call FIXME to
         get a `ConservedVars` dataclass object that resolves the vector quantity
         associated with each conservation equation::
 
-            grad_cv = make_conserved(ndim, q=grad_q),
+            grad_cv = FIXME(ndim, q=grad_q),
 
         after which::
 
