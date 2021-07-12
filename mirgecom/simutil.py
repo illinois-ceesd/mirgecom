@@ -4,7 +4,7 @@ General utilities
 -----------------
 
 .. autofunction:: check_step
-.. autofunction:: inviscid_sim_timestep
+.. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
 .. autofunction:: allsync
 
@@ -48,7 +48,6 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 import grudge.op as op
 
 logger = logging.getLogger(__name__)
@@ -75,19 +74,24 @@ def check_step(step, interval):
     return False
 
 
-def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
-                          t_final, constant_cfl=False):
-    """Return the maximum stable dt for inviscid fluid simulation.
+def get_sim_timestep(discr, state, t, dt, cfl, eos,
+                     t_final, constant_cfl=False):
+    """Return the maximum stable dt for fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or
     *max_dt*, the maximum domain-wide stability-limited
-    timestep for an inviscid fluid simulation. It calls the collective:
+    timestep for a fluid simulation. It calls the collective:
     :func:`~grudge.op.nodal_min` on the inside which makes it
     domain-wide regardless of parallel decomposition.
 
     Two modes are supported:
         - Constant DT mode: returns the minimum of (t_final-t, dt)
         - Constant CFL mode: returns (cfl * max_dt)
+
+    .. important::
+        The current implementation is calculating an acoustic-limited
+        timestep and CFL for an inviscid fluid. The addition of viscous
+        fluxes includes modification to this routine.
 
     Parameters
     ----------
@@ -116,6 +120,7 @@ def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
     mydt = dt
     t_remaining = max(0, t_final - t)
     if constant_cfl:
+        from mirgecom.inviscid import get_inviscid_timestep
         from grudge.op import nodal_min
         mydt = cfl * nodal_min(
             discr, "vol",
