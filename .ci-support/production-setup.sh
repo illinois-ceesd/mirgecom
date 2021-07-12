@@ -15,8 +15,9 @@ if [ -n "${PRODUCTION_CHANGE_BRANCH}" ]; then
 else
     echo "No updates to production branch (${CURRENT_BRANCH})"
 fi
+CURRENT_FORK_OWNER="MTCam"
 if [ -n "${GITHUB_HEAD_REF}" ]; then
-    git remote add changes https://github.com/${GITHUB_REPOSITORY_OWNER}/mirgecom
+    git remote add changes https://github.com/${CURRENT_FORK_OWNER}/mirgecom
     git fetch changes
     git checkout changes/${GITHUB_HEAD_REF}
     git checkout ${CURRENT_BRANCH}
