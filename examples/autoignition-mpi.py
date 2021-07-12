@@ -43,6 +43,7 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
+    get_sim_timestep,
     generate_and_distribute_mesh,
     write_visfile
 )
@@ -143,12 +144,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    restarting = rst_filename is not None
-    if restarting:  # read the grid from restart data
-        rst_fname = f"{rst_filename}-{rank:04d}.pkl"
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_fname)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
@@ -261,7 +261,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
-    if restarting:
+    if rst_filename:
         current_step = rst_step
         current_t = rst_time
         if logmgr:
@@ -443,6 +443,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
+
+    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                  current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,

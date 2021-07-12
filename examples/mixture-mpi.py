@@ -37,7 +37,10 @@ from grudge.shortcuts import make_visualizer
 
 
 from mirgecom.euler import euler_operator
-from mirgecom.simutil import generate_and_distribute_mesh
+from mirgecom.simutil import (
+    get_sim_timestep,
+    generate_and_distribute_mesh
+)
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -72,7 +75,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_leap=False,
-         use_profiling=False, restart_file=None, casename="uiuc_mixture",
+         use_profiling=False, rst_filename=None, casename="uiuc_mixture",
          use_logmgr=True):
     """Drive example."""
     cl_ctx = ctx_factory()
@@ -123,9 +126,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    if restart_file:  # read the grid from restart data
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, restart_file)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
@@ -188,7 +192,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     nodes = thaw(actx, discr.nodes())
-    if restart_file:
+    if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_state = restart_data["state"]
@@ -237,7 +241,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
-        if rst_fname != restart_file:
+        if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
                 "state": state,
@@ -321,7 +325,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        from mirgecom.simutil import get_sim_timestep
         dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
                               constant_cfl)
         return state, dt
@@ -338,6 +341,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     def my_rhs(t, state):
         return euler_operator(discr, cv=state, t=t,
                               boundaries=boundaries, eos=eos)
+
+    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                  current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
