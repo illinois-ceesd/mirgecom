@@ -76,7 +76,7 @@ def check_step(step, interval):
 
 def get_sim_timestep(discr, state, t, dt, cfl, eos,
                      t_final, constant_cfl=False):
-    """Return the maximum stable dt for fluid simulation.
+    """Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or
     *max_dt*, the maximum domain-wide stability-limited

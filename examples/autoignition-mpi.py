@@ -367,7 +367,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         return health_error
 
     def my_get_timestep(t, dt, state):
-        #  richer interface to calculate {dt,dfl} returns node-local estimates
+        #  richer interface to calculate {dt,cfl} returns node-local estimates
         t_remaining = max(0, t_final - t)
         if constant_cfl:
             from mirgecom.inviscid import get_inviscid_timestep
