@@ -96,30 +96,26 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 3
-    nel_1d = 16
-    order = 3
-    t_final = 0.01
-    current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
-    current_dt = .001
-    current_t = 0
-    eos = IdealSingleGas()
-    initializer = Lump(dim=dim, center=orig, velocity=vel)
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
-    constant_cfl = False
-    nstatus = 1
-    nhealth = 1
-    nrestart = 10
-    nviz = 1
-    current_step = 0
+    # timestepping control
     if use_leap:
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
+    t_final = 0.01
+    current_cfl = 1.0
+    current_dt = .001
+    current_t = 0
+    current_step = 0
+    constant_cfl = False
+
+    # some i/o frequencies
+    nstatus = 1
+    nhealth = 1
+    nrestart = 10
+    nviz = 1
+
+    dim = 3
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -137,6 +133,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     else:  # generate the grid from scratch
         box_ll = -5.0
         box_ur = 5.0
+        nel_1d = 16
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
@@ -144,6 +141,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    order = 3
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -166,6 +164,14 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
+
+    # soln setup, init
+    eos = IdealSingleGas()
+    vel = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,))
+    vel[:dim] = 1.0
+    initializer = Lump(dim=dim, center=orig, velocity=vel)
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
 
     if rst_step:
         current_t = restart_data["t"]
@@ -299,8 +305,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        t_remaining = max(0, t_final - t)
-        return state, min(dt, t_remaining)
+        from mirgecom.simutil import get_sim_timestep
+        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
+                              constant_cfl)
+        return state, dt
 
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
