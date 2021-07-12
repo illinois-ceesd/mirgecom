@@ -175,24 +175,16 @@ jobs:
             cd emirge.y1
             ./install.sh --branch=y1-production
             cd mirgecom
-            git config user.email "stupid@dumb.com"
-            git config user.name "CI Runner"
-            git checkout -b production-test
+            env
             . ../../mirgecom/.ci-support/production-setup.sh
-            git remote add changes https://github.com/${GITHUB_REPOSITORY_OWNER}/mirgecom
-            git fetch changes
-            git checkout changes/${GITHUB_HEAD_REF}
-            git checkout production-test
-            git merge changes/${GITHUB_HEAD_REF} --no-edit
 
         - name: Run Y1 production test
           run: |
             cd ..
             source emirge.y1/config/activate_env.sh
+            env
             git clone https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
             cd y1-production-driver
-            git config user.email "stupid@dumb.com"
-            git config user.name "CI Runner"
             . ../mirgecom/.ci-support/production-driver-setup.sh
             cd smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
