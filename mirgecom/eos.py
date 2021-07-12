@@ -39,7 +39,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.fluid import ConservedVars, make_conserved
+from mirgecom.fluid import ConservedVars
 
 
 @dataclass
@@ -457,11 +457,9 @@ class PyrometheusMixture(GasEOS):
         """Get the species mass source terms to be used on the RHS for chemistry."""
         omega = self.get_production_rates(cv)
         w = self.get_species_molecular_weights()
-        dim = len(cv.momentum)
         species_sources = w * omega
         rho_source = 0 * cv.mass
         mom_source = 0 * cv.momentum
         energy_source = 0 * cv.energy
 
-        return make_conserved(dim, rho_source, energy_source, mom_source,
-                              species_sources)
+        return ConservedVars(rho_source, energy_source, mom_source, species_sources)

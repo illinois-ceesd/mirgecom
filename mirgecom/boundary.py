@@ -36,7 +36,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import ConservedVars
 
 
 class PrescribedBoundary:
@@ -112,7 +112,6 @@ class AdiabaticSlipBoundary:
         E_plus = E_minus
         """
         # Grab some boundary-relevant data
-        dim = discr.dim
         actx = cv.mass.array_context
 
         # Grab a unit normal to the boundary
@@ -130,9 +129,9 @@ class AdiabaticSlipBoundary:
         ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
         # Form the external boundary solution with the new momentum
-        bndry_cv = make_conserved(dim=dim, mass=int_cv.mass,
-                                  energy=int_cv.energy,
-                                  momentum=ext_mom,
-                                  species_mass=int_cv.species_mass)
+        bndry_cv = ConservedVars(mass=int_cv.mass,
+                                 energy=int_cv.energy,
+                                 momentum=ext_mom,
+                                 species_mass=int_cv.species_mass)
 
         return TracePair(btag, interior=int_cv, exterior=bndry_cv)

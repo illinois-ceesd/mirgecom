@@ -193,7 +193,8 @@ def check_naninf_local(discr, dd, field):
 def compare_fluid_solutions(discr, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component."""
     resid = red_state - blue_state
-    return [discr.norm(v, np.inf) for v in resid.join()]
+    from mirgecom.fluid import flat_from_cv
+    return [discr.norm(v, np.inf) for v in flat_from_cv(resid)]
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

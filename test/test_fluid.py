@@ -32,12 +32,15 @@ import logging
 import pytest
 
 from pytools.obj_array import (
-    make_obj_array,
-    obj_array_vectorize
+    make_obj_array
 )
 
 from meshmode.dof_array import thaw
-from mirgecom.fluid import split_conserved, join_conserved
+from mirgecom.fluid import (
+    ConservedVars,
+    flat_from_cv,
+    cv_from_flat
+)
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -76,11 +79,11 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     velocity = vel_fac * nodes
     mom = mass * velocity
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    cv = split_conserved(dim, q)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
+    q = flat_from_cv(cv)
 
-    grad_q = obj_array_vectorize(discr.grad, q)
-    grad_cv = split_conserved(dim, grad_q)
+    grad_q = discr.grad(q)
+    grad_cv = cv_from_flat(dim, grad_q)
 
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
@@ -123,11 +126,11 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         velocity = make_obj_array([actx.np.cos(nodes[i]) for i in range(dim)])
         mom = mass*velocity
 
-        q = join_conserved(dim, mass=mass, energy=energy, momentum=mom)
-        cv = split_conserved(dim, q)
+        cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
+        q = flat_from_cv(cv)
 
-        grad_q = obj_array_vectorize(discr.grad, q)
-        grad_cv = split_conserved(dim, grad_q)
+        grad_q = discr.grad(q)
+        grad_cv = cv_from_flat(dim, grad_q)
 
         grad_v = velocity_gradient(discr, cv, grad_cv)
 

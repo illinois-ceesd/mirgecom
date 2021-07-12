@@ -41,7 +41,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import ConservedVars
 
 
 def make_pulse(amp, r0, w, r):
@@ -168,8 +168,7 @@ class Vortex2D:
 
         energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return make_conserved(dim=2, mass=mass, energy=energy,
-                              momentum=momentum)
+        return ConservedVars(mass=mass, energy=energy, momentum=momentum)
 
 
 class SodShock1D:
@@ -262,8 +261,7 @@ class SodShock1D:
             ]
         )
 
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+        return ConservedVars(mass=mass, energy=energy, momentum=mom)
 
 
 class Lump:
@@ -370,8 +368,7 @@ class Lump:
         mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+        return ConservedVars(mass=mass, energy=energy, momentum=mom)
 
     def exact_rhs(self, discr, cv, t=0.0):
         """
@@ -411,8 +408,7 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs)
+        return ConservedVars(mass=massrhs, energy=energyrhs, momentum=momrhs)
 
 
 class MulticomponentLump:
@@ -547,8 +543,8 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, species_mass=species_mass)
+        return ConservedVars(mass=mass, energy=energy, momentum=mom,
+            species_mass=species_mass)
 
     def exact_rhs(self, discr, cv, t=0.0):
         """
@@ -586,8 +582,8 @@ class MulticomponentLump:
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
 
-        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs, species_mass=specrhs)
+        return ConservedVars(mass=massrhs, energy=energyrhs, momentum=momrhs,
+            species_mass=specrhs)
 
 
 class AcousticPulse:
@@ -744,8 +740,8 @@ class Uniform:
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
         species_mass = self._mass_fracs * mass
 
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, species_mass=species_mass)
+        return ConservedVars(mass=mass, energy=energy, momentum=mom,
+            species_mass=species_mass)
 
     def exact_rhs(self, discr, cv, t=0.0):
         """
@@ -768,8 +764,8 @@ class Uniform:
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
         yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs, species_mass=yrhs)
+        return ConservedVars(mass=massrhs, energy=energyrhs, momentum=momrhs,
+            species_mass=yrhs)
 
 
 class MixtureInitializer:
@@ -851,5 +847,5 @@ class MixtureInitializer:
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, species_mass=specmass)
+        return ConservedVars(mass=mass, energy=energy, momentum=mom,
+            species_mass=specmass)

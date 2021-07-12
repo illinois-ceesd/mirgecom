@@ -43,7 +43,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import euler_operator
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import (
+    ConservedVars,
+    flat_from_cv,
+    cv_from_flat
+)
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import PrescribedBoundary, DummyBoundary
 from mirgecom.eos import IdealSingleGas
@@ -106,7 +110,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     mass_fractions = make_obj_array([rand() for _ in range(nspecies)])
     species_mass = mass * mass_fractions
 
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom,
                        species_mass=species_mass)
 
     # {{{ create the expected result
@@ -127,7 +131,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     for i in range(nspecies):
         expected_flux[dim+2+i] = mom * mass_fractions[i]
 
-    expected_flux = make_conserved(dim, q=expected_flux)
+    expected_flux = cv_from_flat(dim, expected_flux)
 
     # }}}
 
@@ -183,7 +187,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
     p_exact = discr.zeros(actx) + p0
     energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
     flux = inviscid_flux(discr, eos, cv)
     assert discr.norm(p - p_exact, np.inf) < tolerance
@@ -239,7 +243,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             p_exact / (eos.gamma() - 1.0)
             + 0.5 * np.dot(mom, mom) / mass
         )
-        cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+        cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(cv)
         assert discr.norm(p - p_exact, np.inf) < tolerance
         flux = inviscid_flux(discr, eos, cv)
@@ -300,8 +304,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         )
         species_mass_input = mass_input * mass_frac_input
 
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+        cv = ConservedVars(
+            mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
         from mirgecom.euler import _facial_flux
@@ -345,9 +349,9 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
 
-        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
+        dir_bval = ConservedVars(mass=dir_mass, energy=dir_e,
                                   momentum=dir_mom, species_mass=dir_mf)
-        dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
+        dir_bc = ConservedVars(mass=dir_mass, energy=dir_e,
                                 momentum=dir_mom, species_mass=dir_mf)
 
         boundary_flux = _facial_flux(
@@ -422,13 +426,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         species_mass_input = mass_input * mass_frac_input
         num_equations = dim + 2 + len(species_mass_input)
 
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+        cv = ConservedVars(
+            mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        expected_rhs = make_conserved(
-            dim, q=make_obj_array([discr.zeros(actx)
-                                   for i in range(num_equations)])
+        expected_rhs = cv_from_flat(
+            dim, make_obj_array([discr.zeros(actx)
+                                 for i in range(num_equations)])
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -467,8 +471,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         for i in range(len(mom_input)):
             mom_input[i] = discr.zeros(actx) + (-1.0) ** i
 
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+        cv = ConservedVars(
+            mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -544,7 +548,7 @@ def test_vortex_rhs(actx_factory, order):
             discr, eos=IdealSingleGas(), boundaries=boundaries,
             cv=vortex_soln, t=0.0)
 
-        err_max = discr.norm(inviscid_rhs.join(), np.inf)
+        err_max = discr.norm(flat_from_cv(inviscid_rhs), np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -598,7 +602,7 @@ def test_lump_rhs(actx_factory, dim, order):
             discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, t=0)
 
-        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
+        err_max = discr.norm(flat_from_cv(inviscid_rhs-expected_rhs), np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -667,7 +671,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, t=0)
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
-        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
+        err_max = discr.norm(flat_from_cv(inviscid_rhs-expected_rhs), np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -735,7 +739,7 @@ def _euler_flow_stepper(actx, parameters):
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)
         expected_result = initializer(nodes, t=t)
-        result_resid = (state - expected_result).join()
+        result_resid = flat_from_cv(state - expected_result)
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -792,9 +796,8 @@ def _euler_flow_stepper(actx, parameters):
         cv = rk4_step(cv, t, dt, rhs)
 
         # Apply spectral filter
-        cv = make_conserved(
-            dim, q=filter_modally(discr, "vol", cutoff, frfunc,
-                                  cv.join())
+        cv = cv_from_flat(
+            dim, filter_modally(discr, "vol", cutoff, frfunc, flat_from_cv(cv))
         )
 
         t += dt
@@ -807,7 +810,7 @@ def _euler_flow_stepper(actx, parameters):
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, t=t)
-        maxerr = discr.norm((cv - expected_result).join(), np.inf)
+        maxerr = discr.norm(flat_from_cv(cv - expected_result), np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:

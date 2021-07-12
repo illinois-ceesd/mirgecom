@@ -33,7 +33,10 @@ from arraycontext import (  # noqa
     as pytest_generate_tests
 )
 
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import (
+    ConservedVars,
+    flat_from_cv
+)
 from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import EagerDGDiscretization
@@ -64,7 +67,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     energy = zeros + .5*np.dot(mom, mom)/mass
 
     eos = IdealSingleGas()
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
     from mirgecom.simutil import check_range_local
@@ -78,7 +81,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     velocity = np.nan * nodes
     mom = mass * velocity
 
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
     from mirgecom.simutil import check_naninf_local
@@ -90,14 +93,14 @@ def test_basic_cfd_healthcheck(actx_factory):
     velocity = 2 * nodes
     mom = mass * velocity
 
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
     assert check_naninf_local(discr, "vol", pressure)
 
     # What the hey, test a good one
     energy = 2.5 + .5*np.dot(mom, mom)
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
     assert not check_naninf_local(discr, "vol", pressure)
@@ -132,9 +135,9 @@ def test_analytic_comparison(actx_factory):
     vortex_init = Vortex2D()
     vortex_soln = vortex_init(x_vec=nodes, eos=IdealSingleGas())
 
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+    cv = ConservedVars(mass=mass, energy=energy, momentum=mom)
     resid = vortex_soln - cv
-    expected_errors = [discr.norm(v, np.inf) for v in resid.join()]
+    expected_errors = [discr.norm(v, np.inf) for v in flat_from_cv(resid)]
 
     errors = compare_fluid_solutions(discr, cv, cv)
     assert max(errors) == 0

@@ -33,6 +33,10 @@ from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
+from mirgecom.fluid import (
+    ConservedVars,
+    flat_from_cv
+)
 
 
 logger = logging.getLogger(__name__)
@@ -64,9 +68,8 @@ def test_restart_cv(actx_factory, nspecies):
 
     rst_filename = f"test_{nspecies}.pkl"
 
-    from mirgecom.fluid import make_conserved
-    test_state = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                                species_mass=species_mass)
+    test_state = ConservedVars(mass=mass, energy=energy, momentum=mom,
+                               species_mass=species_mass)
 
     rst_data = {"state": test_state}
     from mirgecom.restart import write_restart_file
@@ -76,4 +79,4 @@ def test_restart_cv(actx_factory, nspecies):
     restart_data = read_restart_data(actx, rst_filename)
 
     resid = test_state - restart_data["state"]
-    assert discr.norm(resid.join(), np.inf) == 0
+    assert discr.norm(flat_from_cv(resid), np.inf) == 0

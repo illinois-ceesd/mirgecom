@@ -39,8 +39,6 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.initializers import MulticomponentLump
 
-from mirgecom.fluid import get_num_species
-
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
@@ -368,10 +366,10 @@ def test_multilump(ctx_factory, dim):
                               spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
     cv = lump(nodes)
-    numcvspec = get_num_species(dim, cv.join())
+    numcvspec = len(cv.species_mass)
     print(f"get_num_species = {numcvspec}")
 
-    assert get_num_species(dim, cv.join()) == nspecies
+    assert numcvspec == nspecies
     assert discr.norm(cv.mass - rho0) == 0.0
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)

@@ -60,8 +60,9 @@ from grudge.eager import (
     cross_rank_trace_pairs
 )
 from mirgecom.fluid import (
-    compute_wavespeed,
-    make_conserved
+    cv_from_flat,
+    flat_from_cv,
+    compute_wavespeed
 )
 
 from mirgecom.inviscid import (
@@ -142,18 +143,19 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    vol_weak = discr.weak_div(inviscid_flux(discr=discr, eos=eos, cv=cv).join())
+    vol_weak = discr.weak_div(
+        flat_from_cv(inviscid_flux(discr=discr, eos=eos, cv=cv)))
 
-    boundary_flux = (
+    boundary_flux = flat_from_cv(
         _facial_flux(discr=discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
         + sum(
             _facial_flux(
                 discr, eos=eos,
                 cv_tpair=TracePair(
                     part_pair.dd,
-                    interior=make_conserved(discr.dim, q=part_pair.int),
-                    exterior=make_conserved(discr.dim, q=part_pair.ext)))
-            for part_pair in cross_rank_trace_pairs(discr, cv.join()))
+                    interior=cv_from_flat(discr.dim, part_pair.int),
+                    exterior=cv_from_flat(discr.dim, part_pair.ext)))
+            for part_pair in cross_rank_trace_pairs(discr, flat_from_cv(cv)))
         + sum(
             _facial_flux(
                 discr=discr, eos=eos,
@@ -161,9 +163,9 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
                     discr, eos=eos, btag=btag, t=t, cv=cv)
             )
             for btag in boundaries)
-    ).join()
+    )
 
-    return make_conserved(
+    return cv_from_flat(
         discr.dim, q=discr.inverse_mass(vol_weak - discr.face_mass(boundary_flux))
     )
 
@@ -173,8 +175,7 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     from warnings import warn
     warn("Do not call inviscid_operator; it is now called euler_operator. This"
          "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries,
-                          make_conserved(discr.dim, q), t)
+    return euler_operator(discr, eos, boundaries, cv_from_flat(discr.dim, q), t)
 
 
 # By default, run unitless
