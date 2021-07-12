@@ -307,7 +307,7 @@ def get_local_max_species_diffusivity(transport, eos, cv):
     # fun fact: arraycontext needs these exact loop names to work (even though a
     # loopy kernel can have whatever iterator names the user wants)
     # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
-    # spatial locality
+    # spatial locality, causing fewer cache misses
     knl = arraycontext.make_loopy_program(
         "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
         "out[i1,i0] = max(i2, a[i2,i1,i0])"
