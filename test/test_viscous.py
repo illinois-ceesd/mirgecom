@@ -327,7 +327,7 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
     eos = IdealSingleGas(transport_model=tv_model)
 
     from mirgecom.viscous import get_viscous_timestep
-    dt_field = get_viscous_timestep(actx, discr, eos, cv)
+    dt_field = get_viscous_timestep(discr, eos, cv)
 
     speed_total = actx.np.sqrt(np.dot(velocity, velocity)) + eos.sound_speed(cv)
     dt_expected = chlen / (speed_total + (mu / chlen))

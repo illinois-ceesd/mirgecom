@@ -72,14 +72,13 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(actx, discr, state, t, dt, cfl, eos,
-                     t_final, constant_cfl=False):
+def get_sim_timestep(discr, state, t, dt, cfl, eos, t_final, constant_cfl=False):
     """Return the maximum stable dt."""
     t_remaining = max(0, t_final - t)
     mydt = dt
     if constant_cfl is True:
         from mirgecom.viscous import get_viscous_timestep
-        dt_field = get_viscous_timestep(actx=actx, discr=discr, eos=eos, cv=state)
+        dt_field = get_viscous_timestep(discr=discr, eos=eos, cv=state)
         from grudge.op import nodal_min
         mydt = cfl * nodal_min(discr, "vol", dt_field)
     return min(t_remaining, mydt)

@@ -225,13 +225,11 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
     return flux_weak
 
 
-def get_viscous_timestep(actx, discr, eos, cv):
+def get_viscous_timestep(discr, eos, cv):
     """Routine returns the the node-local maximum stable viscous timestep.
 
     Parameters
     ----------
-    actx: arraycontext.ArrayContext
-        the array context used to generate the conserved variables
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     eos: mirgecom.eos.GasEOS
@@ -256,18 +254,16 @@ def get_viscous_timestep(actx, discr, eos, cv):
 
     return(
         length_scales / (compute_wavespeed(eos, cv)
-        + ((mu + get_local_max_species_diffusivity(actx, transport, eos, cv))
+        + ((mu + get_local_max_species_diffusivity(transport, eos, cv))
         / length_scales))
     )
 
 
-def get_viscous_cfl(actx, discr, eos, dt, cv):
+def get_viscous_cfl(discr, eos, dt, cv):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
     ----------
-    actx: arraycontext.ArrayContext
-        the array context used to generate the conserved variables
     discr: :class:`grudge.eager.EagerDGDiscretization`
         the discretization to use
     eos: mirgecom.eos.GasEOS
@@ -283,16 +279,14 @@ def get_viscous_cfl(actx, discr, eos, dt, cv):
     :class:`meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
-    return dt / get_viscous_timestep(actx, discr, eos=eos, cv=cv)
+    return dt / get_viscous_timestep(discr, eos=eos, cv=cv)
 
 
-def get_local_max_species_diffusivity(actx, transport, eos, cv):
+def get_local_max_species_diffusivity(transport, eos, cv):
     """Return the maximum species diffusivity at every point.
 
     Parameters
     ----------
-    actx: arraycontext.ArrayContext
-        the array context used to generate the conserved variables
     transport: mirgecom.transport.TransportModel
         A model representing thermo-diffusive transport
     eos: mirgecom.eos.GasEOS
@@ -300,6 +294,8 @@ def get_local_max_species_diffusivity(actx, transport, eos, cv):
     cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
     """
+    actx = cv.array_context
+
     if(transport is None or transport._d_alpha.size == 0):
         return 0 * cv.mass / cv.mass
 
@@ -310,6 +306,8 @@ def get_local_max_species_diffusivity(actx, transport, eos, cv):
 
     # fun fact: arraycontext needs these exact loop names to work (even though a
     # loopy kernel can have whatever iterator names the user wants)
+    # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
+    # spatial locality
     knl = arraycontext.make_loopy_program(
         "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
         "out[i1,i0] = max(i2, a[i2,i1,i0])"
