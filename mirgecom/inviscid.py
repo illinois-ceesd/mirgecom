@@ -67,7 +67,7 @@ def inviscid_flux(discr, eos, cv):
 
 
 def get_inviscid_timestep(discr, eos, cv):
-    """Returns node-local estimates of the maximum stable timestep size for an inviscid fluid.
+    """Return node-local stable timestep estimate for an inviscid fluid.
 
     The maximum stable timestep is computed from the acoustic wavespeed.
 
@@ -94,7 +94,7 @@ def get_inviscid_timestep(discr, eos, cv):
 
 
 def get_inviscid_cfl(discr, eos, dt, cv):
-    """Calculate and return node-local CFL based on current state and timestep.
+    """Return node-local CFL based on current state and timestep.
 
     Parameters
     ----------
