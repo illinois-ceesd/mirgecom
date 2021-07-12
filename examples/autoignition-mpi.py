@@ -315,28 +315,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                     f" {eq_density=}, {eq_mass_fractions=}")
 
     def my_write_status(dt, cfl):
-        if constant_cfl:
-            status_msg = f"------ {dt=}"
-        else:
-            status_msg = f"------ {cfl=}"
+        status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if rank == 0:
             logger.info(status_msg)
 
     def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
-                     production_rates=None):
+                     production_rates=None, cfl=None):
         if dv is None:
             dv = eos.dependent_vars(state)
         if production_rates is None:
             production_rates = eos.get_production_rates(state)
-        viz_fields = [("cv", state),
-                      ("dv", dv),
-                      ("production_rates", production_rates)]
         if ts_field is None:
             ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
-        if constant_cfl:
-            viz_fields.append(("local_dt", ts_field))
-        else:
-            viz_fields.append(("local_cfl", ts_field))
+        viz_fields = [("cv", state),
+                      ("dv", dv),
+                      ("production_rates", production_rates),
+                      ("dt" if constant_cfl else "cfl", ts_field)]
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
@@ -373,6 +367,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         return health_error
 
     def my_get_timestep(t, dt, state):
+        #  richer interface to calculate {dt,dfl} returns node-local estimates
         t_remaining = max(0, t_final - t)
         if constant_cfl:
             from mirgecom.inviscid import get_inviscid_timestep
@@ -424,7 +419,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                     dv = eos.dependent_vars(state)
                 my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
                              production_rates=production_rates,
-                             ts_field=ts_field)
+                             ts_field=ts_field, cfl=cfl)
 
         except MyRuntimeError:
             if rank == 0:
@@ -464,7 +459,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=current_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
-                 dv=final_dv, production_rates=final_dm, ts_field=ts_field)
+                 dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
     my_write_status(dt=dt, cfl=cfl)
     my_write_restart(step=current_step, t=current_t, state=current_state)
 
