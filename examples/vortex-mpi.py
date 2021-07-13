@@ -217,9 +217,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_status(state, component_errors, cfl=None):
         if cfl is None:
-            from mirgecom.inviscid import get_inviscid_cfl
-            cfl = current_cfl if constant_cfl else \
-                get_inviscid_cfl(discr, eos, current_dt, state)
+            if constant_cfl:
+                cfl = current_cfl
+            else:
+                from grudge.op import nodal_max
+                from mirgecom.inviscid import get_inviscid_cfl
+                cfl = nodal_max(discr, "vol",
+                                get_inviscid_cfl(discr, eos, current_dt, cv=state))
         if rank == 0:
             logger.info(
                 f"------ {cfl=}\n"
