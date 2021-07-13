@@ -161,6 +161,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
@@ -177,9 +180,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if use_profiling:
             logmgr.add_watches(["multiply_time.max"])
-
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
 
     # soln setup and init
     eos = IdealSingleGas()
@@ -237,7 +237,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("residual", resid)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
