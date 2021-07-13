@@ -13,14 +13,14 @@ are used to inject user code into the main timestepping loop of :mod:`mirgecom`.
 
 Consider the following code from the time stepper, :mod:`~mirgecom.steppers`:
 
-> while t < t_final:
->   if pre_step_callback:
->     state, dt = pre_step_callback(step, t, dt, state)
->   state = rk4(dt, state)
->   t = t + dt
->   step = step + 1
->   if post_step_callback:
->     state, dt = post_step_callback(step, t, dt, state)
+| while t < t_final:
+|   if pre_step_callback:
+|     state, dt = pre_step_callback(step, t, dt, state)
+|   state = rk4(dt, state)
+|   t = t + dt
+|   step = step + 1
+|   if post_step_callback:
+|     state, dt = post_step_callback(step, t, dt, state)
 
 The above snippet is typical of the time stepping loop logic, and includes
 a model call to a Runge-Kutta 4th order time integrator to advance the state.
