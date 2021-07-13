@@ -715,8 +715,9 @@ def _euler_flow_stepper(actx, parameters):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
+
     cv = initializer(nodes)
-    sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, cv=cv)
+    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -799,7 +800,7 @@ def _euler_flow_stepper(actx, parameters):
         t += dt
         istep += 1
 
-        sdt = get_inviscid_timestep(discr, eos=eos, cfl=cfl, cv=cv)
+        sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
