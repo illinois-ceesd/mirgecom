@@ -75,7 +75,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_leap=False,
-         use_profiling=False, rst_step=None, rst_name=None,
+         use_profiling=False, rst_filename=None,
          casename="nsmix", use_logmgr=True):
     """Drive example."""
     cl_ctx = ctx_factory()
@@ -102,41 +102,39 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 2
-    nel_1d = 8
-    order = 1
-
+    # Timestepping control
     # This example runs only 3 steps by default (to keep CI ~short)
-    # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
     t_final = 3e-9
     current_cfl = .0009
-    velocity = np.zeros(shape=(dim,))
     current_dt = 1e-9
     current_t = 0
     constant_cfl = True
-    nstatus = 1
-    nviz = 5
-    nrestart = 5
-    nhealth = 1
     current_step = 0
     timestepper = rk4_step
     debug = False
 
+    # Some i/o frequencies
+    nstatus = 1
+    nviz = 5
+    nrestart = 5
+    nhealth = 1
+
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    if rst_step:  # read the grid from restart data
-        rst_fname = rst_pattern.format(cname=rst_name, step=rst_step, rank=rank)
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_fname)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
+        nel_1d = 8
         box_ll = -0.005
         box_ur = 0.005
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -147,6 +145,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    order = 1
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -239,6 +238,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     # }}}
 
     # {{{ MIRGE-Com state initialization
+    velocity = np.zeros(shape=(dim,))
 
     # Initialize the fluid/gas state with Cantera-consistent data:
     # (density, pressure, temperature, mass_fractions)
@@ -251,9 +251,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
-    if rst_step:
+    if rst_filename:
         current_t = restart_data["t"]
-        current_step = rst_step
+        current_step = restart_data["step"]
         current_state = restart_data["state"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
@@ -325,17 +325,18 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
-        rst_data = {
-            "local_mesh": local_mesh,
-            "state": state,
-            "t": t,
-            "step": step,
-            "order": order,
-            "global_nelements": global_nelements,
-            "num_parts": nparts
-        }
-        from mirgecom.restart import write_restart_file
-        write_restart_file(actx, rst_data, rst_fname, comm)
+        if rst_fname != rst_filename:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": state,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": nparts
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(state, dv):
         # Note: This health check is tuned to expected results
@@ -395,10 +396,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            if step == rst_step:  # don't do viz or restart @ restart
-                do_viz = False
-                do_restart = False
-
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
@@ -437,6 +434,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                              boundaries=visc_bnds, eos=eos)
         reaction_source = eos.get_species_source_terms(state)
         return ns_rhs + reaction_source
+
+    current_dt = get_sim_timestep(discr, current_state, current_t,
+                                  current_dt, current_cfl, eos,
+                                  t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
