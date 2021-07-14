@@ -36,8 +36,8 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.transport import SimpleTransport
+from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
-# from mirgecom.heat import heat_operator
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -50,7 +50,6 @@ from mirgecom.boundary import (  # noqa
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.simutil import get_sim_timestep
 import cantera
 import pyrometheus as pyro
 
@@ -103,20 +102,22 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    # Timestepping control
     # This example runs only 3 steps by default (to keep CI ~short)
-    # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
     t_final = 3e-9
-    current_cfl = 1.0
+    current_cfl = .0009
     current_dt = 1e-9
     current_t = 0
-    constant_cfl = False
-    nviz = 5
-    nrestart = 5
-    nhealth = 1
+    constant_cfl = True
     current_step = 0
     timestepper = rk4_step
     debug = False
+
+    # Some i/o frequencies
+    nstatus = 1
+    nviz = 5
+    nrestart = 5
+    nhealth = 1
 
     dim = 2
     rst_path = "restart_data/"
@@ -133,9 +134,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
+        nel_1d = 8
         box_ll = -0.005
         box_ur = 0.005
-        nel_1d = 8
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
@@ -237,10 +238,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     # }}}
 
     # {{{ MIRGE-Com state initialization
+    velocity = np.zeros(shape=(dim,))
 
     # Initialize the fluid/gas state with Cantera-consistent data:
     # (density, pressure, temperature, mass_fractions)
-    velocity = np.zeros(shape=(dim,))
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
@@ -299,6 +300,17 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
+    def my_write_status(step, t, dt, state):
+        if rank == 0:
+            if constant_cfl:
+                cfl = current_cfl
+            else:
+                from mirgecom.viscous import get_viscous_cfl
+                cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
+                from grudge.op import nodal_max
+                cfl = nodal_max(discr, "vol", cfl_field)
+            logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
+
     def my_write_viz(step, t, state, dv=None, production_rates=None):
         if dv is None:
             dv = eos.dependent_vars(state)
@@ -327,7 +339,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(state, dv):
-        # Note: This health check is tuned to 3-step expectations
+        # Note: This health check is tuned to expected results
         #       which effectively makes this example a CI test that
         #       the case gets the expected solution.  If dt,t_final or
         #       other run parameters are changed, this check should
@@ -339,7 +351,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.05e5),
+        if allsync(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.06e5),
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
@@ -351,7 +363,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(check_range_local(discr, "vol", dv.temperature, 1450, 1550),
+        if allsync(check_range_local(discr, "vol", dv.temperature, 1450, 1570),
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
@@ -360,12 +372,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
-
-    def my_rhs(t, state):
-        ns_rhs = ns_operator(discr, cv=state, t=t,
-                             boundaries=visc_bnds, eos=eos)
-        reaction_source = eos.get_species_source_terms(state)
-        return ns_rhs + reaction_source
 
     def my_pre_step(step, t, dt, state):
         try:
@@ -378,6 +384,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step, interval=nstatus)
 
             if do_health:
                 dv = eos.dependent_vars(state)
@@ -399,6 +406,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 my_write_viz(step=step, t=t, state=state, dv=dv,
                              production_rates=production_rates)
 
+            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+                                  t_final, constant_cfl)
+            if do_status:
+                my_write_status(step, t, dt, state)
+
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
@@ -406,8 +418,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
-                              constant_cfl)
         return state, dt
 
     def my_post_step(step, t, dt, state):
@@ -419,8 +429,15 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logmgr.tick_after()
         return state, dt
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
+    def my_rhs(t, state):
+        ns_rhs = ns_operator(discr, cv=state, t=t,
+                             boundaries=visc_bnds, eos=eos)
+        reaction_source = eos.get_species_source_terms(state)
+        return ns_rhs + reaction_source
+
+    current_dt = get_sim_timestep(discr, current_state, current_t,
+                                  current_dt, current_cfl, eos,
+                                  t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -432,8 +449,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
+    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                current_cfl, eos, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_status(current_step, current_t, final_dt, current_state)
 
     if logmgr:
         logmgr.close()
