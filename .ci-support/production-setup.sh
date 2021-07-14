@@ -27,5 +27,7 @@ if [ -n "${GITHUB_HEAD_REF}" ]; then
     git fetch changes
     git checkout changes/${GITHUB_HEAD_REF}
     git checkout ${CURRENT_BRANCH}
+    cp .ci-support/production-setup.sh my-setup.sh
     git merge changes/${GITHUB_HEAD_REF} --no-edit
+    cp my-setup.sh .ci-support/production-setup.sh
 fi
