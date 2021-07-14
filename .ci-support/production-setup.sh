@@ -25,9 +25,11 @@ if [ -n "${GITHUB_HEAD_REF}" ]; then
     fi
     git remote add changes https://github.com/${CURRENT_FORK_OWNER}/mirgecom
     git fetch changes
+    cp -r .ci-support y1-ci-support
     git checkout changes/${GITHUB_HEAD_REF}
+    cp ./y1-ci-support/production-setup.sh .ci-setup/
+    git add .ci-setup/production-setup.sh
+    git commit -am 'Retain y1 setup script.'
     git checkout ${CURRENT_BRANCH}
-    cp .ci-support/production-setup.sh my-setup.sh
     git merge changes/${GITHUB_HEAD_REF} --no-edit
-    cp my-setup.sh .ci-support/production-setup.sh
 fi
