@@ -182,6 +182,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     boundaries = {
         BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
     }
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
