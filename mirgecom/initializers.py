@@ -226,14 +226,12 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+    def __call__(self, x_vec, *, eos=None, **kwargs):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
         Parameters
         ----------
-        time: float
-            Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.IdealSingleGas`
@@ -725,14 +723,12 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+    def __call__(self, x_vec, *, eos=None, **kwargs):
         """
         Create a uniform flow solution at locations *x_vec*.
 
         Parameters
         ----------
-        time: float
-            Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.IdealSingleGas`
@@ -756,9 +752,8 @@ class Uniform:
 
         Parameters
         ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point. (unused)
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
         t: float
             Time at which RHS is desired (unused)
         """
@@ -820,7 +815,7 @@ class MixtureInitializer:
         self._temperature = temperature
         self._massfracs = massfractions
 
-    def __call__(self, x_vec, eos, *, time=0.0, **kwargs):
+    def __call__(self, x_vec, eos, **kwargs):
         """
         Create the mixture state at locations *x_vec* (t is ignored).
 
@@ -833,8 +828,6 @@ class MixtureInitializer:
             these functions:
             `eos.get_density`
             `eos.get_internal_energy`
-        time: float
-            Time is ignored by this solution intitializer (unused)
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"

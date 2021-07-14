@@ -44,9 +44,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
-
 import numpy as np
 import grudge.op as op
 
@@ -88,11 +86,6 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
         - Constant DT mode: returns the minimum of (t_final-t, dt)
         - Constant CFL mode: returns (cfl * max_dt)
 
-    .. important::
-        The current implementation is calculating an acoustic-limited
-        timestep and CFL for an inviscid fluid. The addition of viscous
-        fluxes includes modification to this routine.
-
     Parameters
     ----------
     discr
@@ -117,16 +110,32 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     float
         The maximum stable DT based on inviscid fluid acoustic wavespeed.
     """
-    mydt = dt
     t_remaining = max(0, t_final - t)
+    mydt = dt
     if constant_cfl:
-        from mirgecom.inviscid import get_inviscid_timestep
+        from mirgecom.viscous import get_viscous_timestep
         from grudge.op import nodal_min
-        mydt = cfl * nodal_min(
-            discr, "vol",
-            get_inviscid_timestep(discr=discr, eos=eos, cv=state)
-        )
+        mydt = cfl * nodal_min(discr, "vol",
+                               get_viscous_timestep(discr, eos, state))
     return min(t_remaining, mydt)
+
+
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
+
+
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    return (
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
+    )
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
@@ -146,10 +155,18 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     comm = discr.mpi_communicator
     rank = 0
-    if comm is not None:
+    if comm:
         rank = comm.Get_rank()
 
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+
+    if rank == 0:
+        import os
+        viz_dir = os.path.dirname(rank_fn)
+        if viz_dir and not os.path.exists(viz_dir):
+            os.makedirs(viz_dir)
+    if comm:
+        comm.barrier()
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
@@ -164,24 +181,6 @@ def write_visfile(discr, io_fields, visualizer, vizname,
                 basename=vizname, step=step, t=t
             )
         )
-
-
-def allsync(local_values, comm=None, op=None):
-    """Perform allreduce if MPI comm is provided."""
-    if comm is None:
-        return local_values
-    if op is None:
-        from mpi4py import MPI
-        op = MPI.MAX
-    return comm.allreduce(local_values, op=op)
-
-
-def check_range_local(discr, dd, field, min_value, max_value):
-    """Check for any negative values."""
-    return (
-        op.nodal_min_loc(discr, dd, field) < min_value
-        or op.nodal_max_loc(discr, dd, field) > max_value
-    )
 
 
 def check_naninf_local(discr, dd, field):

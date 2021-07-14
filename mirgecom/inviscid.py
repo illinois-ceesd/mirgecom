@@ -90,23 +90,19 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         "all_faces"; remaining instead on the boundary restriction.
     """
     actx = cv_tpair.int.array_context
-    dim = discr.dim
 
     flux_tpair = TracePair(cv_tpair.dd,
                            interior=inviscid_flux(discr, eos, cv_tpair.int),
                            exterior=inviscid_flux(discr, eos, cv_tpair.ext))
 
     lam = actx.np.maximum(
-        compute_wavespeed(dim, eos=eos, cv=cv_tpair.int),
-        compute_wavespeed(dim, eos=eos, cv=cv_tpair.ext)
+        compute_wavespeed(eos=eos, cv=cv_tpair.int),
+        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
     )
 
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    # flux_weak = make_conserved(
-    #     dim, q=lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
-    # )
     flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
@@ -128,7 +124,7 @@ def get_inviscid_timestep(discr, eos, cv):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid soluition
+        Fluid solution
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
@@ -138,7 +134,7 @@ def get_inviscid_timestep(discr, eos, cv):
     from mirgecom.fluid import compute_wavespeed
     return (
         characteristic_lengthscales(cv.array_context, discr)
-        / compute_wavespeed(discr, eos, cv)
+        / compute_wavespeed(eos, cv)
     )
 
 
@@ -155,7 +151,7 @@ def get_inviscid_cfl(discr, eos, dt, cv):
     dt: float or :class:`~meshmode.dof_array.DOFArray`
         A constant scalar dt or node-local dt
     cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid solution
+        The fluid conserved variables
 
     Returns
     -------
