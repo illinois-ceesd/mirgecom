@@ -4,7 +4,7 @@ General utilities
 -----------------
 
 .. autofunction:: check_step
-.. autofunction:: inviscid_sim_timestep
+.. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
 .. autofunction:: allsync
 
@@ -44,11 +44,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
-
 import numpy as np
-from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 import grudge.op as op
 
 logger = logging.getLogger(__name__)
@@ -75,15 +72,70 @@ def check_step(step, interval):
     return False
 
 
-def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
-                          t_final, constant_cfl=False):
-    """Return the maximum stable dt."""
-    mydt = dt
+def get_sim_timestep(discr, state, t, dt, cfl, eos,
+                     t_final, constant_cfl=False):
+    """Return the maximum stable timestep for a typical fluid simulation.
+
+    This routine returns *dt*, the users defined constant timestep, or
+    *max_dt*, the maximum domain-wide stability-limited
+    timestep for a fluid simulation. It calls the collective:
+    :func:`~grudge.op.nodal_min` on the inside which makes it
+    domain-wide regardless of parallel decomposition.
+
+    Two modes are supported:
+        - Constant DT mode: returns the minimum of (t_final-t, dt)
+        - Constant CFL mode: returns (cfl * max_dt)
+
+    Parameters
+    ----------
+    discr
+        Grudge discretization or discretization collection?
+    state: :class:`~mirgecom.fluid.ConservedVars`
+        The fluid state.
+    t: float
+        Current time
+    t_final: float
+        Final time
+    dt: float
+        The current timestep
+    cfl: float
+        The current CFL number
+    eos: :class:`~mirgecom.eos.GasEOS`
+        Gas equation-of-state supporting speed_of_sound
+    constant_cfl: bool
+        True if running constant CFL mode
+
+    Returns
+    -------
+    float
+        The maximum stable DT based on inviscid fluid acoustic wavespeed.
+    """
     t_remaining = max(0, t_final - t)
-    if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, cv=state,
-                                     cfl=cfl, eos=eos)
+    mydt = dt
+    if constant_cfl:
+        from mirgecom.viscous import get_viscous_timestep
+        from grudge.op import nodal_min
+        mydt = cfl * nodal_min(discr, "vol",
+                               get_viscous_timestep(discr, eos, state))
     return min(t_remaining, mydt)
+
+
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
+
+
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    return (
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
+    )
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
@@ -103,10 +155,18 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     comm = discr.mpi_communicator
     rank = 0
-    if comm is not None:
+    if comm:
         rank = comm.Get_rank()
 
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+
+    if rank == 0:
+        import os
+        viz_dir = os.path.dirname(rank_fn)
+        if viz_dir and not os.path.exists(viz_dir):
+            os.makedirs(viz_dir)
+    if comm:
+        comm.barrier()
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
@@ -121,24 +181,6 @@ def write_visfile(discr, io_fields, visualizer, vizname,
                 basename=vizname, step=step, t=t
             )
         )
-
-
-def allsync(local_values, comm=None, op=None):
-    """Perform allreduce if MPI comm is provided."""
-    if comm is None:
-        return local_values
-    if op is None:
-        from mpi4py import MPI
-        op = MPI.MAX
-    return comm.allreduce(local_values, op=op)
-
-
-def check_range_local(discr, dd, field, min_value, max_value):
-    """Check for any negative values."""
-    return (
-        op.nodal_min_loc(discr, dd, field) < min_value
-        or op.nodal_max_loc(discr, dd, field) > max_value
-    )
 
 
 def check_naninf_local(discr, dd, field):

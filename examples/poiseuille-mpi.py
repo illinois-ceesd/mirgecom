@@ -40,6 +40,8 @@ from grudge.dof_desc import DTAG_BOUNDARY
 
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import get_sim_timestep
+
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
@@ -85,7 +87,7 @@ def _get_box_mesh(dim, a, b, n, t=None):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_leap=False,
-         use_profiling=False, rst_step=None, rst_name=None,
+         use_profiling=False, rst_filename=None,
          casename="poiseuille", use_logmgr=True):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -112,42 +114,43 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 2
-    order = 1
-    t_final = 1e-7
-    current_cfl = 1.0
+    # timestepping control
+    timestepper = rk4_step
+    t_final = 1e-6
+    current_cfl = 0.1
     current_dt = 1e-8
     current_t = 0
-    casename = "poiseuille"
-    constant_cfl = False
+    constant_cfl = True
+    current_step = 0
+
+    # some i/o frequencies
     nstatus = 1
     nviz = 1
     nrestart = 100
     nhealth = 1
-    current_step = 0
-    timestepper = rk4_step
-    left_boundary_location = 0
-    right_boundary_location = 0.1
-    npts_axis = (50, 30)
-    rank = comm.Get_rank()
 
+    # some geometry setup
+    dim = 2
     if dim != 2:
         raise ValueError("This example must be run with dim = 2.")
+    left_boundary_location = 0
+    right_boundary_location = 0.1
 
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    if rst_step:  # read the grid from restart data
-        rst_fname = rst_pattern.format(cname=rst_name, step=rst_step, rank=rank)
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_fname)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
+        npts_axis = (50, 30)
         box_ll = (left_boundary_location, 0.0)
         box_ur = (right_boundary_location, 0.02)
         generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
@@ -156,6 +159,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    order = 1
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -210,9 +214,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                   DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary()}
     eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=1.0))
 
-    if rst_step:
+    if rst_filename:
         current_t = restart_data["t"]
-        current_step = rst_step
+        current_step = restart_data["step"]
         current_state = restart_data["state"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
@@ -236,14 +240,20 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(step, t, dt, dv):
+    def my_write_status(step, t, dt, dv, state):
         from grudge.op import nodal_min, nodal_max
         p_min = nodal_min(discr, "vol", dv.pressure)
         p_max = nodal_max(discr, "vol", dv.pressure)
         t_min = nodal_min(discr, "vol", dv.temperature)
         t_max = nodal_max(discr, "vol", dv.temperature)
+        if constant_cfl:
+            cfl = current_cfl
+        else:
+            from mirgecom.viscous import get_viscous_cfl
+            cfl = nodal_max(discr, "vol",
+                            get_viscous_cfl(discr, eos, dt, state))
         if rank == 0:
-            logger.info(f"Step: {step}, DT: {dt}\n"
+            logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
                         f"----- Temperature({t_min}, {t_max})\n")
 
@@ -258,17 +268,18 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
-        rst_data = {
-            "local_mesh": local_mesh,
-            "state": state,
-            "t": t,
-            "step": step,
-            "order": order,
-            "global_nelements": global_nelements,
-            "num_parts": nparts
-        }
-        from mirgecom.restart import write_restart_file
-        write_restart_file(actx, rst_data, rst_fname, comm)
+        if rst_fname != rst_filename:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": state,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": nparts
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(state, dv):
         health_error = False
@@ -323,10 +334,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            if step == rst_step:  # don't do viz or restart @ restart
-                do_viz = False
-                do_restart = False
-
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
@@ -335,13 +342,13 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                     dv = eos.dependent_vars(state)
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
-            t_remaining = max(0, t_final - t)
-            dt = min(dt, t_remaining)
+            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+                                  t_final, constant_cfl)
 
             if do_status:  # needed because logging fails to make output
                 if dv is None:
                     dv = eos.dependent_vars(state)
-                my_write_status(step=step, t=t, dt=dt, dv=dv)
+                my_write_status(step=step, t=t, dt=dt, dv=dv, state=state)
 
         except MyRuntimeError:
             if rank == 0:
@@ -364,6 +371,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     def my_rhs(t, state):
         return ns_operator(discr, eos=eos, boundaries=boundaries, cv=state, t=t)
 
+    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                  current_cfl, eos, t_final, constant_cfl)
+
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
@@ -374,8 +384,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
+    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                current_cfl, eos, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_status(step=current_step, t=current_t, dt=final_dt, dv=final_dv,
+                    state=current_state)
 
     if logmgr:
         logmgr.close()

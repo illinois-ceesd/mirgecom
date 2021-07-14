@@ -42,7 +42,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
@@ -239,6 +239,11 @@ class ConservedVars:
         """Return the number of physical dimensions."""
         return len(self.momentum)
 
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return(ConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(ConservedVars)))
+
     def join(self):
         """Call :func:`join_conserved` on *self*."""
         return join_conserved(
@@ -321,8 +326,12 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
 
 
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
-                   q=None):
+                   q=None, scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
+    if scalar_quantities is not None:
+        return split_conserved(dim, q=scalar_quantities)
+    if vector_quantities is not None:
+        return split_conserved(dim, q=vector_quantities)
     if q is not None:
         return split_conserved(dim, q=q)
     if mass is None or energy is None or momentum is None:
@@ -381,7 +390,7 @@ def velocity_gradient(discr, cv, grad_cv):
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
                                        - velocity[i]*grad_cv.mass
                                        for i in range(cv.dim)])
-    grad_v = np.empty(shape=(discr.dim, discr.dim), dtype=object)
+    grad_v = np.empty(shape=(cv.dim, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_v[idx] = v
     return grad_v
@@ -420,13 +429,13 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
                                        - y[i]*grad_cv.mass
                                        for i in range(nspecies)])
-    grad_y = np.empty(shape=(nspecies, discr.dim), dtype=object)
+    grad_y = np.empty(shape=(nspecies, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):
         grad_y[idx] = v
     return grad_y
 
 
-def compute_wavespeed(dim, eos, cv: ConservedVars):
+def compute_wavespeed(eos, cv: ConservedVars):
     r"""Return the wavespeed in the flow.
 
     The wavespeed is calculated as:
