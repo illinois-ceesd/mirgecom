@@ -50,7 +50,7 @@ from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
-from logpyle import set_dt
+from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.logging_quantities import (
@@ -151,11 +151,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     nodes = thaw(actx, discr.nodes())
 
+    vis_timer = None
+
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
@@ -211,7 +216,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("residual", resid)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(state, step, t):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
