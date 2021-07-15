@@ -244,6 +244,11 @@ class ConservedVars:
         return(ConservedVars, tuple(getattr(self, f.name)
                                     for f in fields(ConservedVars)))
 
+    @property
+    def velocity(self):
+        """Return the fluid velocity = momentum / mass."""
+        return self.momentum / self.mass
+
     def join(self):
         """Call :func:`join_conserved` on *self*."""
         return join_conserved(
@@ -447,5 +452,5 @@ def compute_wavespeed(eos, cv: ConservedVars):
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
     actx = cv.array_context
-    v = cv.momentum / cv.mass
+    v = cv.velocity
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
