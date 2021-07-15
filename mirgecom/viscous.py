@@ -50,7 +50,6 @@ from mirgecom.fluid import (
 )
 from meshmode.dof_array import thaw
 
-import pyopencl as cl
 import arraycontext
 
 
@@ -300,7 +299,7 @@ def get_local_max_species_diffusivity(transport, eos, cv):
         return 0 * cv.mass / cv.mass
 
     species_diffusivity = transport.species_diffusivity(eos, cv)
-    stacked_diffusivity = cl.array.stack([x[0] for x in species_diffusivity])
+    stacked_diffusivity = actx.np.stack([x[0] for x in species_diffusivity])
 
     n_species, ni1, ni0 = stacked_diffusivity.shape
 
