@@ -32,8 +32,12 @@ PRODUCTION_ENV_FILE="$1"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
     if [ -f "$PRODUCTION_ENV_FILE" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
-        source $PRODUCTION_ENV_FILE
+        sh $PRODUCTION_ENV_FILE
     else
+        pwd
+        ls ../
+        ls ../mirgecom
+        ls ../mirgecom/.ci-support
         echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
