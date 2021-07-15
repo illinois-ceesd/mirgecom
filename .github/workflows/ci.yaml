@@ -166,23 +166,18 @@ jobs:
 
         steps:
         - uses: actions/checkout@v2
-        - name: Prepare Y1 environment
+        - name: Prepare production environment
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            ./install.sh --branch=y1-production
-            cd mirgecom
-            . ../../mirgecom/.ci-support/production-setup.sh
-
+            . ../mirgecom/.ci-support/production-install.sh ../mirgecom/.ci-support/production-testing-env.sh
         - name: Run Y1 production test
           run: |
             cd ..
             source emirge.y1/config/activate_env.sh
-            git clone https://github.com/illinois-ceesd/drivers_y1-nozzle y1-production-driver
-            cd y1-production-driver
-            . ../mirgecom/.ci-support/production-driver-setup.sh
-            cd smoke_test
+            . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
+            cd production-driver/smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
