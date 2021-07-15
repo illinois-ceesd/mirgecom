@@ -43,12 +43,12 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
+    get_sim_timestep,
     generate_and_distribute_mesh,
     write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
@@ -144,12 +144,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    restarting = rst_filename is not None
-    if restarting:  # read the grid from restart data
-        rst_fname = f"{rst_filename}-{rank:04d}.pkl"
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_fname)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
@@ -172,11 +171,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     )
     nodes = thaw(actx, discr.nodes())
 
+    vis_timer = None
+
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
@@ -188,9 +192,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
-
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
 
     # {{{  Set up initial state using Cantera
 
@@ -262,7 +263,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
-    if restarting:
+    if rst_filename:
         current_step = rst_step
         current_t = rst_time
         if logmgr:
@@ -315,16 +316,25 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_viz(step, t, state, dv=None, production_rates=None):
+    def my_write_status(dt, cfl):
+        status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
+        if rank == 0:
+            logger.info(status_msg)
+
+    def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
+                     production_rates=None, cfl=None):
         if dv is None:
             dv = eos.dependent_vars(state)
         if production_rates is None:
             production_rates = eos.get_production_rates(state)
+        if ts_field is None:
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
         viz_fields = [("cv", state),
                       ("dv", dv),
-                      ("production_rates", production_rates)]
+                      ("production_rates", production_rates),
+                      ("dt" if constant_cfl else "cfl", ts_field)]
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
@@ -358,6 +368,23 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
         return health_error
 
+    def my_get_timestep(t, dt, state):
+        #  richer interface to calculate {dt,cfl} returns node-local estimates
+        t_remaining = max(0, t_final - t)
+        if constant_cfl:
+            from mirgecom.inviscid import get_inviscid_timestep
+            ts_field = current_cfl * get_inviscid_timestep(discr, eos=eos, cv=state)
+            from grudge.op import nodal_min
+            dt = nodal_min(discr, "vol", ts_field)
+            cfl = current_cfl
+        else:
+            from mirgecom.inviscid import get_inviscid_cfl
+            ts_field = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
+            from grudge.op import nodal_max
+            cfl = nodal_max(discr, "vol", ts_field)
+
+        return ts_field, cfl, min(t_remaining, dt)
+
     def my_pre_step(step, t, dt, state):
         try:
             dv = None
@@ -369,6 +396,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
                 dv = eos.dependent_vars(state)
@@ -379,6 +407,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+
+            if do_status:
+                my_write_status(dt, cfl)
+
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
@@ -386,18 +419,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                 production_rates = eos.get_production_rates(state)
                 if dv is None:
                     dv = eos.dependent_vars(state)
-                my_write_viz(step=step, t=t, state=state, dv=dv,
-                             production_rates=production_rates)
+                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+                             production_rates=production_rates,
+                             ts_field=ts_field, cfl=cfl)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
+            my_write_viz(step=step, t=t, dt=dt, state=state)
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        t_remaining = max(0, t_final - t)
-        return state, min(dt, t_remaining)
+        return state, dt
 
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
@@ -413,6 +446,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
+    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                  current_cfl, eos, t_final, constant_cfl)
+
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
@@ -425,8 +461,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     final_dv = eos.dependent_vars(current_state)
     final_dm = eos.get_production_rates(current_state)
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
-                 production_rates=final_dm)
+    ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
+                                        state=current_state)
+    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+                 dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
+    my_write_status(dt=dt, cfl=cfl)
     my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
