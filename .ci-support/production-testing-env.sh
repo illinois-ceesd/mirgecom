@@ -14,7 +14,7 @@
 # patched by the incoming development. The following vars control the
 # production environment:
 #
-# PRODUCTION_BRANCH=""   # The base production branch to be installed by emirge
+PRODUCTION_BRANCH="y1-production-testing"   # The base production branch to be installed by emirge
 # PRODUCTION_CHANGE_FORK=""  # The fork/home of production changes (if any)
 # PRODUCTION_CHANGE_BRANCH=""  # Branch from which to pull prod changes (if any)
 #
