@@ -179,5 +179,5 @@ jobs:
             cd ..
             source emirge.y1/config/activate_env.sh
             . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
-            cd production_driver/smoke_test
+            cd production-driver/smoke_test
             python -m mpi4py ./nozzle.py -i run_params.yaml
