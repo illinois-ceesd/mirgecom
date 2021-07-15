@@ -21,7 +21,8 @@
 # If the environment file does not exist, the current development is
 # tested against `mirgecom@y1-production`. 
 set -x
-
+pwd
+ls -R ../../
 # defaults and automatics
 DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
 DEVELOPMENT_FORK="illinois-ceesd"
@@ -34,7 +35,6 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
         source $PRODUCTION_ENV_FILE
     else
-        pwd
         echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
