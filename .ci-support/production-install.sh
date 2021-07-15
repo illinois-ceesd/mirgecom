@@ -32,8 +32,11 @@ PRODUCTION_ENV_FILE="$1"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
     if [ -e "$PRODUCTION_ENV_FILE" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
-        sh $PRODUCTION_ENV_FILE
+        . $PRODUCTION_ENV_FILE
     else
+        ls $PRODUCTION_ENV_FILE
+        MYCD=$(pwd)
+        echo "My Current Directory: $MYCD"
         echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
