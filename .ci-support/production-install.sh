@@ -34,6 +34,9 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
         . $PRODUCTION_ENV_FILE
     else
+        ls ../
+        ls ../mirgecom
+        ls ../mirgecom/.ci-support
         ls $PRODUCTION_ENV_FILE
         MYCD=$(pwd)
         echo "My Current Directory: $MYCD"
