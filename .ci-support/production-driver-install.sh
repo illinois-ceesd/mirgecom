@@ -21,7 +21,7 @@ PRODUCTION_DRIVER_NAME="drivers_y1-nozzle"
 PRODUCTION_DRIVER_BRANCH="update-y1-callbacks"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
     PRODUCTION_ENV_FILE="$1"
-    if [ -f "$PRODUCTION_ENV_FILE" ]; then
+    if [ -e "$PRODUCTION_ENV_FILE" ]; then
         . $PRODUCTION_ENV_FILE
     fi
 fi
