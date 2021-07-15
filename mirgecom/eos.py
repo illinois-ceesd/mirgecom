@@ -428,12 +428,12 @@ class PyrometheusMixture(GasEOS):
         """
         @memoize_in(cv, (PyrometheusMixture.pressure,
                          type(self._pyrometheus_mech)))
-        def get():
+        def get_pressure():
             temperature = self.temperature(cv)
             y = self.species_fractions(cv)
             return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
 
-        return get()
+        return get_pressure()
 
     def sound_speed(self, cv: ConservedVars):
         r"""Get the speed of sound in the gas.
@@ -446,10 +446,11 @@ class PyrometheusMixture(GasEOS):
         """
         @memoize_in(cv, (PyrometheusMixture.sound_speed,
                          type(self._pyrometheus_mech)))
-        def get():
+        def get_sos():
             actx = cv.array_context
             return actx.np.sqrt((self.gamma(cv) * self.pressure(cv)) / cv.mass)
-        return get()
+
+        return get_sos()
 
     def temperature(self, cv: ConservedVars):
         r"""Get the thermodynamic temperature of the gas.
@@ -464,13 +465,13 @@ class PyrometheusMixture(GasEOS):
         """
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
-        def get():
+        def get_temp():
             y = self.species_fractions(cv)
             e = self.internal_energy(cv) / cv.mass
             return self._pyrometheus_mech.get_temperature(e, self._tguess,
                                                           y, True)
 
-        return get()
+        return get_temp()
 
     def total_energy(self, cv, pressure):
         r"""
