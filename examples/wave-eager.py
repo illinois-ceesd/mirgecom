@@ -42,11 +42,10 @@ from meshmode.array_context import PyOpenCLArrayContext
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
-    logmgr_add_device_memory_usage)
+                                         logmgr_add_device_name,
+                                         logmgr_add_device_memory_usage)
 
 
 def bump(actx, discr, t=0):
@@ -117,8 +116,6 @@ def main(use_profiling=False, use_logmgr=False):
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
@@ -150,7 +147,7 @@ def main(use_profiling=False, use_logmgr=False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-
+            print(istep, t, discr.norm(fields[0], np.inf))
             vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),

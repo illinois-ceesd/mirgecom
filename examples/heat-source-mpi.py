@@ -43,9 +43,9 @@ from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
-    logmgr_add_device_memory_usage)
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
+                                         logmgr_add_device_name,
+                                         logmgr_add_device_memory_usage)
+
 from logpyle import IntervalTimer, set_dt
 
 
@@ -130,8 +130,6 @@ def main(use_profiling=False, use_logmgr=False):
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
@@ -162,6 +160,7 @@ def main(use_profiling=False, use_logmgr=False):
             logmgr.tick_before()
 
         if istep % 10 == 0:
+            print(istep, t, discr.norm(u))
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", u)

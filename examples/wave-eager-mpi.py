@@ -44,11 +44,10 @@ from mirgecom.wave import wave_operator
 import pyopencl.tools as cl_tools
 
 from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-    logmgr_add_many_discretization_quantities, logmgr_add_device_name,
-    logmgr_add_device_memory_usage)
+                                         logmgr_add_device_name,
+                                         logmgr_add_device_memory_usage)
 
 
 def bump(actx, discr, t=0):
@@ -173,8 +172,6 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
@@ -217,6 +214,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             )
 
         if istep % 10 == 0:
+            print(istep, t, discr.norm(fields[0]))
             vis.write_parallel_vtk_file(
                 comm,
                 "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
