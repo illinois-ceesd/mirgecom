@@ -173,7 +173,7 @@ jobs:
             cd ..
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            . ../mirgecom/ci-support/production-install.sh ../mirgcom/.ci-support/production-testing-env.sh
+            . ../mirgecom/.ci-support/production-install.sh ../mirgcom/.ci-support/production-testing-env.sh
 
         - name: Run Y1 production test
           run: |
