@@ -31,9 +31,19 @@ PRODUCTION_CHANGE_BRANCH=""
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
     PRODUCTION_ENV_FILE="$1"
     if [ -f "$PRODUCTION_ENV_FILE" ]; then
-        . $PRODUCTION_ENV_FILE
+        echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
+        source $PRODUCTION_ENV_FILE
+    else
+        echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
+        echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
 fi
+echo "Production environment settings:"
+echo "DEVELOPMENT_FORK=$DEVELOPMENT_FORK"
+echo "DEVELOPMENT_BRANCH=$DEVELOPMENT_BRANCH"
+echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
+echo "PRODUCTION_CHANGE_FORK=$PRODUCTION_CHANGE_FORK"
+echo "PRODUCTION_CHANGE_BRANCH=$PRODUCTION_CHANGE_BRANCH"
 
 # Install the production branch with emirge
 ./install.sh --branch=${PRODUCTION_BRANCH}
