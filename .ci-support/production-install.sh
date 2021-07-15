@@ -28,17 +28,19 @@ DEVELOPMENT_FORK="illinois-ceesd"
 PRODUCTION_BRANCH="y1-production"
 PRODUCTION_CHANGE_FORK=""
 PRODUCTION_CHANGE_BRANCH=""
+PRODUCTION_ENV_FILE="$1"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
-    PRODUCTION_ENV_FILE="$1"
     if [ -f "$PRODUCTION_ENV_FILE" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
         source $PRODUCTION_ENV_FILE
     else
+        pwd
         echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
 fi
 echo "Production environment settings:"
+echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE"
 echo "DEVELOPMENT_FORK=$DEVELOPMENT_FORK"
 echo "DEVELOPMENT_BRANCH=$DEVELOPMENT_BRANCH"
 echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
