@@ -37,89 +37,129 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
+from logpyle import IntervalTimer, set_dt
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
-    inviscid_sim_timestep,
-    sim_checkpoint,
-    check_step,
+    get_sim_timestep,
     generate_and_distribute_mesh,
-    ExactSolutionMismatch
+    write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
+
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_many_discretization_quantities,
+    logmgr_add_device_name,
+    logmgr_add_device_memory_usage,
+    set_sim_state
+)
+
 import cantera
 import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
 
+class MyRuntimeError(RuntimeError):
+    """Simple exception for fatal driver errors."""
+
+    pass
+
+
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=False,
-         restart_step=None, restart_name=None):
+def main(ctx_factory=cl.create_some_context, use_logmgr=False,
+         use_leap=False, use_profiling=False, casename="autoignition",
+         rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive example."""
     cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 2
-    nel_1d = 8
-    order = 1
-
-    # This example runs only 3 steps by default (to keep CI ~short)
-    # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
-    t_final = 1e-8
-    current_cfl = 1.0
-    velocity = np.zeros(shape=(dim,))
-    current_dt = 1e-9
-    current_t = 0
-    constant_cfl = False
-    nstatus = 1
-    nviz = 5
-    nrestart = 5
-    rank = 0
-    checkpoint_t = current_t
-    current_step = 0
-    if use_leap:
-        from leap.rk import RK4MethodBuilder
-        timestepper = RK4MethodBuilder("state")
-    else:
-        timestepper = rk4_step
-    box_ll = -0.005
-    box_ur = 0.005
-    error_state = False
-    debug = False
+    if casename is None:
+        casename = "mirgecom"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     nproc = comm.Get_size()
 
-    restart_file_pattern = "{casename}-{step:04d}-{rank:04d}.pkl"
-    restart_path = "restart_data/"
-    if restart_step:
-        if not restart_name:
-            restart_name = casename
-        rst_filename = (
-            restart_path
-            + restart_file_pattern.format(casename=restart_name,
-                                          step=restart_step, rank=rank)
-        )
+    logmgr = initialize_logmgr(use_logmgr,
+        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    # Some discretization parameters
+    dim = 2
+    nel_1d = 8
+    order = 1
+
+    # {{{ Time stepping control
+
+    # This example runs only 3 steps by default (to keep CI ~short)
+    # With the mixture defined below, equilibrium is achieved at ~40ms
+    # To run to equlibrium, set t_final >= 40ms.
+
+    # Time stepper selection
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
+
+    # Time loop control parameters
+    current_step = 0
+    t_final = 1e-8
+    current_cfl = 1.0
+    current_dt = 1e-9
+    current_t = 0
+    constant_cfl = False
+
+    # i.o frequencies
+    nstatus = 1
+    nviz = 5
+    nhealth = 1
+    nrestart = 5
+
+    # }}}  Time stepping control
+
+    debug = False
+
+    rst_path = "restart_data/"
+    rst_pattern = (
+        rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
+    )
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
+
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["nparts"] == nproc
-    else:
+        assert restart_data["num_parts"] == nproc
+        rst_time = restart_data["t"]
+        rst_step = restart_data["step"]
+        rst_order = restart_data["order"]
+    else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
+        box_ll = -0.005
+        box_ur = 0.005
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
@@ -130,6 +170,28 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
+
+    vis_timer = None
+
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                             extract_vars_for_logging, units_for_logging)
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
+        logmgr.add_watches([
+            ("step.max", "step = {value}, "),
+            ("t_sim.max", "sim time: {value:1.6e} s\n"),
+            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("max_pressure",    "{value:1.9e})\n"),
+            ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+            ("max_temperature",    "{value:7g})\n"),
+            ("t_step.max", "------- step walltime: {value:6g} s, "),
+            ("t_log.max", "log walltime: {value:6g} s")
+        ])
 
     # {{{  Set up initial state using Cantera
 
@@ -193,6 +255,7 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
     # Initialize the fluid/gas state with Cantera-consistent data:
     # (density, pressure, temperature, mass_fractions)
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
+    velocity = np.zeros(shape=(dim,))
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
@@ -200,10 +263,22 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
-    if restart_step:
-        current_t = restart_data["t"]
-        current_step = restart_step
-        current_state = restart_data["state"]
+    if rst_filename:
+        current_step = rst_step
+        current_t = rst_time
+        if logmgr:
+            from mirgecom.logging_quantities import logmgr_set_time
+            logmgr_set_time(logmgr, current_step, current_t)
+        if order == rst_order:
+            current_state = restart_data["state"]
+        else:
+            rst_state = restart_data["state"]
+            old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
+                                              mpi_communicator=comm)
+            from meshmode.discretization.connection import make_same_mesh_connection
+            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
+                                                   old_discr.discr_from_dd("vol"))
+            current_state = connection(rst_state)
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes, t=0)
@@ -241,71 +316,180 @@ def main(ctx_factory=cl.create_some_context, casename="autoignition", use_leap=F
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    get_timestep = partial(inviscid_sim_timestep, discr=discr, t=current_t,
-                           dt=current_dt, cfl=current_cfl, eos=eos,
-                           t_final=t_final, constant_cfl=constant_cfl)
+    def my_write_status(dt, cfl):
+        status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
+        if rank == 0:
+            logger.info(status_msg)
+
+    def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
+                     production_rates=None, cfl=None):
+        if dv is None:
+            dv = eos.dependent_vars(state)
+        if production_rates is None:
+            production_rates = eos.get_production_rates(state)
+        if ts_field is None:
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+        viz_fields = [("cv", state),
+                      ("dv", dv),
+                      ("production_rates", production_rates),
+                      ("dt" if constant_cfl else "cfl", ts_field)]
+        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+
+    def my_write_restart(step, t, state):
+        rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
+        if rst_fname == rst_filename:
+            if rank == 0:
+                logger.info("Skipping overwrite of restart file.")
+        else:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": state,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": nproc
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
+
+    def my_health_check(dv):
+        health_error = False
+        from mirgecom.simutil import check_naninf_local, check_range_local
+        if check_naninf_local(discr, "vol", dv.pressure) \
+           or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
+            health_error = True
+            logger.info(f"{rank=}: Invalid pressure data found.")
+
+        if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
+            health_error = True
+            logger.info(f"{rank=}: Invalid temperature data found.")
+
+        return health_error
+
+    def my_get_timestep(t, dt, state):
+        #  richer interface to calculate {dt,cfl} returns node-local estimates
+        t_remaining = max(0, t_final - t)
+        if constant_cfl:
+            from mirgecom.inviscid import get_inviscid_timestep
+            ts_field = current_cfl * get_inviscid_timestep(discr, eos=eos, cv=state)
+            from grudge.op import nodal_min
+            dt = nodal_min(discr, "vol", ts_field)
+            cfl = current_cfl
+        else:
+            from mirgecom.inviscid import get_inviscid_cfl
+            ts_field = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
+            from grudge.op import nodal_max
+            cfl = nodal_max(discr, "vol", ts_field)
+
+        return ts_field, cfl, min(t_remaining, dt)
+
+    def my_pre_step(step, t, dt, state):
+        try:
+            dv = None
+
+            if logmgr:
+                logmgr.tick_before()
+
+            from mirgecom.simutil import check_step
+            do_viz = check_step(step=step, interval=nviz)
+            do_restart = check_step(step=step, interval=nrestart)
+            do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
+
+            if do_health:
+                dv = eos.dependent_vars(state)
+                from mirgecom.simutil import allsync
+                health_errors = allsync(my_health_check(dv), comm, op=MPI.LOR)
+                if health_errors:
+                    if rank == 0:
+                        logger.info("Fluid solution failed health check.")
+                    raise MyRuntimeError("Failed simulation health check.")
+
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+
+            if do_status:
+                my_write_status(dt, cfl)
+
+            if do_restart:
+                my_write_restart(step=step, t=t, state=state)
+
+            if do_viz:
+                production_rates = eos.get_production_rates(state)
+                if dv is None:
+                    dv = eos.dependent_vars(state)
+                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+                             production_rates=production_rates,
+                             ts_field=ts_field, cfl=cfl)
+
+        except MyRuntimeError:
+            if rank == 0:
+                logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, dt=dt, state=state)
+            my_write_restart(step=step, t=t, state=state)
+            raise
+
+        return state, dt
+
+    def my_post_step(step, t, dt, state):
+        # Logmgr needs to know about EOS, dt, dim?
+        # imo this is a design/scope flaw
+        if logmgr:
+            set_dt(logmgr, dt)
+            set_sim_state(logmgr, dim, state, eos)
+            logmgr.tick_after()
+        return state, dt
 
     def my_rhs(t, state):
         return (euler_operator(discr, cv=state, t=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
-    def my_checkpoint(step, t, dt, state):
-        if check_step(step, nrestart) and step != restart_step:
-            rst_filename = (
-                restart_path
-                + restart_file_pattern.format(casename=casename, step=step,
-                                              rank=rank)
-            )
-            rst_data = {
-                "local_mesh": local_mesh,
-                "state": current_state,
-                "t": t,
-                "step": step,
-                "global_nelements": global_nelements,
-                "num_parts": nproc
-            }
-            from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_filename, comm)
+    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                  current_cfl, eos, t_final, constant_cfl)
 
-        # awful - computes potentially expensive viz quantities
-        #         regardless of whether it is time to viz
-        reaction_rates = eos.get_production_rates(state)
-        viz_fields = [("reaction_rates", reaction_rates)]
-        return sim_checkpoint(discr, visualizer, eos, cv=state,
-                              vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              constant_cfl=constant_cfl, comm=comm,
-                              viz_fields=viz_fields)
+    current_step, current_t, current_state = \
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=current_dt,
+                      state=current_state, t=current_t, t_final=t_final)
 
-    try:
-        (current_step, current_t, current_state) = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                checkpoint=my_checkpoint,
-                get_timestep=get_timestep, state=current_state,
-                t=current_t, t_final=t_final)
-    except ExactSolutionMismatch as ex:
-        error_state = True
-        current_step = ex.step
-        current_t = ex.t
-        current_state = ex.state
+    # Dump the final data
+    if rank == 0:
+        logger.info("Checkpointing final state ...")
 
-    if not check_step(current_step, nviz):  # If final step not an output step
-        if rank == 0:
-            logger.info("Checkpointing final state ...")
-        my_checkpoint(current_step, t=current_t,
-                      dt=(current_t - checkpoint_t),
-                      state=current_state)
+    final_dv = eos.dependent_vars(current_state)
+    final_dm = eos.get_production_rates(current_state)
+    ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
+                                        state=current_state)
+    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+                 dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
+    my_write_status(dt=dt, cfl=cfl)
+    my_write_restart(step=current_step, t=current_t, state=current_state)
 
-    if current_t - t_final < 0:
-        error_state = True
+    if logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
 
-    if error_state:
-        raise ValueError("Simulation did not complete successfully.")
+    finish_tol = 1e-16
+    assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    main(use_leap=False)
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    use_profiling = False
+    use_logging = False
+    use_leap = False
+    casename = "autoignition"
+    import argparse
+    parser = argparse.ArgumentParser(description="Autoignition (MPI version)")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    args = parser.parse_args()
+
+    main(use_profiling=use_profiling, use_logmgr=use_logging, use_leap=use_leap,
+         casename=casename, actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
 
 # vim: foldmethod=marker

@@ -19,8 +19,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
+
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
@@ -28,6 +28,7 @@ import pyopencl as cl
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
 from meshmode.dof_array import thaw
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -42,24 +43,45 @@ from mirgecom.diffusion import (
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
+from mirgecom.logging_quantities import (initialize_logmgr,
+                                         logmgr_add_device_name,
+                                         logmgr_add_device_memory_usage)
+
+from logpyle import IntervalTimer, set_dt
+
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
-    """Drive example."""
-    cl_ctx = ctx_factory()
+def main(use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
+    cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = actx_class(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
+
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = PyOpenCLProfilingArrayContext(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
 
     dim = 2
     nel_1d = 16
+
+    t = 0
+    t_final = 0.01
+    istep = 0
 
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -106,6 +128,23 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
 
     u = discr.zeros(actx)
 
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
     vis = make_visualizer(discr)
 
     def rhs(t, u):
@@ -117,11 +156,10 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
 
     rank = comm.Get_rank()
 
-    t = 0
-    t_final = 0.01
-    istep = 0
+    while t < t_final:
+        if logmgr:
+            logmgr.tick_before()
 
-    while True:
         if istep % 10 == 0:
             print(istep, t, discr.norm(u))
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
@@ -129,12 +167,13 @@ def main(ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
                         ("u", u)
                         ])
 
-        if t >= t_final:
-            break
-
         u = rk4_step(u, t, dt, rhs)
         t += dt
         istep += 1
+
+        if logmgr:
+            set_dt(logmgr, dt)
+            logmgr.tick_after()
 
 
 if __name__ == "__main__":
@@ -146,6 +185,10 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
+    # Turn off profiling to not overwhelm CI
+    use_profiling = False
+    use_logging = False
+    main(use_profiling=use_profiling, use_logmgr=use_logging,
+         actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
 
 # vim: foldmethod=marker

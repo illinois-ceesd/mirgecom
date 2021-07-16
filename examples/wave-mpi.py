@@ -21,8 +21,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
+
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
@@ -33,6 +33,8 @@ from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
 from meshmode.dof_array import thaw
 
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
@@ -42,6 +44,12 @@ from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
 
 import pyopencl.tools as cl_tools
+
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.logging_quantities import (initialize_logmgr,
+                                         logmgr_add_device_name,
+                                         logmgr_add_device_memory_usage)
 
 
 def bump(actx, discr, t=0):
@@ -64,12 +72,11 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None, ctx_factory=cl.create_some_context, actx_class=PyOpenCLArrayContext):
+def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None,
+         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
-    cl_ctx = ctx_factory()
+    cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = actx_class(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     lazy_eval = isinstance(actx_class, PytatoPyOpenCLArrayContext)
 
@@ -77,6 +84,19 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="wave-eager.sqlite", mode="wu", mpi_comm=comm)
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
 
@@ -153,6 +173,23 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         else:
             fields = restart_fields
 
+    if logmgr:
+        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
     vis = make_visualizer(discr)
 
     def rhs(t, w):
@@ -162,6 +199,9 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
 
     while t < t_final:
+        if logmgr:
+            logmgr.tick_before()
+
         # restart must happen at beginning of step
         if istep % 100 == 0 and (
                 # Do not overwrite the restart file that we just read.
@@ -200,9 +240,16 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         t += dt
         istep += 1
 
+        if logmgr:
+            set_dt(logmgr, dt)
+            logmgr.tick_after()
+
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
+    # Turn off profiling to not overwhelm CI
+    use_profiling = False
+    use_logging = True
 
     import argparse
     parser = argparse.ArgumentParser(description="Wave (MPI version)")
@@ -210,7 +257,7 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
+    main(use_profiling=use_profiling, use_logmgr=use_logging, actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
 
 
 # vim: foldmethod=marker

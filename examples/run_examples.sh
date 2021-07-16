@@ -9,6 +9,7 @@ origin=$(pwd)
 examples_dir=${1-$origin}
 declare -i exitcode=0
 echo "*** Running examples in $examples_dir ..."
+failed_examples=""
 for example in $examples_dir/*.py
 do
     if [[ "$example" == *"-mpi.py" ]]
@@ -33,6 +34,7 @@ do
     else
         ((exitcode=exitcode+1))
         echo "*** Example $example failed."
+        failed_examples="$failed_examples $example"
     fi
 done
 echo "*** Done running examples!"
@@ -40,7 +42,7 @@ if [[ $exitcode -eq 0 ]]
 then
     echo "*** No errors."
 else
-    echo "*** Errors detected ($exitcode)."
+    echo "*** Errors detected ($exitcode):($failed_examples )"
     exit $exitcode
 fi
 #rm -f examples/*.vtu
