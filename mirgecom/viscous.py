@@ -296,7 +296,7 @@ def get_local_max_species_diffusivity(transport, eos, cv):
     actx = cv.array_context
 
     if(transport is None or transport._d_alpha.size == 0):
-        return 0 * cv.mass / cv.mass
+        return 0 * cv.mass
 
     species_diffusivity = transport.species_diffusivity(eos, cv)
     stacked_diffusivity = actx.np.stack([x[0] for x in species_diffusivity])
