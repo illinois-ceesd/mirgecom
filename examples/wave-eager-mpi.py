@@ -162,8 +162,10 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         restart_fields = restart_data["fields"]
         old_order = restart_data["order"]
         if old_order != order:
-            old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
-                                              mpi_communicator=comm)
+            old_discr = DiscretizationCollection(
+                actx, local_mesh, order=old_order,
+                mpi_communicator=comm
+            )
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))

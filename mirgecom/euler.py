@@ -56,6 +56,7 @@ import numpy as np  # noqa
 
 from arraycontext import thaw
 
+from grudge.trace_pair import TracePair
 import grudge.op as op
 
 from mirgecom.fluid import (
@@ -152,15 +153,14 @@ def euler_operator(dcoll, eos, boundaries, cv, t=0.0):
     )
 
     boundary_flux = (
-        _facial_flux(dcoll=dcoll, eos=eos, cv_tpair=interior_trace_pair(dcoll, cv))
-        + sum(
+        sum(
             _facial_flux(
                 dcoll, eos=eos,
                 cv_tpair=TracePair(
-                    part_pair.dd,
-                    interior=split_conserved(dcoll.dim, part_pair.int),
-                    exterior=split_conserved(dcoll.dim, part_pair.ext)))
-            for part_pair in cross_rank_trace_pairs(dcoll, cv.join()))
+                    qt_pair.dd,
+                    interior=split_conserved(dcoll.dim, qt_pair.int),
+                    exterior=split_conserved(dcoll.dim, qt_pair.ext)))
+            for qt_pair in op.interior_trace_pairs(dcoll, cv.join()))
         + sum(
             _facial_flux(
                 dcoll=dcoll, eos=eos,

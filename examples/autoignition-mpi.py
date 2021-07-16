@@ -175,7 +175,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -272,10 +272,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
             current_state = restart_data["state"]
         else:
             rst_state = restart_data["state"]
-            old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
-                                              mpi_communicator=comm)
+            old_discr = DiscretizationCollection(
+                actx, local_mesh, order=rst_order,
+                mpi_communicator=comm
+            )
             from meshmode.discretization.connection import make_same_mesh_connection
-            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
+            connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
             current_state = connection(rst_state)
     else:

@@ -32,6 +32,7 @@ from pytools.obj_array import flat_obj_array
 
 from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
 
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
