@@ -243,7 +243,7 @@ def test_diffusive_heat_flux(actx_factory):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_local_max_species_diffusivity(actx_factory, dim):
     actx = actx_factory()
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
