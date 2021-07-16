@@ -239,11 +239,6 @@ class ConservedVars:
         """Return the number of physical dimensions."""
         return len(self.momentum)
 
-    def __reduce__(self):
-        """Return a tuple reproduction of self for pickling."""
-        return(ConservedVars, tuple(getattr(self, f.name)
-                                    for f in fields(ConservedVars)))
-
     @property
     def velocity(self):
         """Return the fluid velocity = momentum / mass."""
@@ -257,6 +252,11 @@ class ConservedVars:
             energy=self.energy,
             momentum=self.momentum,
             species_mass=self.species_mass)
+
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return (ConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(ConservedVars)))
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
