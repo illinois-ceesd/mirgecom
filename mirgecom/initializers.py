@@ -11,11 +11,12 @@ Solution Initializers
 .. autoclass:: AcousticPulse
 .. automethod: make_pulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: Discontinuity
+.. autoclass:: DoubleMachReflection
+.. autoclass:: PlanarDiscontinuity
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -42,7 +43,8 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
-from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.fluid import split_conserved, join_conserved
+from numbers import Number
 
 
 def make_pulse(amp, r0, w, r):
@@ -131,7 +133,7 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
@@ -224,7 +226,7 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
@@ -329,7 +331,7 @@ class Lump:
         self._rho0 = rho0
         self._rhoamp = rhoamp
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
@@ -499,7 +501,7 @@ class MulticomponentLump:
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create a multi-component lump solution at time *t* and locations *x_vec*.
 
@@ -630,7 +632,7 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+    def __call__(self, x_vec, q, eos=IdealSingleGas(), **kwargs):
         """
         Create the acoustic pulse at locations *x_vec*.
 
@@ -713,7 +715,7 @@ class Uniform:
         self._e = e
         self._dim = dim
 
-    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas(), **kwargs):
         """
         Create a uniform flow solution at locations *x_vec*.
 
@@ -732,7 +734,6 @@ class Uniform:
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
         species_mass = self._mass_fracs * mass
 
-        from mirgecom.euler import join_conserved
         return join_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
@@ -806,7 +807,7 @@ class MixtureInitializer:
         self._temperature = temperature
         self._massfracs = massfractions
 
-    def __call__(self, x_vec, eos, *, t=0.0):
+    def __call__(self, x_vec, eos, *, t=0.0, **kwargs):
         """
         Create the mixture state at locations *x_vec* (t is ignored).
 
@@ -844,76 +845,174 @@ class MixtureInitializer:
                               momentum=mom, species_mass=specmass)
 
 
-class Discontinuity:
-    r"""Initializes the flow to a discontinuous state.
+class PlanarDiscontinuity:
+    r"""Solution initializer for flow with a discontinuity.
 
-    The inital condition is defined by a hyperbolic tanh function
-    on a planar interface located at x=xloc for all conserved variables
+    This initializer creates a physics-consistent flow solution
+    given an initial thermal state (pressure, temperature) and an EOS.
 
-    This function only serves as an initial condition
+    The solution varies across a planar interface defined by a tanh function
+    located at disc_location for pressure, temperature, velocity, and mass fraction
 
     .. automethod:: __init__
     .. automethod:: __call__
     """
 
     def __init__(
-            self, dim=2, x0=0., rhol=0.1, rhor=0.01, pl=20, pr=10.,
-            ul=None, ur=None, uc=None, sigma=0.5
+            self, *, dim=3, normal_dir=0, disc_location=0, nspecies=0,
+            temperature_left, temperature_right,
+            pressure_left, pressure_right,
+            velocity_left=None, velocity_right=None,
+            species_mass_left=None, species_mass_right=None,
+            convective_velocity=None, sigma=0.5
+    ):
+        r"""Initialize mixture parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specifies the number of dimensions for the solution
+        normal_dir: int
+            specifies the direction (plane) the discontinuity is applied in
+        disc_location: float or Function[float]
+           location of discontinuity (in time)
+        nspecies: int
+            specifies the number of mixture species
+        pressure_left: float
+            pressure to the left of the discontinuity
+        temperature_left: float
+            temperature to the left of the discontinuity
+        velocity_left: numpy.ndarray
+            velocity (vector) to the left of the discontinuity
+        species_mass_left: numpy.ndarray
+            species mass fractions to the left of the discontinuity
+        pressure_right: float
+            pressure to the right of the discontinuity
+        temperature_right: float
+            temperaure to the right of the discontinuity
+        velocity_right: numpy.ndarray
+            velocity (vector) to the right of the discontinuity
+        species_mass_right: numpy.ndarray
+            species mass fractions to the right of the discontinuity
+        sigma: float
+           sharpness parameter
+        """
+        if velocity_left is None:
+            velocity_left = np.zeros(shape=(dim,))
+        if velocity_right is None:
+            velocity_right = np.zeros(shape=(dim,))
+
+        if species_mass_left is None:
+            species_mass_left = np.zeros(shape=(nspecies,))
+        if species_mass_right is None:
+            species_mass_right = np.zeros(shape=(nspecies,))
+
+        self._nspecies = nspecies
+        self._dim = dim
+        self._disc_location = disc_location
+        self._sigma = sigma
+        self._ul = velocity_left
+        self._ur = velocity_right
+        self._uc = convective_velocity
+        self._pl = pressure_left
+        self._pr = pressure_right
+        self._tl = temperature_left
+        self._tr = temperature_right
+        self._yl = species_mass_left
+        self._yr = species_mass_right
+        self._xdir = normal_dir
+        if self._xdir >= self._dim:
+            self._xdir = self._dim - 1
+
+    def __call__(self, x_vec, eos, *, t=0.0):
+        """
+        Create the mixture state at locations *x_vec*.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Coordinates at which solution is desired
+        eos:
+            Mixture-compatible equation-of-state object must provide
+            these functions:
+            `eos.get_density`
+            `eos.get_internal_energy`
+        t: float
+            Time at which solution is desired.
+            The location is (optionally) dependent on time
+        """
+        if x_vec.shape != (self._dim,):
+            raise ValueError(f"Position vector has unexpected dimensionality,"
+                             f" expected {self._dim}.")
+
+        x = x_vec[self._xdir]
+        actx = x.array_context
+        if isinstance(self._disc_location, Number):
+            x0 = self._disc_location
+        else:
+            x0 = self._disc_location(t)
+
+        xtanh = 1.0/self._sigma*(x0 - x)
+        weight = 0.5*(1.0 - actx.np.tanh(xtanh))
+        pressure = self._pl + (self._pr - self._pl)*weight
+        temperature = self._tl + (self._tr - self._tl)*weight
+        velocity = self._ul + (self._ur - self._ul)*weight
+        y = self._yl + (self._yr - self._yl)*weight
+
+        if self._nspecies:
+            mass = eos.get_density(pressure, temperature, y)
+        else:
+            mass = pressure/temperature/eos.gas_const()
+
+        specmass = mass * y
+        mom = mass * velocity
+        if self._nspecies:
+            internal_energy = eos.get_internal_energy(temperature, y)
+        else:
+            internal_energy = pressure/mass/(eos.gamma() - 1)
+
+        kinetic_energy = 0.5 * np.dot(velocity, velocity)
+        energy = mass * (internal_energy + kinetic_energy)
+
+        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=specmass)
+
+
+class DoubleMachReflection:
+    r"""Implement the double shock reflection problem.
+
+    The inital condition is defined after Woodward and Collela:
+
+    .. math::
+        (\rho,u,v,P) =
+
+    This function only serves as an initial condition.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, dim=2, shock_location=1.0/6.0, shock_speed=4.0
     ):
         """Initialize initial condition options.
 
         Parameters
         ----------
         dim: int
-           dimension of domain
-        x0: float
-           location of discontinuity
-        rhol: float
-           density to the left of the discontinuity
-        rhor: float
-           density to the right of the discontinuity
-        pl: float
-           pressure to the left of the discontinuity
-        pr: float
-           pressure to the right of the discontinutiy
-        ul: numpy.ndarray
-            flow velocity to the left of the discontinuity
-        ur: numpy.ndarray
-            flow velocity to the right of the discontinuity
-        uc: numpy.ndarray
-            convective velocity (discontinuity advection speed)
-        sigma: float
-           sharpness parameter
+           dimension of domain, must be 2
+        shock_location: float
+           location of shock
+        shock_speed: float
+           shock speed, Mach number
         """
+        self._shock_location = shock_location
         self._dim = dim
-        self._x0 = x0
-        self._rhol = rhol
-        self._rhor = rhor
-        self._pl = pl
-        self._pr = pr
-        self._sigma = sigma
+        self._shock_speed = shock_speed
 
-        if ul is None:
-            ul = np.zeros(shape=(dim,))
-        if ur is None:
-            ur = np.zeros(shape=(dim,))
-        if uc is None:
-            uc = np.zeros(shape=(dim,))
-
-        self._ul = ul
-        self._ur = ur
-        self._uc = uc
-
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
-        r"""
-        Create the discontinuity at locations *x_vec*.
-
-        profile is defined by:
-
-        .. math::
-
-        {\rho} = \frac{{\rho}_{l}}{2}*(tanh(\frac{{x}_{0}-{x}}{\sigma})+1) +
-                 \frac{{\rho}_{r}}{2}*(tanh(\frac{{x}-{x}_{0}}{\sigma})+1)
+    def __call__(self, x_vec, *, t=0, eos=IdealSingleGas()):
+        """
+        Create the 1D Sod's shock solution at locations *x_vec*.
 
         Parameters
         ----------
@@ -924,34 +1023,47 @@ class Discontinuity:
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (if needed)
         """
-        x_rel = x_vec[0]
-        actx = x_rel.array_context
+        assert self._dim == 2, "only defined for dim=2"
+
         gm1 = eos.gamma() - 1.0
-        zeros = 0 * x_rel
-        sigma = self._sigma
+        gp1 = eos.gamma() + 1.0
+        gmn1 = 1.0 / gm1
+        x_rel = x_vec[0]
+        y_rel = x_vec[1]
+        actx = x_rel.array_context
 
-        x0 = zeros + self._uc[0]*t + self._x0
+        zeros = 0*x_rel
+
+        shock_location = zeros + self._shock_location
+        shock_speed = zeros + self._shock_speed
         t = zeros + t
-        ones = (1.0 + x_vec[0]) - x_vec[0]
 
-        rhol = zeros + self._rhol
-        rhor = zeros + self._rhor
-        ul = make_obj_array([self._ul[i] * ones
-                                   for i in range(self._dim)])
-        ur = make_obj_array([self._ur[i] * ones
-                                   for i in range(self._dim)])
-        rhoel = zeros + self._pl/gm1
-        rhoer = zeros + self._pr/gm1
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
 
-        xtanh = 1.0 / sigma * (x_rel - x0)
-        mass = (rhol / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
-              + rhor / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        rhoe = (rhoel / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
-              + rhoer / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        u = (ul / 2.0 * (actx.np.tanh(-xtanh) + 1.0)
-           + ur / 2.0 * (actx.np.tanh(xtanh) + 1.0))
-        mom = mass * u
-        energy = rhoe + 0.5 * mass * np.dot(u, u)
+        rhol = zeros + eos.gamma() * rho_jump
+        rhor = zeros + eos.gamma()
+        ul = zeros + up * np.cos(np.pi/6.0)
+        ur = zeros + 0.0
+        vl = zeros - up * np.sin(np.pi/6.0)
+        vr = zeros + 0.0
+        rhoel = zeros + gmn1 * p_jump
+        rhoer = zeros + gmn1 * 1.0
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+        xinter = (shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*shock_speed*t/np.sqrt(3.0))
+        sigma = 0.05
+        xtanh = 1.0/sigma*(x_rel-xinter)
+        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
+                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
+        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
+        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
+        vel = make_obj_array([u, v])
+        mom = mass * vel
+        energy = rhoe + .5*mass*np.dot(vel, vel)
+
+        return join_conserved(dim=self._dim, mass=mass, energy=energy, momentum=mom)

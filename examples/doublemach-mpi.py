@@ -35,8 +35,10 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import inviscid_operator, split_conserved
-from mirgecom.artificial_viscosity import artificial_viscosity
-from mirgecom.tag_cells import smoothness_indicator
+from mirgecom.artificial_viscosity import (
+    av_operator,
+    smoothness_indicator
+)
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
@@ -112,7 +114,9 @@ def main(ctx_factory=cl.create_some_context):
 
     dim = 2
     order = 3
-    t_final = 1.0e-2
+    # Too many steps for CI
+    # t_final = 1.0e-2
+    t_final = 1.0e-3
     current_cfl = 0.1
     current_dt = 1.0e-4
     current_t = 0
@@ -153,16 +157,6 @@ def main(ctx_factory=cl.create_some_context):
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
 
-    # Temporary fix for Issue #280
-    local_boundaries = {}
-    for btag in boundaries:
-        bnd_discr = discr.discr_from_dd(btag)
-        bnd_nodes = thaw(actx, bnd_discr.nodes())
-        if bnd_nodes[0][0].shape[0] > 0:
-            local_boundaries[btag] = boundaries[btag]
-    boundaries = local_boundaries
-    # End fix
-
     nodes = thaw(actx, discr.nodes())
     current_state = initializer(nodes)
 
@@ -202,8 +196,8 @@ def main(ctx_factory=cl.create_some_context):
     def my_rhs(t, state):
         return inviscid_operator(
             discr, q=state, t=t, boundaries=boundaries, eos=eos
-        ) + artificial_viscosity(
-            discr, t=t, r=state, boundaries=boundaries, alpha=alpha, eos=eos,
+        ) + av_operator(
+            discr, t=t, q=state, boundaries=boundaries, alpha=alpha, eos=eos,
             s0=s0, kappa=kappa
         )
 

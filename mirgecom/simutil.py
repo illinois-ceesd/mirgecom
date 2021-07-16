@@ -8,7 +8,7 @@
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -36,9 +36,7 @@ import logging
 import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.io import make_status_message
-from mirgecom.euler import (
-    get_inviscid_timestep,
-)
+from mirgecom.inviscid import get_inviscid_timestep  # bad smell?
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +91,7 @@ class ExactSolutionMismatch(Exception):
 
 def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
                    step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   s0=None, kappa=None, constant_cfl=False, 
+                   s0=None, kappa=None, constant_cfl=False,
                    comm=None, overwrite=False, viz_fields=None, vis_timer=None):
     """Check simulation health, status, viz dumps, and restart."""
     do_viz = check_step(step=step, interval=nviz)
@@ -101,7 +99,7 @@ def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
     if do_viz is False and do_status is False:
         return 0
 
-    from mirgecom.euler import split_conserved
+    from mirgecom.fluid import split_conserved
     cv = split_conserved(discr.dim, q)
     dependent_vars = eos.dependent_vars(cv)
 

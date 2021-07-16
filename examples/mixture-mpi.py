@@ -1,4 +1,4 @@
-"""Demonstrate simple mass lump advection."""
+"""Demonstrate simple gas mixture with Pyrometheus."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -36,7 +36,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import euler_operator
+from mirgecom.euler import inviscid_operator
 from mirgecom.simutil import (
     inviscid_sim_timestep,
     sim_checkpoint,
@@ -49,9 +49,11 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedBoundary
-from mirgecom.initializers import Lump
-from mirgecom.eos import IdealSingleGas
+from mirgecom.initializers import MixtureInitializer
+from mirgecom.eos import PyrometheusMixture
 
+import cantera
+import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +69,13 @@ def main(ctx_factory=cl.create_some_context):
     dim = 3
     nel_1d = 16
     order = 3
-    exittol = .09
-    t_final = 0.01
+    exittol = 10.0
+    t_final = 0.002
     current_cfl = 1.0
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
+    velocity = np.zeros(shape=(dim,))
+    velocity[:dim] = 1.0
     current_dt = .001
     current_t = 0
-    eos = IdealSingleGas()
-    initializer = Lump(dim=dim, center=orig, velocity=vel)
-    casename = "lump"
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     constant_cfl = False
     nstatus = 1
     nviz = 1
@@ -88,6 +85,7 @@ def main(ctx_factory=cl.create_some_context):
     timestepper = rk4_step
     box_ll = -5.0
     box_ur = 5.0
+    error_state = 0
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -103,7 +101,30 @@ def main(ctx_factory=cl.create_some_context):
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
-    current_state = initializer(nodes)
+    casename = "uiuc_mixture"
+
+    # Pyrometheus initialization
+    from mirgecom.mechanisms import get_mechanism_cti
+    mech_cti = get_mechanism_cti("uiuc")
+    sol = cantera.Solution(phase_id="gas", source=mech_cti)
+    pyrometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+
+    nspecies = pyrometheus_mechanism.num_species
+    eos = PyrometheusMixture(pyrometheus_mechanism)
+
+    y0s = np.zeros(shape=(nspecies,))
+    for i in range(nspecies-1):
+        y0s[i] = 1.0 / (10.0 ** (i + 1))
+    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
+    y0s[nspecies-1] = 1.0 - spec_sum
+
+    # Mixture defaults to STP (p, T) = (1atm, 300K)
+    initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
+                                     massfractions=y0s, velocity=velocity)
+
+    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+    nodes = thaw(actx, discr.nodes())
+    current_state = initializer(x_vec=nodes, eos=eos)
 
     visualizer = make_visualizer(discr, discr.order + 3
                                  if discr.dim == 2 else discr.order)
@@ -124,10 +145,12 @@ def main(ctx_factory=cl.create_some_context):
                            t_final=t_final, constant_cfl=constant_cfl)
 
     def my_rhs(t, state):
-        return euler_operator(discr, q=state, t=t,
-                              boundaries=boundaries, eos=eos)
+        return inviscid_operator(discr, q=state, t=t,
+                                 boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
+        global checkpoint_t
+        checkpoint_t = t
         return sim_checkpoint(discr, visualizer, eos, q=state,
                               exact_soln=initializer, vizname=casename, step=step,
                               t=t, dt=dt, nstatus=nstatus, nviz=nviz,
@@ -140,19 +163,23 @@ def main(ctx_factory=cl.create_some_context):
                           get_timestep=get_timestep, state=current_state,
                           t=current_t, t_final=t_final)
     except ExactSolutionMismatch as ex:
+        error_state = 1
         current_step = ex.step
         current_t = ex.t
         current_state = ex.state
 
-    #    if current_t != checkpoint_t:
-    if rank == 0:
-        logger.info("Checkpointing final state ...")
-    my_checkpoint(current_step, t=current_t,
-                  dt=(current_t - checkpoint_t),
-                  state=current_state)
+    if current_t != checkpoint_t:  # This check because !overwrite
+        if rank == 0:
+            logger.info("Checkpointing final state ...")
+        my_checkpoint(current_step, t=current_t,
+                      dt=(current_t - checkpoint_t),
+                      state=current_state)
 
     if current_t - t_final < 0:
-        raise ValueError("Simulation exited abnormally")
+        error_state = 1
+
+    if error_state:
+        raise ValueError("Simulation did not complete successfully.")
 
 
 if __name__ == "__main__":
