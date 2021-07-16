@@ -29,7 +29,8 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
+from meshmode.array_context import (PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext)
 from meshmode.dof_array import thaw, freeze
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -181,11 +182,12 @@ def main(ctx_factory=cl.create_some_context, use_profiling=False, use_logmgr=Fal
                               boundaries=boundaries, eos=eos)
 
     def my_checkpoint(step, t, dt, state):
-        return sim_checkpoint(discr, visualizer, eos, cv=state,
-                              exact_soln=initializer, vizname=casename, step=step,
-                              t=t, dt=dt, nstatus=nstatus, nviz=nviz,
-                              exittol=exittol, constant_cfl=constant_cfl, comm=comm,
-                              vis_timer=vis_timer)
+        return
+        # return sim_checkpoint(discr, visualizer, eos, cv=state,
+        #                       exact_soln=initializer, vizname=casename, step=step,
+        #                       t=t, dt=dt, nstatus=nstatus, nviz=nviz,
+        #                       exittol=exittol, constant_cfl=constant_cfl, comm=comm,
+        #                       vis_timer=vis_timer)
 
     try:
         (current_step, current_t, current_state) = \

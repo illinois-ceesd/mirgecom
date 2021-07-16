@@ -29,7 +29,8 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
+from meshmode.array_context import (PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext)
 from meshmode.dof_array import thaw
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa

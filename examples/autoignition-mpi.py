@@ -29,7 +29,8 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext)
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
