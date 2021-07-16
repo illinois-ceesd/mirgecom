@@ -65,12 +65,8 @@ jobs:
             python -m pydocstyle "$(basename $GITHUB_REPOSITORY)" && echo "pydocstyle found no errors."
 
     pytest:
-        name: Pytest ${{ matrix.os }}
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest]
-
+        name: Pytest
+        runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v2
         - name: Install
@@ -89,12 +85,8 @@ jobs:
             python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
-        name: Examples ${{ matrix.os }}
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: ubuntu-latest
-
+        name: Examples
+        runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v2
         - name: Install
@@ -158,7 +150,7 @@ jobs:
             python -m mpi4py ./wave-eager-mpi.py
 
     y1: 
-        name: Y1 production testing
+        name: Production testing
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
@@ -174,7 +166,7 @@ jobs:
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
             . ../mirgecom/.ci-support/production-install.sh ../mirgecom/.ci-support/production-testing-env.sh
-        - name: Run Y1 production test
+        - name: Run production test
           run: |
             cd ..
             source emirge.y1/config/activate_env.sh
