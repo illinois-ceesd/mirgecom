@@ -86,6 +86,10 @@ def main(use_profiling=False, use_logmgr=False):
 
     dim = 2
     nel_1d = 16
+
+    current_cfl = .485
+    wave_speed = 1.0
+
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
@@ -95,18 +99,15 @@ def main(use_profiling=False, use_logmgr=False):
 
     order = 3
 
-    if dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.7 / (nel_1d * order ** 2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.4 / (nel_1d * order ** 2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
 
     print("%d elements" % mesh.nelements)
-
-    discr = EagerDGDiscretization(actx, mesh, order=order)
 
     fields = flat_obj_array(
         bump(actx, discr),
@@ -133,7 +134,7 @@ def main(use_profiling=False, use_logmgr=False):
     vis = make_visualizer(discr)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(discr, c=wave_speed, w=w)
 
     t = 0
     t_final = 3
