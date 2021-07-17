@@ -145,7 +145,7 @@ jobs:
             cd ..
             source emirge/config/activate_env.sh
             cd mirgecom/examples
-            python -m mpi4py ./wave-eager-mpi.py
+            python -m mpi4py ./pulse-mpi.py
 
     y1: 
         name: Production testing
