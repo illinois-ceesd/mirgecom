@@ -56,7 +56,7 @@ git config user.name "CI Runner"
 
 # Make any requested changes to production
 if [ -n "${PRODUCTION_CHANGE_BRANCH}" ]; then
-    if [ -z "${PRODUCTION_CHANGE_FORK}"]; then
+    if [ -z "${PRODUCTION_CHANGE_FORK}" ]; then
         PRODUCTION_CHANGE_FORK="illinois-ceesd"
     fi
     git remote add production_change https://github.com/${PRODUCTION_CHANGE_FORK}/mirgecom
@@ -70,7 +70,7 @@ fi
 
 # Merge in the current developement if !main
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
-    if [ -z "$DEVELOPMENT_FORK"]; then
+    if [ -z "$DEVELOPMENT_FORK" ]; then
         DEVELOPMENT_FORK="illinois-ceesd"
     fi
     git remote add changes https://github.com/${DEVELOPMENT_FORK}/mirgecom
