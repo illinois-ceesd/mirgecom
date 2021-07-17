@@ -22,14 +22,8 @@
 # tested against `mirgecom@y1-production`. 
 set -x
 
-# defaults and automatics
-HOME_FORK="illinois-ceesd"
-DEVELOPMENT_FORK="$HOME_FORK"
-DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
-PRODUCTION_FORK="${HOME_FORK}"
-PRODUCTION_BRANCH="y1-production"
-PRODUCTION_ENV_FILE="$1"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
+    PRODUCTION_ENV_FILE="$1"
     if [ -e "$PRODUCTION_ENV_FILE" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
         . $PRODUCTION_ENV_FILE
@@ -38,29 +32,30 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
 fi
+DEVELOPMENT_BRANCH=${DEVELOPMENT_BRANCH:-"main"}
+DEVELOPMENT_FORK=${DEVELOPMENT_FORK:-"illinois-ceesd"}
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"y1-production"}
+PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
+
 echo "Production environment settings:"
-echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE"
+if [ -n "${PRODUCTION_ENV_FILE}" ]; then
+    echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE"
+    cat ${PRODUCTION_ENV_FILE}
+fi  
 echo "DEVELOPMENT_FORK=$DEVELOPMENT_FORK"
 echo "DEVELOPMENT_BRANCH=$DEVELOPMENT_BRANCH"
-echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 echo "PRODUCTION_FORK=$PRODUCTION_FORK"
+echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 
 # Install the production branch with emirge
-./install.sh --fork=${PRODUCTION_FORK} --branch=${PRODUCTION_BRANCH}
+./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
 cd mirgecom
 
 # This junk is needed to be able to execute git commands properly
 git config user.email "ci-runner@ci.machine.com"
 git config user.name "CI Runner"
 
-# Merge in the current developement if !main
-if [ -n "$DEVELOPMENT_BRANCH" ]; then
-    if [ -z "$DEVELOPMENT_FORK" ]; then
-        DEVELOPMENT_FORK="illinois-ceesd"
-    fi
-    git remote add changes https://github.com/${DEVELOPMENT_FORK}/mirgecom
-    git fetch changes
-    git checkout changes/${DEVELOPMENT_BRANCH}
-    git checkout ${PRODUCTION_BRANCH}
-    git merge changes/${DEVELOPMENT_BRANCH} --no-edit
-fi
+# Merge in the production environment
+git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
+git fetch production
+git merge production/${PRODUCTION_BRANCH} --no-edit
