@@ -50,7 +50,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedInviscidBoundary
+from mirgecom.boundary import PrescribedBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
@@ -195,7 +195,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      massfractions=y0s, velocity=velocity)
 
     boundaries = {
-        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        BTAG_ALL: PrescribedBoundary(initializer)
     }
     nodes = thaw(actx, discr.nodes())
     if rst_filename:
