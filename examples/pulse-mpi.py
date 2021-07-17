@@ -318,7 +318,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    finish_tol = 1e-16
+    finish_tol = 1e-2
     assert np.abs(current_t - t_final) < finish_tol
 
 
