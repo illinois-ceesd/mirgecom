@@ -55,7 +55,7 @@ git config user.name "CI Runner"
 
 # Merge in the current developement if !main
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
-    if [ -z "$DEVELOPMENT_FORK"]; then
+    if [ -z "$DEVELOPMENT_FORK" ]; then
         DEVELOPMENT_FORK="illinois-ceesd"
     fi
     git remote add changes https://github.com/${DEVELOPMENT_FORK}/mirgecom
