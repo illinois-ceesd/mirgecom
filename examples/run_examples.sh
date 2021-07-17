@@ -12,21 +12,23 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 for example in $examples_dir/*.py
 do
-    if [[ "$example" == *"-mpi.py" ]]
+    if [[ "$example" == *"-lazy-mpi.py" ]]
     then
-        echo "*** Running parallel example: $example"
+        echo "*** Running parallel lazy example (1 rank): $example"
+        mpiexec -n 1 python -m mpi4py ${example} --lazy
+        rm -rf *vtu *sqlite *pkl *-journal restart_data
+    elif [[ "$example" == *"-mpi.py" ]]; then
+        echo "*** Running parallel example (2 ranks): $example"
         mpiexec -n 2 python -m mpi4py ${example}
-
-        rm -f *.vtu *.pvtu
-
-        echo "*** Running parallel example lazily (with a single rank only): $example"
-        python -m mpi4py ${example} --lazy
+        rm -rf *vtu *sqlite *pkl *-journal restart_data
+    elif [[ "$example" == *"-lazy.py" ]]; then
+        echo "*** Running serial lazy example: $example"
+        python ${example} --lazy
+        rm -rf *vtu *sqlite *pkl *-journal restart_data
     else
         echo "*** Running serial example: $example"
         python ${example}
-        rm -f *.vtu *.pvtu
-        echo "*** Running serial example lazily: $example"
-        python ${example} --lazy
+        rm -rf *vtu *sqlite *pkl *-journal restart_data
     fi
     if [[ $? -eq 0 ]]
     then
