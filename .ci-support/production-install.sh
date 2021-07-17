@@ -7,29 +7,23 @@
 #
 # The proposed changes to test may be in a fork, or a local branch. For
 # forks, the environment config files should set:
-
-# DEVELOPMENT_FORK = The fork from which the changes are coming (if any)
+#
+# DEVELOPMENT_FORK = The development fork (default=illinois-ceesd)
 #
 # The production capability to test against may be specified outright, or
 # patched by the incoming development. The following vars control the
 # production environment:
 #
-# PRODUCTION_BRANCH = The base production branch to be installed by emirge
-# PRODUCTION_CHANGE_FORK = The fork/home of production changes (if any)
-# PRODUCTION_CHANGE_BRANCH = Branch from which to pull prod changes (if any)
+# PRODUCTION_BRANCH = The production branch (default=y1-production)
+# PRODUCTION_FORK = The production fork (default=illinois-ceesd)
 #
 # If the environment file does not exist, the current development is
-# tested against `mirgecom@y1-production`. 
+# tested against `mirgecom@y1-production`.
+#
 set -x
 
-# defaults and automatics
-DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
-DEVELOPMENT_FORK="illinois-ceesd"
-PRODUCTION_BRANCH="y1-production"
-PRODUCTION_CHANGE_FORK=""
-PRODUCTION_CHANGE_BRANCH=""
-PRODUCTION_ENV_FILE="$1"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
+    PRODUCTION_ENV_FILE="$1"
     if [ -e "$PRODUCTION_ENV_FILE" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
         . $PRODUCTION_ENV_FILE
@@ -38,44 +32,32 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
 fi
+DEVELOPMENT_BRANCH=${DEVELOPMENT_BRANCH:-"main"}
+DEVELOPMENT_FORK=${DEVELOPMENT_FORK:-"illinois-ceesd"}
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"y1-production"}
+PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
+
 echo "Production environment settings:"
-echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE"
+if [ -n "${PRODUCTION_ENV_FILE}" ]; then
+    echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE"
+    cat ${PRODUCTION_ENV_FILE}
+fi  
 echo "DEVELOPMENT_FORK=$DEVELOPMENT_FORK"
 echo "DEVELOPMENT_BRANCH=$DEVELOPMENT_BRANCH"
+echo "PRODUCTION_FORK=$PRODUCTION_FORK"
 echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
-echo "PRODUCTION_CHANGE_FORK=$PRODUCTION_CHANGE_FORK"
-echo "PRODUCTION_CHANGE_BRANCH=$PRODUCTION_CHANGE_BRANCH"
 
 # Install the production branch with emirge
-./install.sh --branch=${PRODUCTION_BRANCH}
+./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
+source config/activate_env.sh
 cd mirgecom
 
 # This junk is needed to be able to execute git commands properly
 git config user.email "ci-runner@ci.machine.com"
 git config user.name "CI Runner"
 
-# Make any requested changes to production
-if [ -n "${PRODUCTION_CHANGE_BRANCH}" ]; then
-    if [ -z "${PRODUCTION_CHANGE_FORK}"]; then
-        PRODUCTION_CHANGE_FORK="illinois-ceesd"
-    fi
-    git remote add production_change https://github.com/${PRODUCTION_CHANGE_FORK}/mirgecom
-    git fetch production_change
-    git checkout production_change/${PRODUCTION_CHANGE_BRANCH}
-    git checkout ${PRODUCTION_BRANCH}
-    git merge production_change/${PRODUCTION_CHANGE_BRANCH} --no-edit
-else
-    echo "No updates to production branch (${PRODUCTION_BRANCH})"
-fi
-
-# Merge in the current developement if !main
-if [ -n "$DEVELOPMENT_BRANCH" ]; then
-    if [ -z "$DEVELOPMENT_FORK"]; then
-        DEVELOPMENT_FORK="illinois-ceesd"
-    fi
-    git remote add changes https://github.com/${DEVELOPMENT_FORK}/mirgecom
-    git fetch changes
-    git checkout changes/${DEVELOPMENT_BRANCH}
-    git checkout ${PRODUCTION_BRANCH}
-    git merge changes/${DEVELOPMENT_BRANCH} --no-edit
-fi
+# Merge in the production environment
+git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
+git fetch production
+git merge production/${PRODUCTION_BRANCH} --no-edit
+pip install -r requirements.txt
