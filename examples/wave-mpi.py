@@ -33,7 +33,7 @@ from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
 from meshmode.dof_array import thaw
 
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
+from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -257,7 +257,9 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging, actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext)
+    main(use_profiling=use_profiling, use_logmgr=use_logging,
+         actx_class=PytatoPyOpenCLArrayContext if args.lazy
+         else PyOpenCLArrayContext)
 
 
 # vim: foldmethod=marker

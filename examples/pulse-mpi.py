@@ -31,8 +31,11 @@ from functools import partial
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 
-from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -47,10 +50,7 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    PrescribedBoundary,
-    AdiabaticSlipBoundary
-)
+from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
     Lump,
     AcousticPulse
@@ -59,7 +59,6 @@ from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -78,8 +77,8 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=False,
-         use_leap=False, use_profiling=False, casename="pulse",
+def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -96,15 +95,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            logmgr=logmgr)
+        queue = cl.CommandQueue(
+            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    actx = actx_class(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # timestepping control
     current_step = 0
@@ -179,7 +177,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
     uniform_state = initializer(nodes)
@@ -302,7 +299,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=None,
+                      pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=current_state, t=current_t, t_final=t_final)
 
@@ -318,20 +315,41 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=False,
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    finish_tol = 1e-2
+    finish_tol = 1e-16
     assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
-
     import argparse
-    parser = argparse.ArgumentParser(description="Pulse (MPI version)")
+    casename = "pulse"
+    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="turn on logging")
+    parser.add_argument("--leap", action="store_true",
+        help="use leap timestepper")
+    parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    if args.profiling:
+        if args.lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+        actx_class = PyOpenCLProfilingArrayContext
+    else:
+        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+            else PyOpenCLArrayContext
 
-    main(actx_class=PytatoPyOpenCLArrayContext if args.lazy else PyOpenCLArrayContext,
-         use_leap=False)
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    if args.casename:
+        casename = args.casename
+    rst_filename = None
+    if args.restart_file:
+        rst_filename = args.restart_file
+
+    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
