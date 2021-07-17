@@ -30,7 +30,12 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
@@ -59,7 +64,6 @@ from mirgecom.simutil import get_sim_timestep
 
 from logpyle import set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -124,9 +128,9 @@ def get_doublemach_mesh():
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_leap=False,
-         use_profiling=False, rst_filename=None,
-         casename="doubleMach", use_logmgr=True):
+def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None,
+         rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -142,15 +146,14 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            logmgr=logmgr)
+        queue = cl.CommandQueue(
+            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    actx = actx_class(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # Timestepping control
     current_step = 0
@@ -416,7 +419,36 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
 
 if __name__ == "__main__":
+    import argparse
+    casename = "doublemach"
+    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="turn on logging")
+    parser.add_argument("--leap", action="store_true",
+        help="use leap timestepper")
+    parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--casename", help="casename to use for i/o")
+    args = parser.parse_args()
+    if args.profiling:
+        if args.lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+        actx_class = PyOpenCLProfilingArrayContext
+    else:
+        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+            else PyOpenCLArrayContext
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    main()
+    if args.casename:
+        casename = args.casename
+    rst_filename = None
+    if args.restart_file:
+        rst_filename = args.restart_file
+
+    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
