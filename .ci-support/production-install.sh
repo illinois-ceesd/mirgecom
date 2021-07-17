@@ -23,11 +23,11 @@
 set -x
 
 # defaults and automatics
+HOME_FORK="illinois-ceesd"
+DEVELOPMENT_FORK="$HOME_FORK"
 DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
-DEVELOPMENT_FORK="illinois-ceesd"
+PRODUCTION_FORK="${HOME_FORK}"
 PRODUCTION_BRANCH="y1-production"
-PRODUCTION_CHANGE_FORK=""
-PRODUCTION_CHANGE_BRANCH=""
 PRODUCTION_ENV_FILE="$1"
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
     if [ -e "$PRODUCTION_ENV_FILE" ]; then
@@ -43,30 +43,15 @@ echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE"
 echo "DEVELOPMENT_FORK=$DEVELOPMENT_FORK"
 echo "DEVELOPMENT_BRANCH=$DEVELOPMENT_BRANCH"
 echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
-echo "PRODUCTION_CHANGE_FORK=$PRODUCTION_CHANGE_FORK"
-echo "PRODUCTION_CHANGE_BRANCH=$PRODUCTION_CHANGE_BRANCH"
+echo "PRODUCTION_FORK=$PRODUCTION_FORK"
 
 # Install the production branch with emirge
-./install.sh --branch=${PRODUCTION_BRANCH}
+./install.sh --fork=${PRODUCTION_FORK} --branch=${PRODUCTION_BRANCH}
 cd mirgecom
 
 # This junk is needed to be able to execute git commands properly
 git config user.email "ci-runner@ci.machine.com"
 git config user.name "CI Runner"
-
-# Make any requested changes to production
-if [ -n "${PRODUCTION_CHANGE_BRANCH}" ]; then
-    if [ -z "${PRODUCTION_CHANGE_FORK}"]; then
-        PRODUCTION_CHANGE_FORK="illinois-ceesd"
-    fi
-    git remote add production_change https://github.com/${PRODUCTION_CHANGE_FORK}/mirgecom
-    git fetch production_change
-    git checkout production_change/${PRODUCTION_CHANGE_BRANCH}
-    git checkout ${PRODUCTION_BRANCH}
-    git merge production_change/${PRODUCTION_CHANGE_BRANCH} --no-edit
-else
-    echo "No updates to production branch (${PRODUCTION_BRANCH})"
-fi
 
 # Merge in the current developement if !main
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
