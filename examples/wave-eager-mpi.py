@@ -1,4 +1,4 @@
-"""Demonstrate wave MPI example."""
+"""Demonstrate wave-eager MPI example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
@@ -29,11 +29,9 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
-from meshmode.dof_array import thaw
+from meshmode.array_context import thaw, PyOpenCLArrayContext
 
-from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -73,12 +71,13 @@ def bump(actx, discr, t=0):
 
 @mpi_entry_point
 def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None,
-         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
+         use_profiling=False, use_logmgr=False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    lazy_eval = isinstance(actx_class, PytatoPyOpenCLArrayContext)
+    current_cfl = .485
+    wave_speed = 1.0
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -90,12 +89,12 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = actx_class(queue,
+        actx = PyOpenCLProfilingArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
             logmgr=logmgr)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = actx_class(queue,
+        actx = PyOpenCLArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
@@ -137,14 +136,11 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
 
-    if local_mesh.dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.7 / (nel_1d*order**2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.4 / (nel_1d*order**2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
 
     t_final = 3
 
@@ -193,10 +189,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     vis = make_visualizer(discr)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
-
-    if lazy_eval:
-        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs), [fields])
+        return wave_operator(discr, c=wave_speed, w=w)
 
     while t < t_final:
         if logmgr:
@@ -221,21 +214,17 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             )
 
         if istep % 10 == 0:
-            if lazy_eval:
-                print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
-            else:
-                print(istep, t, discr.norm(fields[0], np.inf))
+            print(istep, t, discr.norm(fields[0]))
+            vis.write_parallel_vtk_file(
+                comm,
+                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                ]
+            )
 
-            vis.write_vtk_file("fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
-
-        if lazy_eval:
-            fields = compiled_rhs(fields)
-        else:
-            fields = rk4_step(fields, t, dt, rhs)
+        fields = rk4_step(fields, t, dt, rhs)
 
         t += dt
         istep += 1
@@ -251,15 +240,6 @@ if __name__ == "__main__":
     use_profiling = False
     use_logging = True
 
-    import argparse
-    parser = argparse.ArgumentParser(description="Wave (MPI version)")
-    parser.add_argument("--lazy", action="store_true",
-        help="switch to a lazy computation mode")
-    args = parser.parse_args()
-
-    main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=PytatoPyOpenCLArrayContext if args.lazy
-         else PyOpenCLArrayContext)
-
+    main(use_profiling=use_profiling, use_logmgr=use_logging)
 
 # vim: foldmethod=marker
