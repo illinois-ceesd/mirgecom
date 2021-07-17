@@ -283,7 +283,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             current_state = connection(rst_state)
     else:
         # Set the current state from time 0
-        current_state = initializer(eos=eos, x_vec=nodes, time=0)
+        current_state = initializer(eos=eos, x_vec=nodes)
 
     # Inspection at physics debugging time
     if debug:
