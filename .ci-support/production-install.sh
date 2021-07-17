@@ -7,19 +7,19 @@
 #
 # The proposed changes to test may be in a fork, or a local branch. For
 # forks, the environment config files should set:
-
-# DEVELOPMENT_FORK = The fork from which the changes are coming (if any)
+#
+# DEVELOPMENT_FORK = The development fork (default=illinois-ceesd)
 #
 # The production capability to test against may be specified outright, or
 # patched by the incoming development. The following vars control the
 # production environment:
 #
-# PRODUCTION_BRANCH = The base production branch to be installed by emirge
-# PRODUCTION_CHANGE_FORK = The fork/home of production changes (if any)
-# PRODUCTION_CHANGE_BRANCH = Branch from which to pull prod changes (if any)
+# PRODUCTION_BRANCH = The production branch (default=y1-production)
+# PRODUCTION_FORK = The production fork (default=illinois-ceesd)
 #
 # If the environment file does not exist, the current development is
-# tested against `mirgecom@y1-production`. 
+# tested against `mirgecom@y1-production`.
+#
 set -x
 
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
