@@ -49,6 +49,7 @@ echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 
 # Install the production branch with emirge
 ./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
+source config/activate_env.sh
 cd mirgecom
 
 # This junk is needed to be able to execute git commands properly
@@ -59,3 +60,4 @@ git config user.name "CI Runner"
 git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
 git fetch production
 git merge production/${PRODUCTION_BRANCH} --no-edit
+pip install -r requirements.txt
