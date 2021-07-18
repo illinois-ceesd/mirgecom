@@ -24,7 +24,7 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
     fi
 fi
 # Set to default if testing main, or user left it empty
-PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@update-y1-callbacks:w-hagen/isolator@NS"}
+PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@update-y1-callbacks:MTCam/isolator@tweak-arg-parsing"}
 OIFS="$IFS"
 IFS=':'; for production_driver_string in $PRODUCTION_DRIVERS;
 do
