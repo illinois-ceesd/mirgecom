@@ -254,7 +254,7 @@ class SodShock1D:
         x0 = zeros + self._x0
         energyl = zeros + gmn1 * self._energyl
         energyr = zeros + gmn1 * self._energyr
-        yesno = x_rel > x0
+        yesno = actx.np.greater(x_rel, x0)
         mass = actx.np.where(yesno, rhor, rhol)
         energy = actx.np.where(yesno, energyr, energyl)
         mom = make_obj_array(
