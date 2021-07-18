@@ -173,4 +173,5 @@ jobs:
             do
                cd "$production_driver"/smoke_test
                python -m mpi4py ./driver.py -i run_params.yaml
+               cd ../../
             done
