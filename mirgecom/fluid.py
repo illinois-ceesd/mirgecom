@@ -11,9 +11,9 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
+.. autofunction:: compute_wavespeed
 .. autofunction:: velocity_gradient
 .. autofunction:: species_mass_fraction_gradient
-.. autofunction:: compute_wavespeed
 """
 
 __copyright__ = """

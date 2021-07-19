@@ -112,14 +112,11 @@ class PrescribedInviscidBoundary(FluidBC):
     .. automethod:: boundary_pair
     .. automethod:: inviscid_boundary_flux
     .. automethod:: soln_gradient_flux
-    .. automethod:: av_flux
     """
 
     def __init__(self, inviscid_boundary_flux_func=None, boundary_pair_func=None,
                  inviscid_facial_flux_func=None, fluid_solution_func=None,
                  fluid_solution_flux_func=None, scalar_numerical_flux_func=None,
-                 fluid_solution_gradient_func=None,
-                 fluid_solution_gradient_flux_func=None,
                  fluid_temperature_func=None):
         """Initialize the PrescribedInviscidBoundary and methods."""
         self._bnd_pair_func = boundary_pair_func
@@ -133,8 +130,6 @@ class PrescribedInviscidBoundary(FluidBC):
         from mirgecom.flux import central_scalar_flux
         if not self._scalar_num_flux_func:
             self._scalar_num_flux_func = central_scalar_flux
-        self._fluid_soln_grad_func = fluid_solution_gradient_func
-        self._fluid_soln_grad_flux_func = fluid_solution_gradient_flux_func
         from mirgecom.flux import central_vector_flux
         if not self._fluid_soln_grad_flux_func:
             self._fluid_soln_grad_flux_func = central_vector_flux
@@ -216,31 +211,6 @@ class PrescribedInviscidBoundary(FluidBC):
             **kwargs
         )
 
-    def av_flux(self, discr, btag, diffusion, **kwargs):
-        """Get the diffusive fluxes for the AV operator API."""
-        diff_cv = make_conserved(discr.dim, q=diffusion)
-        return self.s_boundary_flux(discr, btag, grad_cv=diff_cv, **kwargs).join()
-
-    def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the "temperature flux" through boundary *btag*."""
-        cv_minus = discr.project("vol", btag, cv)
-        t_minus = eos.temperature(cv_minus)
-        actx = cv.array_context
-        if self._fluid_temperature_func:
-            boundary_discr = discr.discr_from_dd(btag)
-            nodes = thaw(actx, boundary_discr.nodes())
-            t_plus = self._fluid_temperature_func(nodes, cv=cv_minus,
-                                                  temperature=t_minus, eos=eos,
-                                                  **kwargs)
-        else:
-            t_plus = -t_minus
-        nhat = thaw(actx, discr.normal(btag))
-        bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
-
-        return self._boundary_quantity(discr, btag,
-                                       self._scalar_num_flux_func(bnd_tpair, nhat),
-                                       **kwargs)
-
 
 class PrescribedBoundary(PrescribedInviscidBoundary):
     """Boundary condition prescribes boundary soln with user-specified function.
@@ -306,8 +276,7 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
         PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_slip_pair,
-            fluid_solution_gradient_func=self.exterior_grad_q
+            self, boundary_pair_func=self.adiabatic_slip_pair
         )
 
     def adiabatic_slip_pair(self, discr, cv, btag, **kwargs):
@@ -343,18 +312,3 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
         ext_cv = make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
                                 momentum=ext_mom, species_mass=int_cv.species_mass)
         return TracePair(btag, interior=int_cv, exterior=ext_cv)
-
-    def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
-        # Grab some boundary-relevant data
-        dim, = grad_cv.mass.shape
-
-        # Subtract 2*wall-normal component of q
-        # to enforce q=0 on the wall
-        s_mom_normcomp = np.outer(nhat, np.dot(grad_cv.momentum, nhat))
-        s_mom_flux = grad_cv.momentum - 2*s_mom_normcomp
-
-        # flip components to set a neumann condition
-        return make_conserved(dim, mass=-grad_cv.mass, energy=-grad_cv.energy,
-                              momentum=-s_mom_flux,
-                              species_mass=-grad_cv.species_mass)
