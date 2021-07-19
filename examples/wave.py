@@ -101,14 +101,13 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     order = 3
 
-    if dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.7 / (nel_1d * order ** 2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.4 / (nel_1d * order ** 2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    current_cfl = 1.0
+    wave_speed = 1.0
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
+
 
     print("%d elements" % mesh.nelements)
 
