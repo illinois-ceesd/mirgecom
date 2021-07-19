@@ -38,8 +38,7 @@ from arraycontext import freeze, thaw
 def compile_timestepper(actx, timestepper, state, rhs):
     """Create lazy evaluation version of the timestepper."""
     @memoize_in(actx, ("mirgecom_compiled_operator",
-                       timestepper, rhs,
-                       tuple(len(el) for el in state)))
+                       timestepper, rhs))
     def get():
         return actx.compile(lambda y, t, dt: timestepper(state=y, t=t,
                                                          dt=dt,
