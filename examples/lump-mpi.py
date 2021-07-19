@@ -50,7 +50,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
@@ -179,7 +179,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vel[:dim] = 1.0
     initializer = Lump(dim=dim, center=orig, velocity=vel)
     boundaries = {
-        BTAG_ALL: PrescribedBoundary(initializer)
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
     }
 
     if rst_filename:
