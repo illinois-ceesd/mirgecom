@@ -43,13 +43,12 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import euler_operator
-from mirgecom.fluid import (
-    split_conserved,
-    join_conserved,
-    make_conserved
-)
+from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
-from mirgecom.boundary import PrescribedBoundary, DummyBoundary
+from mirgecom.boundary import (
+    PrescribedInviscidBoundary,
+    DummyBoundary
+)
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
@@ -110,9 +109,8 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     mass_fractions = make_obj_array([rand() for _ in range(nspecies)])
     species_mass = mass * mass_fractions
 
-    q = join_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                       species_mass=species_mass)
-    cv = split_conserved(dim, q)
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
 
     # {{{ create the expected result
 
@@ -132,7 +130,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     for i in range(nspecies):
         expected_flux[dim+2+i] = mom * mass_fractions[i]
 
-    expected_flux = split_conserved(dim, expected_flux)
+    expected_flux = make_conserved(dim, q=expected_flux)
 
     # }}}
 
@@ -309,10 +307,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        from mirgecom.euler import _facial_flux
+        from mirgecom.inviscid import inviscid_facial_flux
 
         # Check the boundary facial fluxes as called on an interior boundary
-        interior_face_flux = _facial_flux(
+        interior_face_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(), cv_tpair=interior_trace_pair(discr, cv))
 
         def inf_norm(data):
@@ -321,7 +319,6 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             else:
                 return 0.0
 
-        # iff_split = split_conserved(dim, interior_face_flux)
         assert inf_norm(interior_face_flux.mass) < tolerance
         assert inf_norm(interior_face_flux.energy) < tolerance
         assert inf_norm(interior_face_flux.species_mass) < tolerance
@@ -351,12 +348,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_mom = discr.project("vol", BTAG_ALL, mom_input)
         dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
 
-        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
-                                  momentum=dir_mom, species_mass=dir_mf)
         dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                 momentum=dir_mom, species_mass=dir_mf)
-
-        boundary_flux = _facial_flux(
+        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
+                                  momentum=dir_mom, species_mass=dir_mf)
+        boundary_flux = inviscid_facial_flux(
             discr, eos=IdealSingleGas(),
             cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
         )
@@ -393,6 +389,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     """Tests the inviscid rhs using a trivial constant/uniform state which
     should yield rhs = 0 to FP.  The test is performed for 1, 2, and 3 dimensions.
     """
+
     actx = actx_factory()
 
     tolerance = 1e-9
@@ -432,9 +429,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        expected_rhs = split_conserved(
-            dim, make_obj_array([discr.zeros(actx)
-                                 for i in range(num_equations)])
+        expected_rhs = make_conserved(
+            dim, q=make_obj_array([discr.zeros(actx)
+                                   for i in range(num_equations)])
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
@@ -519,6 +516,7 @@ def test_vortex_rhs(actx_factory, order):
     case configured to yield rhs = 0. Checks several different orders and
     refinement levels to check error behavior.
     """
+
     actx = actx_factory()
 
     dim = 2
@@ -544,7 +542,9 @@ def test_vortex_rhs(actx_factory, order):
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(vortex)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=vortex)
+        }
 
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
@@ -599,10 +599,12 @@ def test_lump_rhs(actx_factory, dim, order):
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+        }
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, t=0)
+        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
         err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
         if err_max > maxxerr:
@@ -666,11 +668,14 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(nodes)
-        boundaries = {BTAG_ALL: PrescribedBoundary(lump)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+        }
 
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
-        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, t=0)
+        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
+
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
         err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
@@ -678,7 +683,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
             maxxerr = err_max
 
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
-    logger.info(f"Max error: {maxxerr}")
+
+        logger.info(f"Max error: {maxxerr}")
 
     logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
@@ -796,8 +802,8 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-        cv = split_conserved(
-            dim, filter_modally(discr, "vol", cutoff, frfunc, cv.join())
+        cv = make_conserved(
+            dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
         )
 
         t += dt
@@ -809,7 +815,7 @@ def _euler_flow_stepper(actx, parameters):
         logger.info("Writing final dump.")
         maxerr = max(write_soln(cv, False))
     else:
-        expected_result = initializer(nodes, t=t)
+        expected_result = initializer(nodes, time=t)
         maxerr = discr.norm((cv - expected_result).join(), np.inf)
 
     logger.info(f"Max Error: {maxerr}")
@@ -854,7 +860,9 @@ def test_isentropic_vortex(actx_factory, order):
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
-        boundaries = {BTAG_ALL: PrescribedBoundary(initializer)}
+        boundaries = {
+            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        }
         eos = IdealSingleGas()
         t = 0
         flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,

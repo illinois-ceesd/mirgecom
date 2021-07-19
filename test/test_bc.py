@@ -34,7 +34,9 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
+from grudge.eager import (
+    EagerDGDiscretization,
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -157,8 +159,9 @@ def test_slipwall_flux(actx_factory, dim, order):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.euler import _facial_flux
-                bnd_flux = _facial_flux(discr, eos, cv_tpair=bnd_pair, local=True)
+                from mirgecom.inviscid import inviscid_facial_flux
+                bnd_flux = inviscid_facial_flux(discr, eos, cv_tpair=bnd_pair,
+                                                local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 
