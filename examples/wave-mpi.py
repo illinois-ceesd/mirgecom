@@ -31,7 +31,7 @@ from pytools.obj_array import flat_obj_array
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
-from meshmode.dof_array import thaw
+from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
 
@@ -48,7 +48,7 @@ import pyopencl.tools as cl_tools
 from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_device_name,
+                                         logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 
@@ -58,7 +58,7 @@ def bump(actx, discr, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -173,7 +173,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             fields = restart_fields
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
