@@ -112,12 +112,6 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     print("%d elements" % mesh.nelements)
 
-    # if lazy_eval:
-    #     fields = thaw(actx, freeze(flat_obj_array(
-    #                   bump(actx, discr),
-    #                   [discr.zeros(actx) for i in range(discr.dim)]
-    #                   )))
-    # else:
     fields = flat_obj_array(bump(actx, discr),
                             [discr.zeros(actx) for i in range(discr.dim)])
 
