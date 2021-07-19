@@ -210,7 +210,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if dv is None:
             dv = eos.dependent_vars(state)
         if exact is None:
-            exact = initializer(x_vec=nodes, eos=eos, t=t)
+            exact = initializer(x_vec=nodes, eos=eos, time=t)
         if resid is None:
             resid = state - exact
         viz_fields = [("cv", state),
@@ -270,7 +270,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 dv = eos.dependent_vars(state)
-                exact = initializer(x_vec=nodes, eos=eos, t=t)
+                exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import allsync
                 health_errors = allsync(
                     my_health_check(dv=dv, state=state, exact=exact),
@@ -288,14 +288,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 if dv is None:
                     dv = eos.dependent_vars(state)
                 if exact is None:
-                    exact = initializer(x_vec=nodes, eos=eos, t=t)
+                    exact = initializer(x_vec=nodes, eos=eos, time=t)
                 resid = state - exact
                 my_write_viz(step=step, t=t, dv=dv, state=state, exact=exact,
                              resid=resid)
 
             if do_status:
                 if exact is None:
-                    exact = initializer(x_vec=nodes, eos=eos, t=t)
+                    exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 status_msg = (
@@ -342,7 +342,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     final_dv = eos.dependent_vars(current_state)
-    final_exact = initializer(x_vec=nodes, eos=eos, t=current_t)
+    final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
     final_resid = current_state - final_exact
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
                  exact=final_exact, resid=final_resid)
