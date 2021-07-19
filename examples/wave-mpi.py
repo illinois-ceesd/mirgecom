@@ -194,8 +194,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     def rhs(t, w):
         return wave_operator(discr, c=wave_speed, w=w)
 
-    if lazy_eval:
-        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
+    compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
 
     while t < t_final:
         if logmgr:
@@ -231,10 +230,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
                         ("v", fields[1:]),
                         ])
 
-        if lazy_eval:
-            fields = compiled_rhs(fields)
-        else:
-            fields = rk4_step(fields, t, dt, rhs)
+        fields = thaw(freeze(fields, actx), actx)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
 
         t += dt
         istep += 1
