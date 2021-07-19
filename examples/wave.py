@@ -150,14 +150,14 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0], np.inf))
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
-                [
-                    ("u", fields[0]),
-                    ("v", fields[1:]),
-                    ])
+            print(istep, t, discr.norm(fields[0], np.inf))
+            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+                    [
+                        ("u", fields[0]),
+                        ("v", fields[1:]),
+                        ])
 
         t += dt
         istep += 1
