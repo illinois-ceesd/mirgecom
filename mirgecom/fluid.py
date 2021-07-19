@@ -40,8 +40,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
+from pytools.obj_array import make_obj_array
 from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
