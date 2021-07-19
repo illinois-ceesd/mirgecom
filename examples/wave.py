@@ -152,10 +152,8 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if logmgr:
             logmgr.tick_before()
 
-        if lazy_eval:
-            fields = compiled_rhs(fields)
-        else:
-            fields = rk4_step(fields, t, dt, rhs)
+        fields = thaw(freeze(fields, actx), actx)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
             if lazy_eval:
