@@ -32,6 +32,7 @@ import numpy as np
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 from pytools import memoize_in
+from arraycontext import freeze, thaw
 
 
 def compile_timestepper(actx, timestepper, state, rhs):
@@ -118,6 +119,8 @@ def _advance_state_stepper_func(rhs, timestepper,
     compiled_rhs = compile_rhs(actx, rhs, state)
 
     while t < t_final:
+        state = thaw(freeze(state, actx), actx)
+
         if logmgr:
             logmgr.tick_before()
 
