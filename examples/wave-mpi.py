@@ -137,6 +137,8 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
 
+    current_cfl = 1.0
+    wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
 
