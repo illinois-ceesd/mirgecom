@@ -72,7 +72,7 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None,
+def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
          use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
@@ -84,7 +84,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     num_parts = comm.Get_size()
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-eager.sqlite", mode="wu", mpi_comm=comm)
+        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -220,7 +220,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             print(istep, t, discr.norm(fields[0]))
             vis.write_parallel_vtk_file(
                 comm,
-                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
                 [
                     ("u", fields[0]),
                     ("v", fields[1:]),
