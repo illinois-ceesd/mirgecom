@@ -276,7 +276,7 @@ def test_local_max_species_diffusivity(actx_factory, dim):
     from mirgecom.viscous import get_local_max_species_diffusivity
     expected = get_local_max_species_diffusivity(tv_model, eos, cv)
 
-    assert((expected == .3*ones[0]).all())
+    assert((expected == .3*ones))
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

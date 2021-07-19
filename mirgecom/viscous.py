@@ -48,7 +48,7 @@ from mirgecom.fluid import (
     species_mass_fraction_gradient,
     make_conserved
 )
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw, DOFArray
 
 import arraycontext
 
@@ -299,17 +299,20 @@ def get_local_max_species_diffusivity(transport, eos, cv):
         return 0 * cv.mass
 
     species_diffusivity = transport.species_diffusivity(eos, cv)
-    stacked_diffusivity = actx.np.stack([x[0] for x in species_diffusivity])
+    return_dof = []
+    for i in range(len(species_diffusivity[0])):
+        stacked_diffusivity = actx.np.stack([x[i] for x in species_diffusivity])
 
-    n_species, ni1, ni0 = stacked_diffusivity.shape
+        n_species, ni1, ni0 = stacked_diffusivity.shape
 
-    # fun fact: arraycontext needs these exact loop names to work (even though a
-    # loopy kernel can have whatever iterator names the user wants)
-    # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
-    # spatial locality, causing fewer cache misses
-    knl = arraycontext.make_loopy_program(
-        "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
-        "out[i1,i0] = max(i2, a[i2,i1,i0])"
-    )
+        # fun fact: arraycontext needs these exact loop names to work (even though a
+        # loopy kernel can have whatever iterator names the user wants)
+        # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
+        # spatial locality, causing fewer cache misses
+        knl = arraycontext.make_loopy_program(
+            "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
+            "out[i1,i0] = max(i2, a[i2,i1,i0])"
+        )
 
-    return actx.call_loopy(knl, a=stacked_diffusivity)["out"]
+        return_dof.append(actx.call_loopy(knl, a=stacked_diffusivity)["out"])
+    return DOFArray(actx, tuple(return_dof))
