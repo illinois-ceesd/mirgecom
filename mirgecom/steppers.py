@@ -42,8 +42,7 @@ def compile_timestepper(actx, timestepper, state, rhs):
     def get():
         return actx.compile(lambda y, t, dt: timestepper(state=y, t=t,
                                                          dt=dt,
-                                                         rhs=rhs),
-                            [state, np.float64(0), np.float64(0)])
+                                                         rhs=rhs))
 
     return get()
 
