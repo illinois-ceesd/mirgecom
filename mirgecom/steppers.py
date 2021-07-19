@@ -203,9 +203,12 @@ def _advance_state_leap(rhs, timestepper, state,
     if get_timestep:
         dt = get_timestep(state=state, t=t, dt=dt)
 
+    actx = state.array_context
+    compiled_rhs = compile_rhs(actx, rhs, state)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
-                                                    rhs, t, dt, state)
+                                                    compiled_rhs, t, dt, state)
     while t < t_final:
+        state = thaw(freeze(state, actx), actx)
 
         if get_timestep:
             dt = get_timestep(state=state, t=t, dt=dt)
