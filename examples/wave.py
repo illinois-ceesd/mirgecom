@@ -101,6 +101,8 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     order = 3
 
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+
     current_cfl = 1.0
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
@@ -108,10 +110,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     from grudge.op import nodal_min
     dt = nodal_min(discr, "vol", dt)
 
-
     print("%d elements" % mesh.nelements)
-
-    discr = EagerDGDiscretization(actx, mesh, order=order)
 
     if lazy_eval:
         fields = thaw(actx, freeze(flat_obj_array(
