@@ -194,7 +194,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     def rhs(t, w):
         return wave_operator(discr, c=wave_speed, w=w)
 
-    compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
+    compiled_rhs = actx.compile(rhs)
 
     while t < t_final:
         if logmgr:
@@ -219,10 +219,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             )
 
         if istep % 10 == 0:
-            if lazy_eval:
-                print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
-            else:
-                print(istep, t, discr.norm(fields[0], np.inf))
+            print(istep, t, discr.norm(fields[0], np.inf))
 
             vis.write_vtk_file("fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
                     [

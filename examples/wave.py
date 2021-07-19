@@ -36,9 +36,9 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
-from meshmode.dof_array import thaw, freeze
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
+from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -55,7 +55,7 @@ def bump(actx, discr, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -112,14 +112,14 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     print("%d elements" % mesh.nelements)
 
-    if lazy_eval:
-        fields = thaw(actx, freeze(flat_obj_array(
-                      bump(actx, discr),
-                      [discr.zeros(actx) for i in range(discr.dim)]
-                      )))
-    else:
-        fields = flat_obj_array(bump(actx, discr),
-                                [discr.zeros(actx) for i in range(discr.dim)])
+    # if lazy_eval:
+    #     fields = thaw(actx, freeze(flat_obj_array(
+    #                   bump(actx, discr),
+    #                   [discr.zeros(actx) for i in range(discr.dim)]
+    #                   )))
+    # else:
+    fields = flat_obj_array(bump(actx, discr),
+                            [discr.zeros(actx) for i in range(discr.dim)])
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
@@ -143,7 +143,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     def rhs(t, w):
         return wave_operator(discr, c=wave_speed, w=w)
 
-    compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
+    compiled_rhs = actx.compile(rhs)
 
     t = 0
     t_final = 3
@@ -156,10 +156,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
-            if lazy_eval:
-                print(istep, t, la.norm(actx.to_numpy(fields[0][0])))
-            else:
-                print(istep, t, discr.norm(fields[0], np.inf))
+            print(istep, t, discr.norm(fields[0], np.inf))
             if use_profiling:
                 print(actx.tabulate_profiling_data())
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
