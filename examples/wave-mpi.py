@@ -217,13 +217,15 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             )
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0], np.inf))
-
-            vis.write_vtk_file("fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ])
+            print(istep, t, discr.norm(fields[0]))
+            vis.write_parallel_vtk_file(
+                comm,
+                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                ]
+            )
 
         fields = thaw(freeze(fields, actx), actx)
         fields = rk4_step(fields, t, dt, compiled_rhs)
