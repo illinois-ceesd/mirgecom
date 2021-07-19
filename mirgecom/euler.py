@@ -66,7 +66,7 @@ from mirgecom.fluid import make_conserved
 from mirgecom.operators import dg_div
 
 
-def euler_operator(discr, eos, boundaries, cv, t=0.0):
+def euler_operator(discr, eos, boundaries, cv, time=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -87,7 +87,7 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
     boundaries
         Dictionary of boundary functions, one for each valid btag
 
-    t
+    time
         Time
 
     eos: mirgecom.eos.GasEOS
@@ -109,7 +109,7 @@ def euler_operator(discr, eos, boundaries, cv, t=0.0):
                 exterior=make_conserved(discr.dim, q=part_tpair.ext)))
               for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
         + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=t)
+                                                      eos=eos, time=time)
               for btag in boundaries)
     )
     q = -dg_div(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())

@@ -436,7 +436,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, t=0.0)
+                                      boundaries=boundaries, cv=cv, time=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -476,7 +476,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, t=0.0)
+                                      boundaries=boundaries, cv=cv, time=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -548,7 +548,7 @@ def test_vortex_rhs(actx_factory, order):
 
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries,
-            cv=vortex_soln, t=0.0)
+            cv=vortex_soln, time=0.0)
 
         err_max = discr.norm(inviscid_rhs.join(), np.inf)
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
@@ -603,7 +603,9 @@ def test_lump_rhs(actx_factory, dim, order):
             BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
         }
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
+            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
+            time=0.0
+        )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
         err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
@@ -673,7 +675,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         }
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln, t=0.0)
+            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
+            time=0.0
+        )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
         print(f"inviscid_rhs = {inviscid_rhs}")
@@ -773,7 +777,7 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return euler_operator(discr, eos=eos, boundaries=boundaries, cv=q, t=t)
+        return euler_operator(discr, eos=eos, boundaries=boundaries, cv=q, time=t)
 
     filter_order = 8
     eta = .5
