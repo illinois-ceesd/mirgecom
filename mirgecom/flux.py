@@ -4,6 +4,9 @@ Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: lfr_flux
+.. autofunction:: central_scalar_flux
+.. autofunction:: central_vector_flux
+
 """
 
 __copyright__ = """
@@ -29,9 +32,96 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import numpy as np  # noqa
+from meshmode.dof_array import DOFArray
+from mirgecom.operators import jump
+from mirgecom.fluid import (
+    ConservedVars,
+    make_conserved
+)
 
 
-def lfr_flux(cv_tpair, flux_func, normal, lam):
+def central_scalar_flux(trace_pair, normal):
+    r"""Compute a central scalar flux.
+
+    The central scalar flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
+
+    where $\mathbf{u}^-, \mathbf{u}^+$, are the vector of independent scalar
+    components and scalar solution components on the interior and exterior of the
+    face on which the central flux is to be calculated, and $\hat{n}$ is the normal
+    vector.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.trace_pair.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    tp_avg = trace_pair.avg
+    if isinstance(tp_avg, DOFArray):
+        return tp_avg*normal
+    elif isinstance(tp_avg, ConservedVars):
+        tp_join = tp_avg.join()
+    elif isinstance(tp_avg, np.ndarray):
+        tp_join = tp_avg
+
+    ncomp = len(tp_join)
+    if ncomp > 1:
+        result = np.empty((ncomp, len(normal)), dtype=object)
+        for i in range(ncomp):
+            result[i] = tp_join[i] * normal
+    else:
+        result = tp_join*normal
+    if isinstance(tp_avg, ConservedVars):
+        return make_conserved(tp_avg.dim, q=result)
+    return result
+
+
+def central_vector_flux(trace_pair, normal):
+    r"""Compute a central vector flux.
+
+    The central vector flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{v}^{+}+\mathbf{v}^{-}\right) \cdot \hat{n}
+
+    where $\mathbf{v}^-, \mathbf{v}^+$, are the vectors on the interior and exterior
+    of the face across which the central flux is to be calculated, and $\hat{n}$ is
+    the unit normal to the face.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.trace_pair.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    return trace_pair.avg@normal
+
+
+def lfr_flux(cv_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -48,13 +138,13 @@ def lfr_flux(cv_tpair, flux_func, normal, lam):
 
     Parameters
     ----------
-    flux_func:
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
 
-        function should return ambient dim-vector fluxes given *q* values
+        Solution trace pair for faces for which numerical flux is to be calculated
 
-    q_tpair: :class:`grudge.trace_pair.TracePair`
+    f_tpair: :class:`grudge.trace_pair.TracePair`
 
-        Trace pair for the face upon which flux calculation is to be performed
+        Physical flux trace pair on faces on which numerical flux is to be calculated
 
     normal: numpy.ndarray
 
@@ -72,7 +162,4 @@ def lfr_flux(cv_tpair, flux_func, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    flux_avg = 0.5*(flux_func(cv_tpair.int)
-                    + flux_func(cv_tpair.ext))
-    return flux_avg @ normal - 0.5*lam*(cv_tpair.ext
-                                        - cv_tpair.int)
+    return f_tpair.avg@normal - lam*jump(cv_tpair)/2
