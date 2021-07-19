@@ -73,7 +73,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     cl_ctx = cl.create_some_context()
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-eager.sqlite", mode="wu")
+        filename="wave.sqlite", mode="wu")
 
     if use_profiling:
         if lazy_eval:
@@ -153,7 +153,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
             if use_profiling:
                 print(actx.tabulate_profiling_data())
             print(istep, t, discr.norm(fields[0], np.inf))
-            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
