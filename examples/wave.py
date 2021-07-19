@@ -103,7 +103,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    current_cfl = 1.0
+    current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
@@ -141,7 +141,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     vis = make_visualizer(discr)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(discr, c=wave_speed, w=w)
 
     if lazy_eval:
         compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
