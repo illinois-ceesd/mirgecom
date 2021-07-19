@@ -45,7 +45,7 @@ from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_device_name,
+                                         logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 
@@ -122,7 +122,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
                             [discr.zeros(actx) for i in range(discr.dim)])
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
