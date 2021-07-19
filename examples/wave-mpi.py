@@ -78,7 +78,7 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    lazy_eval = isinstance(actx_class, PytatoPyOpenCLArrayContext)
+    lazy_eval = actx_class == PytatoPyOpenCLArrayContext
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
