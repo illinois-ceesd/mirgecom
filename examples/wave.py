@@ -143,8 +143,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     def rhs(t, w):
         return wave_operator(discr, c=wave_speed, w=w)
 
-    if lazy_eval:
-        compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
+    compiled_rhs = actx.compile(lambda y: rk4_step(y, 0, dt, rhs))
 
     t = 0
     t_final = 3
