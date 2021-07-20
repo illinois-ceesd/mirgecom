@@ -63,7 +63,8 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 get_timestep=None,
                                 pre_step_callback=None,
                                 post_step_callback=None,
-                                logmgr=None, eos=None, dim=None):
+                                logmgr=None, eos=None, dim=None,
+                                actx=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -113,7 +114,9 @@ def _advance_state_stepper_func(rhs, timestepper,
     if t_final <= t:
         return istep, t, state
 
-    actx = state.array_context
+    if actx is None:
+        actx = state.array_context
+
     compiled_rhs = compile_rhs(actx, rhs, state)
 
     while t < t_final:
@@ -121,9 +124,6 @@ def _advance_state_stepper_func(rhs, timestepper,
 
         if logmgr:
             logmgr.tick_before()
-
-        if get_timestep:
-            dt = np.float64(get_timestep(state=state, t=t, dt=dt))
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
@@ -151,7 +151,8 @@ def _advance_state_leap(rhs, timestepper, state,
                         get_timestep=None,
                         pre_step_callback=None,
                         post_step_callback=None,
-                        logmgr=None, eos=None, dim=None):
+                        logmgr=None, eos=None, dim=None,
+                        actx=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -199,19 +200,19 @@ def _advance_state_leap(rhs, timestepper, state,
     if t_final <= t:
         return istep, t, state
 
-    # Generate code for Leap method.
-    if get_timestep:
-        dt = get_timestep(state=state, t=t, dt=dt)
+    if actx is None:
+        actx = state.array_context
 
-    actx = state.array_context
     compiled_rhs = compile_rhs(actx, rhs, state)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
                                                     compiled_rhs, t, dt, state)
     while t < t_final:
-        state = thaw(freeze(state, actx), actx)
 
-        if get_timestep:
-            dt = get_timestep(state=state, t=t, dt=dt)
+        # This is only needed because Leap testing in test/test_time_integrators.py
+        # tests on single scalar values rather than an array-context-ready array
+        # container like a CV.
+        if isinstance(state, np.ndarray):
+            state = thaw(freeze(state, actx), actx)
 
         if dt < 0:
             return istep, t, state
@@ -282,7 +283,8 @@ def advance_state(rhs, timestepper, state, t_final,
                   get_timestep=None,
                   pre_step_callback=None,
                   post_step_callback=None,
-                  logmgr=None, eos=None, dim=None):
+                  logmgr=None, eos=None, dim=None,
+                  actx=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -368,7 +370,8 @@ def advance_state(rhs, timestepper, state, t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim
+                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
+                actx=actx
             )
     else:
         (current_step, current_t, current_state) = \
@@ -379,7 +382,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 istep=istep,
-                logmgr=logmgr, eos=eos, dim=dim
+                logmgr=logmgr, eos=eos, dim=dim, actx=actx
             )
 
     return current_step, current_t, current_state
