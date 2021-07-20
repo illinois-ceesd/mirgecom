@@ -97,6 +97,13 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             examples/run_examples.sh ./examples
+ 
+        - name: Test lazy accuracy
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            export XDG_CACHE_HOME=/tmp
+            cd examples && ./test_loopy_accuracy.sh
 
     doc:
         name: Documentation
