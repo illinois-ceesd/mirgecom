@@ -1,4 +1,4 @@
-"""Demonstrate wave-eager serial example."""
+"""Demonstrate wave serial example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
 
@@ -36,15 +36,16 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext)
+from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_device_name,
+                                         logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 
@@ -54,7 +55,7 @@ def bump(actx, discr, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -67,29 +68,30 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False, use_logmgr=False):
+def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-eager.sqlite", mode="wu")
+        filename="wave.sqlite", mode="wu")
 
     if use_profiling:
+        if lazy_eval:
+            raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
         actx = PyOpenCLProfilingArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        if lazy_eval:
+            actx = PytatoPyOpenCLArrayContext(queue)
+        else:
+            actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
-
-    current_cfl = .485
-    wave_speed = 1.0
-
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
@@ -101,21 +103,20 @@ def main(use_profiling=False, use_logmgr=False):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
+    current_cfl = 0.485
+    wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
-
     from grudge.op import nodal_min
     dt = nodal_min(discr, "vol", dt)
 
     print("%d elements" % mesh.nelements)
 
-    fields = flat_obj_array(
-        bump(actx, discr),
-        [discr.zeros(actx) for i in range(discr.dim)]
-        )
+    fields = flat_obj_array(bump(actx, discr),
+                            [discr.zeros(actx) for i in range(discr.dim)])
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
@@ -136,6 +137,8 @@ def main(use_profiling=False, use_logmgr=False):
     def rhs(t, w):
         return wave_operator(discr, c=wave_speed, w=w)
 
+    compiled_rhs = actx.compile(rhs)
+
     t = 0
     t_final = 3
     istep = 0
@@ -143,13 +146,14 @@ def main(use_profiling=False, use_logmgr=False):
         if logmgr:
             logmgr.tick_before()
 
-        fields = rk4_step(fields, t, dt, rhs)
+        fields = thaw(freeze(fields, actx), actx)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
             print(istep, t, discr.norm(fields[0], np.inf))
-            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
@@ -165,13 +169,15 @@ def main(use_profiling=False, use_logmgr=False):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
+    parser = argparse.ArgumentParser(description="Wave (non-MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
     parser.add_argument("--logging", action="store_true",
         help="enable logging")
+    parser.add_argument("--lazy", action="store_true",
+        help="enable lazy evaluation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile, use_logmgr=args.logging)
+    main(use_profiling=args.profile, use_logmgr=args.logging, lazy_eval=args.lazy)
 
 # vim: foldmethod=marker
