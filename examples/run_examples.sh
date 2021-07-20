@@ -12,7 +12,7 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 for example in $examples_dir/*.py
 do
-    if [[ "$example" == *"-lazy-mpi.py" ]]
+    if [[ "$example" == *"-mpi-lazy.py" ]]
     then
         echo "*** Running parallel lazy example (1 rank): $example"
         mpiexec -n 1 python -m mpi4py ${example} --lazy
