@@ -145,7 +145,7 @@ jobs:
             cd ..
             source emirge/config/activate_env.sh
             cd mirgecom/examples
-            python -m mpi4py ./wave-eager-mpi.py
+            python -m mpi4py ./pulse-mpi.py
 
     y1: 
         name: Production testing
@@ -169,5 +169,9 @@ jobs:
             cd ..
             source emirge.y1/config/activate_env.sh
             . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
-            cd production-driver/smoke_test
-            python -m mpi4py ./nozzle.py -i run_params.yaml
+            for production_driver in $(ls | grep "production_driver_");
+            do
+               cd "$production_driver"/smoke_test
+               python -m mpi4py ./driver.py -i run_params.yaml
+               cd ../../
+            done
