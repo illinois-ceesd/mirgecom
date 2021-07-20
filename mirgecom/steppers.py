@@ -39,22 +39,22 @@ def compile_timestepper(actx, timestepper, state, rhs):
     """Create lazy evaluation version of the timestepper."""
     @memoize_in(actx, ("mirgecom_compiled_operator",
                        timestepper, rhs))
-    def get():
+    def get_timestepper():
         return actx.compile(lambda y, t, dt: timestepper(state=y, t=t,
                                                          dt=dt,
                                                          rhs=rhs))
 
-    return get()
+    return get_timestepper()
 
 
 def compile_rhs(actx, rhs, state):
     """Create lazy evaluation version of the rhs."""
     @memoize_in(actx, ("mirgecom_compiled_rhs",
                        rhs))
-    def get():
+    def get_rhs():
         return actx.compile(rhs)
 
-    return get()
+    return get_rhs()
 
 
 def _advance_state_stepper_func(rhs, timestepper,
