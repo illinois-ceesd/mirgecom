@@ -52,29 +52,19 @@ class FluidBoundary(metaclass=ABCMeta):
     r"""Abstract interface to fluid boundary treatment.
 
     .. automethod:: inviscid_boundary_flux
-    .. automethod:: q_boundary_flux
     """
 
     @abstractmethod
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid flux across the boundary faces."""
 
-    @abstractmethod
-    def q_boundary_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the scalar conserved quantity flux across the boundary faces."""
-
 
 class FluidBC(FluidBoundary):
     r"""Abstract interface to boundary conditions.
 
-    .. automethod:: q_boundary_flux
     .. automethod:: inviscid_boundary_flux
     .. automethod:: boundary_pair
     """
-
-    def q_boundary_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the flux through boundary *btag* for each scalar in *q*."""
-        raise NotImplementedError()
 
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
@@ -138,23 +128,6 @@ class PrescribedInviscidBoundary(FluidBC):
                                                 cv=int_soln, eos=eos, **kwargs)
         bnd_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
         return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
-
-    def q_boundary_flux(self, discr, btag, cv, **kwargs):
-        """Get the flux through boundary *btag* for each scalar in *q*."""
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        if self._fluid_soln_flux_func:
-            cv_minus = discr.project("vol", btag, cv)
-            flux_weak = self._fluid_soln_flux_func(nodes, cv=cv_minus, nhat=nhat,
-                                                   **kwargs)
-        else:
-            bnd_pair = self.boundary_pair(discr, btag=btag, cv=cv, **kwargs)
-            flux_weak = self._scalar_num_flux_func(bnd_pair, normal=nhat)
-
-        return self._boundary_quantity(discr, btag=btag, quantity=flux_weak,
-                                       **kwargs)
 
 
 class PrescribedBoundary(PrescribedInviscidBoundary):
