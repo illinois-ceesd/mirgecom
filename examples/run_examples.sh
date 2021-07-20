@@ -8,8 +8,10 @@ rm -f *.vtu *.pvtu
 origin=$(pwd)
 examples_dir=${1-$origin}
 declare -i exitcode=0
+declare -i numsuccess=0
 echo "*** Running examples in $examples_dir ..."
 failed_examples=""
+succeeded_examples=""
 for example in $examples_dir/*.py
 do
     if [[ "$example" == *"-mpi-lazy.py" ]]
