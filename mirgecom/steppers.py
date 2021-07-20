@@ -51,10 +51,10 @@ def compile_rhs(actx, rhs, state):
     """Create lazy evaluation version of the rhs."""
     @memoize_in(actx, ("mirgecom_compiled_rhs",
                        rhs))
-    def get():
+    def get_rhs():
         return actx.compile(rhs)
 
-    return get()
+    return get_rhs()
 
 
 def _advance_state_stepper_func(rhs, timestepper,
