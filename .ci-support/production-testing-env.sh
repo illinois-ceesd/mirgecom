@@ -18,8 +18,12 @@ set -x
 export PRODUCTION_BRANCH="lift-euler-production"   # The base production branch to be installed by emirge
 # export PRODUCTION_FORK=""  # The fork/home of production changes (if any)
 #
-# The production driver repo is specified by the following vars:
+# Multiple production drivers are supported. The user should provide a ':'-delimited
+# list of driver locations, where each driver location is of the form:
+# "fork/repo@branch". The defaults are provided below as an example. Provide custom
+# production drivers in this variable:
 #
-# export PRODUCTION_DRIVER_FORK=""    # the fork/home of the driver
-# export PRODUCTION_DRIVER_NAME=""    # the repo for the driver
-# export PRODUCTION_DRIVER_BRANCH=""  # the branch for the driver
+# export PRODUCTION_DRIVERS=""
+#
+# Example:
+# PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
