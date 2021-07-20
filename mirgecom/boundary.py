@@ -149,7 +149,8 @@ class PrescribedBoundary(PrescribedInviscidBoundary):
         """
         from warnings import warn
         warn("Do not use PrescribedBoundary; use PrescribedInvscidBoundary. This"
-             "boundary type will vanish by August 2021.", DeprecationWarning, stacklevel=2)
+             "boundary type will vanish by August 2021.", DeprecationWarning,
+             stacklevel=2)
         PrescribedInviscidBoundary.__init__(self, fluid_solution_func=userfunc)
 
 
