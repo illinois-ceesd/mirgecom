@@ -34,7 +34,6 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray
-from mirgecom.operators import jump
 from mirgecom.fluid import (
     ConservedVars,
     make_conserved
@@ -162,4 +161,4 @@ def lfr_flux(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg@normal - lam*jump(cv_tpair)/2
+    return f_tpair.avg@normal - lam*cv_tpair.diff/2
