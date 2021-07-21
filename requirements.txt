@@ -6,7 +6,6 @@ pyvisfile
 pymetis
 importlib-resources
 psutil
-vtk
 gmsh
 PyYAML
 
