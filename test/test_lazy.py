@@ -21,6 +21,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from functools import partial
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -62,6 +63,15 @@ def _op_test_fixture(cl_ctx):
     discr = EagerDGDiscretization(actx, mesh, order=2)
 
     return actx, discr
+
+
+def _rel_linf_error(discr, x, y):
+    from mirgecom.fluid import ConservedVars
+    if isinstance(x, ConservedVars):
+        return _rel_linf_error(discr, x.join(), y)
+    if isinstance(y, ConservedVars):
+        return _rel_linf_error(discr, x, y.join())
+    return discr.norm(x - y, np.inf) / discr.norm(y, np.inf)
 
 
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
@@ -140,9 +150,11 @@ def test_lazy_op_diffusion(ctx_factory):
     alpha = discr.zeros(actx) + 1
     u = discr.zeros(actx)
 
+    rel_linf_error = partial(_rel_linf_error, discr)
+
     eager_result = op(alpha, u)
     lazy_result = compiled_op(alpha, u)
-    assert discr.norm(lazy_result - eager_result, np.inf) < 1e-15
+    assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
 def test_lazy_op_euler(ctx_factory):
@@ -174,9 +186,11 @@ def test_lazy_op_euler(ctx_factory):
         momentum=discr.zeros(actx) + np.array([1, 2]),
         species_mass=discr.zeros(actx) + np.array([0.5, 0.25, 0.25]))
 
+    rel_linf_error = partial(_rel_linf_error, discr)
+
     eager_result = op(cv)
     lazy_result = compiled_op(cv)
-    assert discr.norm((lazy_result - eager_result).join(), np.inf) < 1e-15
+    assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
 if __name__ == "__main__":
