@@ -5,7 +5,7 @@
 """
 
 __copyright__ = """
-Copyright (C) 2020-21 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -223,6 +223,7 @@ def _advance_state_leap(rhs, timestepper, state,
                                           t=t, dt=dt)
 
         # Leap interface here is *a bit* different.
+        stepper_cls.dt = dt
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component

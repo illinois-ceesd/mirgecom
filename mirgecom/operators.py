@@ -1,7 +1,10 @@
 r""":mod:`mirgecom.operators` provides helper functions for composing DG operators.
 
-.. autofunction:: jump
+.. autofunction:: dg_grad
 .. autofunction:: dg_div
+.. autofunction:: element_boundary_flux
+.. autofunction:: elbnd_flux
+.. autofunction:: jump
 """
 
 __copyright__ = """
@@ -48,6 +51,42 @@ def jump(trace_pair):
     like(trace_pair.int)
     """
     return trace_pair.ext - trace_pair.int
+
+
+def elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
+               int_tpair, xrank_pairs, boundaries):
+    """Generically compute flux across element boundaries."""
+    return (compute_interior_flux(int_tpair)
+            + sum(compute_interior_flux(part_tpair)
+                  for part_tpair in xrank_pairs)
+            + sum(compute_boundary_flux(btag) for btag in boundaries))
+
+
+def dg_grad(discr, interior_u, bndry_flux):
+    r"""Compute a DG gradient for the input *u*.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    compute_interior_flux:
+        function taking a `grudge.sym.TracePair` and returning the numerical flux
+        for the corresponding interior boundary.
+    compute_boundary_flux:
+        function taking a boundary tag and returning the numerical flux
+        for the corresponding domain boundary.
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg gradient operator applied to *u*
+    """
+    from grudge.op import weak_local_grad
+    return -discr.inverse_mass(weak_local_grad(discr, interior_u, nested=False)
+                               - discr.face_mass(bndry_flux))
 
 
 def dg_div(discr, vol_flux, bnd_flux):

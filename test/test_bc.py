@@ -36,7 +36,9 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import (
     EagerDGDiscretization,
+    interior_trace_pair
 )
+from mirgecom.fluid import make_conserved
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -173,3 +175,238 @@ def test_slipwall_flux(actx_factory, dim, order):
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < 1e-12
     )
+
+
+# Box grid generator widget lifted from @majosm's diffusion tester
+def _get_box_mesh(dim, a, b, n):
+    dim_names = ["x", "y", "z"]
+    boundary_tag_to_face = {}
+    for i in range(dim):
+        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
+        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
+        boundary_tag_to_face=boundary_tag_to_face)
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+# @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
+# def test_noslip(actx_factory, dim, order):
+def test_noslip(actx_factory, dim):
+    """Check IsothermalNoSlipBoundary viscous boundary treatment."""
+    actx = actx_factory()
+    order = 1
+
+    wall_temp = 1.0
+    kappa = 3.0
+    sigma = 5.0
+
+    from mirgecom.transport import SimpleTransport
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+
+    from mirgecom.boundary import IsothermalNoSlipBoundary
+    wall = IsothermalNoSlipBoundary(wall_temperature=wall_temp)
+    eos = IdealSingleGas(transport_model=transport_model, gas_const=1.0)
+
+    # from pytools.convergence import EOCRecorder
+    # eoc = EOCRecorder()
+
+    #    for np1 in [4, 8, 12]:
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    #    boundaries = {BTAG_ALL: wall}
+    # for i in range(dim):
+    #     boundaries[DTAG_BOUNDARY("-"+str(i+1))] = 0
+    #     boundaries[DTAG_BOUNDARY("+"+str(i+1))] = 0
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    print(f"{nhat=}")
+    # h = 1.0 / np1
+
+    from mirgecom.flux import central_scalar_flux
+
+    def scalar_flux_interior(int_tpair):
+        normal = thaw(actx, discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = central_scalar_flux(int_tpair, normal)
+        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+
+    # utility to compare stuff on the boundary only
+    # from functools import partial
+    # bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+    # for velocities in each direction
+    # err_max = 0.0
+    for vdir in range(dim):
+        vel = np.zeros(shape=(dim,))
+
+        # for velocity directions +1, and -1
+        for parity in [1.0, -1.0]:
+            vel[vdir] = parity
+            from mirgecom.initializers import Uniform
+            initializer = Uniform(dim=dim, velocity=vel)
+            uniform_state = initializer(nodes, eos=eos)
+            print(f"{uniform_state=}")
+            temper = eos.temperature(uniform_state)
+            print(f"{temper=}")
+
+            cv_int_tpair = interior_trace_pair(discr, uniform_state)
+            cv_flux_int = scalar_flux_interior(cv_int_tpair)
+            print(f"{cv_flux_int=}")
+            cv_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
+                                              eos=eos, cv=uniform_state)
+            print(f"{cv_flux_bc=}")
+            cv_flux_bnd = cv_flux_bc + cv_flux_int
+
+            t_int_tpair = interior_trace_pair(discr, temper)
+            t_flux_int = scalar_flux_interior(t_int_tpair)
+            t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+                                             cv=uniform_state)
+            t_flux_bnd = t_flux_bc + t_flux_int
+
+            from mirgecom.inviscid import inviscid_facial_flux
+            i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                    cv=uniform_state)
+            i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
+            i_flux_bnd = i_flux_bc + i_flux_int
+
+            print(f"{cv_flux_bnd=}")
+            print(f"{t_flux_bnd=}")
+            print(f"{i_flux_bnd=}")
+
+            from mirgecom.operators import dg_grad
+            grad_cv = make_conserved(
+                dim, q=dg_grad(discr, uniform_state.join(), cv_flux_bnd.join())
+            )
+            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            print(f"{grad_cv=}")
+            print(f"{grad_t=}")
+
+            v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                   cv=uniform_state, grad_cv=grad_cv,
+                                                   t=temper, grad_t=grad_t)
+            print(f"{v_flux_bc=}")
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+# @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
+# def test_noslip(actx_factory, dim, order):
+def test_prescribedviscous(actx_factory, dim):
+    """Check viscous prescribed boundary treatment."""
+    actx = actx_factory()
+    order = 1
+
+    kappa = 3.0
+    sigma = 5.0
+
+    from mirgecom.transport import SimpleTransport
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+
+    # Functions that control PrescribedViscousBoundary (pvb):
+    # Specify none to get a DummyBoundary-like behavior
+    # Specify q_func to prescribe soln(Q) at the boundary (InflowOutflow likely)
+    # > q_plus = q_func(nodes, eos, q_minus, **kwargs)
+    # Specify (*note) q_flux_func to prescribe flux of Q through the boundary:
+    # > q_flux_func(nodes, eos, q_minus, nhat, **kwargs)
+    # Specify grad_q_func to prescribe grad(Q) at the boundary:
+    # > s_plus = grad_q_func(nodes, eos, q_minus, grad_q_minus ,**kwargs)
+    # Specify t_func to prescribe temperature at the boundary: (InflowOutflow likely)
+    # > t_plus = t_func(nodes, eos, q_minus, **kwargs)
+    # Prescribe (*note) t_flux to prescribe "flux of temperature" at the boundary:
+    # > t_flux_func(nodes, eos, q_minus, nhat, **kwargs)
+    # Prescribe grad(temperature) at the boundary with grad_t_func:
+    # > grad_t_plus = grad_t_func(nodes, eos, q_minus, grad_t_minus, **kwargs)
+    # Fully prescribe the inviscid or viscous flux - unusual
+    # inviscid_flux_func(nodes, eos, q_minus, **kwargs)
+    # viscous_flux_func(nodes, eos, q_minus, grad_q_minus, t_minus,
+    #                   grad_t_minus, nhat, **kwargs)
+    #
+    # (*note): Most people will never change these as they are used internally
+    #          to compute a DG gradient of Q and temperature.
+
+    from mirgecom.boundary import PrescribedViscousBoundary
+    wall = PrescribedViscousBoundary()
+    eos = IdealSingleGas(transport_model=transport_model, gas_const=1.0)
+
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    #    boundaries = {BTAG_ALL: wall}
+    # for i in range(dim):
+    #     boundaries[DTAG_BOUNDARY("-"+str(i+1))] = 0
+    #     boundaries[DTAG_BOUNDARY("+"+str(i+1))] = 0
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
+    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    print(f"{nhat=}")
+
+    from mirgecom.flux import central_scalar_flux
+
+    def scalar_flux_interior(int_tpair):
+        normal = thaw(actx, discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = central_scalar_flux(int_tpair, normal)
+        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+
+    # utility to compare stuff on the boundary only
+    # from functools import partial
+    # bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+    # for velocities in each direction
+    # err_max = 0.0
+    for vdir in range(dim):
+        vel = np.zeros(shape=(dim,))
+
+        # for velocity directions +1, and -1
+        for parity in [1.0, -1.0]:
+            vel[vdir] = parity
+            from mirgecom.initializers import Uniform
+            initializer = Uniform(dim=dim, velocity=vel)
+            cv = initializer(nodes, eos=eos)
+
+            print(f"{cv=}")
+            temper = eos.temperature(cv)
+            print(f"{temper=}")
+
+            cv_int_tpair = interior_trace_pair(discr, cv)
+            cv_flux_int = scalar_flux_interior(cv_int_tpair)
+            cv_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
+                                              eos=eos, cv=cv)
+            cv_flux_bnd = cv_flux_bc + cv_flux_int
+
+            t_int_tpair = interior_trace_pair(discr, temper)
+            t_flux_int = scalar_flux_interior(t_int_tpair)
+            t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+                                             cv=cv)
+            t_flux_bnd = t_flux_bc + t_flux_int
+
+            from mirgecom.inviscid import inviscid_facial_flux
+            i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                    cv=cv)
+            i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
+            i_flux_bnd = i_flux_bc + i_flux_int
+
+            print(f"{cv_flux_bnd=}")
+            print(f"{t_flux_bnd=}")
+            print(f"{i_flux_bnd=}")
+
+            from mirgecom.operators import dg_grad
+            grad_cv = make_conserved(
+                dim, q=dg_grad(discr, cv.join(), cv_flux_bnd.join())
+            )
+            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            print(f"{grad_cv=}")
+            print(f"{grad_t=}")
+
+            v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                   cv=cv, grad_cv=grad_cv,
+                                                   t=temper, grad_t=grad_t)
+            print(f"{v_flux_bc=}")
