@@ -1,6 +1,5 @@
 r""":mod:`mirgecom.operators` provides helper functions for composing DG operators.
 
-.. autofunction:: jump
 .. autofunction:: dg_div
 """
 
@@ -27,27 +26,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-
-# placeholder awaits resolution on grudge PR #71
-def jump(trace_pair):
-    r"""Return the "jump" in the quantities represented by the *trace_pair*.
-
-    The jump in a quantity $\mathbf{q}$ is denoted $[\mathbf{q}]$ and is
-    defined by:
-    .. math:
-        [\mathbf{q}] = \mathbf{q}^+ - \mathbf{q}^-
-
-    Parameters
-    ----------
-    trace_pair: :class:`grudge.sym.TracePair`
-    Represents the quantity for which the jump is to be calculated.
-
-    Returns
-    -------
-    like(trace_pair.int)
-    """
-    return trace_pair.ext - trace_pair.int
 
 
 def dg_div(discr, vol_flux, bnd_flux):

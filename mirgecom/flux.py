@@ -30,7 +30,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from mirgecom.operators import jump
 
 
 def lfr_flux(cv_tpair, f_tpair, normal, lam):
@@ -74,4 +73,4 @@ def lfr_flux(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg@normal - lam*jump(cv_tpair)/2
+    return f_tpair.avg@normal - lam*cv_tpair.diff/2
