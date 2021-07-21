@@ -30,6 +30,7 @@ run-debug-*
 *.vtk
 *.silo
 *.dat
+*.pkl
 
 .cache
 .pytest_cache
@@ -39,3 +40,7 @@ test/nodal-dg
 # Logging output files
 *.sqlite
 *.sqlite-journal
+
+
+# Linting temp files
+.run-pylint.py

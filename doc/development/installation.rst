@@ -22,7 +22,7 @@ set up a working version of mirgecom and all its dependencies:
 
    # Run a quick test
    $ cd mirgecom/examples
-   $ python ./wave-eager.py
+   $ python ./wave.py
 
 
 .. note::

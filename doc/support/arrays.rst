@@ -70,10 +70,8 @@ the following:
    >>> dcoll.nodes() * 5
    Traceback (most recent call last):
     ...
-   AttributeError: 'NoneType' object has no attribute 'device'
+   ValueError: array containers with frozen arrays cannot be operated upon
 
-(That error message is not ideal; it is being `worked on
-<https://github.com/inducer/pyopencl/pull/486>`__.)
 Fortunately, recovering from this is straightforward:
 
 .. doctest::

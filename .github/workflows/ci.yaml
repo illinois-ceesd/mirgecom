@@ -40,14 +40,13 @@ jobs:
           run: |
             . .ci-support/install.sh
 
-        - name: Pylint
+        - name: Run Pylint
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             python -m pip install wheel
             python -m pip install pylint pyyaml
-            curl -L -O https://raw.githubusercontent.com/inducer/ci-support/master/run-pylint.py
-            python run-pylint.py --yaml-rcfile=.pylintrc.yml "$(basename $GITHUB_REPOSITORY)" test examples && echo "Pylint found no errors."
+            ./run-pylint.sh
 
     pydocstyle:
         runs-on: ubuntu-latest
@@ -57,7 +56,7 @@ jobs:
           uses: actions/setup-python@v1
           with:
             python-version: '3.x'
-        - name: Lint
+        - name: Run Pydocstyle
           run: |
             python3 -m venv myenv
             source myenv/bin/activate
@@ -66,11 +65,8 @@ jobs:
             python -m pydocstyle "$(basename $GITHUB_REPOSITORY)" && echo "pydocstyle found no errors."
 
     pytest:
-        name: Pytest ${{ matrix.os }}
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest, macos-latest]
+        name: Pytest
+        runs-on: ubuntu-latest
 
         steps:
         - uses: actions/checkout@v2
@@ -83,18 +79,11 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            if [[ ${{ matrix.os }} == "macos-latest" ]]; then
-              export PYOPENCL_TEST=port:pthread
-            fi
-
             python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
-        name: Examples ${{ matrix.os }}
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest, macos-latest]
+        name: Examples
+        runs-on: ubuntu-latest
 
         steps:
         - uses: actions/checkout@v2
@@ -102,12 +91,20 @@ jobs:
           run: |
             . .ci-support/install.sh
 
+        - name: Test lazy accuracy
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            export XDG_CACHE_HOME=/tmp
+            cd examples && ./test_lazy_accuracy.sh
+
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            export XDG_CACHE_HOME=/tmp
             examples/run_examples.sh ./examples
-
+ 
     doc:
         name: Documentation
         runs-on: ubuntu-latest
@@ -155,4 +152,33 @@ jobs:
             cd ..
             source emirge/config/activate_env.sh
             cd mirgecom/examples
-            python -m mpi4py ./wave-eager-mpi.py
+            python -m mpi4py ./pulse-mpi.py
+
+    y1: 
+        name: Production testing
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, macos-latest]
+
+        steps:
+        - uses: actions/checkout@v2
+        - name: Prepare production environment
+          run: |
+            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Darwin ]] && brew update && brew install mpich
+            cd ..
+            git clone https://github.com/illinois-ceesd/emirge emirge.y1
+            cd emirge.y1
+            . ../mirgecom/.ci-support/production-install.sh ../mirgecom/.ci-support/production-testing-env.sh
+        - name: Run production test
+          run: |
+            cd ..
+            source emirge.y1/config/activate_env.sh
+            . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
+            for production_driver in $(ls | grep "production_driver_");
+            do
+               cd "$production_driver"/smoke_test
+               python -m mpi4py ./driver.py -i run_params.yaml
+               cd ../../
+            done

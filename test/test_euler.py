@@ -96,10 +96,12 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
     def rand():
-        ary = discr.zeros(actx)
-        for grp_ary in ary:
-            grp_ary.set(np.random.rand(*grp_ary.shape))
-        return ary
+        from meshmode.dof_array import DOFArray
+        return DOFArray(
+            actx,
+            tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))
+                  for grp in discr.discr_from_dd("vol").groups)
+        )
 
     mass = rand()
     energy = rand()
@@ -719,6 +721,7 @@ def _euler_flow_stepper(actx, parameters):
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
+
     cv = initializer(nodes)
     sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
 

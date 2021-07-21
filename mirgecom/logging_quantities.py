@@ -40,9 +40,11 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
-from typing import Any
-from logpyle import (DtConsumer, LogQuantity, LogManager, MultiLogQuantity,
-    add_run_info, add_general_quantities, add_simulation_quantities)
+from logpyle import (
+    DtConsumer, LogQuantity, PostLogQuantity, LogManager,
+    MultiPostLogQuantity, add_run_info,
+    add_general_quantities, add_simulation_quantities
+)
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
@@ -236,7 +238,7 @@ class StateConsumer:
 # {{{ Discretization-based quantities
 
 
-class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
+class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
     Possible rank aggregation operations (``op``) are: min, max, L2_norm.
@@ -332,7 +334,7 @@ class LogUserQuantity(LogQuantity):
 
 # {{{ Kernel profile quantities
 
-class KernelProfile(MultiLogQuantity):
+class KernelProfile(MultiPostLogQuantity):
     """Logging support for statistics of the OpenCL kernel profiling (num_calls, \
     time, flops, bytes_accessed, footprint).
 
@@ -380,7 +382,7 @@ class KernelProfile(MultiLogQuantity):
 
 # {{{ Memory profiling
 
-class PythonMemoryUsage(LogQuantity):
+class PythonMemoryUsage(PostLogQuantity):
     """Logging support for Python memory usage (RSS, host).
 
     Uses :mod:`psutil` to track memory usage. Virtually no overhead.
@@ -401,7 +403,7 @@ class PythonMemoryUsage(LogQuantity):
         return self.process.memory_info()[0] / 1024 / 1024
 
 
-class DeviceMemoryUsage(LogQuantity):
+class DeviceMemoryUsage(PostLogQuantity):
     """Logging support for GPU memory usage (Nvidia only currently)."""
 
     def __init__(self, name: str = None) -> None:

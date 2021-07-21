@@ -146,7 +146,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
         DOFArray or object array of DOFArrays
 
     """
-    from meshmode.array_context import FirstAxisIsElementsTag
+    from meshmode.transform_metadata import FirstAxisIsElementsTag
     return DOFArray(
         actx,
         tuple(actx.einsum("j,ej->ej",
