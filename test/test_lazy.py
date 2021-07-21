@@ -30,6 +30,7 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
+from meshmode.dof_array import thaw
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -129,6 +130,7 @@ def _rel_linf_error(discr, x, y):
 def test_lazy_op_diffusion(ctx_factory):
     cl_ctx = ctx_factory()
     actx, discr = _op_test_fixture(cl_ctx)
+    nodes = thaw(actx, discr.nodes())
 
     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
     from mirgecom.diffusion import (
@@ -148,7 +150,7 @@ def test_lazy_op_diffusion(ctx_factory):
     compiled_op = actx.compile(op)
 
     alpha = discr.zeros(actx) + 1
-    u = discr.zeros(actx)
+    u = actx.np.cos(np.pi*nodes[0])
 
     rel_linf_error = partial(_rel_linf_error, discr)
 
@@ -160,9 +162,9 @@ def test_lazy_op_diffusion(ctx_factory):
 def test_lazy_op_euler(ctx_factory):
     cl_ctx = ctx_factory()
     actx, discr = _op_test_fixture(cl_ctx)
+    nodes = thaw(actx, discr.nodes())
 
     from grudge.dof_desc import DTAG_BOUNDARY
-    from mirgecom.fluid import make_conserved
     from mirgecom.eos import IdealSingleGas
     from mirgecom.boundary import AdiabaticSlipBoundary
     from mirgecom.euler import euler_operator
@@ -179,17 +181,15 @@ def test_lazy_op_euler(ctx_factory):
 
     compiled_op = actx.compile(op)
 
-    cv = make_conserved(
-        dim=2,
-        mass=discr.zeros(actx) + 1,
-        energy=discr.zeros(actx) + 1,
-        momentum=discr.zeros(actx) + np.array([1, 2]),
-        species_mass=discr.zeros(actx) + np.array([0.5, 0.25, 0.25]))
+    from mirgecom.initializers import MulticomponentLump
+    init = MulticomponentLump(
+        dim=2, velocity=np.ones(2), spec_y0s=np.ones(3), spec_amplitudes=np.ones(3))
+    state = init(nodes)
 
     rel_linf_error = partial(_rel_linf_error, discr)
 
-    eager_result = op(cv)
-    lazy_result = compiled_op(cv)
+    eager_result = op(state)
+    lazy_result = compiled_op(state)
     assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
