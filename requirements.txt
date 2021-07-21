@@ -6,7 +6,6 @@ pyvisfile
 pymetis
 importlib-resources
 psutil
-gmsh
 PyYAML
 
 # The following packages will be git cloned by emirge:
