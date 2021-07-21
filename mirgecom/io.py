@@ -3,6 +3,7 @@
 .. autofunction:: make_status_message
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
+.. autofunction:: read_and_distribute_yaml_data
 """
 
 __copyright__ = """
@@ -74,3 +75,16 @@ def make_rank_fname(basename, rank=0, step=0, t=0):
 def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename."""
     return f"{basename}-{step:06d}.pvtu"
+
+
+def read_and_distribute_yaml_data(mpi_comm, file_path):
+    """Read a YAML file on one rank, broadcast result to world."""
+    import yaml
+    rank = mpi_comm.Get_rank()
+    if rank == 0:
+        with open(file_path) as f:
+            input_data = yaml.load(f, Loader=yaml.FullLoader)
+    else:
+        input_data = None
+    mpi_comm.bcast(input_data, root=0)
+    return input_data

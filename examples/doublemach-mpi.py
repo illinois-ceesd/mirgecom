@@ -30,7 +30,12 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
@@ -38,7 +43,6 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.artificial_viscosity import (
     av_operator,
@@ -46,7 +50,7 @@ from mirgecom.artificial_viscosity import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-
+from mirgecom.fluid import make_conserved
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
@@ -56,10 +60,10 @@ from mirgecom.boundary import (
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
+from mirgecom.simutil import get_sim_timestep
 
 from logpyle import set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -124,9 +128,9 @@ def get_doublemach_mesh():
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_leap=False,
-         use_profiling=False, rst_step=None, rst_name=None,
-         casename="doubleMach", use_logmgr=True):
+def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None,
+         rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -142,61 +146,39 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            logmgr=logmgr)
+        queue = cl.CommandQueue(
+            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 2
-    order = 3
-    # Too many steps for CI
-    # t_final = 1.0e-2
+    actx = actx_class(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    # Timestepping control
+    current_step = 0
+    timestepper = rk4_step
     t_final = 1.0e-3
     current_cfl = 0.1
     current_dt = 1.0e-4
     current_t = 0
-    # {{{ Initialize simple transport model
-    kappa = 1e-5
-    sigma = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
-    # }}}
-    eos = IdealSingleGas(transport_model=transport_model)
-    initializer = DoubleMachReflection()
-
-    boundaries = {
-        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
-        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
-    }
     constant_cfl = False
+
+    # Some i/o frequencies
     nstatus = 10
     nviz = 100
-    current_step = 0
-    timestepper = rk4_step
     nrestart = 100
     nhealth = 1
-
-    s0 = -6.0
-    kappa = 1.0
-    alpha = 2.0e-2
-    from mpi4py import MPI
 
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    if rst_step:  # read the grid from restart data
-        rst_fname = rst_pattern.format(cname=rst_name, step=rst_step, rank=rank)
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_fname)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
@@ -207,10 +189,12 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
         local_nelements = local_mesh.nelements
 
+    order = 3
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
     nodes = thaw(actx, discr.nodes())
 
+    dim = 2
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
@@ -228,9 +212,30 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    if rst_step:
+    # Solution setup and initialization
+    s0 = -6.0
+    kappa = 1.0
+    alpha = 2.0e-2
+    # {{{ Initialize simple transport model
+    kappa_t = 1e-5
+    sigma_v = 1e-5
+    transport_model = SimpleTransport(viscosity=sigma_v,
+                                      thermal_conductivity=kappa_t)
+    # }}}
+    eos = IdealSingleGas(transport_model=transport_model)
+    initializer = DoubleMachReflection()
+
+    boundaries = {
+        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
+        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
+    }
+
+    if rst_filename:
         current_t = restart_data["t"]
-        current_step = rst_step
+        current_step = restart_data["step"]
         current_state = restart_data["state"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
@@ -277,17 +282,18 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
-        rst_data = {
-            "local_mesh": local_mesh,
-            "state": state,
-            "t": t,
-            "step": step,
-            "order": order,
-            "global_nelements": global_nelements,
-            "num_parts": nparts
-        }
-        from mirgecom.restart import write_restart_file
-        write_restart_file(actx, rst_data, rst_fname, comm)
+        if rst_fname != rst_filename:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": state,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": nparts
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(state, dv):
         # Note: This health check is tuned s.t. it is a test that
@@ -346,10 +352,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            if step == rst_step:  # don't do viz or restart @ restart
-                do_viz = False
-                do_restart = False
-
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
@@ -368,8 +370,10 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        t_remaining = max(0, t_final - t)
-        return state, min(dt, t_remaining)
+        dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                              current_cfl, eos, t_final, constant_cfl)
+
+        return state, dt
 
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
@@ -388,6 +392,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
             s0=s0, kappa=kappa)
         )
+
+    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                  current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -412,7 +419,36 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
 
 if __name__ == "__main__":
+    import argparse
+    casename = "doublemach"
+    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="turn on logging")
+    parser.add_argument("--leap", action="store_true",
+        help="use leap timestepper")
+    parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--casename", help="casename to use for i/o")
+    args = parser.parse_args()
+    if args.profiling:
+        if args.lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+        actx_class = PyOpenCLProfilingArrayContext
+    else:
+        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+            else PyOpenCLArrayContext
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    main()
+    if args.casename:
+        casename = args.casename
+    rst_filename = None
+    if args.restart_file:
+        rst_filename = args.restart_file
+
+    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
