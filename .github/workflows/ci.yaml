@@ -91,13 +91,20 @@ jobs:
           run: |
             . .ci-support/install.sh
 
+        - name: Test lazy accuracy
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            export XDG_CACHE_HOME=/tmp
+            cd examples && ./test_lazy_accuracy.sh
+
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             examples/run_examples.sh ./examples
-
+ 
     doc:
         name: Documentation
         runs-on: ubuntu-latest
@@ -169,5 +176,9 @@ jobs:
             cd ..
             source emirge.y1/config/activate_env.sh
             . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
-            cd production-driver/smoke_test
-            python -m mpi4py ./nozzle.py -i run_params.yaml
+            for production_driver in $(ls | grep "production_driver_");
+            do
+               cd "$production_driver"/smoke_test
+               python -m mpi4py ./driver.py -i run_params.yaml
+               cd ../../
+            done

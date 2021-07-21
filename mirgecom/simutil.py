@@ -185,7 +185,8 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
 def check_naninf_local(discr, dd, field):
     """Check for any NANs or Infs in the field."""
-    s = op.nodal_sum_loc(discr, dd, field)
+    actx = field.array_context
+    s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
     return np.isnan(s) or (s == np.inf)
 
 
