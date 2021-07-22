@@ -214,13 +214,12 @@ def _advance_state_leap(rhs, timestepper, state,
         if isinstance(state, np.ndarray):
             state = thaw(freeze(state, actx), actx)
 
-        if dt < 0:
-            return istep, t, state
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
                                           step=istep,
                                           t=t, dt=dt)
+        stepper_cls.dt = dt
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
