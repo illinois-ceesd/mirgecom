@@ -250,9 +250,8 @@ def get_viscous_timestep(discr, eos, cv):
     d_alpha_max = 0
     transport = eos.transport_model()
     if transport:
-        nspecies = len(cv.species_mass)
         mu = transport.viscosity(eos, cv)
-        if nspecies > 0:
+        if cv.species_mass:
             d_alpha_max = \
                 get_local_max_species_diffusivity(
                     cv.array_context, discr, transport.species_diffusivity(eos, cv)
@@ -292,6 +291,8 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
 
     Parameters
     ----------
+    actx: :class:`arraycontext.ArrayContext`
+        Array context to use
     discr: :class:`grudge.eager.EagerDGDiscretization`
         the discretization to use
     d_alpha: np.ndarray
@@ -303,7 +304,7 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
 
         n_species, ni1, ni0 = stacked_diffusivity.shape
 
-        @memoize_in(discr, ("max_species_diffusivity", n_species))
+        @memoize_in(discr, ("max_species_diffusivity", n_species, i))
         def make_max_kernel():
             # fun fact: arraycontext needs these exact loop names to work (even
             # though a loopy kernel can have whatever iterator names the user wants)
