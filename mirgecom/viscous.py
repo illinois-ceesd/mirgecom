@@ -42,6 +42,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from pytools import memoize_in
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import (
     velocity_gradient,
@@ -49,7 +50,6 @@ from mirgecom.fluid import (
     make_conserved
 )
 from meshmode.dof_array import thaw, DOFArray
-
 import arraycontext
 
 
@@ -247,14 +247,20 @@ def get_viscous_timestep(discr, eos, cv):
     length_scales = characteristic_lengthscales(cv.array_context, discr)
 
     mu = 0
+    d_alpha_max = 0
     transport = eos.transport_model()
     if transport:
+        nspecies = len(cv.species_mass)
         mu = transport.viscosity(eos, cv)
+        if nspecies > 0:
+            d_alpha_max = \
+                get_local_max_species_diffusivity(
+                    cv.array_context, discr, transport.species_diffusivity(eos, cv)
+                )
 
     return(
         length_scales / (compute_wavespeed(eos, cv)
-        + ((mu + get_local_max_species_diffusivity(transport, eos, cv))
-        / length_scales))
+        + ((mu + d_alpha_max) / length_scales))
     )
 
 
@@ -281,38 +287,33 @@ def get_viscous_cfl(discr, eos, dt, cv):
     return dt / get_viscous_timestep(discr, eos=eos, cv=cv)
 
 
-def get_local_max_species_diffusivity(transport, eos, cv):
+def get_local_max_species_diffusivity(actx, discr, d_alpha):
     """Return the maximum species diffusivity at every point.
 
     Parameters
     ----------
-    transport: mirgecom.transport.TransportModel
-        A model representing thermo-diffusive transport
-    eos: mirgecom.eos.GasEOS
-        An equation of state implementing the speed_of_sound method
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid solution
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        the discretization to use
+    d_alpha: np.ndarray
+        Species diffusivities
     """
-    actx = cv.array_context
-
-    if(transport is None or transport._d_alpha.size == 0):
-        return 0 * cv.mass
-
-    species_diffusivity = transport.species_diffusivity(eos, cv)
     return_dof = []
-    for i in range(len(species_diffusivity[0])):
-        stacked_diffusivity = actx.np.stack([x[i] for x in species_diffusivity])
+    for i in range(len(d_alpha[0])):
+        stacked_diffusivity = actx.np.stack([x[i] for x in d_alpha])
 
         n_species, ni1, ni0 = stacked_diffusivity.shape
 
-        # fun fact: arraycontext needs these exact loop names to work (even though a
-        # loopy kernel can have whatever iterator names the user wants)
-        # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
-        # spatial locality, causing fewer cache misses
-        knl = arraycontext.make_loopy_program(
-            "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
-            "out[i1,i0] = max(i2, a[i2,i1,i0])"
-        )
+        @memoize_in(discr, ("max_species_diffusivity", n_species))
+        def make_max_kernel():
+            # fun fact: arraycontext needs these exact loop names to work (even
+            # though a loopy kernel can have whatever iterator names the user wants)
+            # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
+            # spatial locality, causing fewer cache misses
+            return arraycontext.make_loopy_program(
+                "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
+                "out[i1,i0] = max(i2, a[i2,i1,i0])"
+            )
 
-        return_dof.append(actx.call_loopy(knl, a=stacked_diffusivity)["out"])
+        return_dof.append(
+            actx.call_loopy(make_max_kernel(), a=stacked_diffusivity)["out"])
     return DOFArray(actx, tuple(return_dof))
