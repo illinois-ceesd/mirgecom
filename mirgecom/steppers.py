@@ -230,6 +230,7 @@ def _advance_state_leap(rhs, timestepper, state,
                     state, dt = post_step_callback(state=state,
                                                    step=istep,
                                                    t=t, dt=dt)
+                stepper_cls.dt = dt
 
                 istep += 1
 
