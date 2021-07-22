@@ -120,24 +120,6 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     return min(t_remaining, mydt)
 
 
-def allsync(local_values, comm=None, op=None):
-    """Perform allreduce if MPI comm is provided."""
-    if comm is None:
-        return local_values
-    if op is None:
-        from mpi4py import MPI
-        op = MPI.MAX
-    return comm.allreduce(local_values, op=op)
-
-
-def check_range_local(discr, dd, field, min_value, max_value):
-    """Check for any negative values."""
-    return (
-        op.nodal_min_loc(discr, dd, field) < min_value
-        or op.nodal_max_loc(discr, dd, field) > max_value
-    )
-
-
 def write_visfile(discr, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None):
     """Write VTK output for the fields specified in *io_fields*.
@@ -181,6 +163,24 @@ def write_visfile(discr, io_fields, visualizer, vizname,
                 basename=vizname, step=step, t=t
             )
         )
+
+
+def allsync(local_values, comm=None, op=None):
+    """Perform allreduce if MPI comm is provided."""
+    if comm is None:
+        return local_values
+    if op is None:
+        from mpi4py import MPI
+        op = MPI.MAX
+    return comm.allreduce(local_values, op=op)
+
+
+def check_range_local(discr, dd, field, min_value, max_value):
+    """Check for any negative values."""
+    return (
+        op.nodal_min_loc(discr, dd, field) < min_value
+        or op.nodal_max_loc(discr, dd, field) > max_value
+    )
 
 
 def check_naninf_local(discr, dd, field):
