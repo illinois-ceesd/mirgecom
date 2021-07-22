@@ -2,7 +2,6 @@ r""":mod:`mirgecom.operators` provides helper functions for composing DG operato
 
 .. autofunction:: dg_grad
 .. autofunction:: dg_div
-.. autofunction:: element_boundary_flux
 .. autofunction:: elbnd_flux
 """
 

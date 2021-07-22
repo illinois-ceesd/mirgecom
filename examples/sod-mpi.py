@@ -170,8 +170,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    eos = IdealSingleGas()
     initializer = SodShock1D(dim=dim)
+    eos = IdealSingleGas()
     boundaries = {
         BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
     }
