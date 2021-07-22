@@ -2,7 +2,6 @@
 
 .. autofunction:: read_restart_data
 .. autofunction:: write_restart_file
-
 """
 
 __copyright__ = """
