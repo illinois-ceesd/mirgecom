@@ -2,8 +2,6 @@
 
 .. autofunction:: read_restart_data
 .. autofunction:: write_restart_file
-.. autofunction:: make_fluid_state
-
 """
 
 __copyright__ = """
