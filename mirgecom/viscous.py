@@ -252,7 +252,7 @@ def get_viscous_timestep(discr, eos, cv):
     if transport:
         mu = transport.viscosity(eos, cv)
         d_alpha = transport.species_diffusivity(eos, cv)
-        if d_alpha is not np.empty:
+        if d_alpha is not np.empty and d_alpha.size != 0:
             d_alpha_max = \
                 get_local_max_species_diffusivity(
                     cv.array_context, discr, d_alpha
