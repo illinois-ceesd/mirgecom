@@ -298,7 +298,7 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
         Species diffusivities
     """
     return_dof = []
-    for i in range(len(d_alpha)):
+    for i in range(len(d_alpha[0])):
         stacked_diffusivity = actx.np.stack([x[i] for x in d_alpha])
 
         n_species, ni1, ni0 = stacked_diffusivity.shape
