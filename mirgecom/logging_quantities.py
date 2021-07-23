@@ -49,7 +49,7 @@ from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
 
-from typing import Optional, Callable
+from typing import Any, Optional, Callable
 import numpy as np
 
 
@@ -235,8 +235,30 @@ class StateConsumer:
 
 # }}}
 
-# {{{ Discretization-based quantities
 
+# {{{ Logging support for user-defined quantities
+
+class PushLogQuantity(LogQuantity):
+    """Logging support for arbitrary user quantities."""
+
+    def __init__(self, name, value=None, unit=None,
+          description=None) -> None:
+        LogQuantity.__init__(self, name=name, unit=unit,
+                             description=description)
+        self._quantity_value = value
+
+    def __call__(self) -> float:
+        """Return the actual logged quantity."""
+        return self._quantity_value
+
+    def set_quantity_value(self, value: Any) -> None:
+        """Set the value of the logged quantity."""
+        self._quantity_value = value
+
+# }}}
+
+
+# {{{ Discretization-based quantities
 
 class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     """Logging support for physical quantities.
@@ -292,44 +314,6 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         return self._discr_reduction(quantity)
 
 # }}}
-
-
-class LogCFL(LogQuantity, StateConsumer, DtConsumer):
-    """Logging support for CFL."""
-
-    def __init__(self, discr, eos, name="cfl", dt: float = 0) -> None:
-        LogQuantity.__init__(self, name, "1")
-        StateConsumer.__init__(self, None)
-        DtConsumer.__init__(self, dt)
-        self.discr = discr
-        self.eos = eos
-
-    def __call__(self) -> float:
-        """Return the value of cfl."""
-        if self.state is None:
-            return None
-
-        from mirgecom.inviscid import get_inviscid_cfl
-        return get_inviscid_cfl(self.discr, eos=self.eos, dt=self.dt, cv=self.state)
-
-
-class LogUserQuantity(LogQuantity):
-    """Logging support for arbitrary user quantities."""
-
-    def __init__(self, name="user_quantity", value=None, user_function=None) -> None:
-        LogQuantity.__init__(self, name, "1")
-        self._quantity_value = value
-        self._uf = user_function
-
-    def __call__(self) -> float:
-        """Return the actual logged quantity."""
-        if self._uf:
-            return self._uf(self._quantity_value)
-        return self._quantity_value
-
-    def set_quantity_value(self, value: Any) -> None:
-        """Set the value of the logged quantity."""
-        self._quantity_value = value
 
 
 # {{{ Kernel profile quantities
