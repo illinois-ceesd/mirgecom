@@ -146,10 +146,20 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     comm = discr.mpi_communicator
     rank = 0
-    if comm is not None:
+
+    if comm:
         rank = comm.Get_rank()
 
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+
+    if rank == 0:
+        import os
+        viz_dir = os.path.dirname(rank_fn)
+        if viz_dir and not os.path.exists(viz_dir):
+            os.makedirs(viz_dir)
+
+    if comm:
+        comm.barrier()
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
