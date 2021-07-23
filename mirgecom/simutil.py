@@ -155,6 +155,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     comm = discr.mpi_communicator
     rank = 0
+
     if comm:
         rank = comm.Get_rank()
 
@@ -165,6 +166,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         viz_dir = os.path.dirname(rank_fn)
         if viz_dir and not os.path.exists(viz_dir):
             os.makedirs(viz_dir)
+
     if comm:
         comm.barrier()
 
