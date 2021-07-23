@@ -149,6 +149,8 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     if comm:
         rank = comm.Get_rank()
+        
+    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
     if rank == 0:
         import os
@@ -158,8 +160,6 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     if comm:
         comm.barrier()
-
-    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
