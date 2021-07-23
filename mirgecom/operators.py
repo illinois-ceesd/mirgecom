@@ -2,7 +2,6 @@ r""":mod:`mirgecom.operators` provides helper functions for composing DG operato
 
 .. autofunction:: dg_grad
 .. autofunction:: dg_div
-.. autofunction:: elbnd_flux
 """
 
 __copyright__ = """
@@ -28,15 +27,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-
-def elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-               int_tpair, xrank_pairs, boundaries):
-    """Generically compute flux across element boundaries."""
-    return (compute_interior_flux(int_tpair)
-            + sum(compute_interior_flux(part_tpair)
-                  for part_tpair in xrank_pairs)
-            + sum(compute_boundary_flux(btag) for btag in boundaries))
 
 
 def dg_grad(discr, interior_u, bndry_flux):

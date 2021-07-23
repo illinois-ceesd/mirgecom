@@ -79,10 +79,6 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     from grudge.op import local_grad
     grad_cv = make_conserved(dim,
                              q=local_grad(discr, cv.join()))
-
-    from grudge.op import local_grad
-    grad_cv = make_conserved(dim,
-                             q=local_grad(discr, cv.join()))
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
     tol = 1e-11
