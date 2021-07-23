@@ -149,7 +149,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     if comm:
         rank = comm.Get_rank()
-        
+
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
     if rank == 0:
