@@ -60,7 +60,7 @@ from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 
 from mirgecom.logging_quantities import (
-    LogUserQuantity,
+    PushLogQuantity,
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_device_name,
@@ -165,7 +165,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
 
-        logmgr.add_quantity(LogUserQuantity(name="cfl", value=current_cfl))
+        logmgr.add_quantity(PushLogQuantity(name="cfl", value=current_cfl))
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
@@ -176,7 +176,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ("max_pressure",    "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s"),
-            ("cfl.max", "max CFL number: {value:6g}")
+            ("cfl.max", "CFL number: {value:6g}")
         ])
 
         try:
@@ -231,9 +231,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 from mirgecom.inviscid import get_inviscid_cfl
                 cfl = nodal_max(discr, "vol",
                                 get_inviscid_cfl(discr, eos, current_dt, cv=state))
+
+        logmgr.set_quantity_value("cfl", cfl)
+
         if rank == 0:
             logger.info(
-                f"------ {cfl=}\n"
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
 
@@ -344,11 +346,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
+        # Logmgr needs to know about EOS, dt?
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state, eos)
             logmgr.tick_after()
         return state, dt
 
