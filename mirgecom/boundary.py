@@ -66,13 +66,13 @@ class FluidBC(FluidBoundary):
     .. automethod:: boundary_pair
     """
 
+    @abstractmethod
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def boundary_pair(self, discr, btag, cv, eos, **kwargs):
         """Get the interior and exterior solution (*u*) on the boundary."""
-        raise NotImplementedError()
 
 
 class PrescribedInviscidBoundary(FluidBC):
