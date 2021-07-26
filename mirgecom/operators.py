@@ -1,7 +1,6 @@
-"""Provide some utilities for restarting simulations.
+r""":mod:`mirgecom.operators` provides helper functions for composing DG operators.
 
-.. autofunction:: read_restart_data
-.. autofunction:: write_restart_file
+.. autofunction:: div_operator
 """
 
 __copyright__ = """
@@ -28,29 +27,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pickle
-from meshmode.dof_array import array_context_for_pickling
 
+def div_operator(discr, u, flux):
+    r"""Compute a DG divergence for *u* with element boundary flux given in *flux*.
 
-def read_restart_data(actx, filename):
-    """Read the raw restart data dictionary from the given pickle restart file."""
-    with array_context_for_pickling(actx):
-        with open(filename, "rb") as f:
-            return pickle.load(f)
-
-
-def write_restart_file(actx, restart_data, filename, comm=None):
-    """Pickle the simulation data into a file for use in restarting."""
-    rank = 0
-    if comm:
-        rank = comm.Get_rank()
-    if rank == 0:
-        import os
-        rst_dir = os.path.dirname(filename)
-        if rst_dir:
-            os.makedirs(rst_dir, exist_ok=True)
-    if comm:
-        comm.barrier()
-    with array_context_for_pickling(actx):
-        with open(filename, "wb") as f:
-            pickle.dump(restart_data, f)
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    u: np.ndarray
+        the vector-valued function for which divergence is to be calculated
+    flux: np.ndarray
+        the boundary fluxes across the faces of the element
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg divergence operator applied to vector-valued function *u*.
+    """
+    from grudge.op import weak_local_div
+    return -discr.inverse_mass(weak_local_div(discr, u)
+                               - discr.face_mass(flux))

@@ -29,9 +29,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import numpy as np  # noqa
 
 
-def lfr_flux(cv_tpair, flux_func, normal, lam):
+def lfr_flux(cv_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -48,13 +49,13 @@ def lfr_flux(cv_tpair, flux_func, normal, lam):
 
     Parameters
     ----------
-    flux_func:
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
 
-        function should return ambient dim-vector fluxes given *q* values
+        Solution trace pair for faces for which numerical flux is to be calculated
 
-    q_tpair: :class:`grudge.trace_pair.TracePair`
+    f_tpair: :class:`grudge.trace_pair.TracePair`
 
-        Trace pair for the face upon which flux calculation is to be performed
+        Physical flux trace pair on faces on which numerical flux is to be calculated
 
     normal: numpy.ndarray
 
@@ -72,7 +73,4 @@ def lfr_flux(cv_tpair, flux_func, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    flux_avg = 0.5*(flux_func(cv_tpair.int)
-                    + flux_func(cv_tpair.ext))
-    return flux_avg @ normal - 0.5*lam*(cv_tpair.ext
-                                        - cv_tpair.int)
+    return f_tpair.avg@normal - lam*cv_tpair.diff/2
