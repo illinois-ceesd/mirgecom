@@ -43,31 +43,34 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _op_test_fixture(cl_ctx):
+@pytest.fixture
+def op_test_data(ctx_factory):
+    cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+
     eager_actx = PyOpenCLArrayContext(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
     lazy_actx = PytatoPyOpenCLArrayContext(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    n = 4
+    def get_discr(order):
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(-0.5,)*2,
+            b=(0.5,)*2,
+            nelements_per_axis=(4,)*2,
+            boundary_tag_to_face={
+                "x": ["-x", "+x"],
+                "y": ["-y", "+y"]
+            })
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,)*2,
-        b=(0.5,)*2,
-        nelements_per_axis=(n,)*2,
-        boundary_tag_to_face={
-            "x": ["-x", "+x"],
-            "y": ["-y", "+y"]
-        })
+        from grudge.eager import EagerDGDiscretization
+        return EagerDGDiscretization(eager_actx, mesh, order=order)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(eager_actx, mesh, order=2)
-
-    return eager_actx, lazy_actx, discr
+    return eager_actx, lazy_actx, get_discr
 
 
 def _rel_linf_error(discr, x, y):
@@ -105,9 +108,10 @@ def _rel_linf_error(discr, x, y):
 #     compiled_op(alpha, u)
 
 
-def test_lazy_op_divergence(ctx_factory):
-    cl_ctx = ctx_factory()
-    eager_actx, lazy_actx, discr = _op_test_fixture(cl_ctx)
+@pytest.mark.parametrize("order", [1, 2, 3])
+def test_lazy_op_divergence(op_test_data, order):
+    eager_actx, lazy_actx, get_discr = op_test_data
+    discr = get_discr(order)
 
     from grudge.trace_pair import interior_trace_pair
     from mirgecom.operators import div_operator
@@ -139,9 +143,10 @@ def test_lazy_op_divergence(ctx_factory):
     assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
-def test_lazy_op_diffusion(ctx_factory):
-    cl_ctx = ctx_factory()
-    eager_actx, lazy_actx, discr = _op_test_fixture(cl_ctx)
+@pytest.mark.parametrize("order", [1, 2, 3])
+def test_lazy_op_diffusion(op_test_data, order):
+    eager_actx, lazy_actx, get_discr = op_test_data
+    discr = get_discr(order)
 
     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
     from mirgecom.diffusion import (
@@ -176,9 +181,10 @@ def test_lazy_op_diffusion(ctx_factory):
     assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
-def test_lazy_op_euler(ctx_factory):
-    cl_ctx = ctx_factory()
-    eager_actx, lazy_actx, discr = _op_test_fixture(cl_ctx)
+@pytest.mark.parametrize("order", [1, 2, 3])
+def test_lazy_op_euler(op_test_data, order):
+    eager_actx, lazy_actx, get_discr = op_test_data
+    discr = get_discr(order)
 
     from grudge.dof_desc import DTAG_BOUNDARY
     from mirgecom.eos import IdealSingleGas
