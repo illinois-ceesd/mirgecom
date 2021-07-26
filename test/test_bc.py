@@ -279,11 +279,11 @@ def test_noslip(actx_factory, dim):
             print(f"{t_flux_bnd=}")
             print(f"{i_flux_bnd=}")
 
-            from mirgecom.operators import dg_grad
+            from mirgecom.operators import grad_operator
             grad_cv = make_conserved(
-                dim, q=dg_grad(discr, uniform_state.join(), cv_flux_bnd.join())
+                dim, q=grad_operator(discr, uniform_state.join(), cv_flux_bnd.join())
             )
-            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            grad_t = grad_operator(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 
@@ -398,11 +398,11 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{t_flux_bnd=}")
             print(f"{i_flux_bnd=}")
 
-            from mirgecom.operators import dg_grad
+            from mirgecom.operators import grad_operator
             grad_cv = make_conserved(
-                dim, q=dg_grad(discr, cv.join(), cv_flux_bnd.join())
+                dim, q=grad_operator(discr, cv.join(), cv_flux_bnd.join())
             )
-            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            grad_t = grad_operator(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 

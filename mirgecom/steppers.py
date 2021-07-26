@@ -221,7 +221,6 @@ def _advance_state_leap(rhs, timestepper, state,
             stepper_cls.dt = dt
 
         # Leap interface here is *a bit* different.
-        stepper_cls.dt = dt
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component

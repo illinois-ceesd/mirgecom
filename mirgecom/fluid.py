@@ -391,9 +391,9 @@ def velocity_gradient(discr, cv, grad_cv):
         \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
 
     """
-    velocity = cv.momentum / cv.mass
+    vel = cv.velocity
     obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
-                                       - velocity[i]*grad_cv.mass
+                                       - vel[i]*grad_cv.mass
                                        for i in range(cv.dim)])
     grad_v = np.empty(shape=(cv.dim, cv.dim), dtype=object)
     for idx, v in enumerate(obj_ary):

@@ -76,13 +76,12 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     mom = mass * velocity
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
-
     from grudge.op import local_grad
     grad_cv = make_conserved(dim,
                              q=local_grad(discr, cv.join()))
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
-    tol = 1e-12
+    tol = 1e-11
     exp_result = vel_fac * np.eye(dim) * ones
     grad_v_err = [discr.norm(grad_v[i] - exp_result[i], np.inf)
                   for i in range(dim)]
