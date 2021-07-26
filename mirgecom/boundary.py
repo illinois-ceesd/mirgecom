@@ -109,7 +109,7 @@ class FluidBC(FluidBoundary):
     def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
         raise NotImplementedError()
-        
+
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
 
