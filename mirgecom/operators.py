@@ -1,6 +1,6 @@
 r""":mod:`mirgecom.operators` provides helper functions for composing DG operators.
 
-.. autofunction:: dg_div
+.. autofunction:: div_operator
 """
 
 __copyright__ = """
@@ -28,22 +28,22 @@ THE SOFTWARE.
 """
 
 
-def dg_div(discr, vol_flux, bnd_flux):
-    r"""Compute a DG divergence for the flux vectors given in *vol_flux* and *bnd_flux*.
+def div_operator(discr, u, flux):
+    r"""Compute a DG divergence for *u* with element boundary flux given in *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    vol_flux: np.ndarray
-        the volume flux term in the element
-    bnd_flux: np.ndarray
+    u: np.ndarray
+        the vector-valued function for which divergence is to be calculated
+    flux: np.ndarray
         the boundary fluxes across the faces of the element
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
-        the dg divergence operator applied to the flux of *u*.
+        the dg divergence operator applied to vector-valued function *u*.
     """
     from grudge.op import weak_local_div
-    return -discr.inverse_mass(weak_local_div(discr, vol_flux)
-                               - discr.face_mass(bnd_flux))
+    return -discr.inverse_mass(weak_local_div(discr, u)
+                               - discr.face_mass(flux))

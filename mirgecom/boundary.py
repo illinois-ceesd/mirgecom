@@ -66,13 +66,13 @@ class FluidBC(FluidBoundary):
     .. automethod:: boundary_pair
     """
 
+    @abstractmethod
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def boundary_pair(self, discr, btag, cv, eos, **kwargs):
         """Get the interior and exterior solution (*u*) on the boundary."""
-        raise NotImplementedError()
 
 
 class PrescribedInviscidBoundary(FluidBC):
@@ -94,13 +94,6 @@ class PrescribedInviscidBoundary(FluidBC):
             self._inviscid_facial_flux_func = inviscid_facial_flux
         self._fluid_soln_func = fluid_solution_func
         self._fluid_soln_flux_func = fluid_solution_flux_func
-
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
 
     def boundary_pair(self, discr, btag, cv, **kwargs):
         """Get the interior and exterior solution on the boundary."""
