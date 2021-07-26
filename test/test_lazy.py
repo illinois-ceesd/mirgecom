@@ -30,7 +30,7 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
-from meshmode.dof_array import thaw
+from arraycontext.container.traversal import freeze, thaw
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -44,7 +44,10 @@ logger = logging.getLogger(__name__)
 
 def _op_test_fixture(cl_ctx):
     queue = cl.CommandQueue(cl_ctx)
-    actx = PytatoPyOpenCLArrayContext(
+    eager_actx = PyOpenCLArrayContext(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    lazy_actx = PytatoPyOpenCLArrayContext(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
@@ -61,9 +64,9 @@ def _op_test_fixture(cl_ctx):
         })
 
     from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=2)
+    discr = EagerDGDiscretization(eager_actx, mesh, order=2)
 
-    return actx, discr
+    return eager_actx, lazy_actx, discr
 
 
 def _rel_linf_error(discr, x, y):
@@ -129,8 +132,7 @@ def _rel_linf_error(discr, x, y):
 
 def test_lazy_op_diffusion(ctx_factory):
     cl_ctx = ctx_factory()
-    actx, discr = _op_test_fixture(cl_ctx)
-    nodes = thaw(actx, discr.nodes())
+    eager_actx, lazy_actx, discr = _op_test_fixture(cl_ctx)
 
     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
     from mirgecom.diffusion import (
@@ -147,22 +149,27 @@ def test_lazy_op_diffusion(ctx_factory):
         return diffusion_operator(
             discr, DISCR_TAG_BASE, alpha, boundaries, u)
 
-    compiled_op = actx.compile(op)
+    lazy_op = lazy_actx.compile(op)
 
-    alpha = discr.zeros(actx) + 1
-    u = actx.np.cos(np.pi*nodes[0])
+    def get_inputs(actx):
+        nodes = thaw(discr.nodes(), actx)
+        alpha = discr.zeros(actx) + 1
+        u = actx.np.cos(np.pi*nodes[0])
+        return alpha, u
 
     rel_linf_error = partial(_rel_linf_error, discr)
 
-    eager_result = op(alpha, u)
-    lazy_result = compiled_op(alpha, u)
+    def lazy_to_eager(u):
+        return thaw(freeze(u, lazy_actx), eager_actx)
+
+    eager_result = op(*get_inputs(eager_actx))
+    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
     assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
 def test_lazy_op_euler(ctx_factory):
     cl_ctx = ctx_factory()
-    actx, discr = _op_test_fixture(cl_ctx)
-    nodes = thaw(actx, discr.nodes())
+    eager_actx, lazy_actx, discr = _op_test_fixture(cl_ctx)
 
     from grudge.dof_desc import DTAG_BOUNDARY
     from mirgecom.eos import IdealSingleGas
@@ -176,20 +183,27 @@ def test_lazy_op_euler(ctx_factory):
         DTAG_BOUNDARY("y"): AdiabaticSlipBoundary()
     }
 
-    def op(cv):
-        return euler_operator(discr, eos, boundaries, cv)
+    def op(state):
+        return euler_operator(discr, eos, boundaries, state)
 
-    compiled_op = actx.compile(op)
+    lazy_op = lazy_actx.compile(op)
 
-    from mirgecom.initializers import MulticomponentLump
-    init = MulticomponentLump(
-        dim=2, velocity=np.ones(2), spec_y0s=np.ones(3), spec_amplitudes=np.ones(3))
-    state = init(nodes)
+    def get_inputs(actx):
+        nodes = thaw(discr.nodes(), actx)
+        from mirgecom.initializers import MulticomponentLump
+        init = MulticomponentLump(
+            dim=2, velocity=np.ones(2), spec_y0s=np.ones(3),
+            spec_amplitudes=np.ones(3))
+        state = init(nodes)
+        return state,
 
     rel_linf_error = partial(_rel_linf_error, discr)
 
-    eager_result = op(state)
-    lazy_result = compiled_op(state)
+    def lazy_to_eager(u):
+        return thaw(freeze(u, lazy_actx), eager_actx)
+
+    eager_result = op(*get_inputs(eager_actx))
+    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
     assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
