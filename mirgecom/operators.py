@@ -65,7 +65,7 @@ def div_operator(discr, u, flux):
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
-        the dg divergence operator applied to the flux of *u*.
+        the dg divergence operator applied to vector-valued function *u*.
     """
     from grudge.op import weak_local_div
     return -discr.inverse_mass(weak_local_div(discr, u)

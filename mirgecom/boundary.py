@@ -109,10 +109,9 @@ class FluidBC(FluidBoundary):
     def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
         raise NotImplementedError()
-
+        
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
-        raise NotImplementedError()
 
     def viscous_boundary_flux(self, discr, btag, cv, grad_cv, grad_t, eos, **kwargs):
         """Get the viscous part of the physical flux across the boundary *btag*."""
@@ -120,7 +119,6 @@ class FluidBC(FluidBoundary):
 
     def boundary_pair(self, discr, btag, cv, eos, **kwargs):
         """Get the interior and exterior solution (*u*) on the boundary."""
-        raise NotImplementedError()
 
 
 class PrescribedInviscidBoundary(FluidBC):
@@ -156,13 +154,6 @@ class PrescribedInviscidBoundary(FluidBC):
         if not self._fluid_soln_grad_flux_func:
             self._fluid_soln_grad_flux_func = central_vector_flux
         self._fluid_temperature_func = fluid_temperature_func
-
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
 
     def boundary_pair(self, discr, btag, cv, **kwargs):
         """Get the interior and exterior solution on the boundary."""
