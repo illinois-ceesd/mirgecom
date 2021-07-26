@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 import numpy as np
 from functools import partial
+from pytools.obj_array import make_obj_array
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -104,30 +105,38 @@ def _rel_linf_error(discr, x, y):
 #     compiled_op(alpha, u)
 
 
-# FIXME: Re-enable and fix up if/when standalone divergence operator exists
-# def test_lazy_op_divergence(ctx_factory):
-#     cl_ctx = ctx_factory()
-#     actx, discr = _op_test_fixture(cl_ctx)
-#
-#     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
-#     from mirgecom.diffusion import (
-#         _divergence_alpha_operator,
-#         DirichletDiffusionBoundary,
-#         NeumannDiffusionBoundary)
-#
-#     boundaries = {
-#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
-#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
-#     }
-#
-#     def op(alpha, u):
-#         return _divergence_alpha_operator(
-#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
+def test_lazy_op_divergence(ctx_factory):
+    cl_ctx = ctx_factory()
+    eager_actx, lazy_actx, discr = _op_test_fixture(cl_ctx)
 
-#     compiled_op = actx.compile(op)
-#     alpha = discr.zeros(actx) + 1
-#     u = make_obj_array([discr.zeros(actx) for _ in range(2)])
-#     compiled_op(alpha, u)
+    from grudge.trace_pair import interior_trace_pair
+    from mirgecom.operators import div_operator
+
+    def get_flux(u_tpair):
+        dd = u_tpair.dd
+        dd_allfaces = dd.with_dtag("all_faces")
+        normal = thaw(discr.normal(dd), u_tpair.int[0].array_context)
+        flux = u_tpair.avg @ normal
+        return discr.project(dd, dd_allfaces, flux)
+
+    def op(u):
+        return div_operator(discr, u, get_flux(interior_trace_pair(discr, u)))
+
+    lazy_op = lazy_actx.compile(op)
+
+    def get_inputs(actx):
+        nodes = thaw(discr.nodes(), actx)
+        u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
+        return u,
+
+    rel_linf_error = partial(_rel_linf_error, discr)
+
+    def lazy_to_eager(u):
+        return thaw(freeze(u, lazy_actx), eager_actx)
+
+    eager_result = op(*get_inputs(eager_actx))
+    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
+    assert rel_linf_error(lazy_result, eager_result) < 1e-12
 
 
 def test_lazy_op_diffusion(ctx_factory):
