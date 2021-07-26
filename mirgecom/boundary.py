@@ -95,13 +95,6 @@ class PrescribedInviscidBoundary(FluidBC):
         self._fluid_soln_func = fluid_solution_func
         self._fluid_soln_flux_func = fluid_solution_flux_func
 
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
-
     def boundary_pair(self, discr, btag, cv, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         if self._bnd_pair_func:
