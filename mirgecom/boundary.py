@@ -112,6 +112,7 @@ class FluidBC(FluidBoundary):
 
     def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
+        raise NotImplementedError()
 
     def viscous_boundary_flux(self, discr, btag, cv, grad_cv, grad_t, eos, **kwargs):
         """Get the viscous part of the physical flux across the boundary *btag*."""
@@ -119,6 +120,7 @@ class FluidBC(FluidBoundary):
 
     def boundary_pair(self, discr, btag, cv, eos, **kwargs):
         """Get the interior and exterior solution (*u*) on the boundary."""
+        raise NotImplementedError()
 
 
 class PrescribedInviscidBoundary(FluidBC):
