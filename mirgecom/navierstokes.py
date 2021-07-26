@@ -74,7 +74,7 @@ from mirgecom.flux import (
 )
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
-    dg_div, dg_grad
+    div_operator, grad_operator
 )
 from meshmode.dof_array import thaw
 
@@ -145,7 +145,8 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                               cv_int_tpair, cv_part_pairs, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_cv = make_conserved(dim, q=dg_grad(discr, cv.join(), cv_flux_bnd.join()))
+    grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
+                                                  cv_flux_bnd.join()))
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
@@ -164,7 +165,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
         for part_tpair in cv_part_pairs]
     t_flux_bnd = _elbnd_flux(discr, scalar_flux_interior, get_t_flux_bnd,
                              t_int_tpair, t_part_pairs, boundaries)
-    grad_t = dg_grad(discr, gas_t, t_flux_bnd)
+    grad_t = grad_operator(discr, gas_t, t_flux_bnd)
 
     # inviscid parts
     def finv_interior_face(cv_tpair):
@@ -223,4 +224,4 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     ).join()
 
     # NS RHS
-    return make_conserved(dim, q=dg_div(discr, vol_term, bnd_term))
+    return make_conserved(dim, q=div_operator(discr, vol_term, bnd_term))

@@ -1,7 +1,7 @@
 r""":mod:`mirgecom.operators` provides helper functions for composing DG operators.
 
-.. autofunction:: dg_grad
-.. autofunction:: dg_div
+.. autofunction:: grad_operator
+.. autofunction:: div_operator
 """
 
 __copyright__ = """
@@ -29,43 +29,38 @@ THE SOFTWARE.
 """
 
 
-def dg_grad(discr, interior_u, bndry_flux):
-    r"""Compute a DG gradient for the input *u*.
+def grad_operator(discr, u, flux):
+    r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    compute_interior_flux:
-        function taking a `grudge.sym.TracePair` and returning the numerical flux
-        for the corresponding interior boundary.
-    compute_boundary_flux:
-        function taking a boundary tag and returning the numerical flux
-        for the corresponding domain boundary.
     u: meshmode.dof_array.DOFArray or numpy.ndarray
         the DOF array (or object array of DOF arrays) to which the operator should be
         applied
-
+    flux: numpy.ndarray
+        the boundary fluxes across the faces of the element
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
     from grudge.op import weak_local_grad
-    return -discr.inverse_mass(weak_local_grad(discr, interior_u, nested=False)
-                               - discr.face_mass(bndry_flux))
+    return -discr.inverse_mass(weak_local_grad(discr, u, nested=False)
+                               - discr.face_mass(flux))
 
 
-def dg_div(discr, vol_flux, bnd_flux):
-    r"""Compute a DG divergence for the flux vectors given in *vol_flux* and *bnd_flux*.
+def div_operator(discr, u, flux):
+    r"""Compute a DG divergence of vector-valued function *u* with flux given by *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    vol_flux: np.ndarray
-        the volume flux term in the element
-    bnd_flux: np.ndarray
+    u: np.ndarray
+        the vector-valued function for which the divergence is to be calculated
+    flux: np.ndarray
         the boundary fluxes across the faces of the element
     Returns
     -------
@@ -73,5 +68,5 @@ def dg_div(discr, vol_flux, bnd_flux):
         the dg divergence operator applied to the flux of *u*.
     """
     from grudge.op import weak_local_div
-    return -discr.inverse_mass(weak_local_div(discr, vol_flux)
-                               - discr.face_mass(bnd_flux))
+    return -discr.inverse_mass(weak_local_div(discr, u)
+                               - discr.face_mass(flux))

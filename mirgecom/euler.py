@@ -63,7 +63,7 @@ from grudge.eager import (
 )
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
-from mirgecom.operators import dg_div
+from mirgecom.operators import div_operator
 
 
 def euler_operator(discr, eos, boundaries, cv, time=0.0):
@@ -112,7 +112,7 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
                                                       eos=eos, time=time)
               for btag in boundaries)
     )
-    q = -dg_div(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
+    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
     return make_conserved(discr.dim, q=q)
 
 
