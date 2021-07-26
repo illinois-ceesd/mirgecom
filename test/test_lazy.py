@@ -87,8 +87,8 @@ def _rel_linf_error(discr, x, y):
 #         NeumannDiffusionBoundary)
 #
 #     boundaries = {
-#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0.),
-#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0.)
+#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
+#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
 #     }
 #
 #     def op(alpha, u):
@@ -113,8 +113,8 @@ def _rel_linf_error(discr, x, y):
 #         NeumannDiffusionBoundary)
 #
 #     boundaries = {
-#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0.),
-#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0.)
+#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
+#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
 #     }
 #
 #     def op(alpha, u):
@@ -139,8 +139,8 @@ def test_lazy_op_diffusion(ctx_factory):
         NeumannDiffusionBoundary)
 
     boundaries = {
-        DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0.),
-        DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0.)
+        DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
+        DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
     }
 
     def op(alpha, u):
