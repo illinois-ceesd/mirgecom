@@ -209,7 +209,7 @@ def test_lazy_op_euler(op_test_data, order):
         nodes = thaw(discr.nodes(), actx)
         from mirgecom.initializers import MulticomponentLump
         init = MulticomponentLump(
-            dim=2, velocity=np.ones(2), spec_y0s=np.ones(3),
+            dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
             spec_amplitudes=np.ones(3))
         state = init(nodes)
         return state,
