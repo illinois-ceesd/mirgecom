@@ -479,22 +479,22 @@ class MulticomponentLump:
         if center.shape != (dim,) or velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional vector inputs.")
 
-        if nspecies > 0:
-            if spec_y0s is None:
-                spec_y0s = np.ones(shape=(nspecies,))
-            if spec_centers is None:
-                spec_centers = make_obj_array([np.zeros(shape=dim,)
-                                               for i in range(nspecies)])
-            if spec_amplitudes is None:
-                spec_amplitudes = np.ones(shape=(nspecies,))
-            if len(spec_y0s) != nspecies or\
-               len(spec_amplitudes) != nspecies or\
-                   len(spec_centers) != nspecies:
-                raise ValueError(f"Expected nspecies={nspecies} inputs.")
-            for i in range(nspecies):
-                if len(spec_centers[i]) != dim:
-                    raise ValueError(f"Expected {dim}-dimensional "
-                                     f"inputs for spec_centers.")
+        if spec_y0s is None:
+            spec_y0s = np.ones(shape=(nspecies,))
+        if spec_centers is None:
+            spec_centers = make_obj_array([np.zeros(shape=dim,)
+                                           for i in range(nspecies)])
+        if spec_amplitudes is None:
+            spec_amplitudes = np.ones(shape=(nspecies,))
+
+        if len(spec_y0s) != nspecies or\
+           len(spec_amplitudes) != nspecies or\
+               len(spec_centers) != nspecies:
+            raise ValueError(f"Expected nspecies={nspecies} inputs.")
+        for i in range(nspecies):
+            if len(spec_centers[i]) != dim:
+                raise ValueError(f"Expected {dim}-dimensional "
+                                 f"inputs for spec_centers.")
 
         self._nspecies = nspecies
         self._dim = dim
