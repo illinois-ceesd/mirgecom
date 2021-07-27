@@ -292,7 +292,7 @@ class Lump:
     """
 
     def __init__(
-            self, *, dim=1, nspecies=0,
+            self, *, dim=1,
             rho0=1.0, rhoamp=1.0, p0=1.0,
             center=None, velocity=None,
     ):
