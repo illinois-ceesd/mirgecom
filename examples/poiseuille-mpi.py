@@ -137,7 +137,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         raise ValueError("This example must be run with dim = 2.")
     left_boundary_location = 0
     right_boundary_location = 0.1
-
+    ybottom = 0.
+    ytop = .02
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -153,8 +154,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
         npts_axis = (50, 30)
-        box_ll = (left_boundary_location, 0.0)
-        box_ur = (right_boundary_location, 0.02)
+        box_ll = (left_boundary_location, ybottom)
+        box_ur = (right_boundary_location, ytop)
         generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
@@ -189,32 +190,44 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     base_pressure = 100000.0
     pressure_ratio = 1.001
+    mu = 1.0
 
-    def poiseuille_soln(nodes, eos, cv=None, **kwargs):
-        dim = len(nodes)
+    def poiseuille_2d(x_vec, eos, cv=None, **kwargs):
+        y = x_vec[1]
+        x = x_vec[0]
         x0 = left_boundary_location
         xmax = right_boundary_location
         xlen = xmax - x0
-        p0 = base_pressure
-        p1 = pressure_ratio*p0
-        p_x = p1 + p0*(1 - pressure_ratio)*(nodes[0] - x0)/xlen
-        ke = 0
-        mass = nodes[0] + 1.0 - nodes[0]
-        momentum = make_obj_array([0*mass for i in range(dim)])
+        p_low = base_pressure
+        p_hi = pressure_ratio*base_pressure
+        dp = p_hi - p_low
+        dpdx = dp/xlen
+        h = ytop - ybottom
+        u_x = dpdx*y*(h - y)/(2*mu) if exact else 0*x
+        p_x = p_hi - dpdx*x
+        rho = 1.0
+        mass = 0*x + rho
+        u_y = 0*x
+        velocity = make_obj_array([u_x, u_y])
+        ke = .5*np.dot(velocity, velocity)*mass
+        gamma = eos.gamma()
         if cv is not None:
             mass = cv.mass
-            momentum = cv.momentum
-            ke = .5*np.dot(cv.momentum, cv.momentum)/cv.mass
-        energy_bc = p_x / (eos.gamma() - 1) + ke
-        return make_conserved(dim, mass=mass, energy=energy_bc,
-                              momentum=momentum)
+            vel = cv.velocity
+            ke = .5*np.dot(vel, vel)*mass
 
-    initializer = poiseuille_soln
+        rho_e = p_x/(gamma-1) + ke
+        return make_conserved(2, mass=mass, energy=rho_e,
+                              momentum=mass*velocity)
+
+    initializer = poiseuille_2d
+    eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=mu))
+    exact = initializer(x_vec=nodes, eos=eos)
+
     boundaries = {DTAG_BOUNDARY("-1"): PrescribedViscousBoundary(q_func=initializer),
                   DTAG_BOUNDARY("+1"): PrescribedViscousBoundary(q_func=initializer),
                   DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(),
                   DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary()}
-    eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=1.0))
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -225,7 +238,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = initializer(nodes=nodes, eos=eos)
+        current_state = exact
 
     vis_timer = None
 
@@ -242,7 +255,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(step, t, dt, dv, state):
+    def my_write_status(step, t, dt, dv, state, component_errors):
         from grudge.op import nodal_min, nodal_max
         p_min = nodal_min(discr, "vol", dv.pressure)
         p_max = nodal_max(discr, "vol", dv.pressure)
@@ -257,13 +270,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
-                        f"----- Temperature({t_min}, {t_max})\n")
+                        f"----- Temperature({t_min}, {t_max})\n"
+                        "----- errors="
+                        + ", ".join("%.3g" % en for en in component_errors))
 
-    def my_write_viz(step, t, state, dv=None, exact=None):
+    def my_write_viz(step, t, state, dv=None):
         if dv is None:
             dv = eos.dependent_vars(state)
+        resid = state - exact
         viz_fields = [("cv", state),
-                      ("dv", dv)]
+                      ("dv", dv),
+                      ("poiseuille", exact),
+                      ("resid", resid)]
+
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
@@ -283,7 +302,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, dv):
+    def my_health_check(state, dv, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure):
@@ -311,11 +330,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             t_max = nodal_max(discr, "vol", dv.temperature)
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
+        exittol = 10
+        if max(component_errors) > exittol:
+            health_error = True
+            if rank == 0:
+                logger.info("Solution diverged from exact soln.")
+
         return health_error
 
     def my_pre_step(step, t, dt, state):
         try:
             dv = None
+            component_errors = None
 
             if logmgr:
                 logmgr.tick_before()
@@ -328,9 +354,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 dv = eos.dependent_vars(state)
+                from mirgecom.simutil import compare_fluid_solutions
+                component_errors = compare_fluid_solutions(discr, state, exact)
                 from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(state, dv), comm,
-                                        op=MPI.LOR)
+                health_errors = allsync(
+                    my_health_check(state, dv, component_errors), comm,
+                    op=MPI.LOR
+                )
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
@@ -350,7 +380,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_status:  # needed because logging fails to make output
                 if dv is None:
                     dv = eos.dependent_vars(state)
-                my_write_status(step=step, t=t, dt=dt, dv=dv, state=state)
+                if component_errors is None:
+                    from mirgecom.simutil import compare_fluid_solutions
+                    component_errors = compare_fluid_solutions(discr, state, exact)
+                my_write_status(step=step, t=t, dt=dt, dv=dv, state=state,
+                                component_errors=component_errors)
 
         except MyRuntimeError:
             if rank == 0:
@@ -388,10 +422,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_dv = eos.dependent_vars(current_state)
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, eos, t_final, constant_cfl)
+    from mirgecom.simutil import compare_fluid_solutions
+    component_errors = compare_fluid_solutions(discr, current_state, exact)
+
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
     my_write_status(step=current_step, t=current_t, dt=final_dt, dv=final_dv,
-                    state=current_state)
+                    state=current_state, component_errors=component_errors)
 
     if logmgr:
         logmgr.close()
