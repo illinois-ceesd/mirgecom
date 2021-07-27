@@ -41,7 +41,6 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray  # noqa
-from pytools.obj_array import make_obj_array
 from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
@@ -392,13 +391,9 @@ def velocity_gradient(discr, cv, grad_cv):
 
     """
     vel = cv.velocity
-    obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
-                                       - vel[i]*grad_cv.mass
-                                       for i in range(cv.dim)])
-    grad_v = np.empty(shape=(cv.dim, cv.dim), dtype=object)
-    for idx, v in enumerate(obj_ary):
-        grad_v[idx] = v
-    return grad_v
+    return (1/cv.mass)*np.array([grad_cv.momentum[i]
+                                 - vel[i]*grad_cv.mass
+                                 for i in range(cv.dim)], dtype=object)
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -431,13 +426,9 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
     """
     nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
-    obj_ary = (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
-                                       - y[i]*grad_cv.mass
-                                       for i in range(nspecies)])
-    grad_y = np.empty(shape=(nspecies, cv.dim), dtype=object)
-    for idx, v in enumerate(obj_ary):
-        grad_y[idx] = v
-    return grad_y
+    return (1/cv.mass)*np.array([grad_cv.species_mass[i]
+                                 - y[i]*grad_cv.mass
+                                 for i in range(nspecies)], dtype=object)
 
 
 def compute_wavespeed(eos, cv: ConservedVars):
