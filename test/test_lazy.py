@@ -73,14 +73,15 @@ def op_test_data(ctx_factory):
     return eager_actx, lazy_actx, get_discr
 
 
-def _rel_linf_error(discr, x, y):
+def _rel_linf_error(discr, actual, expected):
     from mirgecom.fluid import ConservedVars
-    if isinstance(x, ConservedVars):
-        return _rel_linf_error(discr, x.join(), y)
-    if isinstance(y, ConservedVars):
-        return _rel_linf_error(discr, x, y.join())
+    if isinstance(actual, ConservedVars):
+        return _rel_linf_error(discr, actual.join(), expected)
+    if isinstance(expected, ConservedVars):
+        return _rel_linf_error(discr, actual, expected.join())
     return np.max(obj_array_vectorize_n_args(
-        lambda a, b: discr.norm(a - b, np.inf) / discr.norm(b, np.inf), x, y))
+        lambda a, b: discr.norm(a - b, np.inf) / discr.norm(b, np.inf),
+        actual, expected))
 
 
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
