@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array
+from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -79,7 +79,8 @@ def _rel_linf_error(discr, x, y):
         return _rel_linf_error(discr, x.join(), y)
     if isinstance(y, ConservedVars):
         return _rel_linf_error(discr, x, y.join())
-    return discr.norm(x - y, np.inf) / discr.norm(y, np.inf)
+    return np.max(obj_array_vectorize_n_args(
+        lambda a, b: discr.norm(a - b, np.inf) / discr.norm(b, np.inf), x, y))
 
 
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
