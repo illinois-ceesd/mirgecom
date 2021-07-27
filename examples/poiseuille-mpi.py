@@ -203,7 +203,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         dp = p_hi - p_low
         dpdx = dp/xlen
         h = ytop - ybottom
-        u_x = dpdx*y*(h - y)/(2*mu) if exact else 0*x
+        u_x = dpdx*y*(h - y)/(2*mu)
         p_x = p_hi - dpdx*x
         rho = 1.0
         mass = 0*x + rho
