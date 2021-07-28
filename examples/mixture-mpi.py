@@ -110,9 +110,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.002
+    t_final = 1e-8
     current_cfl = 1.0
-    current_dt = .001
+    current_dt = 1e-9
     current_t = 0
     current_step = 0
     constant_cfl = False
@@ -123,7 +123,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nrestart = 5
     nviz = 1
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -189,8 +189,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     y0s[nspecies-1] = 1.0 - spec_sum
 
     # Mixture defaults to STP (p, T) = (1atm, 300K)
-    velocity = np.zeros(shape=(dim,))
-    velocity[:dim] = 1.0
+    velocity = np.zeros(shape=(dim,)) + 1.0
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      massfractions=y0s, velocity=velocity)
 
