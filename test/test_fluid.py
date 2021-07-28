@@ -184,6 +184,7 @@ def test_velocity_gradient_structure(actx_factory):
     exp_trans = [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
     exp_trace = 15
     assert grad_v.shape == (dim, dim)
+    from meshmode.dof_array import DOFArray
     assert type(grad_v[0, 0]) == DOFArray
     assert discr.norm(grad_v - exp_result, np.inf) < tol
     assert discr.norm(grad_v.T - exp_trans, np.inf) < tol
@@ -231,8 +232,9 @@ def test_species_mass_gradient(actx_factory, dim):
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
 
     assert grad_y.shape == (nspecies, dim)
+    from meshmode.dof_array import DOFArray
     assert type(grad_y[0, 0]) == DOFArray
-    
+
     tol = 1e-11
     for idim in range(dim):
         ispec = 2*idim
