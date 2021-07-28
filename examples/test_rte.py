@@ -65,20 +65,21 @@ def main():
     mesh_dist = MPIMeshDistributor(comm)
 
     dim = 3
-    order_des = 1
+    order_des = 2
     err_inf = []
     nx_plot = []
 
-    for n in range(10,11):
-        nz = 10
-        tau_max = 0.5
+    for i in range(1,11):
+        nz = 15
+        tau_max = float(i)
+        tau_L = 0.5*tau_max
 
         if mesh_dist.is_mananger_rank():
             from meshmode.mesh.generation import generate_regular_rect_mesh
             mesh = generate_regular_rect_mesh(
-                a=(0,0,-tau_max),
-                b=(10,10,tau_max),
-                nelements_per_axis=(3,3,nz),
+                a=(0,0,-tau_L),
+                b=(10,10,tau_L),
+                nelements_per_axis=(5,5,nz),
                 boundary_tag_to_face={
                     "bdy_x": ["+x", "-x"],
                     "bdy_y": ["+y", "-y"],
@@ -132,17 +133,20 @@ def main():
 
                     def G_analytical(actx, discr):
                         tau = nodes[2]
-                        C_htrig = 1/(np.cosh(gamma*tau_max) + 2*gamma/(3 - omega*A1)*np.sinh(gamma*tau_max))
+                        C_htrig = 1/(np.cosh(gamma*tau_L) + 2*gamma/(3 - omega*A1)*np.sinh(gamma*tau_L))
                         return Ibw(1.0,T0) + (Ibw(1.0,Tw) - Ibw(1.0,T0))*C_htrig*actx.np.cosh(gamma * tau)
 
                     def dG_analytical(actx, discr):
                         tau = nodes[2]
-                        C_htrig = 1/(np.cosh(gamma*tau_max) + 2*gamma/(3 - omega*A1)*np.sinh(gamma*tau_max))
+                        C_htrig = 1/(np.cosh(gamma*tau_L) + 2*gamma/(3 - omega*A1)*np.sinh(gamma*tau_L))
                         return gamma*(Ibw(1.0,Tw) - Ibw(1.0,T0))*C_htrig*actx.np.sinh(gamma * tau)
 
                     def heatflux_analytical(actx, discr):
                         tau = nodes[2]
-                        return 2*actx.np.sinh(gamma*tau)/(np.sinh(gamma*tau_max) + 
+                        return 2*actx.np.sinh(gamma*tau)/(np.sinh(gamma*tau_L) + 
+                            0.5*np.sqrt((3 - A1*omega)/(1 - omega))*np.cosh(gamma*tau_max))
+                    def heatflux_wall(tau_L, A1, omega):
+                        return 2*np.sinh(gamma*tau_L)/(np.sinh(gamma*tau_L) + 
                             0.5*np.sqrt((3 - A1*omega)/(1 - omega))*np.cosh(gamma*tau_max))
 
                     if order == 1:
@@ -196,26 +200,39 @@ def main():
                             #discr_mod = discr.discr_from_dd("vol")
                             #print(discr_mod.groups[0].basis_obj().functions[0])
                             print(istep, t, discr.norm(u_old))
+                            # diff_u, grad_u = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=1.0, 
+                            #     boundaries=boundaries, u=u_old, return_grad_u=True)
+
+                            # q_nondim = grad_u[2]/(( Ibw(1.0,Tw) - Ibw(1.0,T0) )/4 * (3 - omega*A1))
+                            # q_err = q_nondim - q_analytical
+
+                            # vis.write_vtk_file("fld-rte-q_test-%03d-%03d-%04d.vtu" % (Alab, om, istep),
+                            #     [
+                            #         ("u", u_old),
+                            #         ("u_err", u_old - u_analytical),
+                            #         ("q", q_nondim),
+                            #         ("q_err", q_err)
+                            #         ])
+
+                        u_new = rk4_step(u_old, t, dt, rhs)
+                        t += dt
+                        istep += 1
+
+                        if discr.norm(u_old - u_new)/discr.norm(u_old) < 1e-7 and istep > 500:
+                            u_0 = u_old
                             diff_u, grad_u = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=1.0, 
                                 boundaries=boundaries, u=u_old, return_grad_u=True)
 
                             q_nondim = grad_u[2]/(( Ibw(1.0,Tw) - Ibw(1.0,T0) )/4 * (3 - omega*A1))
                             q_err = q_nondim - q_analytical
 
-                            vis.write_vtk_file("fld-rte-q_test-%03d-%03d-%04d.vtu" % (Alab, om, istep),
+                            vis.write_vtk_file("soln-rte-q_test-%03d-%03d-%04d.vtu" % (Alab, om, i),
                                 [
                                     ("u", u_old),
                                     ("u_err", u_old - u_analytical),
-                                    ("q", q_nondim), # GRAD_U TESTING
+                                    ("q", q_nondim),
                                     ("q_err", q_err)
                                     ])
-
-                        u_new = rk4_step(u_old, t, dt, rhs) # GRAD_U TESTING
-                        t += dt
-                        istep += 1
-
-                        if discr.norm(u_old - u_new)/discr.norm(u_old) < 1e-7 and istep > 500:
-                            u_0 = u_old
                             break
             
     #err = np.abs(np.max(u_old - u_analytical))
