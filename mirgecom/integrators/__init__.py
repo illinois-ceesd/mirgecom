@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from .explicit_rk import rk4_step                          # noqa: F401
+from .explicit_rk import rk4_step, rk4_step_grad           # noqa: F401
 from .lsrk import euler_step, lsrk54_step, lsrk144_step    # noqa: F401
 
 __doc__ = """

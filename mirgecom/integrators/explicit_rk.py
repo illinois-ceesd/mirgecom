@@ -36,3 +36,14 @@ def rk4_step(state, t, dt, rhs):
     k4 = rhs(t+dt, state + dt*k3)
 
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+
+def rk4_step_grad(state, dstate, t, dt, rhs):
+	"""Same as rk4_step, but also returning derivative"""
+	k1, dk1 = rhs(t, state, dstate)
+	k2, dk2 = rhs(t+dt/2, state + dt/2*k1, dstate+dt/2*dk1)
+	k3, dk3 = rhs(t+dt/2, state + dt/2*k2, dstate+dt/2*dk2)
+	k4, dk4 = rhs(t+dt,   state + dt*k3,   dstate+dt*dk3)
+
+	new_state = state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+	dnew_state = dstate + dt/6*(dk1 + 2*dk2 + 2*dk3 + dk4)
+	return new_state, dnew_state
