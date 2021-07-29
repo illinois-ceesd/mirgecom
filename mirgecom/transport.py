@@ -162,7 +162,7 @@ class PowerLawTransport(TransportModel):
 
         $\mu_{B} = \alpha\mu$
         """
-        return self._alpha*self._viscosity(eos, cv)
+        return self._alpha * self.viscosity(eos, cv)
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$.
