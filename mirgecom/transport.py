@@ -9,6 +9,7 @@ manage the transport properties in viscous flows.
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
+.. autoclass:: PowerLawTransport
 """
 
 __copyright__ = """
