@@ -79,6 +79,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     from grudge.op import local_grad
     grad_cv = make_conserved(dim,
                              q=local_grad(discr, cv.join()))
+
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
     tol = 1e-11
@@ -149,12 +150,12 @@ def test_velocity_gradient_structure(actx_factory):
     from mirgecom.fluid import velocity_gradient
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -184,6 +185,9 @@ def test_velocity_gradient_structure(actx_factory):
     exp_result = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     exp_trans = [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
     exp_trace = 15
+    assert grad_v.shape == (dim, dim)
+    from meshmode.dof_array import DOFArray
+    assert type(grad_v[0, 0]) == DOFArray
     assert discr.norm(grad_v - exp_result, np.inf) < tol
     assert discr.norm(grad_v.T - exp_trans, np.inf) < tol
     assert discr.norm(np.trace(grad_v) - exp_trace, np.inf) < tol
@@ -193,11 +197,11 @@ def test_velocity_gradient_structure(actx_factory):
 def test_species_mass_gradient(actx_factory, dim):
     """Test gradY structure and values against exact."""
     actx = actx_factory()
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -228,6 +232,10 @@ def test_species_mass_gradient(actx_factory, dim):
                              q=local_grad(discr, cv.join()))
     from mirgecom.fluid import species_mass_fraction_gradient
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
+
+    assert grad_y.shape == (nspecies, dim)
+    from meshmode.dof_array import DOFArray
+    assert type(grad_y[0, 0]) == DOFArray
 
     tol = 1e-11
     for idim in range(dim):
