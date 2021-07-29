@@ -437,6 +437,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
+        from mirgecom.simutil import limit_species_mass_fractions
+        state = limit_species_mass_fractions(state)
         if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)

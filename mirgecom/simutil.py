@@ -251,3 +251,15 @@ def create_parallel_grid(comm, generate_grid):
          "instead. This function will disappear August 1, 2021",
          DeprecationWarning, stacklevel=2)
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
+
+
+def limit_species_mass_fractions(cv):
+    """Keep the species mass fractions from going negative."""
+    y = cv.species_mass_fractions
+    if len(y) > 0:
+        actx = cv.array_context
+        zero = 0 * y[0]
+        for y_spec in y:
+            y_spec = actx.np.where(y_spec < 0, zero, y_spec)
+        cv = cv.replace(species_mass=cv.mass*y)
+    return(cv)
