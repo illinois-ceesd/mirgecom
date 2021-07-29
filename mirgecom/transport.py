@@ -1,10 +1,17 @@
-"""
+r"""
 :mod:`mirgecom.transport` provides methods/utils for tranport properties.
 
 Transport Models
 ^^^^^^^^^^^^^^^^
 This module is designed provide Transport Model objects used to compute and
-manage the transport properties in viscous flows.
+manage the transport properties in viscous flows.  The transport properties
+currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
+($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
+($d_{\alpha}).
+
+Two models are currently implemented, the :class:`SimpleTransport` model is
+for uniform and constant transport properties and the :class:`PowerLawTransport`
+is for transport properties that are power-law temperature-dependent.
 
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
@@ -137,9 +144,14 @@ class SimpleTransport(TransportModel):
 class PowerLawTransport(TransportModel):
     r"""Transport model with simple power law properties.
 
-    .. automethod:: __init__
+    Inherits from (and implements) :class:`TransportModel` based on a
+    temperature-dependent power law.
 
-    Inherits from (and implements) :class:`TransportModel`.
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
     """
 
     # air-like defaults here
