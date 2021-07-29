@@ -7,7 +7,7 @@ This module is designed provide Transport Model objects used to compute and
 manage the transport properties in viscous flows.  The transport properties
 currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
-($d_{\alpha}).
+($d_{\alpha}$).
 
 Two models are currently implemented, the :class:`SimpleTransport` model is
 for uniform and constant transport properties and the :class:`PowerLawTransport`
@@ -123,7 +123,7 @@ class SimpleTransport(TransportModel):
         return something * cv.mass / cv.mass
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the bulk viscosity for the gas, $\mu_{B}."""
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         return self._make_array(self._mu_bulk, cv)
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -171,7 +171,7 @@ class PowerLawTransport(TransportModel):
         return something * cv.mass / cv.mass
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the bulk viscosity for the gas, $\mu_{B}.
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
         $\mu_{B} = \alpha\mu$
         """
