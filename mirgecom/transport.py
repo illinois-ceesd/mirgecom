@@ -131,3 +131,57 @@ class SimpleTransport(TransportModel):
         nspecies = len(cv.species_mass)
         assert nspecies == len(self._d_alpha)
         return self._make_array(self._d_alpha, cv)
+
+
+class PowerLawTransport(TransportModel):
+    r"""Transport model with simple power law properties.
+
+    .. automethod:: __init__
+
+    Inherits from (and implements) :class:`TransportModel`.
+    """
+
+    # air-like defaults here
+    def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
+                 species_diffusivity=None):
+        """Initialize power law coefficients and parameters."""
+        if species_diffusivity is None:
+            species_diffusivity = np.empty((0,), dtype=object)
+        self._alpha = alpha
+        self._beta = beta
+        self._sigma = sigma
+        self._n = n
+        self._d_alpha = species_diffusivity
+
+    def _make_array(self, something, cv):
+        """Make an appropriate shaped array from the constant properties."""
+        return something * cv.mass / cv.mass
+
+    def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the bulk viscosity for the gas, $\mu_{B}.
+
+        $\mu_{B} = \alpha\mu$
+        """
+        return self._alpha*self._viscosity(eos, cv)
+
+    def viscosity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the gas dynamic viscosity, $\mu$.
+
+        $\mu = \beta{T}^n$
+        """
+        actx = cv.array_context
+        gas_t = eos.temperature(cv)
+        return self._beta * actx.np.pow(gas_t, self._n)
+
+    def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the gas thermal_conductivity, $\kappa$.
+
+        $\kappa = \sigma\mu{C}_{v}$
+        """
+        return self._sigma * self.viscosity(eos, cv) * eos.heat_capacity_cv(cv)
+
+    def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        nspecies = len(cv.species_mass)
+        assert nspecies == len(self._d_alpha)
+        return self._make_array(self._d_alpha, cv)
