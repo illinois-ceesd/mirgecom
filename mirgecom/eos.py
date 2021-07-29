@@ -13,7 +13,7 @@ manage the relationships between and among state and thermodynamic variables.
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -77,6 +77,7 @@ class GasEOS:
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
     .. automethod:: gamma
+    .. automethod:: transport_model
     """
 
     def pressure(self, cv: ConservedVars):
@@ -111,12 +112,16 @@ class GasEOS:
         """Get the ratio of gas specific heats Cp/Cv."""
         raise NotImplementedError()
 
+    def transport_model(self):
+        """Get the transport model if it exists."""
+        raise NotImplementedError()
+
     def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
-        """Get an agglomerated array of the depedent variables."""
+        """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
             pressure=self.pressure(cv),
             temperature=self.temperature(cv),
-            )
+        )
 
 
 class IdealSingleGas(GasEOS):
@@ -135,10 +140,15 @@ class IdealSingleGas(GasEOS):
     Inherits from (and implements) :class:`GasEOS`.
     """
 
-    def __init__(self, gamma=1.4, gas_const=287.1):
+    def __init__(self, gamma=1.4, gas_const=287.1, transport_model=None):
         """Initialize Ideal Gas EOS parameters."""
         self._gamma = gamma
         self._gas_const = gas_const
+        self._transport_model = transport_model
+
+    def transport_model(self):
+        """Get the transport model object for this EOS."""
+        return self._transport_model
 
     def gamma(self, cv: ConservedVars = None):
         """Get specific heat ratio Cp/Cv."""
@@ -231,6 +241,20 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
+    def get_internal_energy(self, temperature, species_fractions, **kwargs):
+        r"""Get the gas thermal energy from temperature, and species fractions (Y).
+
+        The gas internal energy $e$ is calculated from:
+
+        .. math::
+
+            e = R_s T \sum{Y_\alpha h_\alpha}
+        """
+        if "mass" not in kwargs:
+            return ValueError("Expected mass keyword argument.")
+        mass = kwargs["mass"]
+        return self._gas_const * mass * temperature / (self._gamma - 1)
+
 
 class PyrometheusMixture(GasEOS):
     r"""Ideal gas mixture ($p = \rho{R}_\mathtt{mix}{T}$).
@@ -262,7 +286,8 @@ class PyrometheusMixture(GasEOS):
     Inherits from (and implements) :class:`GasEOS`.
     """
 
-    def __init__(self, pyrometheus_mech, temperature_guess=300.0):
+    def __init__(self, pyrometheus_mech, temperature_guess=300.0,
+                 transport_model=None):
         """Initialize Pyrometheus-based EOS with mechanism class.
 
         Parameters
@@ -286,6 +311,11 @@ class PyrometheusMixture(GasEOS):
         """
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
+        self._transport_model = transport_model
+
+    def transport_model(self):
+        """Get the transport model object for this EOS."""
+        return self._transport_model
 
     def gamma(self, cv: ConservedVars = None):
         r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_p - R_s}$.
@@ -360,7 +390,7 @@ class PyrometheusMixture(GasEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_fractions)
 
-    def get_internal_energy(self, temperature, species_fractions):
+    def get_internal_energy(self, temperature, species_fractions, **kwargs):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
