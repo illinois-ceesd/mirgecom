@@ -13,4 +13,4 @@ pydocstyle
 pep8
 flake8-docstrings
 
-git+https://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64" 
+git+https://github.com/vmprof/vmprof-python.git
