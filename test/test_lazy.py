@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
+from pytools.obj_array import make_obj_array, obj_array_vectorize
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -73,15 +73,20 @@ def op_test_data(ctx_factory):
     return eager_actx, lazy_actx, get_discr
 
 
-def _rel_linf_error(discr, actual, expected):
-    from mirgecom.fluid import ConservedVars
-    if isinstance(actual, ConservedVars):
-        return _rel_linf_error(discr, actual.join(), expected)
-    if isinstance(expected, ConservedVars):
-        return _rel_linf_error(discr, actual, expected.join())
-    return np.max(obj_array_vectorize_n_args(
-        lambda a, b: discr.norm(a - b, np.inf) / discr.norm(b, np.inf),
-        actual, expected))
+# Mimics math.isclose for state arrays
+def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0):
+    def componentwise_norm(a):
+        from mirgecom.fluid import ConservedVars
+        if isinstance(a, ConservedVars):
+            return componentwise_norm(a.join())
+        return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
+
+    norm_x = componentwise_norm(x)
+    norm_y = componentwise_norm(y)
+    norm_x_minus_y = componentwise_norm(x - y)
+
+    return np.all(
+        norm_x_minus_y <= np.maximum(rel_tol * np.maximum(norm_x, norm_y), abs_tol))
 
 
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
@@ -135,14 +140,15 @@ def test_lazy_op_divergence(op_test_data, order):
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
         return u,
 
-    rel_linf_error = partial(_rel_linf_error, discr)
+    tol = 1e-12
+    isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert rel_linf_error(lazy_result, eager_result) < 1e-12
+    assert isclose(lazy_result, eager_result)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -173,14 +179,15 @@ def test_lazy_op_diffusion(op_test_data, order):
         u = actx.np.cos(np.pi*nodes[0])
         return alpha, u
 
-    rel_linf_error = partial(_rel_linf_error, discr)
+    tol = 1e-12
+    isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert rel_linf_error(lazy_result, eager_result) < 1e-12
+    assert isclose(lazy_result, eager_result)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -214,14 +221,15 @@ def test_lazy_op_euler(op_test_data, order):
         state = init(nodes)
         return state,
 
-    rel_linf_error = partial(_rel_linf_error, discr)
+    tol = 1e-12
+    isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert rel_linf_error(lazy_result, eager_result) < 1e-12
+    assert isclose(lazy_result, eager_result)
 
 
 if __name__ == "__main__":
