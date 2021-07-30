@@ -190,22 +190,56 @@ def test_lazy_op_diffusion(op_test_data, order):
     assert isclose(lazy_result, eager_result)
 
 
+def _get_pulse():
+    from mirgecom.eos import IdealSingleGas
+    eos = IdealSingleGas()
+
+    from mirgecom.initializers import Uniform, AcousticPulse
+    uniform_init = Uniform(dim=2)
+    pulse_init = AcousticPulse(dim=2, center=np.zeros(2), amplitude=1.0, width=.1)
+
+    def init(nodes):
+        return pulse_init(x_vec=nodes, cv=uniform_init(nodes), eos=eos)
+
+    from meshmode.mesh import BTAG_ALL
+    from mirgecom.boundary import AdiabaticSlipBoundary
+    boundaries = {
+        BTAG_ALL: AdiabaticSlipBoundary()
+    }
+
+    return eos, init, boundaries, 1e-12
+
+
+def _get_scalar_lump():
+    from mirgecom.eos import IdealSingleGas
+    eos = IdealSingleGas()
+
+    from mirgecom.initializers import MulticomponentLump
+    init = MulticomponentLump(
+        dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
+        spec_amplitudes=np.ones(3))
+
+    from meshmode.mesh import BTAG_ALL
+    from mirgecom.boundary import PrescribedInviscidBoundary
+    boundaries = {
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=init)
+    }
+
+    return eos, init, boundaries, 1e-12
+
+
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lazy_op_euler(op_test_data, order):
+@pytest.mark.parametrize("problem", [
+    _get_pulse(),
+    _get_scalar_lump(),
+])
+def test_lazy_op_euler(op_test_data, problem, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY
-    from mirgecom.eos import IdealSingleGas
-    from mirgecom.boundary import AdiabaticSlipBoundary
+    eos, init, boundaries, tol = problem
+
     from mirgecom.euler import euler_operator
-
-    eos = IdealSingleGas()
-
-    boundaries = {
-        DTAG_BOUNDARY("x"): AdiabaticSlipBoundary(),
-        DTAG_BOUNDARY("y"): AdiabaticSlipBoundary()
-    }
 
     def op(state):
         return euler_operator(discr, eos, boundaries, state)
@@ -214,14 +248,9 @@ def test_lazy_op_euler(op_test_data, order):
 
     def get_inputs(actx):
         nodes = thaw(discr.nodes(), actx)
-        from mirgecom.initializers import MulticomponentLump
-        init = MulticomponentLump(
-            dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
-            spec_amplitudes=np.ones(3))
         state = init(nodes)
         return state,
 
-    tol = 1e-12
     isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
 
     def lazy_to_eager(u):
