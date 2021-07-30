@@ -74,19 +74,26 @@ def op_test_data(ctx_factory):
 
 
 # Mimics math.isclose for state arrays
-def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0):
+def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
     def componentwise_norm(a):
         from mirgecom.fluid import ConservedVars
         if isinstance(a, ConservedVars):
             return componentwise_norm(a.join())
         return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
 
-    norm_x = componentwise_norm(x)
-    norm_y = componentwise_norm(y)
-    norm_x_minus_y = componentwise_norm(x - y)
+    lhs = componentwise_norm(x - y)
+    rhs = np.maximum(
+        rel_tol * np.maximum(
+            componentwise_norm(x),
+            componentwise_norm(y)),
+        abs_tol)
 
-    return np.all(
-        norm_x_minus_y <= np.maximum(rel_tol * np.maximum(norm_x, norm_y), abs_tol))
+    is_close = np.all(lhs <= rhs)
+
+    if return_operands:
+        return is_close, lhs, rhs
+    else:
+        return is_close
 
 
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
@@ -141,14 +148,16 @@ def test_lazy_op_divergence(op_test_data, order):
         return u,
 
     tol = 1e-12
-    isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert isclose(lazy_result, eager_result)
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -180,14 +189,16 @@ def test_lazy_op_diffusion(op_test_data, order):
         return alpha, u
 
     tol = 1e-12
-    isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert isclose(lazy_result, eager_result)
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 def _get_pulse():
@@ -251,14 +262,16 @@ def test_lazy_op_euler(op_test_data, problem, order):
         state = init(nodes)
         return state,
 
-    isclose = partial(_isclose, discr, rel_tol=tol, abs_tol=tol)
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert isclose(lazy_result, eager_result)
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 if __name__ == "__main__":
