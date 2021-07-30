@@ -41,7 +41,6 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray  # noqa
-from pytools.obj_array import make_obj_array
 from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
@@ -391,10 +390,7 @@ def velocity_gradient(discr, cv, grad_cv):
         \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
 
     """
-    velocity = cv.momentum / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
-                                       - velocity[i]*grad_cv.mass
-                                       for i in range(cv.dim)])
+    return (grad_cv.momentum - np.outer(cv.velocity, grad_cv.mass))/cv.mass
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -425,11 +421,8 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
-                                       - y[i]*grad_cv.mass
-                                       for i in range(nspecies)])
+    return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
 
 
 def compute_wavespeed(eos, cv: ConservedVars):
