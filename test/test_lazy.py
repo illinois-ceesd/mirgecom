@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
+from pytools.obj_array import make_obj_array, obj_array_vectorize
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -73,15 +73,27 @@ def op_test_data(ctx_factory):
     return eager_actx, lazy_actx, get_discr
 
 
-def _rel_linf_error(discr, actual, expected):
-    from mirgecom.fluid import ConservedVars
-    if isinstance(actual, ConservedVars):
-        return _rel_linf_error(discr, actual.join(), expected)
-    if isinstance(expected, ConservedVars):
-        return _rel_linf_error(discr, actual, expected.join())
-    return np.max(obj_array_vectorize_n_args(
-        lambda a, b: discr.norm(a - b, np.inf) / discr.norm(b, np.inf),
-        actual, expected))
+# Mimics math.isclose for state arrays
+def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
+    def componentwise_norm(a):
+        from mirgecom.fluid import ConservedVars
+        if isinstance(a, ConservedVars):
+            return componentwise_norm(a.join())
+        return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
+
+    lhs = componentwise_norm(x - y)
+    rhs = np.maximum(
+        rel_tol * np.maximum(
+            componentwise_norm(x),
+            componentwise_norm(y)),
+        abs_tol)
+
+    is_close = np.all(lhs <= rhs)
+
+    if return_operands:
+        return is_close, lhs, rhs
+    else:
+        return is_close
 
 
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
@@ -135,14 +147,17 @@ def test_lazy_op_divergence(op_test_data, order):
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
         return u,
 
-    rel_linf_error = partial(_rel_linf_error, discr)
+    tol = 1e-12
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert rel_linf_error(lazy_result, eager_result) < 1e-12
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -173,32 +188,69 @@ def test_lazy_op_diffusion(op_test_data, order):
         u = actx.np.cos(np.pi*nodes[0])
         return alpha, u
 
-    rel_linf_error = partial(_rel_linf_error, discr)
+    tol = 1e-12
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert rel_linf_error(lazy_result, eager_result) < 1e-12
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
+
+
+def _get_pulse():
+    from mirgecom.eos import IdealSingleGas
+    eos = IdealSingleGas()
+
+    from mirgecom.initializers import Uniform, AcousticPulse
+    uniform_init = Uniform(dim=2)
+    pulse_init = AcousticPulse(dim=2, center=np.zeros(2), amplitude=1.0, width=.1)
+
+    def init(nodes):
+        return pulse_init(x_vec=nodes, cv=uniform_init(nodes), eos=eos)
+
+    from meshmode.mesh import BTAG_ALL
+    from mirgecom.boundary import AdiabaticSlipBoundary
+    boundaries = {
+        BTAG_ALL: AdiabaticSlipBoundary()
+    }
+
+    return eos, init, boundaries, 1e-12
+
+
+def _get_scalar_lump():
+    from mirgecom.eos import IdealSingleGas
+    eos = IdealSingleGas()
+
+    from mirgecom.initializers import MulticomponentLump
+    init = MulticomponentLump(
+        dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
+        spec_amplitudes=np.ones(3))
+
+    from meshmode.mesh import BTAG_ALL
+    from mirgecom.boundary import PrescribedInviscidBoundary
+    boundaries = {
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=init)
+    }
+
+    return eos, init, boundaries, 1e-12
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lazy_op_euler(op_test_data, order):
+@pytest.mark.parametrize("problem", [
+    _get_pulse(),
+    _get_scalar_lump(),
+])
+def test_lazy_op_euler(op_test_data, problem, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY
-    from mirgecom.eos import IdealSingleGas
-    from mirgecom.boundary import AdiabaticSlipBoundary
+    eos, init, boundaries, tol = problem
+
     from mirgecom.euler import euler_operator
-
-    eos = IdealSingleGas()
-
-    boundaries = {
-        DTAG_BOUNDARY("x"): AdiabaticSlipBoundary(),
-        DTAG_BOUNDARY("y"): AdiabaticSlipBoundary()
-    }
 
     def op(state):
         return euler_operator(discr, eos, boundaries, state)
@@ -207,21 +259,19 @@ def test_lazy_op_euler(op_test_data, order):
 
     def get_inputs(actx):
         nodes = thaw(discr.nodes(), actx)
-        from mirgecom.initializers import MulticomponentLump
-        init = MulticomponentLump(
-            dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
-            spec_amplitudes=np.ones(3))
         state = init(nodes)
         return state,
 
-    rel_linf_error = partial(_rel_linf_error, discr)
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    assert rel_linf_error(lazy_result, eager_result) < 1e-12
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 if __name__ == "__main__":
