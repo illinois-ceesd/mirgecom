@@ -119,7 +119,7 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     mydt = dt
     t_remaining = max(0, t_final - t)
     if constant_cfl:
-        from mirgecom.inviscid import get_viscous_timestep
+        from mirgecom.viscous import get_viscous_timestep
         from grudge.op import nodal_min
         mydt = cfl * nodal_min(
             discr, "vol",
