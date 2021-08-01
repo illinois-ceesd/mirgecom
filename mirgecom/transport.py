@@ -80,6 +80,7 @@ class TransportModel:
     .. automethod:: viscosity
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
+    .. automethod:: viscosity2
     """
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -88,6 +89,10 @@ class TransportModel:
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$."""
+        raise NotImplementedError()
+
+    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the 2nd coefficent of viscosity, $\lambda$."""
         raise NotImplementedError()
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
@@ -126,6 +131,10 @@ class SimpleTransport(TransportModel):
         r"""Get the gas dynamic viscosity, $\mu$."""
         return self._mu
 
+    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        return self._mu_bulk - 2 * self._mu / 3
+
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$."""
         return self._kappa
@@ -146,6 +155,7 @@ class PowerLawTransport(TransportModel):
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
+    .. automethod:: viscosity2
     .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
     """
@@ -177,7 +187,18 @@ class PowerLawTransport(TransportModel):
         """
         actx = cv.array_context
         gas_t = eos.temperature(cv)
-        return self._beta * actx.np.pow(gas_t, self._n)
+        return self._beta * actx.np.power(gas_t, self._n)
+
+    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        .. math::
+
+        \lambda = \left(\alpha - \frac{2}{3}\right)\mu
+        """
+        return (self._alpha - 2.0/3.0)*self.viscosity(eos, cv)
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$.
