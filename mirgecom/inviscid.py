@@ -1,13 +1,13 @@
 r""":mod:`mirgecom.inviscid` provides helper functions for inviscid flow.
 
-Flux Calculation
-^^^^^^^^^^^^^^^^
+Inviscid Flux Calculation
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
 .. autofunction:: inviscid_facial_flux
 
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
+Inviscid Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
