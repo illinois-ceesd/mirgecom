@@ -194,9 +194,7 @@ class PowerLawTransport(TransportModel):
 
         In this transport model, the second coefficient of viscosity is defined as:
 
-        .. math::
-
-        \lambda = \left(\alpha - \frac{2}{3}\right)\mu
+        $\lambda = \left(\alpha - \frac{2}{3}\right)\mu$
         """
         return (self._alpha - 2.0/3.0)*self.viscosity(eos, cv)
 
