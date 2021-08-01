@@ -40,13 +40,17 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 
 from mirgecom.fluid import make_conserved
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import (
+    SimpleTransport,
+    PowerLawTransport
+)
 from mirgecom.eos import IdealSingleGas
 
 logger = logging.getLogger(__name__)
 
 
-def test_viscous_stress_tensor(actx_factory):
+@pytest.mark.parametrize("transport_model", [0, 1])
+def test_viscous_stress_tensor(actx_factory, transport_model):
     """Test tau data structure and values against exact."""
     actx = actx_factory()
     dim = 3
@@ -78,19 +82,21 @@ def test_viscous_stress_tensor(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
 
-    mu_b = 1.0
-    mu = 0.5
-
-    tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu)
+    if transport_model:
+        tv_model = SimpleTransport(bulk_viscosity=1.0, viscosity=0.5)
+    else:
+        tv_model = PowerLawTransport()
 
     eos = IdealSingleGas(transport_model=tv_model)
+    mu = tv_model.viscosity(eos, cv)
+    lam = tv_model.viscosity2(eos, cv)
 
     # Exact answer for tau
     exp_grad_v = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
     exp_grad_v_t = np.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     exp_div_v = 15
     exp_tau = (mu*(exp_grad_v + exp_grad_v_t)
-               + (mu_b - 2*mu/3)*exp_div_v*np.eye(3))
+               + lam*exp_div_v*np.eye(3))
 
     from mirgecom.viscous import viscous_stress_tensor
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
