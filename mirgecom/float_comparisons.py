@@ -47,7 +47,7 @@ def componentwise_err(discr, lhs, rhs, relative=True):
     lhs_norm = componentwise_norm(discr, lhs)
     rhs_norm = componentwise_norm(discr, rhs)
 
-    err_norm = componentwise_norm(rhs - lhs)
+    err_norm = componentwise_norm(discr, rhs - lhs)
     return err_norm if not relative else err_norm / np.maximum(lhs_norm, rhs_norm)
 
 
@@ -57,7 +57,7 @@ def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
     lhs_norm = componentwise_norm(discr, lhs)
     rhs_norm = componentwise_norm(discr, rhs)
 
-    err_norm = componentwise_norm(rhs - lhs)
+    err_norm = componentwise_norm(discr, rhs - lhs)
     if relative:
         err_norm = err_norm / np.maximum(lhs_norm, rhs_norm)
         if correct_for_eps_differences_from_zero:
