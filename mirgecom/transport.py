@@ -187,6 +187,7 @@ class PowerLawTransport(TransportModel):
         """
         actx = cv.array_context
         gas_t = eos.temperature(cv)
+        # NOTE: actx.np.power does not seem to work
         return self._beta * actx.np.power(gas_t, self._n)
 
     def viscosity2(self, eos: GasEOS, cv: ConservedVars):
