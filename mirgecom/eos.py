@@ -208,6 +208,7 @@ class IdealSingleGas(GasEOS):
         r"""Get kinetic (i.e. not internal) energy of gas.
 
         The kinetic energy is calculated as:
+
         .. math::
 
             k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
@@ -330,7 +331,7 @@ class IdealSingleGas(GasEOS):
 
         .. math::
 
-            \rhoE = \frac{p}{(\gamma - 1)} +
+            \rho{E} = \frac{p}{(\gamma - 1)} +
             \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
 
         .. note::
