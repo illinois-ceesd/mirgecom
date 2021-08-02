@@ -63,8 +63,10 @@ def op_test_data(ctx_factory):
             b=(0.5,)*2,
             nelements_per_axis=(4,)*2,
             boundary_tag_to_face={
-                "x": ["-x", "+x"],
-                "y": ["-y", "+y"]
+                "-x": ["-x"],
+                "+x": ["+x"],
+                "-y": ["-y"],
+                "+y": ["+y"],
             })
 
         from grudge.eager import EagerDGDiscretization
@@ -172,8 +174,10 @@ def test_lazy_op_diffusion(op_test_data, order):
         NeumannDiffusionBoundary)
 
     boundaries = {
-        DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
-        DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
+        DTAG_BOUNDARY("-x"): DirichletDiffusionBoundary(0),
+        DTAG_BOUNDARY("+x"): DirichletDiffusionBoundary(0),
+        DTAG_BOUNDARY("-y"): NeumannDiffusionBoundary(0),
+        DTAG_BOUNDARY("+y"): NeumannDiffusionBoundary(0),
     }
 
     def op(alpha, u):
