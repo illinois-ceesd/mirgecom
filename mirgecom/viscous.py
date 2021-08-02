@@ -1,7 +1,7 @@
 r""":mod:`mirgecom.viscous` provides helper functions for viscous flow.
 
-Flux Calculation
-^^^^^^^^^^^^^^^^
+Viscous Flux Calculation
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: viscous_flux
 .. autofunction:: viscous_stress_tensor
@@ -10,8 +10,8 @@ Flux Calculation
 .. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux
 
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
+Viscous Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: get_viscous_timestep
 .. autofunction:: get_viscous_cfl
@@ -52,7 +52,31 @@ from meshmode.dof_array import thaw
 
 
 def viscous_stress_tensor(discr, eos, cv, grad_cv):
-    """Compute the viscous stress tensor."""
+    r"""Compute the viscous stress tensor.
+
+    The viscous stress tensor $\tau$ is defined by:
+
+    .. math::
+
+        \mathbf{\tau} = \mu\left(\nabla{\mathbf{v}}
+        +\left(\nabla{\mathbf{v}}\right)^T\right) + (\mu_B - \frac{2\mu}{3})
+        \left(\nabla\cdot\mathbf{v}\right)
+
+    Parameters
+    ----------
+    eos: :class:`~mirgecom.eos.GasEOS`
+        A gas equation of state with a non-empty
+        :class:`~mirgecom.transport.TransportModel`.
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid state
+    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+        Gradient of the fluid state
+
+    Returns
+    -------
+    numpy.ndarray
+        The viscous stress tensor
+    """
     dim = cv.dim
     transport = eos.transport_model()
 
@@ -77,6 +101,21 @@ def diffusive_flux(discr, eos, cv, grad_cv):
 
     with species diffusivities ${d}_{\alpha}$, and species mass
     fractions ${Y}_{\alpha}$.
+
+    Parameters
+    ----------
+    eos: :class:`~mirgecom.eos.GasEOS`
+        A gas equation of state with a non-empty
+        :class:`~mirgecom.transport.TransportModel`
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid state
+    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+        Gradient of the fluid state
+
+    Returns
+    -------
+    numpy.ndarray
+        The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
     nspecies = len(cv.species_mass)
     transport = eos.transport_model()
@@ -103,6 +142,21 @@ def conductive_heat_flux(discr, eos, cv, grad_t):
         \mathbf{q}_{c} = \kappa\nabla{T},
 
     with thermal conductivity $\kappa$, and gas temperature $T$.
+
+    Parameters
+    ----------
+    eos: :class:`~mirgecom.eos.GasEOS`
+        A gas equation of state with a non-empty
+        :class:`~mirgecom.transport.TransportModel`
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid state
+    grad_t: numpy.ndarray
+        Gradient of the fluid temperature
+
+    Returns
+    -------
+    numpy.ndarray
+        The conductive heat flux vector
     """
     transport = eos.transport_model()
     return transport.thermal_conductivity(eos, cv)*grad_t
@@ -118,7 +172,7 @@ def diffusive_heat_flux(discr, eos, cv, j):
         \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{h}_{\alpha}
         \mathbf{J}_{\alpha},
 
-    with species specific enthalpy ${h}_{\alpha} and diffusive flux
+    with species specific enthalpy ${h}_{\alpha}$ and diffusive flux
     ($\mathbf{J}_{\alpha}$) defined as:
 
     .. math::
@@ -126,6 +180,21 @@ def diffusive_heat_flux(discr, eos, cv, j):
         \mathbf{J}_{\alpha} = -\rho{d}_{\alpha}\nabla{Y}_{\alpha},
 
     where ${Y}_{\alpha}$ is the vector of species mass fractions.
+
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        A gas equation of state with a non-empty
+        :class:`~mirgecom.transport.TransportModel`
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid state
+    j: numpy.ndarray
+        The species diffusive flux vector
+
+    Returns
+    -------
+    numpy.ndarray
+        The total diffusive heath flux vector
     """
     numspecies = len(cv.species_mass)
     transport = eos.transport_model()
@@ -133,7 +202,10 @@ def diffusive_heat_flux(discr, eos, cv, j):
     return sum(d[i]*j[i] for i in range(numspecies))
 
 
-def viscous_flux(discr, eos, cv, grad_cv, t, grad_t):
+# TODO: We could easily make this more general (dv, grad_dv)
+# so that user can define arbitrary array containers for *dv*,
+# enabling support for other models and simultaneous eqns.
+def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     r"""Compute the viscous flux vectors.
 
     The viscous fluxes are:
@@ -141,11 +213,11 @@ def viscous_flux(discr, eos, cv, grad_cv, t, grad_t):
     .. math::
 
         \mathbf{F}_V = [0,\tau\cdot\mathbf{v} - \mathbf{q},
-        \tau_{:i},-\mathbf{j}_\alpha],
+        \tau_{:i},-\mathbf{J}_\alpha],
 
     with fluid velocity ($\mathbf{v}$), viscous stress tensor
     ($\mathbf{\tau}$), and diffusive flux for each species
-    ($\mathbf{j}_\alpha$).
+    ($\mathbf{J}_\alpha$).
 
     .. note::
 
@@ -153,6 +225,23 @@ def viscous_flux(discr, eos, cv, grad_cv, t, grad_t):
         object with a *dim-vector* for each conservation equation. See
         :class:`mirgecom.fluid.ConservedVars` for more information about
         how the fluxes are represented.
+
+    Parameters
+    ----------
+    eos: :class:`~mirgecom.eos.GasEOS`
+        A gas equation of state with a non-empty
+        :class:`~mirgecom.transport.TransportModel`
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid state
+    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+        Gradient of the fluid state
+    grad_t: numpy.ndarray
+        Gradient of the fluid temperature
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+        The viscous transport flux vector
     """
     dim = cv.dim
 
@@ -160,10 +249,9 @@ def viscous_flux(discr, eos, cv, grad_cv, t, grad_t):
     heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
     #    heat_flux = (conductive_heat_flux(discr, eos, q, grad_t)
     #                 + diffusive_heat_flux(discr, eos, q, j))
-    vel = cv.momentum / cv.mass
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_mass_flux = 0 * cv.momentum
-    viscous_energy_flux = np.dot(tau, vel) - heat_flux
+    viscous_energy_flux = np.dot(tau, cv.velocity) - heat_flux
 
     # passes the right (empty) shape for diffusive flux when no species
     # TODO: fix single gas join_conserved for vectors at each cons eqn
@@ -176,44 +264,45 @@ def viscous_flux(discr, eos, cv, grad_cv, t, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
-                        t_tpair, grad_t_tpair, local=False):
+def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
+                        local=False):
     """Return the viscous flux across a face given the solution on both sides.
 
     Parameters
     ----------
-    eos: mirgecom.eos.GasEOS
+    eos: :class:`~mirgecom.eos.GasEOS`
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
-
     cv_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the fluid solution
         on the faces
-
     grad_cv_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
         fluid solution on the faces
-
-    t_tpair: :class:`grudge.trace_pair.TracePair`
-        Trace pair of temperatures on the faces
-
     grad_t_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of temperature gradient on the faces.
-
     local: bool
         Indicates whether to skip projection of fluxes to "all_faces" or not. If
         set to *False* (the default), the returned fluxes are projected to
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+        The viscous transport flux in the face-normal direction on "all_faces" or
+        local to the sub-discretization depending on *local* input parameter
     """
     actx = cv_tpair.int.array_context
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    f_int = viscous_flux(discr, eos, cv_tpair.int, grad_cv_tpair.int, t_tpair.int,
+    f_int = viscous_flux(discr, eos, cv_tpair.int, grad_cv_tpair.int,
                          grad_t_tpair.int)
-    f_ext = viscous_flux(discr, eos, cv_tpair.ext, grad_cv_tpair.ext, t_tpair.ext,
+    f_ext = viscous_flux(discr, eos, cv_tpair.ext, grad_cv_tpair.ext,
                          grad_t_tpair.ext)
+
+    # This bit hard-codes BR1 central flux, use mirgecom.flux.central?
     f_avg = 0.5*(f_int + f_ext)
     flux_weak = make_conserved(cv_tpair.int.dim, q=(f_avg.join() @ normal))
 
@@ -229,14 +318,14 @@ def get_viscous_timestep(discr, eos, cv):
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    eos: mirgecom.eos.GasEOS
+    eos: :class:`~mirgecom.eos.GasEOS`
         An equation of state implementing the speed_of_sound method
     cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
 
     Returns
     -------
-    class:`~meshmode.dof_array.DOFArray`
+    :class:`~meshmode.dof_array.DOFArray`
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
@@ -261,7 +350,7 @@ def get_viscous_cfl(discr, eos, dt, cv):
     ----------
     discr: :class:`grudge.eager.EagerDGDiscretization`
         the discretization to use
-    eos: mirgecom.eos.GasEOS
+    eos: :class:`~mirgecom.eos.GasEOS`
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     dt: float or :class:`~meshmode.dof_array.DOFArray`
@@ -271,7 +360,7 @@ def get_viscous_cfl(discr, eos, dt, cv):
 
     Returns
     -------
-    :class:`meshmode.dof_array.DOFArray`
+    :class:`~meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
     return dt / get_viscous_timestep(discr, eos=eos, cv=cv)

@@ -190,17 +190,15 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     # glob the inputs together in a tuple to use the _elbnd_flux wrapper
     visc_part_inputs = [
         (cv_part_pairs[bnd_index], s_part_pairs[bnd_index],
-         t_part_pairs[bnd_index], delt_part_pairs[bnd_index])
+         delt_part_pairs[bnd_index])
         for bnd_index in range(num_partition_interfaces)]
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def fvisc_interior_face(tpair_tuple):
         cv_pair_int = tpair_tuple[0]
         s_pair_int = tpair_tuple[1]
-        t_pair_int = tpair_tuple[2]
-        dt_pair_int = tpair_tuple[3]
-        return viscous_facial_flux(discr, eos, cv_pair_int, s_pair_int,
-                                   t_pair_int, dt_pair_int)
+        dt_pair_int = tpair_tuple[2]
+        return viscous_facial_flux(discr, eos, cv_pair_int, s_pair_int, dt_pair_int)
 
     # viscous part of bcs applied here
     def visc_bnd_flux(btag):
@@ -209,14 +207,14 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                                                       grad_t=grad_t, time=t)
 
     vol_term = (
-        viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, t=gas_t, grad_t=grad_t)
+        viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
         - inviscid_flux(discr, eos=eos, cv=cv)
     ).join()
 
     bnd_term = (
         _elbnd_flux(
             discr, fvisc_interior_face, visc_bnd_flux,
-            (cv_int_tpair, s_int_pair, t_int_tpair, delt_int_pair),
+            (cv_int_tpair, s_int_pair, delt_int_pair),
             visc_part_inputs, boundaries)
         - _elbnd_flux(
             discr, finv_interior_face, finv_domain_boundary, cv_int_tpair,

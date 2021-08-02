@@ -76,11 +76,13 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
                      t_final, constant_cfl=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
-    This routine returns *dt*, the users defined constant timestep, or
-    *max_dt*, the maximum domain-wide stability-limited
-    timestep for a fluid simulation. It calls the collective:
-    :func:`~grudge.op.nodal_min` on the inside which makes it
-    domain-wide regardless of parallel decomposition.
+    This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
+    maximum domain-wide stability-limited timestep for a fluid simulation.
+
+    .. important::
+        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
+        which makes it domain-wide regardless of parallel domain decomposition. Thus
+        this routine must be called *collectively* (i.e. by all ranks).
 
     Two modes are supported:
         - Constant DT mode: returns the minimum of (t_final-t, dt)
@@ -101,28 +103,35 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     cfl: float
         The current CFL number
     eos: :class:`~mirgecom.eos.GasEOS`
-        Gas equation-of-state supporting speed_of_sound
+        Gas equation-of-state supporting speed_of_sound, and, optionally for viscous
+        fluids, a non-empty :class:`~mirgecom.transport.TransportModel` for viscous
+        transport properties.
     constant_cfl: bool
         True if running constant CFL mode
 
     Returns
     -------
     float
-        The maximum stable DT based on inviscid fluid acoustic wavespeed.
+        The maximum stable DT based on a viscous fluid.
     """
     t_remaining = max(0, t_final - t)
     mydt = dt
     if constant_cfl:
         from mirgecom.viscous import get_viscous_timestep
         from grudge.op import nodal_min
-        mydt = cfl * nodal_min(discr, "vol",
-                               get_viscous_timestep(discr, eos, state))
+        mydt = cfl * nodal_min(
+            discr, "vol",
+            get_viscous_timestep(discr=discr, eos=eos, cv=state)
+        )
     return min(t_remaining, mydt)
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None):
     """Write VTK output for the fields specified in *io_fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
 
     Parameters
     ----------
@@ -168,7 +177,11 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
 
 def allsync(local_values, comm=None, op=None):
-    """Perform allreduce if MPI comm is provided."""
+    """Perform allreduce if MPI comm is provided.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
     if comm is None:
         return local_values
     if op is None:
@@ -193,7 +206,11 @@ def check_naninf_local(discr, dd, field):
 
 
 def compare_fluid_solutions(discr, red_state, blue_state):
-    """Return inf norm of (*red_state* - *blue_state*) for each component."""
+    """Return inf norm of (*red_state* - *blue_state*) for each component.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
     resid = red_state - blue_state
     return [discr.norm(v, np.inf) for v in resid.join()]
 
@@ -204,6 +221,9 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     Generate the mesh with the user-supplied mesh generation function
     *generate_mesh*, partition the mesh, and distribute it to every
     rank in the provided MPI communicator *comm*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
 
     Parameters
     ----------

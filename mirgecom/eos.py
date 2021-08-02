@@ -154,6 +154,30 @@ class IdealSingleGas(GasEOS):
         """Get specific heat ratio Cp/Cv."""
         return self._gamma
 
+    def heat_capacity_cp(self, cv: ConservedVars = None):
+        r"""Get specific heat capcity at constant pressure.
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
+            species masses, ($\rho{Y}_\alpha$).
+        """
+        return self._gas_const * self._gamma / (self._gamma - 1)
+
+    def heat_capacity_cv(self, cv: ConservedVars = None):
+        r"""Get specific heat capcity at constant volume.
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
+            species masses, ($\rho{Y}_\alpha$).
+        """
+        return self._gas_const / (self._gamma - 1)
+
     def gas_const(self, cv: ConservedVars = None):
         """Get specific gas constant R."""
         return self._gas_const
@@ -316,6 +340,41 @@ class PyrometheusMixture(GasEOS):
     def transport_model(self):
         """Get the transport model object for this EOS."""
         return self._transport_model
+
+    def heat_capacity_cp(self, cv: ConservedVars = None):
+        r"""Get mixture-averaged specific heat capcity at constant pressure.
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
+            species masses, ($\rho{Y}_\alpha$).
+        """
+        if cv is None:
+            raise ValueError("EOS.gamma requires ConservedVars (cv) argument.")
+        temp = self.temperature(cv)
+        y = cv.species_mass_fractions
+        return self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temp, y)
+
+    def heat_capacity_cv(self, cv: ConservedVars = None):
+        r"""Get mixture-averaged specific heat capcity at constant volume.
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
+            species masses, ($\rho{Y}_\alpha$).
+        """
+        if cv is None:
+            raise ValueError("EOS.gamma requires ConservedVars (cv) argument.")
+        temp = self.temperature(cv)
+        y = cv.species_mass_fractions
+        return (
+            self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temp, y)
+            / self.gamma(cv)
+        )
 
     def gamma(self, cv: ConservedVars = None):
         r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_p - R_s}$.

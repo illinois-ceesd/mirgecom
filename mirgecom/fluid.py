@@ -243,6 +243,11 @@ class ConservedVars:
         """Return the fluid velocity = momentum / mass."""
         return self.momentum / self.mass
 
+    @property
+    def species_mass_fractions(self):
+        """Return the fluid velocity = momentum / mass."""
+        return self.species_mass / self.mass
+
     def join(self):
         """Call :func:`join_conserved` on *self*."""
         return join_conserved(
