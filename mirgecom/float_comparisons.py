@@ -62,9 +62,9 @@ def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
         err_norm = err_norm / np.maximum(lhs_norm, rhs_norm)
         if correct_for_eps_differences_from_zero:
             return np.all(
-                np.logical_and(
+                np.logical_or(np.logical_and(
                     np.minimum(lhs_norm, rhs_norm) == 0, lhs_norm - rhs_norm < 1e-30
-                    )
+                    ), err_norm <= tol)
                 )
 
     return np.all(err_norm <= tol)
