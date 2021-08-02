@@ -78,6 +78,7 @@ class GasEOS:
     .. automethod:: kinetic_energy
     .. automethod:: gamma
     .. automethod:: transport_model
+    .. automethod:: get_internal_energy
     """
 
     def pressure(self, cv: ConservedVars):
@@ -94,6 +95,14 @@ class GasEOS:
 
     def gas_const(self, cv: ConservedVars = None):
         r"""Get the specific gas constant ($R_s$)."""
+        raise NotImplementedError()
+
+    def heat_capacity_cp(self, cv: ConservedVars = None):
+        r"""Get the specific heat capacity at constant pressure ($C_p$)."""
+        raise NotImplementedError()
+
+    def heat_capacity_cv(self, cv: ConservedVars = None):
+        r"""Get the specific heat capacity at constant volume ($C_v$)."""
         raise NotImplementedError()
 
     def internal_energy(self, cv: ConservedVars):
@@ -116,6 +125,10 @@ class GasEOS:
         """Get the transport model if it exists."""
         raise NotImplementedError()
 
+    def get_internal_energy(self, temperature, **kwargs):
+        """Get the fluid internal energy from temperature and mass."""
+        raise NotImplementedError()
+
     def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
@@ -136,8 +149,17 @@ class IdealSingleGas(GasEOS):
     momentum ($\rho\vec{V}$).
 
     .. automethod:: __init__
-
-    Inherits from (and implements) :class:`GasEOS`.
+    .. automethod:: pressure
+    .. automethod:: temperature
+    .. automethod:: sound_speed
+    .. automethod:: internal_energy
+    .. automethod:: gas_const
+    .. automethod:: dependent_vars
+    .. automethod:: total_energy
+    .. automethod:: kinetic_energy
+    .. automethod:: gamma
+    .. automethod:: transport_model
+    .. automethod:: get_internal_energy
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1, transport_model=None):
@@ -189,6 +211,17 @@ class IdealSingleGas(GasEOS):
         .. :math::
 
             k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The kinetic energy of the fluid flow
         """
         mom = cv.momentum
         return (0.5 * np.dot(mom, mom) / cv.mass)
@@ -200,6 +233,17 @@ class IdealSingleGas(GasEOS):
         .. :math::
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The internal energy of the fluid material
         """
         return (cv.energy - self.kinetic_energy(cv))
 
@@ -211,6 +255,17 @@ class IdealSingleGas(GasEOS):
         .. :math::
 
             p = (\gamma - 1)e
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The fluid pressure
         """
         return self.internal_energy(cv) * (self._gamma - 1.0)
 
@@ -222,6 +277,17 @@ class IdealSingleGas(GasEOS):
         .. :math::
 
             c = \sqrt{\frac{\gamma{p}}{\rho}}
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The speed of sound in the fluid
         """
         actx = cv.array_context
         return actx.np.sqrt(self._gamma / cv.mass * self.pressure(cv))
@@ -236,6 +302,17 @@ class IdealSingleGas(GasEOS):
         .. :math::
 
             T = \frac{(\gamma - 1)e}{R\rho}
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The fluid temperature
         """
         return (
             (((self._gamma - 1.0) / self._gas_const)
@@ -261,18 +338,32 @@ class IdealSingleGas(GasEOS):
             mass, and momentum in this case. In general in the EOS we need
             DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
             inversion interfaces.
+
+        Parameters
+        ----------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        pressure: :class:`~meshmode.dof_array.DOFArray`
+            The fluid pressure
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The total energy of the fluid (i.e. internal + kinetic)
         """
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
-    def get_internal_energy(self, temperature, species_fractions, **kwargs):
-        r"""Get the gas thermal energy from temperature, and species fractions (Y).
+    def get_internal_energy(self, temperature, **kwargs):
+        r"""Get the gas thermal energy from temperature, and fluid density.
 
         The gas internal energy $e$ is calculated from:
 
         .. math::
 
-            e = R_s T \sum{Y_\alpha h_\alpha}
+            e = R_s T \frac{\rho}{\left(\gamma - 1\right)}
         """
         if "mass" not in kwargs:
             return ValueError("Expected mass keyword argument.")
@@ -306,8 +397,7 @@ class PyrometheusMixture(GasEOS):
     .. automethod:: total_energy
     .. automethod:: gamma
     .. automethod:: gas_const
-
-    Inherits from (and implements) :class:`GasEOS`.
+    .. automethod:: transport_model
     """
 
     def __init__(self, pyrometheus_mech, temperature_guess=300.0,
@@ -449,7 +539,7 @@ class PyrometheusMixture(GasEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_fractions)
 
-    def get_internal_energy(self, temperature, species_fractions, **kwargs):
+    def get_internal_energy(self, temperature, **kwargs):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
@@ -458,6 +548,10 @@ class PyrometheusMixture(GasEOS):
 
             e = R_s T \sum{Y_\alpha h_\alpha}
         """
+        if "species_fractions" not in kwargs:
+            raise ValueError("Mixture EOS.get_internal_energy requires "
+                             "species_fractions argument.")
+        species_fractions = kwargs["species_fractions"]
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
             temperature, species_fractions)
 

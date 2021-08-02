@@ -9,10 +9,6 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
 
-Two models are currently implemented, the :class:`SimpleTransport` model is
-for uniform and constant transport properties and the :class:`PowerLawTransport`
-is for transport properties that are power-law temperature-dependent.
-
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
@@ -132,7 +128,12 @@ class SimpleTransport(TransportModel):
         return self._mu
 
     def viscosity2(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
         return self._mu_bulk - 2 * self._mu / 3
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
