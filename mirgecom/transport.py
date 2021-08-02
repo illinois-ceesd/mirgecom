@@ -9,10 +9,6 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
 
-Two models are currently implemented, the :class:`SimpleTransport` model is
-for uniform and constant transport properties and the :class:`PowerLawTransport`
-is for transport properties that are power-law temperature-dependent.
-
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
