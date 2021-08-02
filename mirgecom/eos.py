@@ -93,15 +93,15 @@ class GasEOS:
         """Get the gas sound speed."""
         raise NotImplementedError()
 
-    def gas_const(self, cv: ConservedVars = None):
+    def gas_const(self, cv: ConservedVars):
         r"""Get the specific gas constant ($R_s$)."""
         raise NotImplementedError()
 
-    def heat_capacity_cp(self, cv: ConservedVars = None):
+    def heat_capacity_cp(self, cv: ConservedVars):
         r"""Get the specific heat capacity at constant pressure ($C_p$)."""
         raise NotImplementedError()
 
-    def heat_capacity_cv(self, cv: ConservedVars = None):
+    def heat_capacity_cv(self, cv: ConservedVars):
         r"""Get the specific heat capacity at constant volume ($C_v$)."""
         raise NotImplementedError()
 
@@ -117,7 +117,7 @@ class GasEOS:
         """Get the kinetic energy for the gas."""
         raise NotImplementedError()
 
-    def gamma(self, cv: ConservedVars = None):
+    def gamma(self, cv: ConservedVars):
         """Get the ratio of gas specific heats Cp/Cv."""
         raise NotImplementedError()
 
@@ -125,7 +125,7 @@ class GasEOS:
         """Get the transport model if it exists."""
         raise NotImplementedError()
 
-    def get_internal_energy(self, temperature, **kwargs):
+    def get_internal_energy(self, temperature, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
         raise NotImplementedError()
 
@@ -357,7 +357,7 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
-    def get_internal_energy(self, temperature, **kwargs):
+    def get_internal_energy(self, temperature, mass, species_mass_fractions=None):
         r"""Get the gas thermal energy from temperature, and fluid density.
 
         The gas internal energy $e$ is calculated from:
@@ -365,10 +365,16 @@ class IdealSingleGas(GasEOS):
         .. math::
 
             e = R_s T \frac{\rho}{\left(\gamma - 1\right)}
+
+        Parameters
+        ----------
+        temperature: :class:`~meshmode.dof_array.DOFArray`
+            The fluid temperature
+        mass: float or :class:`~meshmode.dof_array.DOFArray`
+            The fluid mass density
+        species_mass_fractions:
+            Unused
         """
-        if "mass" not in kwargs:
-            return ValueError("Expected mass keyword argument.")
-        mass = kwargs["mass"]
         return self._gas_const * mass * temperature / (self._gamma - 1)
 
 
@@ -389,16 +395,21 @@ class PyrometheusMixture(GasEOS):
         mechanism input files.
 
     .. automethod:: __init__
+    .. automethod:: pressure
+    .. automethod:: temperature
+    .. automethod:: sound_speed
+    .. automethod:: internal_energy
+    .. automethod:: gas_const
+    .. automethod:: dependent_vars
+    .. automethod:: total_energy
+    .. automethod:: kinetic_energy
+    .. automethod:: gamma
+    .. automethod:: transport_model
+    .. automethod:: get_internal_energy
     .. automethod:: get_density
     .. automethod:: get_species_molecular_weights
     .. automethod:: get_production_rates
     .. automethod:: get_species_source_terms
-    .. automethod:: get_internal_energy
-    .. automethod:: species_fractions
-    .. automethod:: total_energy
-    .. automethod:: gamma
-    .. automethod:: gas_const
-    .. automethod:: transport_model
     """
 
     def __init__(self, pyrometheus_mech, temperature_guess=300.0,
@@ -432,7 +443,7 @@ class PyrometheusMixture(GasEOS):
         """Get the transport model object for this EOS."""
         return self._transport_model
 
-    def heat_capacity_cp(self, cv: ConservedVars = None):
+    def heat_capacity_cp(self, cv: ConservedVars):
         r"""Get mixture-averaged specific heat capacity at constant pressure.
 
         Parameters
@@ -442,13 +453,11 @@ class PyrometheusMixture(GasEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
-        if cv is None:
-            raise ValueError("EOS.gamma requires ConservedVars (cv) argument.")
         temp = self.temperature(cv)
         y = cv.species_mass_fractions
         return self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temp, y)
 
-    def heat_capacity_cv(self, cv: ConservedVars = None):
+    def heat_capacity_cv(self, cv: ConservedVars):
         r"""Get mixture-averaged specific heat capacity at constant volume.
 
         Parameters
@@ -458,8 +467,6 @@ class PyrometheusMixture(GasEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
-        if cv is None:
-            raise ValueError("EOS.gamma requires ConservedVars (cv) argument.")
         temp = self.temperature(cv)
         y = cv.species_mass_fractions
         return (
@@ -467,7 +474,7 @@ class PyrometheusMixture(GasEOS):
             / self.gamma(cv)
         )
 
-    def gamma(self, cv: ConservedVars = None):
+    def gamma(self, cv: ConservedVars):
         r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_p - R_s}$.
 
         Parameters
@@ -477,15 +484,13 @@ class PyrometheusMixture(GasEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
-        if cv is None:
-            raise ValueError("EOS.gamma requires ConservedVars (cv) argument.")
         temperature = self.temperature(cv)
-        y = self.species_fractions(cv)
+        y = cv.species_mass_fractions
         cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
         rspec = self.gas_const(cv)
         return cp / (cp - rspec)
 
-    def gas_const(self, cv: ConservedVars = None):
+    def gas_const(self, cv: ConservedVars):
         r"""Get specific gas constant $R_s$.
 
         The mixture specific gas constant is calculated
@@ -500,9 +505,7 @@ class PyrometheusMixture(GasEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
         """
-        if cv is None:
-            raise ValueError("EOS.gas_const requires ConservedVars (cv) argument.")
-        y = self.species_fractions(cv)
+        y = cv.species_mass_fractions
         return self._pyrometheus_mech.get_specific_gas_constant(y)
 
     def kinetic_energy(self, cv: ConservedVars):
@@ -513,6 +516,13 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
         """
         mom = cv.momentum
         return (0.5 * np.dot(mom, mom) / cv.mass)
@@ -525,10 +535,22 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            Internal energy of the fluid
         """
         return (cv.energy - self.kinetic_energy(cv))
 
-    def get_density(self, pressure, temperature, species_fractions):
+    def get_density(self, pressure, temperature, species_mass_fractions):
         r"""Get the density from pressure, temperature, and species fractions (Y).
 
         The gas density $\rho$ is calculated from pressure, temperature and $R$ as:
@@ -536,11 +558,26 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             \rho = \frac{p}{R_s T}
+
+        Parameters
+        ----------
+        pressure: :class:`~meshmode.dof_array.DOFArray`
+            The fluid pressure
+        temperature: :class:`~meshmode.dof_array.DOFArray`
+            The fluid temperature
+        species_mass_fractions: numpy.ndarray
+            Object array of species mass fractions
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The total fluid mass density
         """
         return self._pyrometheus_mech.get_density(pressure, temperature,
-                                                  species_fractions)
+                                                  species_mass_fractions)
 
-    def get_internal_energy(self, temperature, **kwargs):
+    def get_internal_energy(self, temperature, mass=None,
+                            species_mass_fractions=None):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
@@ -548,28 +585,45 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             e = R_s T \sum{Y_\alpha h_\alpha}
+
+        Parameters
+        ----------
+        temperature: :class:`~meshmode.dof_array.DOFArray`
+            The fluid temperature
+        species_mass_fractions: numpy.ndarray
+            Object array of species mass fractions
+        mass:
+            Unused
         """
-        if "species_fractions" not in kwargs:
+        if species_mass_fractions is None:
             raise ValueError("Mixture EOS.get_internal_energy requires "
-                             "species_fractions argument.")
-        species_fractions = kwargs["species_fractions"]
+                             "species_mass_fractions argument.")
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
-            temperature, species_fractions)
+            temperature, species_mass_fractions)
 
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
         return self._pyrometheus_mech.wts
 
     def get_production_rates(self, cv: ConservedVars):
-        """Get the production rate for each species."""
+        r"""Get the production rate for each species.
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
+        Returns
+        -------
+        numpy.ndarray
+            The chemical production rates for each species
+        """
         temperature = self.temperature(cv)
-        y = self.species_fractions(cv)
+        y = cv.species_mass_fractions
         return self._pyrometheus_mech.get_net_production_rates(
             cv.mass, temperature, y)
-
-    def species_fractions(self, cv: ConservedVars):
-        r"""Get species fractions $Y_\alpha$ from species mass density."""
-        return cv.species_mass / cv.mass
 
     def pressure(self, cv: ConservedVars):
         r"""Get thermodynamic pressure of the gas.
@@ -579,12 +633,24 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             p = (\gamma_{\mathtt{mix}} - 1)e
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The pressure of the fluid.
         """
         @memoize_in(cv, (PyrometheusMixture.pressure,
                          type(self._pyrometheus_mech)))
         def get_pressure():
             temperature = self.temperature(cv)
-            y = self.species_fractions(cv)
+            y = cv.species_mass_fractions
             return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
         return get_pressure()
 
@@ -596,6 +662,18 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             c = \sqrt{\frac{\gamma_{\mathtt{mix}}{p}}{\rho}}
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The speed of sound in the fluid.
         """
         @memoize_in(cv, (PyrometheusMixture.sound_speed,
                          type(self._pyrometheus_mech)))
@@ -614,11 +692,23 @@ class PyrometheusMixture(GasEOS):
         .. math::
 
             T = \frac{(\gamma_{\mathtt{mix}} - 1)e}{R_s \rho}
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The temperature of the fluid.
         """
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
-            y = self.species_fractions(cv)
+            y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
             return self._pyrometheus_mech.get_temperature(e, self._tguess,
                                                           y, True)
@@ -643,12 +733,39 @@ class PyrometheusMixture(GasEOS):
             mass, and momentum in this case. In general in the EOS we need
             DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
             inversion interfaces.
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+        pressure: :class:`~meshmode.dof_array.DOFArray`
+            The fluid pressure
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The total energy fo the fluid (i.e. internal + kinetic)
         """
         return (pressure / (self.gamma(cv) - 1.0)
                 + self.kinetic_energy(cv))
 
     def get_species_source_terms(self, cv: ConservedVars):
-        """Get the species mass source terms to be used on the RHS for chemistry."""
+        r"""Get the species mass source terms to be used on the RHS for chemistry.
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
+            ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
+            of species masses, ($\rho{Y}_\alpha$).
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            Chemistry source terms
+        """
         omega = self.get_production_rates(cv)
         w = self.get_species_molecular_weights()
         dim = len(cv.momentum)

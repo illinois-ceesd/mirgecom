@@ -106,6 +106,11 @@ class SimpleTransport(TransportModel):
     Inherits from (and implements) :class:`TransportModel`.
 
     .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: viscosity2
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
     """
 
     def __init__(self, bulk_viscosity=0, viscosity=0,
@@ -165,6 +170,9 @@ class PowerLawTransport(TransportModel):
     def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
                  species_diffusivity=None):
         """Initialize power law coefficients and parameters."""
+        raise NotImplementedError("This class is not yet supported, awaits "
+                                  "implementation of array_context.power.")
+
         if species_diffusivity is None:
             species_diffusivity = np.empty((0,), dtype=object)
         self._alpha = alpha
