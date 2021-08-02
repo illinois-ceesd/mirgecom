@@ -24,17 +24,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
 import pytest  # noqa
 
-from meshmode.dof_array import thaw
 from grudge.eager import EagerDGDiscretization
 from mirgecom.float_comparisons import within_tol
 
 
-
 def test_within_tol_absolute(actx_factory):
-    """Test tau data structure and values against exact."""
+    """Test absolute mode of tolerance checking."""
     actx = actx_factory()
     dim = 3
     nel_1d = 5
@@ -48,15 +45,15 @@ def test_within_tol_absolute(actx_factory):
     order = 1
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
     assert within_tol(discr, ones, ones + 1e-7, tol=1e-6, relative=False)
     assert not within_tol(discr, ones, ones + 1e-5, tol=1e-6, relative=False)
 
+
 def test_within_tol_relative(actx_factory):
-    """Test tau data structure and values against exact."""
+    """Test relative mode of tolerance checking."""
     actx = actx_factory()
     dim = 3
     nel_1d = 5
@@ -70,15 +67,15 @@ def test_within_tol_relative(actx_factory):
     order = 1
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
     assert within_tol(discr, 30 * ones, 30 * ones + 1e-5, tol=1e-6)
     assert not within_tol(discr, .01 * ones, .01 * ones + 1e-7, tol=1e-6)
 
+
 def test_within_tol_errors_around_zero(actx_factory):
-    """Test tau data structure and values against exact."""
+    """Test relative mode's checks when zero values are present."""
     actx = actx_factory()
     dim = 3
     nel_1d = 5
@@ -92,11 +89,10 @@ def test_within_tol_errors_around_zero(actx_factory):
     order = 1
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
 
     assert within_tol(discr, zeros, zeros + 1e-100, tol=1e-6)
     assert not within_tol(
-                            discr, zeros, zeros + 1e-100, tol=1e-6,
-                            correct_for_eps_differences_from_zero=False
-                        )
+        discr, zeros, zeros + 1e-100, tol=1e-6,
+        correct_for_eps_differences_from_zero=False
+    )

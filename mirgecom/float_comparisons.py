@@ -37,12 +37,14 @@ import numpy as np
 
 
 def componentwise_norm(discr, a):
+    """Calculates a component-wise infinity norm"""
     if isinstance(a, ConservedVars):
         return componentwise_norm(discr, a.join())
     return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
 
 
 def componentwise_err(discr, lhs, rhs, relative=True):
+    """Calculates the component-wise error"""
     lhs_norm = componentwise_norm(discr, lhs)
     rhs_norm = componentwise_norm(discr, rhs)
 
@@ -52,6 +54,7 @@ def componentwise_err(discr, lhs, rhs, relative=True):
 
 def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
                 correct_for_eps_differences_from_zero=True):
+    """Checks if the component-wise error is within a tolerance"""
     lhs_norm = componentwise_norm(discr, lhs)
     rhs_norm = componentwise_norm(discr, rhs)
 
