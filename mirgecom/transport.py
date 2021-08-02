@@ -1,5 +1,5 @@
 r"""
-:mod:`mirgecom.transport` provides methods/utils for tranport properties.
+:mod:`mirgecom.transport` provides methods/utils for transport properties.
 
 Transport Models
 ^^^^^^^^^^^^^^^^
@@ -100,16 +100,16 @@ class TransportModel:
         raise NotImplementedError()
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the vector of species diffusivities (${d}_{\alpha}$)."""
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
 
 
 class SimpleTransport(TransportModel):
     r"""Transport model with uniform, constant properties.
 
-    .. automethod:: __init__
-
     Inherits from (and implements) :class:`TransportModel`.
+
+    .. automethod:: __init__
     """
 
     def __init__(self, bulk_viscosity=0, viscosity=0,

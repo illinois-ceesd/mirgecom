@@ -155,7 +155,7 @@ class IdealSingleGas(GasEOS):
         return self._gamma
 
     def heat_capacity_cp(self, cv: ConservedVars = None):
-        r"""Get specific heat capcity at constant pressure.
+        r"""Get specific heat capacity at constant pressure.
 
         Parameters
         ----------
@@ -167,7 +167,7 @@ class IdealSingleGas(GasEOS):
         return self._gas_const * self._gamma / (self._gamma - 1)
 
     def heat_capacity_cv(self, cv: ConservedVars = None):
-        r"""Get specific heat capcity at constant volume.
+        r"""Get specific heat capacity at constant volume.
 
         Parameters
         ----------
@@ -342,7 +342,7 @@ class PyrometheusMixture(GasEOS):
         return self._transport_model
 
     def heat_capacity_cp(self, cv: ConservedVars = None):
-        r"""Get mixture-averaged specific heat capcity at constant pressure.
+        r"""Get mixture-averaged specific heat capacity at constant pressure.
 
         Parameters
         ----------
@@ -358,7 +358,7 @@ class PyrometheusMixture(GasEOS):
         return self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temp, y)
 
     def heat_capacity_cv(self, cv: ConservedVars = None):
-        r"""Get mixture-averaged specific heat capcity at constant volume.
+        r"""Get mixture-averaged specific heat capacity at constant volume.
 
         Parameters
         ----------
