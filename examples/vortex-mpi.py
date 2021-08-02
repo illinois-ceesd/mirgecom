@@ -31,7 +31,7 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.dof_array import thaw
