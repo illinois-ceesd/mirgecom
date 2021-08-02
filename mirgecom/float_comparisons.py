@@ -1,0 +1,68 @@
+""":mod:`mirgecom.float_comparisons` provides common utilities for comparing
+float-valued arrays.
+
+Comparison Functions
+^^^^^^^^^^^^^^^^^^^^
+.. autofunction:: componentwise_norm
+.. autofunction:: componentwise_err
+.. autofunction:: within_tol
+"""
+
+__copyright__ = """
+Copyright (C) 2021 University of Illinois Board of Trustees
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+from mirgecom.fluid import ConservedVars
+from pytools.obj_array import obj_array_vectorize
+import numpy as np
+
+
+def componentwise_norm(discr, a):
+    if isinstance(a, ConservedVars):
+        return componentwise_norm(discr, a.join())
+    return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
+
+
+def componentwise_err(discr, lhs, rhs, relative=True):
+    lhs_norm = componentwise_norm(discr, lhs)
+    rhs_norm = componentwise_norm(discr, rhs)
+
+    err_norm = componentwise_norm(rhs - lhs)
+    return err_norm if not relative else err_norm / np.maximum(lhs_norm, rhs_norm)
+
+
+def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
+                correct_for_eps_differences_from_zero=True):
+    lhs_norm = componentwise_norm(discr, lhs)
+    rhs_norm = componentwise_norm(discr, rhs)
+
+    err_norm = componentwise_norm(rhs - lhs)
+    if relative:
+        err_norm = err_norm / np.maximum(lhs_norm, rhs_norm)
+        if correct_for_eps_differences_from_zero:
+            return np.all(
+                np.logical_and(
+                    np.minimum(lhs_norm, rhs_norm) == 0, lhs_norm - rhs_norm < 1e-30
+                    )
+                )
+
+    return np.all(err_norm <= tol)
