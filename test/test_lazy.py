@@ -278,6 +278,107 @@ def test_lazy_op_euler(op_test_data, problem, order):
     assert is_close, f"{lhs} not <= {rhs}"
 
 
+def _get_poiseuille():
+    p_low = 1
+    p_hi = 1.001
+    mu = 1
+
+    from mirgecom.eos import IdealSingleGas
+    from mirgecom.transport import SimpleTransport
+    eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=mu))
+
+    def poiseuille_init(nodes, eos, cv=None, **kwargs):
+        x = nodes[0] + 0.5
+        y = nodes[1] + 0.5
+        u_x = (p_hi - p_low)*y*(1 - y)/(2*mu)
+        p_x = p_hi - (p_hi - p_low)*x
+        rho = 1.0
+        mass = 0*x + rho
+        u_y = 0*x
+        velocity = make_obj_array([u_x, u_y])
+        ke = .5*np.dot(velocity, velocity)*mass
+        gamma = eos.gamma()
+        if cv is not None:
+            mass = cv.mass
+            vel = cv.velocity
+            ke = .5*np.dot(vel, vel)*mass
+
+        rho_e = p_x/(gamma-1) + ke
+        from mirgecom.fluid import make_conserved
+        return make_conserved(
+            2, mass=mass, energy=rho_e, momentum=mass*velocity)
+
+    init = partial(poiseuille_init, eos=eos)
+
+    from grudge.dof_desc import DTAG_BOUNDARY
+    from mirgecom.boundary import PrescribedViscousBoundary, IsothermalNoSlipBoundary
+    boundaries = {
+        DTAG_BOUNDARY("-x"): PrescribedViscousBoundary(q_func=poiseuille_init),
+        DTAG_BOUNDARY("+x"): PrescribedViscousBoundary(q_func=poiseuille_init),
+        DTAG_BOUNDARY("-y"): IsothermalNoSlipBoundary(),
+        DTAG_BOUNDARY("+y"): IsothermalNoSlipBoundary(),
+    }
+
+    return eos, init, boundaries, 1e-12
+
+
+def _get_viscous_scalar_lump():
+    from mirgecom.eos import IdealSingleGas
+    from mirgecom.transport import SimpleTransport
+    transport = SimpleTransport(
+        viscosity=1,
+        species_diffusivity=np.ones(3))
+    eos = IdealSingleGas(transport_model=transport)
+
+    from mirgecom.initializers import MulticomponentLump
+    init = MulticomponentLump(
+        dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
+        spec_amplitudes=np.ones(3))
+
+    from meshmode.mesh import BTAG_ALL
+    from mirgecom.boundary import PrescribedViscousBoundary
+    boundaries = {
+        BTAG_ALL: PrescribedViscousBoundary(q_func=init)
+    }
+
+    return eos, init, boundaries, 1e-12
+
+
+@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("problem", [
+    _get_poiseuille(),
+    _get_viscous_scalar_lump(),
+])
+def test_lazy_op_ns(op_test_data, problem, order):
+    eager_actx, lazy_actx, get_discr = op_test_data
+    discr = get_discr(order)
+
+    eos, init, boundaries, tol = problem
+
+    from mirgecom.navierstokes import ns_operator
+
+    def op(state):
+        return ns_operator(discr, eos, boundaries, state)
+
+    lazy_op = lazy_actx.compile(op)
+
+    def get_inputs(actx):
+        nodes = thaw(discr.nodes(), actx)
+        state = init(nodes)
+        return state,
+
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
+
+    def lazy_to_eager(u):
+        return thaw(freeze(u, lazy_actx), eager_actx)
+
+    eager_result = op(*get_inputs(eager_actx))
+    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
