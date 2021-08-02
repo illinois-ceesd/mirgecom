@@ -64,7 +64,7 @@ class GasEOS:
     Equation of state (EOS) classes are responsible for
     computing relations between fluid or gas state variables.
 
-    Each interface call takes an :class:`mirgecom.fluid.ConservedVars` object
+    Each interface call takes an :class:`~mirgecom.fluid.ConservedVars` object
     array representing the simulation state quantities. Each EOS class
     implementation should document its own state data requirements.
 
@@ -143,9 +143,9 @@ class IdealSingleGas(GasEOS):
     The specific gas constant, R, defaults to the air-like 287.1 J/(kg*K),
     but can be set according to simulation units and materials.
 
-    Each interface call expects that the :class:`mirgecom.fluid.ConservedVars` object
-    representing the simulation conserved quantities contains at least the canonical
-    conserved quantities mass ($\rho$), energy ($\rho{E}$), and
+    Each interface call expects that the :class:`~mirgecom.fluid.ConservedVars`
+    object representing the simulation conserved quantities contains at least
+    the canonical conserved quantities mass ($\rho$), energy ($\rho{E}$), and
     momentum ($\rho\vec{V}$).
 
     .. automethod:: __init__
@@ -181,8 +181,8 @@ class IdealSingleGas(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
@@ -193,8 +193,8 @@ class IdealSingleGas(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
@@ -208,14 +208,14 @@ class IdealSingleGas(GasEOS):
         r"""Get kinetic (i.e. not internal) energy of gas.
 
         The kinetic energy is calculated as:
-        .. :math::
+        .. math::
 
             k = \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
 
         Returns
@@ -230,14 +230,15 @@ class IdealSingleGas(GasEOS):
         r"""Get internal thermal energy of gas.
 
         The internal energy (e) is calculated as:
-        .. :math::
+
+        .. math::
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
 
         Returns
@@ -252,14 +253,14 @@ class IdealSingleGas(GasEOS):
 
         Gas pressure (p) is calculated from the internal energy (e) as:
 
-        .. :math::
+        .. math::
 
             p = (\gamma - 1)e
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
 
         Returns
@@ -274,14 +275,14 @@ class IdealSingleGas(GasEOS):
 
         The speed of sound (c) is calculated as:
 
-        .. :math::
+        .. math::
 
             c = \sqrt{\frac{\gamma{p}}{\rho}}
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
 
         Returns
@@ -299,14 +300,14 @@ class IdealSingleGas(GasEOS):
         the internal energy (e) and specific gas constant (R)
         as:
 
-        .. :math::
+        .. math::
 
             T = \frac{(\gamma - 1)e}{R\rho}
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
 
         Returns
@@ -327,7 +328,7 @@ class IdealSingleGas(GasEOS):
         the mass density (rho) , pressure (p) , and
         momentum (rhoV) as:
 
-        .. :math::
+        .. math::
 
             \rhoE = \frac{p}{(\gamma - 1)} +
             \frac{1}{2}\rho(\vec{v} \cdot \vec{v})
@@ -341,8 +342,8 @@ class IdealSingleGas(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
 
         pressure: :class:`~meshmode.dof_array.DOFArray`
@@ -436,8 +437,8 @@ class PyrometheusMixture(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
@@ -452,8 +453,8 @@ class PyrometheusMixture(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
@@ -471,8 +472,8 @@ class PyrometheusMixture(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector of
             species masses, ($\rho{Y}_\alpha$).
         """
@@ -494,8 +495,8 @@ class PyrometheusMixture(GasEOS):
 
         Parameters
         ----------
-        cv: :class:`mirgecom.fluid.ConservedVars`
-            :class:`mirgecom.fluid.ConservedVars` containing at least the mass
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
         """
