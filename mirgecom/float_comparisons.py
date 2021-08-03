@@ -1,4 +1,5 @@
 """:mod:`mirgecom.float_comparisons` provides comparisons for float-valued arrays.
+
 Comparison Functions
 ^^^^^^^^^^^^^^^^^^^^
 .. autofunction:: componentwise_norm
