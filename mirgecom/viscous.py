@@ -342,13 +342,10 @@ def get_viscous_timestep(discr, eos, cv):
         mu = transport.viscosity(eos, cv)
         d_alpha = transport.species_diffusivity(eos, cv)
         if len(d_alpha) > 0:
-            if isinstance(d_alpha[0], DOFArray):
-                d_alpha_max = \
-                    get_local_max_species_diffusivity(
-                        cv.array_context, discr, d_alpha
-                    )
-            else:
-                d_alpha_max = np.max(d_alpha)
+            d_alpha_max = \
+                get_local_max_species_diffusivity(
+                    cv.array_context, discr, d_alpha
+                )
 
     return(
         length_scales / (compute_wavespeed(eos, cv)
@@ -391,6 +388,9 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
     d_alpha: np.ndarray
         Species diffusivities
     """
+    if not isinstance(d_alpha[0], DOFArray):
+        return max(d_alpha)
+
     return_dof = []
     for i in range(len(d_alpha[0])):
         stacked_diffusivity = actx.np.stack([x[i] for x in d_alpha])
