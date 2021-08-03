@@ -171,7 +171,7 @@ class PowerLawTransport(TransportModel):
                  species_diffusivity=None):
         """Initialize power law coefficients and parameters."""
         raise NotImplementedError("This class is not yet supported, awaits "
-                                  "implementation of array_context.power.")
+                                  "implementation of array_context.np.power.")
 
         if species_diffusivity is None:
             species_diffusivity = np.empty((0,), dtype=object)
@@ -196,6 +196,7 @@ class PowerLawTransport(TransportModel):
         """
         actx = cv.array_context
         gas_t = eos.temperature(cv)
+        # TODO: actx.np.power is unimplemented
         return self._beta * actx.np.power(gas_t, self._n)
 
     def viscosity2(self, eos: GasEOS, cv: ConservedVars):
