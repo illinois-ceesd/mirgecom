@@ -1,5 +1,4 @@
 """:mod:`mirgecom.float_comparisons` provides comparisons for float-valued arrays.
-
 Comparison Functions
 ^^^^^^^^^^^^^^^^^^^^
 .. autofunction:: componentwise_norm
@@ -18,10 +17,8 @@ in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
-
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -31,8 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 from mirgecom.fluid import ConservedVars
-from arraycontext import map_array_container, get_container_context
-from meshmode.dof_array import DOFArray
+from pytools.obj_array import obj_array_vectorize
 import numpy as np
 
 
@@ -40,8 +36,7 @@ def componentwise_norm(discr, a, order=np.inf):
     """Calculate a component-wise norm."""
     if isinstance(a, ConservedVars):
         return componentwise_norm(discr, a.join())
-    actx = get_container_context(a)
-    return map_array_container(lambda b: discr.norm(DOFArray(actx, (b)), order), a)
+    return obj_array_vectorize(lambda b: discr.norm(b, order), a)
 
 
 def componentwise_err(discr, lhs, rhs, relative=True, order=np.inf):
