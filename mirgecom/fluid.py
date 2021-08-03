@@ -245,7 +245,7 @@ class ConservedVars:
 
     @property
     def species_mass_fractions(self):
-        """Return the fluid velocity = momentum / mass."""
+        """Return the species mass fractions y = species_mass / mass."""
         return self.species_mass / self.mass
 
     def join(self):
