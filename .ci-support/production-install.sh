@@ -14,7 +14,7 @@
 # patched by the incoming development. The following vars control the
 # production environment:
 #
-# PRODUCTION_BRANCH = The production branch (default=y1-production)
+PRODUCTION_BRANCH="y1-production-update"
 # PRODUCTION_FORK = The production fork (default=illinois-ceesd)
 #
 # If the environment file does not exist, the current development is
