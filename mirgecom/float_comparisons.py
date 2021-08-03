@@ -35,29 +35,29 @@ from pytools.obj_array import obj_array_vectorize
 import numpy as np
 
 
-def componentwise_norm(discr, a):
-    """Calculate a component-wise infinity norm."""
+def componentwise_norm(discr, a, order=np.inf):
+    """Calculate a component-wise norm."""
     if isinstance(a, ConservedVars):
         return componentwise_norm(discr, a.join())
-    return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
+    return obj_array_vectorize(lambda b: discr.norm(b, order), a)
 
 
-def componentwise_err(discr, lhs, rhs, relative=True):
+def componentwise_err(discr, lhs, rhs, relative=True, order=np.inf):
     """Calculate the component-wise error."""
-    lhs_norm = componentwise_norm(discr, lhs)
-    rhs_norm = componentwise_norm(discr, rhs)
+    lhs_norm = componentwise_norm(discr, lhs, order=order)
+    rhs_norm = componentwise_norm(discr, rhs, order=order)
 
-    err_norm = componentwise_norm(discr, rhs - lhs)
+    err_norm = componentwise_norm(discr, rhs - lhs, order=order)
     return err_norm if not relative else err_norm / np.maximum(lhs_norm, rhs_norm)
 
 
 def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
-                correct_for_eps_differences_from_zero=True):
+                correct_for_eps_differences_from_zero=True, order=np.inf):
     """Check if the component-wise error is within a tolerance."""
-    lhs_norm = componentwise_norm(discr, lhs)
-    rhs_norm = componentwise_norm(discr, rhs)
+    lhs_norm = componentwise_norm(discr, lhs, order=order)
+    rhs_norm = componentwise_norm(discr, rhs, order=order)
 
-    err_norm = componentwise_norm(discr, rhs - lhs)
+    err_norm = componentwise_norm(discr, rhs - lhs, order=order)
     if relative:
         err_norm = err_norm / np.maximum(lhs_norm, rhs_norm)
         if correct_for_eps_differences_from_zero:
