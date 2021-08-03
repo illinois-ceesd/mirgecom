@@ -85,7 +85,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nel_1d = 16
 
     t = 0
-    t_final = 0.01
+    t_final = 0.001
     istep = 0
 
     if mesh_dist.is_mananger_rank():
