@@ -107,7 +107,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
 
     eos = IdealSingleGas(transport_model=tv_model)
     mu = tv_model.viscosity(eos, cv)
-    lam = tv_model.viscosity2(eos, cv)
+    lam = tv_model.volume_viscosity(eos, cv)
 
     # Exact answer for tau
     exp_grad_v = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
