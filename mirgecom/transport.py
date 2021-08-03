@@ -76,7 +76,7 @@ class TransportModel:
     .. automethod:: viscosity
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
-    .. automethod:: viscosity2
+    .. automethod:: volume_viscosity
     """
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -87,7 +87,7 @@ class TransportModel:
         r"""Get the gas dynamic viscosity, $\mu$."""
         raise NotImplementedError()
 
-    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+    def volume_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the 2nd coefficent of viscosity, $\lambda$."""
         raise NotImplementedError()
 
@@ -108,7 +108,7 @@ class SimpleTransport(TransportModel):
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
-    .. automethod:: viscosity2
+    .. automethod:: volume_viscosity
     .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
     """
@@ -132,7 +132,7 @@ class SimpleTransport(TransportModel):
         r"""Get the gas dynamic viscosity, $\mu$."""
         return self._mu
 
-    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+    def volume_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
         In this transport model, the second coefficient of viscosity is defined as:
@@ -161,7 +161,7 @@ class PowerLawTransport(TransportModel):
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
-    .. automethod:: viscosity2
+    .. automethod:: volume_viscosity
     .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
     """
@@ -199,7 +199,7 @@ class PowerLawTransport(TransportModel):
         # TODO: actx.np.power is unimplemented
         return self._beta * actx.np.power(gas_t, self._n)
 
-    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+    def volume_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
         In this transport model, the second coefficient of viscosity is defined as:
