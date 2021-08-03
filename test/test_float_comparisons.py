@@ -29,6 +29,10 @@ import pytest  # noqa
 from grudge.eager import EagerDGDiscretization
 from mirgecom.float_comparisons import within_tol
 
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+
 
 def test_within_tol_absolute(actx_factory):
     """Test absolute mode of tolerance checking."""
