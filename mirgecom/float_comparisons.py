@@ -31,7 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 from mirgecom.fluid import ConservedVars
-from pytools.obj_array import obj_array_vectorize
+from array_context import map_array_container
 import numpy as np
 
 
@@ -39,7 +39,7 @@ def componentwise_norm(discr, a, order=np.inf):
     """Calculate a component-wise norm."""
     if isinstance(a, ConservedVars):
         return componentwise_norm(discr, a.join())
-    return obj_array_vectorize(lambda b: discr.norm(b, order), a)
+    return map_array_container(lambda b: discr.norm(b, order), a)
 
 
 def componentwise_err(discr, lhs, rhs, relative=True, order=np.inf):
