@@ -125,8 +125,7 @@ class GasEOS:
         """Get the transport model if it exists."""
         raise NotImplementedError()
 
-    def get_internal_energy(self, temperature, *, mass=None,
-                            species_mass_fractions=None):
+    def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
         raise NotImplementedError()
 
