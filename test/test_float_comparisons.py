@@ -76,6 +76,7 @@ def test_within_tol_relative(actx_factory):
 
     assert within_tol(discr, 30 * ones, 30 * ones + 1e-5, tol=1e-6)
     assert not within_tol(discr, .01 * ones, .01 * ones + 1e-7, tol=1e-6)
+    assert not within_tol(discr, ones, -1 * ones)
 
 
 def test_within_tol_errors_around_zero(actx_factory):
