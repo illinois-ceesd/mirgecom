@@ -963,7 +963,8 @@ class MixtureInitializer:
         mass = eos.get_density(pressure, temperature, y)
         specmass = mass * y
         mom = mass * velocity
-        internal_energy = eos.get_internal_energy(temperature, y)
+        internal_energy = eos.get_internal_energy(temperature=temperature,
+                                                  species_mass_fractions=y)
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 

@@ -1,14 +1,18 @@
-"""
-:mod:`mirgecom.transport` provides methods/utils for tranport properties.
+r"""
+:mod:`mirgecom.transport` provides methods/utils for transport properties.
 
 Transport Models
 ^^^^^^^^^^^^^^^^
 This module is designed provide Transport Model objects used to compute and
-manage the transport properties in viscous flows.
+manage the transport properties in viscous flows.  The transport properties
+currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
+($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
+($d_{\alpha}$).
 
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
+.. autoclass:: PowerLawTransport
 """
 
 __copyright__ = """
@@ -72,6 +76,7 @@ class TransportModel:
     .. automethod:: viscosity
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
+    .. automethod:: viscosity2
     """
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -82,21 +87,30 @@ class TransportModel:
         r"""Get the gas dynamic viscosity, $\mu$."""
         raise NotImplementedError()
 
+    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the 2nd coefficent of viscosity, $\lambda$."""
+        raise NotImplementedError()
+
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$."""
         raise NotImplementedError()
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the vector of species diffusivities (${d}_{\alpha}$)."""
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
 
 
 class SimpleTransport(TransportModel):
     r"""Transport model with uniform, constant properties.
 
-    .. automethod:: __init__
-
     Inherits from (and implements) :class:`TransportModel`.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: viscosity2
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
     """
 
     def __init__(self, bulk_viscosity=0, viscosity=0,
@@ -110,24 +124,99 @@ class SimpleTransport(TransportModel):
         self._kappa = thermal_conductivity
         self._d_alpha = species_diffusivity
 
-    def _make_array(self, something, cv):
-        """Make an appropriate shaped array from the constant properties."""
-        return something * cv.mass / cv.mass
-
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the bulk viscosity for the gas, $\mu_{B}."""
-        return self._make_array(self._mu_bulk, cv)
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return self._mu_bulk
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return self._make_array(self._mu, cv)
+        return self._mu
+
+    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
+        return self._mu_bulk - 2 * self._mu / 3
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        return self._make_array(self._kappa, cv)
+        return self._kappa
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         nspecies = len(cv.species_mass)
         assert nspecies == len(self._d_alpha)
-        return self._make_array(self._d_alpha, cv)
+        return self._d_alpha
+
+
+class PowerLawTransport(TransportModel):
+    r"""Transport model with simple power law properties.
+
+    Inherits from (and implements) :class:`TransportModel` based on a
+    temperature-dependent power law.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: viscosity2
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
+    """
+
+    # air-like defaults here
+    def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
+                 species_diffusivity=None):
+        """Initialize power law coefficients and parameters."""
+        raise NotImplementedError("This class is not yet supported, awaits "
+                                  "implementation of array_context.np.power.")
+
+        if species_diffusivity is None:
+            species_diffusivity = np.empty((0,), dtype=object)
+        self._alpha = alpha
+        self._beta = beta
+        self._sigma = sigma
+        self._n = n
+        self._d_alpha = species_diffusivity
+
+    def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$.
+
+        $\mu_{B} = \alpha\mu$
+        """
+        return self._alpha * self.viscosity(eos, cv)
+
+    # TODO: Should this be memoized? Avoid multiple calls?
+    def viscosity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the gas dynamic viscosity, $\mu$.
+
+        $\mu = \beta{T}^n$
+        """
+        actx = cv.array_context
+        gas_t = eos.temperature(cv)
+        # TODO: actx.np.power is unimplemented
+        return self._beta * actx.np.power(gas_t, self._n)
+
+    def viscosity2(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\alpha - \frac{2}{3}\right)\mu$
+        """
+        return (self._alpha - 2.0/3.0)*self.viscosity(eos, cv)
+
+    def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the gas thermal_conductivity, $\kappa$.
+
+        $\kappa = \sigma\mu{C}_{v}$
+        """
+        return self._sigma * self.viscosity(eos, cv) * eos.heat_capacity_cv(cv)
+
+    def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        nspecies = len(cv.species_mass)
+        assert nspecies == len(self._d_alpha)
+        return self._d_alpha

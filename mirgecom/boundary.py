@@ -261,32 +261,17 @@ class PrescribedInviscidBoundary(FluidBC):
 
     def viscous_boundary_flux(self, discr, btag, eos, cv, grad_cv, grad_t, **kwargs):
         """Get the viscous part of the physical flux across the boundary *btag*."""
-        actx = cv.array_context
         cv_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
-        cv_minus = cv_tpair.int
 
         grad_cv_minus = discr.project("vol", btag, grad_cv)
         grad_cv_tpair = TracePair(btag, interior=grad_cv_minus,
                                   exterior=grad_cv_minus)
 
-        t_minus = eos.temperature(cv_minus)
-        if self._fluid_temperature_func:
-            boundary_discr = discr.discr_from_dd(btag)
-            nodes = thaw(actx, boundary_discr.nodes())
-            t_plus = self._fluid_temperature_func(nodes, cv=cv_tpair.exterior,
-                                                  temperature=t_minus, eos=eos,
-                                                  **kwargs)
-        else:
-            t_plus = -t_minus
-
-        t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
-
         grad_t_minus = discr.project("vol", btag, grad_t)
         grad_t_tpair = TracePair(btag, interior=grad_t_minus, exterior=grad_t_minus)
 
         from mirgecom.viscous import viscous_facial_flux
-        return viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair,
-                                   t_tpair, grad_t_tpair)
+        return viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair)
 
 
 class PrescribedBoundary(PrescribedInviscidBoundary):
@@ -483,7 +468,7 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
 
         internal_energy_plus = eos.get_internal_energy(
-            temperature=t_plus, species_fractions=mass_frac_plus,
+            temperature=t_plus, species_mass_fractions=mass_frac_plus,
             mass=cv_minus.mass
         )
         total_energy_plus = (internal_energy_plus
@@ -623,12 +608,11 @@ class PrescribedViscousBoundary(FluidBC):
         grad_t_minus = discr.project("vol", btag, grad_t)
         nodes = thaw(actx, boundary_discr.nodes())
         nhat = thaw(actx, discr.normal(btag))
-        t_minus = eos.temperature(cv_minus)
 
         flux_weak = 0
         if self._viscous_flux_func:
             flux_weak = self._viscous_flux_func(nodes, eos, cv=cv_minus,
-                                                grad_cv=s_minus, temperature=t_minus,
+                                                grad_cv=s_minus,
                                                 grad_temperature=grad_t_minus,
                                                 nhat=nhat, **kwargs)
             return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
@@ -651,18 +635,12 @@ class PrescribedViscousBoundary(FluidBC):
             else:
                 grad_t_plus = grad_t_minus
 
-            if self._t_func:
-                t_plus = self._t_func(nodes, eos, cv_minus, **kwargs)
-            else:
-                t_plus = eos.temperature(cv_plus)
-
             cv_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
             s_tpair = TracePair(btag, interior=s_minus, exterior=s_plus)
-            t_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
             grad_t_tpair = TracePair(btag, interior=grad_t_minus,
                                      exterior=grad_t_plus)
 
             from mirgecom.viscous import viscous_facial_flux
             return viscous_facial_flux(discr, eos, cv_tpair=cv_tpair,
-                                       grad_cv_tpair=s_tpair, t_tpair=t_tpair,
+                                       grad_cv_tpair=s_tpair,
                                        grad_t_tpair=grad_t_tpair)
