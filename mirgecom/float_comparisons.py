@@ -31,7 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 from mirgecom.fluid import ConservedVars
-from array_context import map_array_container
+from arraycontext import map_array_container
 import numpy as np
 
 
