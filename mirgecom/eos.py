@@ -125,7 +125,8 @@ class GasEOS:
         """Get the transport model if it exists."""
         raise NotImplementedError()
 
-    def get_internal_energy(self, temperature, mass, species_mass_fractions):
+    def get_internal_energy(self, temperature, *, mass=None,
+                            species_mass_fractions=None):
         """Get the fluid internal energy from temperature and mass."""
         raise NotImplementedError()
 
@@ -577,8 +578,8 @@ class PyrometheusMixture(GasEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_mass_fractions)
 
-    def get_internal_energy(self, temperature, mass=None,
-                            species_mass_fractions=None):
+    def get_internal_energy(self, temperature, species_mass_fractions,
+                            mass=None):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
@@ -596,9 +597,6 @@ class PyrometheusMixture(GasEOS):
         mass:
             Unused
         """
-        if species_mass_fractions is None:
-            raise ValueError("Mixture EOS.get_internal_energy requires "
-                             "species_mass_fractions argument.")
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
             temperature, species_mass_fractions)
 
