@@ -769,7 +769,7 @@ class PyrometheusMixture(GasEOS):
         """
         omega = self.get_production_rates(cv)
         w = self.get_species_molecular_weights()
-        dim = len(cv.momentum)
+        dim = cv.dim
         species_sources = w * omega
         rho_source = 0 * cv.mass
         mom_source = 0 * cv.momentum
