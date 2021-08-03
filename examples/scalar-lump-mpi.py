@@ -51,7 +51,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedBoundary
+from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
 
@@ -184,7 +184,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      spec_y0s=spec_y0s,
                                      spec_amplitudes=spec_amplitudes)
     boundaries = {
-        BTAG_ALL: PrescribedBoundary(initializer)
+        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
     }
 
     if rst_filename:
@@ -221,7 +221,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if dv is None:
             dv = eos.dependent_vars(state)
         if exact is None:
-            exact = initializer(x_vec=nodes, eos=eos, t=t)
+            exact = initializer(x_vec=nodes, eos=eos, time=t)
         if resid is None:
             resid = state - exact
         viz_fields = [("cv", state),
@@ -280,7 +280,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 dv = eos.dependent_vars(state)
-                exact = initializer(x_vec=nodes, eos=eos, t=t)
+                exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 from mirgecom.simutil import allsync
@@ -300,7 +300,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 if dv is None:
                     dv = eos.dependent_vars(state)
                 if exact is None:
-                    exact = initializer(x_vec=nodes, eos=eos, t=t)
+                    exact = initializer(x_vec=nodes, eos=eos, time=t)
                 resid = state - exact
                 my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
                              resid=resid)
@@ -308,7 +308,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_status:
                 if component_errors is None:
                     if exact is None:
-                        exact = initializer(x_vec=nodes, eos=eos, t=t)
+                        exact = initializer(x_vec=nodes, eos=eos, time=t)
                     from mirgecom.simutil import compare_fluid_solutions
                     component_errors = compare_fluid_solutions(discr, state, exact)
                 my_write_status(component_errors)
@@ -334,7 +334,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return euler_operator(discr, cv=state, t=t,
+        return euler_operator(discr, cv=state, time=t,
                               boundaries=boundaries, eos=eos)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
@@ -351,7 +351,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     final_dv = eos.dependent_vars(current_state)
-    final_exact = initializer(x_vec=nodes, eos=eos, t=current_t)
+    final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
     final_resid = current_state - final_exact
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
                  exact=final_exact, resid=final_resid)
