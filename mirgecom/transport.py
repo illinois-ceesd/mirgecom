@@ -1,5 +1,5 @@
 r"""
-:mod:`mirgecom.transport` provides methods/utils for tranport properties.
+:mod:`mirgecom.transport` provides methods/utils for transport properties.
 
 Transport Models
 ^^^^^^^^^^^^^^^^
@@ -8,10 +8,6 @@ manage the transport properties in viscous flows.  The transport properties
 currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
-
-Two models are currently implemented, the :class:`SimpleTransport` model is
-for uniform and constant transport properties and the :class:`PowerLawTransport`
-is for transport properties that are power-law temperature-dependent.
 
 .. autoclass:: TransportDependentVars
 .. autoclass:: TransportModel
@@ -100,16 +96,21 @@ class TransportModel:
         raise NotImplementedError()
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the vector of species diffusivities (${d}_{\alpha}$)."""
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
 
 
 class SimpleTransport(TransportModel):
     r"""Transport model with uniform, constant properties.
 
-    .. automethod:: __init__
-
     Inherits from (and implements) :class:`TransportModel`.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: viscosity2
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
     """
 
     def __init__(self, bulk_viscosity=0, viscosity=0,
@@ -132,7 +133,12 @@ class SimpleTransport(TransportModel):
         return self._mu
 
     def viscosity2(self, eos: GasEOS, cv: ConservedVars):
-        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
         return self._mu_bulk - 2 * self._mu / 3
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
@@ -164,6 +170,9 @@ class PowerLawTransport(TransportModel):
     def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
                  species_diffusivity=None):
         """Initialize power law coefficients and parameters."""
+        raise NotImplementedError("This class is not yet supported, awaits "
+                                  "implementation of array_context.np.power.")
+
         if species_diffusivity is None:
             species_diffusivity = np.empty((0,), dtype=object)
         self._alpha = alpha
@@ -187,7 +196,7 @@ class PowerLawTransport(TransportModel):
         """
         actx = cv.array_context
         gas_t = eos.temperature(cv)
-        # NOTE: actx.np.power does not seem to work
+        # TODO: actx.np.power is unimplemented
         return self._beta * actx.np.power(gas_t, self._n)
 
     def viscosity2(self, eos: GasEOS, cv: ConservedVars):
