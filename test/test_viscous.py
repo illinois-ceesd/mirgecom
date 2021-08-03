@@ -49,7 +49,7 @@ from mirgecom.eos import IdealSingleGas
 logger = logging.getLogger(__name__)
 
 
-def test_actx_power(actx_factory):
+def dont_test_actx_power(actx_factory):
     """Test power of DOFArrays and the likes."""
     actx = actx_factory()
     dim = 3
