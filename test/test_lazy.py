@@ -61,7 +61,7 @@ def op_test_data(ctx_factory):
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*2,
             b=(0.5,)*2,
-            nelements_per_axis=(4,)*2,
+            nelements_per_axis=(16,)*2,
             boundary_tag_to_face={
                 "-x": ["-x"],
                 "+x": ["+x"],
