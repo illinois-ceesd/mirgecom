@@ -195,7 +195,8 @@ def test_lazy_op_diffusion(op_test_data, order):
 #             discr, DISCR_TAG_BASE, alpha, boundaries, u)
         return sum(
             bdry.get_gradient_flux(discr, DISCR_TAG_BASE, as_dofdesc(btag), alpha, u)
-            for btag, bdry in boundaries.items())
+            for btag, bdry in boundaries.items()
+            if isinstance(bdry, NeumannDiffusionBoundary))
 
     lazy_op = lazy_actx.compile(op)
 
