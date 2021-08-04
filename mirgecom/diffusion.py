@@ -48,19 +48,14 @@ def gradient_flux(discr, quad_tag, u_tpair):
     actx = u_tpair.int.array_context
 
     dd = u_tpair.dd
-    dd_quad = dd.with_discr_tag(quad_tag)
-    dd_allfaces_quad = dd_quad.with_dtag("all_faces")
+    dd_allfaces = dd.with_dtag("all_faces")
 
-    normal_quad = thaw(actx, discr.normal(dd_quad))
-
-    def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+    normal = thaw(actx, discr.normal(dd))
 
     def flux(u, normal):
         return -u * normal
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux(
-        to_quad(u_tpair.avg), normal_quad))
+    return discr.project(dd, dd_allfaces, flux(u_tpair.avg, normal))
 
 
 def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
