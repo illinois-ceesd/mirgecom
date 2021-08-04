@@ -61,7 +61,7 @@ def op_test_data(ctx_factory):
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*2,
             b=(0.5,)*2,
-            nelements_per_axis=(16,)*2,
+            nelements_per_axis=(4,)*2,
             boundary_tag_to_face={
                 "-x": ["-x"],
                 "+x": ["+x"],
@@ -82,6 +82,14 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
         if isinstance(a, ConservedVars):
             return componentwise_norm(a.join())
         return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
+
+    print(f"{componentwise_norm(x)=}")
+    print(f"{componentwise_norm(y)=}")
+    print(f"{componentwise_norm(x-y)=}")
+    print("")
+    print(f"{x=}")
+    print("")
+    print(f"{y=}")
 
     lhs = componentwise_norm(x - y)
     rhs = np.maximum(
