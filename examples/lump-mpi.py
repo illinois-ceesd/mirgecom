@@ -120,7 +120,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nrestart = 10
     nviz = 1
 
-    dim = 3
+    dim = 2
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -240,7 +240,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
-           or check_range_local(discr, "vol", dv.pressure, .9, 1.1):
+           or check_range_local(discr, "vol", dv.pressure, .9999999999, 1.00000001):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
