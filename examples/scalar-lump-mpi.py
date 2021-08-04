@@ -363,7 +363,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         print(actx.tabulate_profiling_data())
 
     finish_tol = 1e-16
-    assert np.abs(current_t - t_final) < finish_tol
+    time_err = current_t - t_final
+    if np.abs(time_err) > finish_tol:
+        raise ValueError(f"Simulation did not finish at expected time {time_err=}.")
 
 
 if __name__ == "__main__":
