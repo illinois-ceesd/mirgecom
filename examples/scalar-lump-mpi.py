@@ -121,7 +121,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 1
     nhealth = 1
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -251,7 +251,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", pressure) \
-           or check_range_local(discr, "vol", pressure, .9, 1.1):
+           or check_range_local(discr, "vol", pressure, .99999999, 1.00000001):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -363,7 +363,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         print(actx.tabulate_profiling_data())
 
     finish_tol = 1e-16
-    assert np.abs(current_t - t_final) < finish_tol
+    time_err = current_t - t_final
+    if np.abs(time_err) > finish_tol:
+        raise ValueError(f"Simulation did not finish at expected time {time_err=}.")
 
 
 if __name__ == "__main__":

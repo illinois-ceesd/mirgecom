@@ -85,7 +85,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nel_1d = 16
 
     t = 0
-    t_final = 0.01
+    t_final = 0.0002
     istep = 0
 
     if mesh_dist.is_mananger_rank():
@@ -124,8 +124,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     source_width = 0.2
 
-    from meshmode.array_context import thaw
-    nodes = thaw(actx, discr.nodes())
+    from arraycontext import thaw
+    nodes = thaw(discr.nodes(), actx)
 
     boundaries = {
         DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
@@ -160,6 +160,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 alpha=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
+    compiled_rhs = actx.compile(rhs)
+
     rank = comm.Get_rank()
 
     while t < t_final:
@@ -167,19 +169,23 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_before()
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(u))
+            print(istep, t, actx.to_numpy(actx.np.linalg.norm(u[0])))
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", u)
-                        ])
+                        ], overwrite=True)
 
-        u = rk4_step(u, t, dt, rhs)
+        u = rk4_step(u, t, dt, compiled_rhs)
         t += dt
         istep += 1
 
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+    final_answer = discr.norm(u, np.inf)
+    resid = abs(final_answer - 0.00020620711665201585)
+    if resid > 1e-15:
+        raise ValueError(f"Run did not produce the expected result {resid=}")
 
 
 if __name__ == "__main__":
