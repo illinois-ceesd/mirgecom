@@ -61,7 +61,7 @@ def op_test_data(ctx_factory):
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*2,
             b=(0.5,)*2,
-            nelements_per_axis=(5,)*2,
+            nelements_per_axis=(4,)*2,
             boundary_tag_to_face={
                 "-x": ["-x"],
                 "+x": ["+x"],
@@ -198,7 +198,7 @@ def test_lazy_op_diffusion(op_test_data, order):
 
     def get_inputs(actx):
         nodes = thaw(discr.nodes(), actx)
-        alpha = discr.zeros(actx) + 1
+        alpha = 1
         u = actx.np.cos(np.pi*nodes[0])
         return alpha, u
 
