@@ -40,7 +40,6 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
-from mirgecom.inviscid import get_inviscid_cfl
 
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -170,17 +169,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr.add_quantity(vis_timer)
 
         logmgr.add_watches([
-            ("step.max", "step = {value}, "),
-            ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("step.max", "\nstep = {value},\n"),
+            ("t_sim.max", "        sim time: {value:1.6e} s\n"),
+            ("min_pressure", "        P (min, max) (Pa) = ({value:1.9e}, "),
             ("max_pressure",    "{value:1.9e})\n"),
-            ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s"),
-            ("cfl.max", "CFL number: {value:6g}")
+            ("t_step.max", "        step walltime: {value:6g} s\n"),
+            ("t_log.max", "        log walltime: {value:6g} s\n"),
+            ("cfl.max", "        CFL number: {value:6g} {unit}\n")
         ])
 
         try:
-            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+            logmgr.add_watches([
+                ("memory_usage_python.max", "        memory_usage_gpu: {value:g} {unit}")
+                ])
         except KeyError:
             pass
 
@@ -236,7 +237,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if rank == 0:
             logger.info(
-                "------- errors="
+                "        errors = "
                 + ", ".join("%.3g" % en for en in component_errors))
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
