@@ -57,6 +57,7 @@ from mirgecom.eos import IdealSingleGas
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
+    PushLogQuantity,
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_device_name,
@@ -162,14 +163,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
+        logmgr.add_quantity(PushLogQuantity(name="cfl", value=current_cfl))
 
         logmgr.add_watches([
-            ("step.max", "step = {value}, "),
-            ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("step.max", "\nstep = {value},\n"),
+            ("t_sim.max", "        sim time: {value:1.6e} s\n"),
+            ("min_pressure", "        P (min, max) (Pa) = ({value:1.9e}, "),
             ("max_pressure",    "{value:1.9e})\n"),
-            ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s")
+            ("t_step.max", "        step walltime: {value:6g} s\n"),
+            ("t_log.max", "        log walltime: {value:6g} s\n"),
+            ("cfl.max", "        CFL number: {value:6g} {unit}")
         ])
 
     # soln setup, init
@@ -205,6 +208,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      eosname=eosname, casename=casename)
     if rank == 0:
         logger.info(init_message)
+
+    def my_write_status(state, cfl=None):
+        if cfl is None:
+            if constant_cfl:
+                cfl = current_cfl
+            else:
+                from grudge.op import nodal_max
+                from mirgecom.inviscid import get_inviscid_cfl
+                cfl = nodal_max(discr, "vol",
+                                get_inviscid_cfl(discr, eos, current_dt, cv=state))
+
+        logmgr.set_quantity_value("cfl", cfl)
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
@@ -299,10 +314,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 status_msg = (
-                    "------- errors="
+                    "        errors = "
                     + ", ".join("%.3g" % en for en in component_errors))
                 if rank == 0:
                     logger.info(status_msg)
+                my_write_status(state=state)
 
         except MyRuntimeError:
             if rank == 0:
@@ -320,7 +336,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state, eos)
             logmgr.tick_after()
         return state, dt
 
