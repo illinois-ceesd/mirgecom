@@ -177,7 +177,7 @@ def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, as_dofdesc
     from mirgecom.diffusion import (
         diffusion_operator,
         DirichletDiffusionBoundary,
@@ -191,8 +191,11 @@ def test_lazy_op_diffusion(op_test_data, order):
     }
 
     def op(alpha, u):
-        return diffusion_operator(
-            discr, DISCR_TAG_BASE, alpha, boundaries, u)
+#         return diffusion_operator(
+#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
+        return sum(
+            bdry.get_gradient_flux(discr, DISCR_TAG_BASE, as_dofdesc(btag), alpha, u)
+            for btag, bdry in boundaries.items())
 
     lazy_op = lazy_actx.compile(op)
 
