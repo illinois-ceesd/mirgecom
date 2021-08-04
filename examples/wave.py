@@ -140,7 +140,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     compiled_rhs = actx.compile(rhs)
 
     t = 0
-    t_final = 3
+    t_final = 1
     istep = 0
     while t < t_final:
         if logmgr:
@@ -157,7 +157,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
-                        ])
+                        ], overwrite=True)
 
         t += dt
         istep += 1
