@@ -35,6 +35,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge import sym as grudge_sym
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_BASE, DTAG_BOUNDARY
+from mirgecom.sampling import _find_src_unit_nodes
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -64,7 +65,8 @@ def main():
         from meshmode.mesh.io import read_gmsh
         mesh = read_gmsh("/Users/dshtey2/Documents/TT/CADs/act2_noholes.msh")
         
-        print("%d elements" % mesh.nelements)
+        n_elem = mesh.nelements
+        print("%d elements" % n_elem)
 
         part_per_element = get_partition_by_pymetis(mesh, num_parts)
 
@@ -75,7 +77,7 @@ def main():
     else:
         local_mesh = mesh_dist.receive_mesh_part()
 
-    order = 3
+    order = 1
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                     mpi_communicator=comm)
@@ -87,6 +89,12 @@ def main():
         raise ValueError("don't have a stable time step guesstimate")
 
     nodes = thaw(actx, discr.nodes())
+    ##########
+    print(discr.discr_from_dd("vol"))
+    for i in range(0,n_elem):
+        elem_nodes = discr.discr_from_dd("vol").groups[i].unit_nodes
+        print(elem_nodes)
+    ##########
 
     def sinus(actx, discr, t=0):
         nodes = thaw(actx, discr.nodes())
@@ -237,6 +245,7 @@ def main():
     istep = 0
 
     while True:
+
         if istep % 50 == 0:
             print(istep, t, discr.norm(u))
             vis.write_vtk_file("29-fld-act2-bdy-%03d-%04d.vtu" % (rank, istep),
@@ -251,6 +260,33 @@ def main():
         u = rk4_step(u, t, dt, rhs)
         t += dt
         istep += 1
+
+    ### Convert query point to DOFArray
+    def convert_pt_to_DOF(query_point):
+        return True
+
+
+    ### Find element containing query point
+    query_point = np.ndarray([0,0,0])
+    qdof = convert_pt_to_DOF(query_point)
+    elem_des_idx = floor(n_elem/2)
+    for i in range(0,mesh.nelements):
+        elem_nodes = discr.discr_from_dd("vol").groups[i].nodes # Get coordintates of element nodes
+        box_u = elem_nodes.max(axis=0)
+        box_l = elem_nodes.min(axis=0)
+        if all(elem_nodes[j] > box_l[j] & elem_nodes[j] < box_u[j] for j in range(0,3)):
+            elem_des_idx = i
+            break
+
+    ### Transform query point to element basis
+    query_node = qdof
+    src_bdry_nodes = element[elem_des_idx] # Find way to loop through elements
+    tol = 1e-5
+    src_grp = discr.discr_from_dd("vol").groups[0] # what is the index?
+    query_coords = _find_src_unit_nodes(quedy_node, src_bdry_nodes, src_grp, tol)
+
+    ### Evaluate basis function at query point
+
 
 
 if __name__ == "__main__":
