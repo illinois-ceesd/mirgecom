@@ -143,7 +143,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
     from grudge.op import nodal_min
     dt = nodal_min(discr, "vol", dt)
 
-    t_final = 3
+    t_final = 1
 
     if restart_step is None:
         t = 0
@@ -224,7 +224,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
                 [
                     ("u", fields[0]),
                     ("v", fields[1:]),
-                ]
+                ], overwrite=True
             )
 
         fields = thaw(freeze(fields, actx), actx)
@@ -236,6 +236,9 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+
+    final_soln = discr.norm(fields[0])
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
 
 if __name__ == "__main__":
