@@ -198,7 +198,7 @@ def test_lazy_op_diffusion(op_test_data, order):
 
     def get_inputs(actx):
         nodes = thaw(discr.nodes(), actx)
-        alpha = 1
+        alpha = discr.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
         return alpha, u
 
