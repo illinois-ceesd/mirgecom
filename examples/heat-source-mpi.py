@@ -85,7 +85,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nel_1d = 16
 
     t = 0
-    t_final = 0.001
+    t_final = 0.0002
     istep = 0
 
     if mesh_dist.is_mananger_rank():
@@ -173,7 +173,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
                     [
                         ("u", u)
-                        ])
+                        ], overwrite=True)
 
         u = rk4_step(u, t, dt, compiled_rhs)
         t += dt
@@ -182,6 +182,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+
+    final_answer = actx.to_numpy(actx.np.linalg.norm(u[0]))
+    resid = abs(final_answer - 0.003717384289363805)
+    if resid > 1e-15:
+        raise ValueError(f"Run did not produce the expected result {resid=}")
 
 
 if __name__ == "__main__":
