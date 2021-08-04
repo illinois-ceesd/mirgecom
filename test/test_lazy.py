@@ -61,7 +61,7 @@ def op_test_data(ctx_factory):
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*2,
             b=(0.5,)*2,
-            nelements_per_axis=(4,)*2,
+            nelements_per_axis=(6,)*2,
             boundary_tag_to_face={
                 "-x": ["-x"],
                 "+x": ["+x"],
@@ -90,6 +90,8 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
     print(f"{x=}")
     print("")
     print(f"{y=}")
+    print("")
+    print(f"{x-y=}")
 
     lhs = componentwise_norm(x - y)
     rhs = np.maximum(
