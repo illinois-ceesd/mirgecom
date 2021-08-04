@@ -101,7 +101,9 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.kernel_stats = {}
         self.logmgr = logmgr
 
-        cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
+        # Only store the first kernel exec hook for elwise kernels
+        if cl.array.ARRAY_KERNEL_EXEC_HOOK is None:
+            cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
 
     def clone(self):
         """Return a semantically equivalent but distinct version of *self*."""
