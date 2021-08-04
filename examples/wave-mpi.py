@@ -238,7 +238,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             logmgr.tick_after()
 
     final_soln = discr.norm(fields[0])
-    assert np.abs(final_soln - 0.04409852463947439) < 1e-16
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
 
 if __name__ == "__main__":
