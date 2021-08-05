@@ -215,8 +215,13 @@ def test_lazy_op_diffusion(op_test_data, order):
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    is_close, lhs, rhs = isclose(lazy_result, eager_result)
-    assert is_close, f"{lhs} not <= {rhs}"
+
+    print(f"{eager_result=}")
+    print("")
+    print(f"{lazy_result=}")
+    print("")
+
+    assert False
 
 
 def _get_pulse():

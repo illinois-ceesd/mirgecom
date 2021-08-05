@@ -183,7 +183,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def get_gradient_flux(self, discr, quad_tag, dd, alpha, u):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
-        return gradient_flux(discr, quad_tag, u_tpair)
+#         return gradient_flux(discr, quad_tag, u_tpair)
+        return u_tpair
 
     def get_diffusion_flux(self, discr, quad_tag, dd, alpha, grad_u):  # noqa: D102
         dd_quad = dd.with_discr_tag(quad_tag)
