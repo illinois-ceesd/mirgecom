@@ -42,6 +42,7 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
+from pytools.obj_array import make_obj_array
 import pyopencl.tools as cl_tools
 
 
@@ -72,6 +73,8 @@ def main():
 
         local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
 
+        mesh_grp = mesh.groups
+
         del mesh
 
     else:
@@ -89,12 +92,6 @@ def main():
         raise ValueError("don't have a stable time step guesstimate")
 
     nodes = thaw(actx, discr.nodes())
-    ##########
-    print(discr.discr_from_dd("vol"))
-    for i in range(0,n_elem):
-        elem_nodes = discr.discr_from_dd("vol").groups[i].unit_nodes
-        print(elem_nodes)
-    ##########
 
     def sinus(actx, discr, t=0):
         nodes = thaw(actx, discr.nodes())
@@ -241,7 +238,7 @@ def main():
     u = discr.zeros(actx) + act2_tanh(0)
 
     t = 0
-    t_final = 10
+    t_final = dt
     istep = 0
 
     while True:
@@ -261,29 +258,28 @@ def main():
         t += dt
         istep += 1
 
-    ### Convert query point to DOFArray
-    def convert_pt_to_DOF(query_point):
-        return True
-
-
     ### Find element containing query point
-    query_point = np.ndarray([0,0,0])
-    qdof = convert_pt_to_DOF(query_point)
-    elem_des_idx = floor(n_elem/2)
-    for i in range(0,mesh.nelements):
-        elem_nodes = discr.discr_from_dd("vol").groups[i].nodes # Get coordintates of element nodes
-        box_u = elem_nodes.max(axis=0)
-        box_l = elem_nodes.min(axis=0)
-        if all(elem_nodes[j] > box_l[j] & elem_nodes[j] < box_u[j] for j in range(0,3)):
-            elem_des_idx = i
-            break
+    query_point = actx.from_numpy(np.array([0, 0, 0]))
+    Discr = discr.discr_from_dd("vol")
+    matched_elems_per_group = []
+    for igrp in range(len(mesh_grp)):
+        grp_nodes = make_obj_array([nodes[i][igrp] for i in range(dim)])
+        box_ls = make_obj_array([coords.min(axis=1) for coords in grp_nodes])
+        box_us = make_obj_array([coords.max(axis=1) for coords in grp_nodes])
+        overlaps_in_dim = (query_point >= box_ls) & (query_point <= box_us)
+        overlaps = overlaps_in_dim[0]
+        for i in range(1, dim):
+            overlaps = overlaps & overlaps_in_dim[i]
+        indices, = actx.np.where(overlaps)
+        matched_elems_per_group.append(indices)
 
     ### Transform query point to element basis
-    query_node = qdof
-    src_bdry_nodes = element[elem_des_idx] # Find way to loop through elements
+    test_elem = matched_elems_per_group[0]
+    for grp_idx in matched_elems_per_group:
+        src_nodes = Discr.groups[grp_idx].unit_nodes
+        src_grp = Discr.groups[grp_idx]
     tol = 1e-5
-    src_grp = discr.discr_from_dd("vol").groups[0] # what is the index?
-    query_coords = _find_src_unit_nodes(quedy_node, src_bdry_nodes, src_grp, tol)
+    query_coords = _find_src_unit_nodes(quedy_point, src_nodes, src_grp, tol)
 
     ### Evaluate basis function at query point
 

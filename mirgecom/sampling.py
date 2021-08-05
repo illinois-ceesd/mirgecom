@@ -24,9 +24,9 @@ import numpy as np
 import numpy.linalg as la
 import modepy as mp
 
-def _find_src_unit_nodes(query_nodes, src_bdry_nodes, src_grp, tol):
+def _find_src_unit_nodes(query_point, src_nodes, src_grp, tol):
     dim = src_grp.dim
-    _, nelements, ntgt_unit_nodes = query_nodes.shape
+    _, nelements, ntgt_unit_nodes = query_point.shape
 
     initial_guess = np.array([0.5, 0.5, 0.5])
     src_unit_nodes = np.empty((dim, nelements, ntgt_unit_nodes))
@@ -54,7 +54,7 @@ def _find_src_unit_nodes(query_nodes, src_bdry_nodes, src_grp, tol):
         one_deviation = np.abs(np.sum(intp_coeffs, axis=0) - 1)
         assert (one_deviation < tol).all(), np.max(one_deviation)
 
-        mapped = np.einsum("fet,aef->aet", intp_coeffs, src_bdry_nodes)
+        mapped = np.einsum("fet,aef->aet", intp_coeffs, src_nodes)
         assert query_nodes.shape == mapped.shape
         return mapped
 
@@ -75,7 +75,7 @@ def _find_src_unit_nodes(query_nodes, src_bdry_nodes, src_grp, tol):
         dintp_coeffs = np.einsum(
                 "fj,rjet->rfet", inv_t_vdm, dbasis_at_unit_nodes)
 
-        return np.einsum("rfet,aef->raet", dintp_coeffs, src_bdry_nodes)
+        return np.einsum("rfet,aef->raet", dintp_coeffs, src_nodes)
 
     niter = 0
     while True:
