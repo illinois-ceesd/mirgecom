@@ -59,6 +59,7 @@ def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
 
     err_norm = componentwise_norm(discr, rhs - lhs, order=order)
     if relative:
+        actx = err_norm.array_context
         err_norm = err_norm / actx.np.maximum(lhs_norm, rhs_norm)
         if correct_for_eps_differences_from_zero:
             return np.all(
