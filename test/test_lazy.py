@@ -213,8 +213,18 @@ def test_lazy_op_diffusion(op_test_data, order):
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
+    from pytools.obj_array import obj_array_vectorized
+
+    @obj_array_vectorized
+    def dof_array_to_numpy(u):
+        actx = u.array_context
+        return make_obj_array([
+            actx.to_numpy(grp_array)
+            for grp_array in u])
+
 #     eager_result = op(*get_inputs(eager_actx))
-    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
+#     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
+    lazy_result = dof_array_to_numpy(lazy_op(*get_inputs(lazy_actx)))
 
 #     print(f"{eager_result=}")
 #     print("")
