@@ -134,7 +134,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #     compiled_op(alpha, u)
 
 
-@pytest.mark.parametrize("order", [2, 1, 3])
+@pytest.mark.parametrize("order", [1, 2, 3])
 def test_lazy_op_divergence(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
