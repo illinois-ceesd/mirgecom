@@ -213,11 +213,11 @@ def test_lazy_op_diffusion(op_test_data, order):
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
 
-    eager_result = op(*get_inputs(eager_actx))
+#     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
 
-    print(f"{eager_result=}")
-    print("")
+#     print(f"{eager_result=}")
+#     print("")
     print(f"{lazy_result=}")
     print("")
 
