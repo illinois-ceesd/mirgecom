@@ -115,7 +115,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     def clone(self):
         """Return a semantically equivalent but distinct version of *self*."""
         from warnings import warn
-        warn("Cloned PyOpenCLProfilingArrayContexts can not profile elementwise PyOpenCL kernels.")
+        warn("Cloned PyOpenCLProfilingArrayContexts can not "
+             "profile elementwise PyOpenCL kernels.")
         return type(self)(self.queue, self.allocator, self.logmgr)
 
     def __del__(self):
