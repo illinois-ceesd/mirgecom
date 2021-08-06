@@ -218,7 +218,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 cfl = nodal_max(discr, "vol",
                                 get_inviscid_cfl(discr, eos, current_dt, cv=state))
 
-        logmgr.set_quantity_value("cfl", cfl)        
+        logmgr.set_quantity_value("cfl", cfl)
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
