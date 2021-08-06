@@ -34,11 +34,14 @@ from meshmode.dof_array import DOFArray
 import numpy as np
 
 
-def componentwise_norm(discr, a, order=np.inf):
+def componentwise_norm(discr, a, order=np.inf, actx=None):
     """Calculate a component-wise norm."""
     if isinstance(a, ConservedVars):
-        return componentwise_norm(discr, a.join())
-    actx = get_container_context(a)
+        return componentwise_norm(
+            discr, a.join(), order=order, actx=a.array_context()
+        )
+    if actx is None:
+        actx = get_container_context(a)
     return map_array_container(lambda b: discr.norm(DOFArray(actx, (b,)), order), a)
 
 
