@@ -237,8 +237,9 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         cv = initializer(eos=eos, t=0, x_vec=nodes)
         p = eos.pressure(cv)
         temperature = eos.temperature(cv)
-        internal_energy = eos.get_internal_energy(tin, yin)
-        y = eos.species_fractions(cv)
+        internal_energy = eos.get_internal_energy(temperature=tin,
+                                                  species_mass_fractions=yin)
+        y = cv.species_mass_fractions
 
         print(f"pyro_y = {y}")
         print(f"pyro_eos.p = {p}")

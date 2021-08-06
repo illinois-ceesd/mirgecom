@@ -4,6 +4,7 @@ Flux Calculation
 ^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
+.. autofunction:: inviscid_facial_flux
 
 Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -37,6 +38,10 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from meshmode.dof_array import thaw
+from mirgecom.fluid import compute_wavespeed
+from grudge.trace_pair import TracePair
+from mirgecom.flux import lfr_flux
 from mirgecom.fluid import make_conserved
 
 
@@ -66,6 +71,46 @@ def inviscid_flux(discr, eos, cv):
             (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 
 
+def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
+    """Return the flux across a face given the solution on both sides *q_tpair*.
+
+    Parameters
+    ----------
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+
+    q_tpair: :class:`grudge.trace_pair.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+
+    local: bool
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
+    """
+    actx = cv_tpair.int.array_context
+
+    flux_tpair = TracePair(cv_tpair.dd,
+                           interior=inviscid_flux(discr, eos, cv_tpair.int),
+                           exterior=inviscid_flux(discr, eos, cv_tpair.ext))
+
+    lam = actx.np.maximum(
+        compute_wavespeed(eos=eos, cv=cv_tpair.int),
+        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
+    )
+
+    normal = thaw(actx, discr.normal(cv_tpair.dd))
+
+    # todo: user-supplied flux routine
+    flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
+
+    if local is False:
+        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+
+    return flux_weak
+
+
 def get_inviscid_timestep(discr, eos, cv):
     """Return node-local stable timestep estimate for an inviscid fluid.
 
@@ -79,7 +124,7 @@ def get_inviscid_timestep(discr, eos, cv):
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
     cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid soluition
+        Fluid solution
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
@@ -89,7 +134,7 @@ def get_inviscid_timestep(discr, eos, cv):
     from mirgecom.fluid import compute_wavespeed
     return (
         characteristic_lengthscales(cv.array_context, discr)
-        / compute_wavespeed(discr, eos, cv)
+        / compute_wavespeed(eos, cv)
     )
 
 
@@ -106,7 +151,8 @@ def get_inviscid_cfl(discr, eos, dt, cv):
     dt: float or :class:`~meshmode.dof_array.DOFArray`
         A constant scalar dt or node-local dt
     cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid solution
+        The fluid conserved variables
+
     Returns
     -------
     :class:`meshmode.dof_array.DOFArray`

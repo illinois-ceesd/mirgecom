@@ -40,7 +40,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass, fields
 from arraycontext import (
@@ -244,6 +243,11 @@ class ConservedVars:
         """Return the fluid velocity = momentum / mass."""
         return self.momentum / self.mass
 
+    @property
+    def species_mass_fractions(self):
+        """Return the species mass fractions y = species_mass / mass."""
+        return self.species_mass / self.mass
+
     def join(self):
         """Call :func:`join_conserved` on *self*."""
         return join_conserved(
@@ -330,8 +334,17 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
                            momentum=momentum, species_mass=species_mass)
 
 
-def make_conserved(dim, mass, energy, momentum, species_mass=None):
+def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
+                   q=None, scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
+    if scalar_quantities is not None:
+        return split_conserved(dim, q=scalar_quantities)
+    if vector_quantities is not None:
+        return split_conserved(dim, q=vector_quantities)
+    if q is not None:
+        return split_conserved(dim, q=q)
+    if mass is None or energy is None or momentum is None:
+        raise ValueError("Must have one of *q* or *mass, energy, momentum*.")
     return split_conserved(
         dim, _join_conserved(dim, mass=mass, energy=energy,
                              momentum=momentum, species_mass=species_mass)
@@ -382,10 +395,7 @@ def velocity_gradient(discr, cv, grad_cv):
         \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
 
     """
-    velocity = cv.momentum / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
-                                       - velocity[i]*grad_cv.mass
-                                       for i in range(cv.dim)])
+    return (grad_cv.momentum - np.outer(cv.velocity, grad_cv.mass))/cv.mass
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -416,14 +426,11 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
-    return (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
-                                       - y[i]*grad_cv.mass
-                                       for i in range(nspecies)])
+    return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
 
 
-def compute_wavespeed(dim, eos, cv: ConservedVars):
+def compute_wavespeed(eos, cv: ConservedVars):
     r"""Return the wavespeed in the flow.
 
     The wavespeed is calculated as:

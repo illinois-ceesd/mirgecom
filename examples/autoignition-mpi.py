@@ -454,7 +454,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return (euler_operator(discr, cv=state, t=t,
+        return (euler_operator(discr, cv=state, time=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
 
