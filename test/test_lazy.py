@@ -222,16 +222,10 @@ def test_lazy_op_diffusion(op_test_data, order):
             actx.to_numpy(grp_array)
             for grp_array in u])
 
-#     eager_result = op(*get_inputs(eager_actx))
-#     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
-    lazy_result = dof_array_to_numpy(lazy_op(*get_inputs(lazy_actx)))
-
-#     print(f"{eager_result=}")
-#     print("")
-    print(f"{lazy_result=}")
-    print("")
-
-    assert False
+    eager_result = op(*get_inputs(eager_actx))
+    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 def _get_pulse():
