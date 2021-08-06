@@ -172,7 +172,7 @@ def test_lazy_op_divergence(op_test_data, order):
     assert is_close, f"{lhs} not <= {rhs}"
 
 
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 1, 3, 1, 1])
 def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
