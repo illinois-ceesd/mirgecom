@@ -38,7 +38,7 @@ def componentwise_norm(discr, a, order=np.inf, actx=None):
     """Calculate a component-wise norm."""
     if isinstance(a, ConservedVars):
         return componentwise_norm(
-            discr, a.join(), order=order, actx=a.array_context()
+            discr, a.join(), order=order, actx=a.array_context
         )
     if actx is None:
         actx = get_container_context(a)
