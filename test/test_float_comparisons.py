@@ -149,4 +149,4 @@ def test_within_tol_cv(actx_factory, vel):
                         species_mass=species_mass)
 
     assert within_tol(discr, cv1, cv2)
-    assert within_tol(discr, cv1, cv3)
+    assert not within_tol(discr, cv1, cv3)
