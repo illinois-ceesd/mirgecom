@@ -43,7 +43,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture
 def op_test_data(ctx_factory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -125,8 +124,8 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lazy_op_divergence(op_test_data, order):
-    eager_actx, lazy_actx, get_discr = op_test_data
+def test_lazy_op_divergence(ctx_factory, order):
+    eager_actx, lazy_actx, get_discr = op_test_data(ctx_factory)
     discr = get_discr(order)
 
     from grudge.trace_pair import interior_trace_pair
@@ -163,8 +162,8 @@ def test_lazy_op_divergence(op_test_data, order):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lazy_op_diffusion(op_test_data, order):
-    eager_actx, lazy_actx, get_discr = op_test_data
+def test_lazy_op_diffusion(ctx_factory, order):
+    eager_actx, lazy_actx, get_discr = op_test_data(ctx_factory)
     discr = get_discr(order)
 
     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
@@ -248,8 +247,8 @@ def _get_scalar_lump():
     _get_pulse(),
     _get_scalar_lump(),
 ])
-def test_lazy_op_euler(op_test_data, problem, order):
-    eager_actx, lazy_actx, get_discr = op_test_data
+def test_lazy_op_euler(ctx_factory, problem, order):
+    eager_actx, lazy_actx, get_discr = op_test_data(ctx_factory)
     discr = get_discr(order)
 
     eos, init, boundaries, tol = problem
@@ -349,8 +348,8 @@ def _get_viscous_scalar_lump():
     _get_poiseuille(),
     _get_viscous_scalar_lump(),
 ])
-def test_lazy_op_ns(op_test_data, problem, order):
-    eager_actx, lazy_actx, get_discr = op_test_data
+def test_lazy_op_ns(ctx_factory, problem, order):
+    eager_actx, lazy_actx, get_discr = op_test_data(ctx_factory)
     discr = get_discr(order)
 
     eos, init, boundaries, tol = problem
@@ -380,8 +379,8 @@ def test_lazy_op_ns(op_test_data, problem, order):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lazy_op_projection(op_test_data, order):
-    eager_actx, lazy_actx, get_discr = op_test_data
+def test_lazy_op_projection(ctx_factory, order):
+    eager_actx, lazy_actx, get_discr = op_test_data(ctx_factory)
     discr = get_discr(order)
 
     from grudge.dof_desc import DTAG_BOUNDARY, as_dofdesc
