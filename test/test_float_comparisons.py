@@ -101,3 +101,52 @@ def test_within_tol_errors_around_zero(actx_factory):
         discr, zeros, zeros + 1e-100, tol=1e-6,
         correct_for_eps_differences_from_zero=False
     )
+
+
+@pytest.mark.parametrize("vel", [0, 1])
+def test_within_tol_cv(actx_factory, vel):
+    actx = actx_factory()
+    dim = 3
+    nel_1d = 5
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+    )
+
+    order = 1
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    zeros = discr.zeros(actx)
+    ones = zeros + 1.0
+
+    from pytools.obj_array import make_obj_array
+    velocity = make_obj_array([zeros+vel for _ in range(dim)])
+
+    massval = 1
+    mass = massval*ones
+
+    energy = zeros + 1.0 / (1.4*.4)
+    mom = mass * velocity
+    species_mass = None
+
+    from mirgecom.fluid import make_conserved
+
+    cv1 = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+
+    velocity = make_obj_array([zeros+vel+1e-100 for _ in range(dim)])
+    mom = mass * velocity
+
+    cv2 = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+
+    velocity = make_obj_array([zeros+vel+1 for _ in range(dim)])
+    mom = mass * velocity
+
+    cv3 = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+
+    assert within_tol(discr, cv1, cv2)
+    assert within_tol(discr, cv1, cv3)
