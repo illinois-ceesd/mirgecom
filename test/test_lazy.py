@@ -379,6 +379,55 @@ def test_lazy_op_ns(op_test_data, problem, order):
     assert is_close, f"{lhs} not <= {rhs}"
 
 
+@pytest.mark.parametrize("order", [1, 2, 3])
+def test_lazy_op_projection(op_test_data, order):
+    eager_actx, lazy_actx, get_discr = op_test_data
+    discr = get_discr(order)
+
+    from grudge.dof_desc import DTAG_BOUNDARY, as_dofdesc
+
+    lower_y_btag = DTAG_BOUNDARY("-y")
+    upper_y_btag = DTAG_BOUNDARY("+y")
+    btags = [lower_y_btag, upper_y_btag]
+
+    def op(u):
+        return make_obj_array([
+            discr.project("vol", as_dofdesc(btag), u)
+            for btag in btags])
+
+    lazy_op = lazy_actx.compile(op)
+
+    def get_inputs(actx):
+        nodes = thaw(discr.nodes(), actx)
+        u = actx.np.cos(np.pi*nodes[0])
+        return u,
+
+    tol = 1e-12
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
+
+    def lazy_to_eager(u):
+        return thaw(freeze(u, lazy_actx), eager_actx)
+
+    from pytools.obj_array import obj_array_vectorized
+
+    @obj_array_vectorized
+    def dof_array_to_numpy(u):
+        actx = u.array_context
+        return make_obj_array([
+            actx.to_numpy(grp_array)
+            for grp_array in u])
+
+    eager_result = dof_array_to_numpy(op(*get_inputs(eager_actx)))
+    lazy_result = dof_array_to_numpy(lazy_op(*get_inputs(lazy_actx)))
+
+    print(f"{lazy_result=}")
+    print("")
+
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
