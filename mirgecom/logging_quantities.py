@@ -41,7 +41,7 @@ __doc__ = """
 """
 
 from logpyle import (
-    DtConsumer, LogQuantity, PostLogQuantity, LogManager,
+    LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities
 )

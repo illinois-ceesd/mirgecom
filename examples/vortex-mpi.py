@@ -180,8 +180,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         try:
             logmgr.add_watches([
-                ("memory_usage_python.max", "        memory_usage_gpu: {value:g} {unit}")
-                ])
+                ("memory_usage_python.max",
+                 "        memory_usage_gpu: {value:g} {unit}")
+            ])
         except KeyError:
             pass
 
