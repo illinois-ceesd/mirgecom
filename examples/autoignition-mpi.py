@@ -59,6 +59,7 @@ from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
 from mirgecom.logging_quantities import (
+    PushLogQuantity,
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_device_name,
@@ -183,16 +184,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
+        logmgr.add_quantity(PushLogQuantity(name="cfl", value=current_cfl))
 
         logmgr.add_watches([
-            ("step.max", "step = {value}, "),
-            ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+            ("step.max", "\nstep = {value},\n"),
+            ("t_sim.max", "        sim time: {value:1.6e} s\n"),
+            ("min_pressure", "        P (min, max) (Pa) = ({value:1.9e}, "),
             ("max_pressure",    "{value:1.9e})\n"),
-            ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+            ("min_temperature", "        T (min, max) (K)  = ({value:7g}, "),
             ("max_temperature",    "{value:7g})\n"),
-            ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s")
+            ("t_step.max", "        step walltime: {value:6g} s\n"),
+            ("t_log.max", "        log walltime: {value:6g} s\n"),
+            ("cfl.max", "        CFL number: {value:6g} {unit}")
         ])
 
     # {{{  Set up initial state using Cantera
@@ -318,10 +321,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_status(dt, cfl):
-        status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
-        if rank == 0:
-            logger.info(status_msg)
+    def my_write_status(state, cfl=None):
+        if cfl is None:
+            if constant_cfl:
+                cfl = current_cfl
+            else:
+                from grudge.op import nodal_max
+                from mirgecom.inviscid import get_inviscid_cfl
+                cfl = nodal_max(discr, "vol",
+                                get_inviscid_cfl(discr, eos, current_dt, cv=state))
+
+        logmgr.set_quantity_value("cfl", cfl)
 
     def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
                      production_rates=None, cfl=None):
@@ -412,7 +422,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
 
             if do_status:
-                my_write_status(dt, cfl)
+                my_write_status(state, cfl=cfl)
 
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
@@ -439,7 +449,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, state, eos)
             logmgr.tick_after()
         return state, dt
 
@@ -467,7 +477,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                         state=current_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
                  dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
-    my_write_status(dt=dt, cfl=cfl)
+    my_write_status(state=current_state, cfl=cfl)
     my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
