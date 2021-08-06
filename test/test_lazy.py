@@ -420,8 +420,10 @@ def test_lazy_op_projection(op_test_data, order):
 
     eager_result = dof_array_to_numpy(op(*get_inputs(eager_actx)))
     lazy_result = dof_array_to_numpy(lazy_op(*get_inputs(lazy_actx)))
+    lazy_result_2 = dof_array_to_numpy(lazy_op(*get_inputs(lazy_actx)))
 
     print(f"{lazy_result=}")
+    print(f"{lazy_result_2=}")
     print("")
 
     is_close, lhs, rhs = isclose(lazy_result, eager_result)
