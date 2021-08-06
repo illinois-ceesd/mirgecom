@@ -83,16 +83,6 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
             return componentwise_norm(a.join())
         return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
 
-    print(f"{componentwise_norm(x)=}")
-    print(f"{componentwise_norm(y)=}")
-    print(f"{componentwise_norm(x-y)=}")
-    print("")
-    print(f"{x=}")
-    print("")
-    print(f"{y=}")
-    print("")
-    print(f"{x-y=}")
-
     lhs = componentwise_norm(x - y)
     rhs = np.maximum(
         rel_tol * np.maximum(
@@ -172,12 +162,12 @@ def test_lazy_op_divergence(op_test_data, order):
     assert is_close, f"{lhs} not <= {rhs}"
 
 
-@pytest.mark.parametrize("order", [1, 1, 2, 1, 3, 1])
+@pytest.mark.parametrize("order", [1, 2, 3])
 def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, as_dofdesc
+    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
     from mirgecom.diffusion import (
         diffusion_operator,
         DirichletDiffusionBoundary,
@@ -191,12 +181,8 @@ def test_lazy_op_diffusion(op_test_data, order):
     }
 
     def op(alpha, u):
-#         return diffusion_operator(
-#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
-        return make_obj_array([
-            bdry.get_gradient_flux(discr, DISCR_TAG_BASE, as_dofdesc(btag), alpha, u)
-            for btag, bdry in boundaries.items()
-            if isinstance(bdry, NeumannDiffusionBoundary)])
+        return diffusion_operator(
+            discr, DISCR_TAG_BASE, alpha, boundaries, u)
 
     lazy_op = lazy_actx.compile(op)
 
@@ -212,15 +198,6 @@ def test_lazy_op_diffusion(op_test_data, order):
 
     def lazy_to_eager(u):
         return thaw(freeze(u, lazy_actx), eager_actx)
-
-    from pytools.obj_array import obj_array_vectorized
-
-    @obj_array_vectorized
-    def dof_array_to_numpy(u):
-        actx = u.array_context
-        return make_obj_array([
-            actx.to_numpy(grp_array)
-            for grp_array in u])
 
     eager_result = op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
