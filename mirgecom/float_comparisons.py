@@ -29,7 +29,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 from mirgecom.fluid import ConservedVars
-from arraycontext import map_array_container, get_container_context
+from arraycontext import map_array_container, get_container_context_recursively
 from meshmode.dof_array import DOFArray
 import numpy as np
 
@@ -41,7 +41,7 @@ def componentwise_norm(discr, a, order=np.inf, actx=None):
             discr, a.join(), order=order, actx=a.array_context
         )
     if actx is None:
-        actx = get_container_context(a)
+        actx = get_container_context_recursively(a)
     return map_array_container(lambda b: discr.norm(DOFArray(actx, (b,)), order), a)
 
 
@@ -63,7 +63,7 @@ def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
     err_norm = componentwise_norm(discr, rhs - lhs, order=order)
     if relative:
         try:
-            actx = err_norm.array_context
+            actx = get_container_context_recursively(err_norm)
             err_norm = err_norm / actx.np.maximum(lhs_norm, rhs_norm)
         except AttributeError:
             err_norm = err_norm / np.maximum(lhs_norm, rhs_norm)
