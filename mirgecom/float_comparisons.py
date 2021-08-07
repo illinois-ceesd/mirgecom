@@ -64,7 +64,7 @@ def within_tol(discr, lhs, rhs, tol=1e-6, relative=True,
     if relative:
         actx = get_container_context_recursively(err_norm)
         err_norm = err_norm / actx.np.maximum(lhs_norm, rhs_norm)
-        
+
         if correct_for_eps_differences_from_zero:
             return np.all(
                 np.logical_or(np.logical_and(
