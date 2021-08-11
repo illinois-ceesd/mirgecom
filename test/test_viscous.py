@@ -203,6 +203,34 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     initializer = _poiseuille_2d
 
+    def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
+                    int_tpair, xrank_pairs, boundaries):
+        return (compute_interior_flux(int_tpair)
+                + sum(compute_boundary_flux(btag) for btag in boundaries))
+
+    def cv_flux_interior(int_tpair):
+        normal = thaw(actx, discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = central_scalar_flux(int_tpair, normal)
+        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+
+    def cv_flux_boundary(btag):
+        boundary_discr = discr.discr_from_dd(btag)
+        bnd_nodes = thaw(actx, boundary_discr.nodes())
+        bnd_nhat = thaw(actx, discr.normal(btag))
+        cv_minus = discr.project("vol", btag, cv)
+        cv_plus = cv_minus
+        bnd_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
+        flux_weak = central_scalar_flux(bnd_tpair, bnd_nhat)
+        return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
+
+    q_int_tpair = interior_trace_pair(discr, q)
+    q_part_pairs = cross_rank_trace_pairs(discr, q)
+    q_flux_bnd = elbnd_flux(discr, scalar_flux_interior, get_q_flux_bnd,
+                            q_int_tpair, q_part_pairs, boundaries)
+
+    # [Bassi_1997]_ eqn 15 (s = grad_q)
+    grad_q = np.stack(dg_grad_low(discr, q, q_flux_bnd), axis=0)
     # for nel_1d in [4, 8, 12]:
     for nfac in [1, 2, 4]:
 
