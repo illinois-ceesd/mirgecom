@@ -33,7 +33,7 @@ def _get_query_map(query_point, src_nodes, src_grp, tol):
     dim = src_grp.dim
     _, ntest_elements, _ = src_nodes.shape
 
-    initial_guess = np.array([0.5, 0.5, 0.5])
+    initial_guess = np.full(dim, 0.5)
     src_unit_query_points = np.empty((dim, ntest_elements))
     src_unit_query_points[:] = initial_guess.reshape(-1, 1)
 
@@ -142,11 +142,12 @@ def query_eval(query_point, actx, discr, dim, tol):
     vol_discr = discr.discr_from_dd("vol")
 
     query_mapped = None
+    query_elem = None
 
     for igrp, src_grp in enumerate(vol_discr.groups):
         grp_nodes = np.stack([actx.to_numpy(nodes[i][igrp]) for i in range(dim)])
-        box_ls = np.stack([coords.min(axis=1) for coords in grp_nodes])
-        box_us = np.stack([coords.max(axis=1) for coords in grp_nodes])
+        box_ls = np.stack([coords.min(axis=1)-tol for coords in grp_nodes])
+        box_us = np.stack([coords.max(axis=1)+tol for coords in grp_nodes])
         overlaps_in_dim = (
             (query_point[:, np.newaxis] >= box_ls)
             & (query_point[:, np.newaxis] <= box_us))
@@ -154,16 +155,14 @@ def query_eval(query_point, actx, discr, dim, tol):
         for i in range(1, dim):
             overlaps = overlaps & overlaps_in_dim[i]
         matched_elems, = np.where(overlaps)
-        print(matched_elems)
+        print(f"{matched_elems=}")
+        if len(matched_elems) == 0:
+            break
         src_nodes = np.stack([grp_nodes[i][matched_elems, :] for i in range(dim)])
         query_mapped_cand = _get_query_map(query_point, src_nodes, src_grp, tol)
-        # TODO: Figure out which candidate element actually contains the query point
-        query_mapped = query_mapped_cand[:, 0]
-        query_elem = matched_elems[0]
         for i in range(query_mapped_cand.shape[1]):
             query_test = query_mapped_cand[:, i]
-            assert (query_test >= -1).all()
-            if sum(query_test <= 1):
+            if (query_test >= -1).all() and sum(query_test <= 1):
                 query_mapped = query_test
                 query_elem = matched_elems[i]
                 break
