@@ -199,7 +199,7 @@ def diffusive_heat_flux(discr, eos, cv, j):
     nspec = cv.nspecies
     if nspec > 0:
         try:
-            h_alpha = eos.species_enthalpies(cv)
+            h_alpha = eos.get_species_enthalpies(cv)
             return sum(h_alpha[i]*j[i] for i in range(nspec))
         except NotImplementedError:
             return 0
