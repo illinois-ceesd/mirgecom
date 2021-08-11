@@ -31,6 +31,60 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
+from meshmode.dof_array import DOFArray
+from mirgecom.fluid import (
+    ConservedVars,
+    make_conserved
+)
+
+
+def central_scalar_flux(trace_pair, normal):
+    r"""Compute a central scalar flux.
+
+    The central scalar flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
+
+    where $\mathbf{u}^-, \mathbf{u}^+$, are the vector of independent scalar
+    components and scalar solution components on the interior and exterior of the
+    face on which the central flux is to be calculated, and $\hat{n}$ is the normal
+    vector.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.trace_pair.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    tp_avg = trace_pair.avg
+    if isinstance(tp_avg, DOFArray):
+        return tp_avg*normal
+    elif isinstance(tp_avg, ConservedVars):
+        tp_join = tp_avg.join()
+    elif isinstance(tp_avg, np.ndarray):
+        tp_join = tp_avg
+
+    ncomp = len(tp_join)
+    if ncomp > 1:
+        result = np.empty((ncomp, len(normal)), dtype=object)
+        for i in range(ncomp):
+            result[i] = tp_join[i] * normal
+    else:
+        result = tp_join*normal
+    if isinstance(tp_avg, ConservedVars):
+        return make_conserved(tp_avg.dim, q=result)
+    return result
 
 
 def lfr_flux(cv_tpair, f_tpair, normal, lam):

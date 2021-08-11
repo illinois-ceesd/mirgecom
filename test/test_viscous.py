@@ -33,8 +33,12 @@ import pytest  # noqa
 
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
+from meshmode.mesh import BTAG_ALL
 import grudge.op as op
-from grudge.eager import EagerDGDiscretization
+from grudge.eager import (
+    EagerDGDiscretization,
+    interior_trace_pair
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -134,7 +138,7 @@ def _get_box_mesh(dim, a, b, n, t=None):
     return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
-@pytest.mark.parametrize("order", [2, 4, 6])
+@pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("kappa", [0.0, 1.0, 2.3])
 def test_poiseuille_fluxes(actx_factory, order, kappa):
     """Test the viscous fluxes using a Poiseuille input state."""
@@ -204,37 +208,30 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     initializer = _poiseuille_2d
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                    int_tpair, xrank_pairs, boundaries):
+                    int_tpair, boundaries):
         return (compute_interior_flux(int_tpair)
                 + sum(compute_boundary_flux(btag) for btag in boundaries))
 
+    from mirgecom.flux import central_scalar_flux
+
     def cv_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
-        # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = central_scalar_flux(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def cv_flux_boundary(btag):
         boundary_discr = discr.discr_from_dd(btag)
         bnd_nodes = thaw(actx, boundary_discr.nodes())
+        cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
         bnd_nhat = thaw(actx, discr.normal(btag))
-        cv_minus = discr.project("vol", btag, cv)
-        cv_plus = cv_minus
-        bnd_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
+        from grudge.trace_pair import TracePair
+        bnd_tpair = TracePair(btag, interior=cv_bnd, exterior=cv_bnd)
         flux_weak = central_scalar_flux(bnd_tpair, bnd_nhat)
         return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
 
-    q_int_tpair = interior_trace_pair(discr, q)
-    q_part_pairs = cross_rank_trace_pairs(discr, q)
-    q_flux_bnd = elbnd_flux(discr, scalar_flux_interior, get_q_flux_bnd,
-                            q_int_tpair, q_part_pairs, boundaries)
-
-    # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_q = np.stack(dg_grad_low(discr, q, q_flux_bnd), axis=0)
-    # for nel_1d in [4, 8, 12]:
     for nfac in [1, 2, 4]:
 
-        npts_axis = nfac*(10, 20)
+        npts_axis = nfac*(11, 21)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
         mesh = _get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
@@ -246,14 +243,29 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
 
+        # form exact cv
         cv = initializer(x_vec=nodes, eos=eos)
-        # local grad OK here due to CV are continuous
-        grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+        cv_int_tpair = interior_trace_pair(discr, cv)
+        boundaries = [BTAG_ALL]
+        cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
+                                  cv_int_tpair, boundaries)
+        from mirgecom.operators import grad_operator
+        grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
+                                                      cv_flux_bnd.join()))
 
-        # form exact soln
         xp_grad_cv = _exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
         xp_grad_v = 1/cv.mass * xp_grad_cv.momentum
         xp_tau = mu * (xp_grad_v + xp_grad_v.transpose())
+
+        # sanity check the gradient:
+        relerr_scale_e = 1.0 / discr.norm(xp_grad_cv.energy, np.inf)
+        relerr_scale_p = 1.0 / discr.norm(xp_grad_cv.momentum, np.inf)
+        graderr_e = discr.norm((grad_cv.energy - xp_grad_cv.energy), np.inf)
+        graderr_p = discr.norm((grad_cv.momentum - xp_grad_cv.momentum), np.inf)
+        graderr_e *= relerr_scale_e
+        graderr_p *= relerr_scale_p
+        assert graderr_e < 5e-7
+        assert graderr_p < 1e-10
 
         zeros = discr.zeros(actx)
         ones = zeros + 1
@@ -263,18 +275,19 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         grad_p = op.local_grad(discr, pressure)
 
         temperature = eos.temperature(cv)
+        tscal = dpdx/(rho*eos.gas_const())
         xp_grad_t = xp_grad_p/(cv.mass*eos.gas_const())
         grad_t = op.local_grad(discr, temperature)
 
         # sanity check
-        assert discr.norm(grad_p - xp_grad_p, np.inf) < 2e-5
-        assert discr.norm(grad_t - xp_grad_t, np.inf) < 1e-7
+        assert discr.norm(grad_p - xp_grad_p, np.inf)/dpdx < 5e-9
+        assert discr.norm(grad_t - xp_grad_t, np.inf)/tscal < 5e-9
 
         # verify heat flux
         from mirgecom.viscous import conductive_heat_flux
         heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
         xp_heat_flux = -kappa*xp_grad_t
-        assert discr.norm(heat_flux - xp_heat_flux, np.inf) < 2e-7
+        assert discr.norm(heat_flux - xp_heat_flux, np.inf) < 2e-8
 
         # verify diffusive mass flux is zilch (no scalar components)
         from mirgecom.viscous import diffusive_flux
@@ -301,11 +314,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5
-        or e_eoc_rec.max_error() < 1e-7
+        or e_eoc_rec.max_error() < 3e-9
     )
     assert (
         p_eoc_rec.order_estimate() >= order - 0.5
-        or p_eoc_rec.max_error() < 1e-10
+        or p_eoc_rec.max_error() < 1e-12
     )
 
 
