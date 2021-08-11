@@ -258,33 +258,6 @@ def main():
         t += dt
         istep += 1
 
-    ### Find element containing query point
-    query_point = actx.from_numpy(np.array([0, 0, 0]))
-    Discr = discr.discr_from_dd("vol")
-    matched_elems_per_group = []
-    for igrp in range(len(mesh_grp)):
-        grp_nodes = make_obj_array([nodes[i][igrp] for i in range(dim)])
-        box_ls = make_obj_array([coords.min(axis=1) for coords in grp_nodes])
-        box_us = make_obj_array([coords.max(axis=1) for coords in grp_nodes])
-        overlaps_in_dim = (query_point >= box_ls) & (query_point <= box_us)
-        overlaps = overlaps_in_dim[0]
-        for i in range(1, dim):
-            overlaps = overlaps & overlaps_in_dim[i]
-        indices, = actx.np.where(overlaps)
-        matched_elems_per_group.append(indices)
-
-    ### Transform query point to element basis
-    test_elem = matched_elems_per_group[0]
-    for grp_idx in matched_elems_per_group:
-        src_nodes = Discr.groups[grp_idx].unit_nodes
-        src_grp = Discr.groups[grp_idx]
-    tol = 1e-5
-    query_coords = _find_src_unit_nodes(quedy_point, src_nodes, src_grp, tol)
-
-    ### Evaluate basis function at query point
-
-
-
 if __name__ == "__main__":
     main()
 
