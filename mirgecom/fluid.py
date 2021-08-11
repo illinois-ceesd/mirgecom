@@ -244,6 +244,11 @@ class ConservedVars:
         return self.momentum / self.mass
 
     @property
+    def nspecies(self):
+        """Return the number of mixture species."""
+        return len(self.species_mass)
+
+    @property
     def species_mass_fractions(self):
         """Return the species mass fractions y = species_mass / mass."""
         return self.species_mass / self.mass

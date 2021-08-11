@@ -117,7 +117,7 @@ def diffusive_flux(discr, eos, cv, grad_cv):
     numpy.ndarray
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
-    nspecies = len(cv.species_mass)
+    nspecies = cv.nspecies
     transport = eos.transport_model()
 
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
@@ -139,7 +139,7 @@ def conductive_heat_flux(discr, eos, cv, grad_t):
 
     .. math::
 
-        \mathbf{q}_{c} = \kappa\nabla{T},
+        \mathbf{q}_{c} = -\kappa\nabla{T},
 
     with thermal conductivity $\kappa$, and gas temperature $T$.
 
@@ -159,7 +159,7 @@ def conductive_heat_flux(discr, eos, cv, grad_t):
         The conductive heat flux vector
     """
     transport = eos.transport_model()
-    return transport.thermal_conductivity(eos, cv)*grad_t
+    return -transport.thermal_conductivity(eos, cv)*grad_t
 
 
 def diffusive_heat_flux(discr, eos, cv, j):
@@ -196,10 +196,14 @@ def diffusive_heat_flux(discr, eos, cv, j):
     numpy.ndarray
         The total diffusive heath flux vector
     """
-    numspecies = len(cv.species_mass)
-    transport = eos.transport_model()
-    d = transport.species_diffusivity(eos, cv)
-    return sum(d[i]*j[i] for i in range(numspecies))
+    nspec = cv.nspecies
+    if nspec > 0:
+        try:
+            h_alpha = eos.species_enthalpies(cv)
+            return sum(h_alpha[i]*j[i] for i in range(nspec))
+        except NotImplementedError:
+            return 0
+    return 0
 
 
 # TODO: We could easily make this more general (dv, grad_dv)
@@ -243,20 +247,28 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     :class:`~mirgecom.fluid.ConservedVars`
         The viscous transport flux vector
     """
+    transport = eos.transport_model()
+    if transport is None:
+        return 0
+
     dim = cv.dim
-
-    j = diffusive_flux(discr, eos, cv, grad_cv)
-    heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
-    #    heat_flux = (conductive_heat_flux(discr, eos, q, grad_t)
-    #                 + diffusive_heat_flux(discr, eos, q, j))
-    tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_mass_flux = 0 * cv.momentum
-    viscous_energy_flux = np.dot(tau, cv.velocity) - heat_flux
 
-    # passes the right (empty) shape for diffusive flux when no species
-    # TODO: fix single gas join_conserved for vectors at each cons eqn
-    if len(j) == 0:
+    nspecies = cv.nspecies
+    if nspecies > 0:
+        j = diffusive_flux(discr, eos, cv, grad_cv)
+        heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
+    else:
+        # passes the right (empty) shape for diffusive flux when no species
         j = cv.momentum * cv.species_mass.reshape(-1, 1)
+        heat_flux_diffusive = 0
+
+    tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
+    viscous_energy_flux = (
+        np.dot(tau, cv.velocity)
+        - conductive_heat_flux(discr, eos, cv, grad_t)
+        - heat_flux_diffusive
+    )
 
     return make_conserved(dim,
             mass=viscous_mass_flux,

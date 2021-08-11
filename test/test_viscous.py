@@ -123,6 +123,164 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     assert discr.norm(tau - exp_tau, np.inf) < 1e-12
 
 
+# Box grid generator widget lifted from @majosm and slightly bent
+def _get_box_mesh(dim, a, b, n, t=None):
+    dim_names = ["x", "y", "z"]
+    bttf = {}
+    for i in range(dim):
+        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
+        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
+    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
+
+
+@pytest.mark.parametrize("order", [2, 4, 6])
+@pytest.mark.parametrize("kappa", [0.0, 1.0, 2.3])
+def test_poiseuille_fluxes(actx_factory, order, kappa):
+    """Test the viscous fluxes using a Poiseuille input state."""
+    actx = actx_factory()
+    dim = 2
+
+    from pytools.convergence import EOCRecorder
+    e_eoc_rec = EOCRecorder()
+    p_eoc_rec = EOCRecorder()
+
+    base_pressure = 100000.0
+    pressure_ratio = 1.001
+    mu = 42  # arbitrary
+    left_boundary_location = 0
+    right_boundary_location = 0.1
+    ybottom = 0.
+    ytop = .02
+    nspecies = 0
+    spec_diffusivity = 0 * np.ones(nspecies)
+    transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
+                                      species_diffusivity=spec_diffusivity)
+
+    xlen = right_boundary_location - left_boundary_location
+    p_low = base_pressure
+    p_hi = pressure_ratio*base_pressure
+    dpdx = (p_hi - p_low) / xlen
+    h = ytop - ybottom
+    rho = 1.0
+
+    eos = IdealSingleGas(transport_model=transport_model)
+    gamma = eos.gamma()
+
+    def _poiseuille_2d(x_vec, eos):
+        y = x_vec[1]
+        x = x_vec[0]
+        ones = x / x
+        u_x = dpdx*y*(h - y)/(2*mu)
+        p_x = p_hi - dpdx*x
+        mass = rho*ones
+        u_y = 0*x
+        velocity = make_obj_array([u_x, u_y])
+        ke = .5*np.dot(velocity, velocity)*mass
+        rho_e = p_x/(gamma-1) + ke
+        return make_conserved(2, mass=mass, energy=rho_e,
+                              momentum=mass*velocity)
+
+    def _exact_grad(x_vec, eos, cv_exact):
+        y = x_vec[1]
+        x = x_vec[0]
+        ones = x / x
+        mass = cv_exact.mass
+        velocity = cv_exact.velocity
+        dvxdy = dpdx*(h-2*y)/(2*mu)
+        dvdy = make_obj_array([dvxdy, 0*x])
+        dedx = -dpdx/(gamma-1)*ones
+        dedy = mass*np.dot(velocity, dvdy)
+        dmass = make_obj_array([0*x, 0*x])
+        denergy = make_obj_array([dedx, dedy])
+        dvx = make_obj_array([0*x, dvxdy])
+        dvy = make_obj_array([0*x, 0*x])
+        dv = np.stack((dvx, dvy))
+        dmom = mass*dv
+        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
+        return make_conserved(2, mass=dmass, energy=denergy,
+                              momentum=dmom, species_mass=species_mass)
+
+    initializer = _poiseuille_2d
+
+    # for nel_1d in [4, 8, 12]:
+    for nfac in [1, 2, 4]:
+
+        npts_axis = nfac*(10, 20)
+        box_ll = (left_boundary_location, ybottom)
+        box_ur = (right_boundary_location, ytop)
+        mesh = _get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
+
+        logger.info(
+            f"Number of {dim}d elements: {mesh.nelements}"
+        )
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+
+        cv = initializer(x_vec=nodes, eos=eos)
+        # local grad OK here due to CV are continuous
+        grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+
+        # form exact soln
+        xp_grad_cv = _exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
+        xp_grad_v = 1/cv.mass * xp_grad_cv.momentum
+        xp_tau = mu * (xp_grad_v + xp_grad_v.transpose())
+
+        zeros = discr.zeros(actx)
+        ones = zeros + 1
+        pressure = eos.pressure(cv)
+        # grad of p should be dp/dx
+        xp_grad_p = -make_obj_array([dpdx*ones, zeros])
+        grad_p = op.local_grad(discr, pressure)
+
+        temperature = eos.temperature(cv)
+        xp_grad_t = xp_grad_p/(cv.mass*eos.gas_const())
+        grad_t = op.local_grad(discr, temperature)
+
+        # sanity check
+        assert discr.norm(grad_p - xp_grad_p, np.inf) < 2e-5
+        assert discr.norm(grad_t - xp_grad_t, np.inf) < 1e-7
+
+        # verify heat flux
+        from mirgecom.viscous import conductive_heat_flux
+        heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
+        xp_heat_flux = -kappa*xp_grad_t
+        assert discr.norm(heat_flux - xp_heat_flux, np.inf) < 2e-7
+
+        # verify diffusive mass flux is zilch (no scalar components)
+        from mirgecom.viscous import diffusive_flux
+        j = diffusive_flux(discr, eos, cv, grad_cv)
+        assert len(j) == 0
+
+        xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
+        xp_mom_flux = xp_tau
+        from mirgecom.viscous import viscous_flux
+        vflux = viscous_flux(discr, eos, cv, grad_cv, grad_t)
+
+        efluxerr = (
+            discr.norm(vflux.energy - xp_e_flux, np.inf)
+            / discr.norm(xp_e_flux, np.inf)
+        )
+        momfluxerr = (
+            discr.norm(vflux.momentum - xp_mom_flux, np.inf)
+            / discr.norm(xp_mom_flux, np.inf)
+        )
+
+        assert discr.norm(vflux.mass, np.inf) == 0
+        e_eoc_rec.add_data_point(1.0 / nfac, efluxerr)
+        p_eoc_rec.add_data_point(1.0 / nfac, momfluxerr)
+
+    assert (
+        e_eoc_rec.order_estimate() >= order - 0.5
+        or e_eoc_rec.max_error() < 1e-7
+    )
+    assert (
+        p_eoc_rec.order_estimate() >= order - 0.5
+        or p_eoc_rec.max_error() < 1e-10
+    )
+
+
 def test_species_diffusive_flux(actx_factory):
     """Test species diffusive flux and values against exact."""
     actx = actx_factory()
