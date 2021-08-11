@@ -68,7 +68,7 @@ def main():
         mesh = generate_regular_rect_mesh(
             a=(0,0,0),
             b=(10,10,10),
-            nelements_per_axis=(3,3,3),
+            nelements_per_axis=(4,4,4),
             boundary_tag_to_face={
                 "bdy_x": ["+x", "-x"],
                 "bdy_y": ["+y", "-y"],
@@ -93,7 +93,6 @@ def main():
                     mpi_communicator=comm)
 
     nodes = thaw(actx, discr.nodes())
-    print(nodes)
 
     vis = make_visualizer(discr, order+3 if dim == 2 else order)
 
@@ -105,15 +104,14 @@ def main():
 
     u = simple_poly_nodes(nodes)
     qx = 0.1
-    qy = 0.1
-    qz = 0.1
+    qy = 0.2
+    qz = 0.3
     
     query_point = np.array([qx, qy, qz])
     u_query = simple_poly(qx,qy,qz)
     tol = 1e-5
     
-    q_mapped = query_eval(query_point, actx, discr, dim, tol)
-    print(q_mapped)
+    q_mapped, q_elem = query_eval(query_point, actx, discr, dim, tol)
 
     u_elem = u[0] #u[q_elem]
     u_query = 0
@@ -121,11 +119,10 @@ def main():
     for i in range(nnodes):
         f_basis_i = discr.discr_from_dd("vol").groups[0].basis_obj().functions[i]
         u_query = u_query + u_elem[i]*f_basis_i(q_mapped)
-    
-    print(u_query)
-    print(type(u_query))
-    print(type(simple_poly(qx,qy,qz)))
-    assert u_query == pytest.approx(simple_poly(qx,qy,qz), tol)
+
+    print(q_mapped)
+    print(q_elem)    
+    #assert u_query == pytest.approx(simple_poly(qx,qy,qz), tol)
 
 
 if __name__ == "__main__":

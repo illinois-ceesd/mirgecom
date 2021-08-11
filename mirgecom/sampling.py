@@ -154,9 +154,18 @@ def query_eval(query_point, actx, discr, dim, tol):
         for i in range(1, dim):
             overlaps = overlaps & overlaps_in_dim[i]
         matched_elems, = np.where(overlaps)
+        print(matched_elems)
         src_nodes = np.stack([grp_nodes[i][matched_elems, :] for i in range(dim)])
         query_mapped_cand = _get_query_map(query_point, src_nodes, src_grp, tol)
         # TODO: Figure out which candidate element actually contains the query point
         query_mapped = query_mapped_cand[:, 0]
+        query_elem = matched_elems[0]
+        for i in range(query_mapped_cand.shape[1]):
+            query_test = query_mapped_cand[:, i]
+            assert (query_test >= -1).all()
+            if sum(query_test <= 1):
+                query_mapped = query_test
+                query_elem = matched_elems[i]
+                break
 
-    return query_mapped
+    return query_mapped, query_elem
