@@ -79,6 +79,7 @@ class GasEOS:
     .. automethod:: gamma
     .. automethod:: transport_model
     .. automethod:: get_internal_energy
+    .. automethod:: get_species_enthalpies
     """
 
     def pressure(self, cv: ConservedVars):
