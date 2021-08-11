@@ -125,10 +125,13 @@ def _get_query_map(query_point, src_nodes, src_grp, tol):
         max_resid = np.max(np.abs(resid))
 
         if max_resid < tol:
+            print(f"{src_unit_query_points=}")
             return src_unit_query_points
 
         niter += 1
         if niter > 10:
+            print(f"{src_unit_query_points=}")
+            print(f"{np.max(np.abs(resid), axis=0)=}")
             raise RuntimeError("Gauss-Newton (for finding opposite-face reference "
                     "coordinates) did not converge (residual: %g)" % max_resid)
 

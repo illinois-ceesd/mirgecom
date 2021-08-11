@@ -27,6 +27,10 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pytest
 
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import DOFArray, thaw
 
@@ -47,85 +51,53 @@ from pytools.obj_array import make_obj_array
 import pyopencl.tools as cl_tools
 
 
-@mpi_entry_point
-def main():
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+@pytest.mark.parametrize("query_point", [
+    (0, 0),
+    (0, 1e-5),
+    (0, -1e-5),
+    (0.1, 0.2),
+])
+def test_query_eval(actx_factory, query_point, visualize=False):
+    actx = actx_factory()
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    num_parts = comm.Get_size()
+    dim = 2
 
-    from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-    mesh_dist = MPIMeshDistributor(comm)
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(0,)*dim,
+        b=(1,)*dim,
+        nelements_per_axis=(4,)*dim)
 
-    dim = 3
+    order = 1
 
-    if mesh_dist.is_mananger_rank():
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(0,0,0),
-            b=(10,10,10),
-            nelements_per_axis=(4,4,4),
-            boundary_tag_to_face={
-                "bdy_x": ["+x", "-x"],
-                "bdy_y": ["+y", "-y"],
-                "bdy_z": ["+z", "-z"]
-                }
-            )
-        n_elem = mesh.nelements
-        print("%d elements" % n_elem)
-
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-
-        del mesh
-
-    else:
-        local_mesh = mesh_dist.receive_mesh_part()
-
-    order = 3
-
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                    mpi_communicator=comm)
+    discr = EagerDGDiscretization(actx, mesh, order=order)
 
     nodes = thaw(actx, discr.nodes())
 
-    vis = make_visualizer(discr, order+3 if dim == 2 else order)
-
-    def simple_poly(x,y,z):
-        return (x**3) + (y**2) + z
+    def simple_poly(x,y):
+        return (x**3) + (y**2)
 
     def simple_poly_nodes(nodes):
-        return simple_poly(nodes[0], nodes[1], nodes[2])
+        return simple_poly(nodes[0], nodes[1])
 
     u = simple_poly_nodes(nodes)
-    qx = 0.1
-    qy = 0.2
-    qz = 0.3
-    
-    query_point = np.array([qx, qy, qz])
-    u_query = simple_poly(qx,qy,qz)
-    tol = 1e-5
-    
-    q_mapped, q_elem = query_eval(query_point, actx, discr, dim, tol)
 
-    u_elem = u[0] #u[q_elem]
-    u_query = 0
-    nnodes = 20
-    for i in range(nnodes):
-        f_basis_i = discr.discr_from_dd("vol").groups[0].basis_obj().functions[i]
-        u_query = u_query + u_elem[i]*f_basis_i(q_mapped)
+    if visualize:
+        vis = make_visualizer(discr, order)
+        vis.write_vtk_file("test_query_eval_mesh.vtu",
+            [
+                ("u", u)
+            ], overwrite=True)
 
-    print(q_mapped)
-    print(q_elem)    
-    #assert u_query == pytest.approx(simple_poly(qx,qy,qz), tol)
+    tol = 1e-4
+
+    q_mapped, q_elem = query_eval(np.array(query_point), actx, discr, dim, tol)
 
 
 if __name__ == "__main__":
-    main()
-
-# vim: foldmethod=marker
+    import sys
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])
