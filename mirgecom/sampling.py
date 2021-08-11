@@ -38,7 +38,7 @@ def _get_query_map(query_point, src_nodes, src_grp, tol):
     src_unit_query_points[:] = initial_guess.reshape(-1, 1)
 
     src_grp_basis_fcts = src_grp.basis_obj().functions
-    vdm = mp.vandermonde(src_grp_basis_fcts, src_grp.unit_query_points)
+    vdm = mp.vandermonde(src_grp_basis_fcts, src_grp.unit_nodes)
     inv_t_vdm = la.inv(vdm.T)
     nsrc_funcs = len(src_grp_basis_fcts)
 

@@ -25,6 +25,7 @@ import math
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
+import pytest
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import DOFArray, thaw
@@ -103,15 +104,28 @@ def main():
         return simple_poly(nodes[0], nodes[1], nodes[2])
 
     u = simple_poly_nodes(nodes)
-    qx = 4
-    qy = 4
-    qz = 4
+    qx = 0.1
+    qy = 0.1
+    qz = 0.1
     
     query_point = np.array([qx, qy, qz])
     u_query = simple_poly(qx,qy,qz)
     tol = 1e-5
     
     q_mapped = query_eval(query_point, actx, discr, dim, tol)
+    print(q_mapped)
+
+    u_elem = u[0] #u[q_elem]
+    u_query = 0
+    nnodes = 20
+    for i in range(nnodes):
+        f_basis_i = discr.discr_from_dd("vol").groups[0].basis_obj().functions[i]
+        u_query = u_query + u_elem[i]*f_basis_i(q_mapped)
+    
+    print(u_query)
+    print(type(u_query))
+    print(type(simple_poly(qx,qy,qz)))
+    assert u_query == pytest.approx(simple_poly(qx,qy,qz), tol)
 
 
 if __name__ == "__main__":
