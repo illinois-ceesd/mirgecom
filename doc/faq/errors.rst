@@ -8,11 +8,11 @@ How can I fix the ``clGetPlatformIDs failed: PLATFORM_NOT_FOUND_KHR`` error?
 This error appears at mirgecom startup when the OpenCL loader (ocl-icd) can not
 find any valid OpenCL platform::
 
-   $ python examples/wave-eager.py
+   $ python examples/wave.py
    Traceback (most recent call last):
-     File "examples/wave-eager.py", line 134, in <module>
+     File "examples/wave.py", line 134, in <module>
        main(use_profiling=args.profile)
-     File "examples/wave-eager.py", line 62, in main
+     File "examples/wave.py", line 62, in main
        cl_ctx = cl.create_some_context()
      File "/usr/WS1/diener3/Work/emirge/pyopencl/pyopencl/__init__.py", line 1432, in create_some_context
        platforms = get_platforms()
@@ -32,7 +32,7 @@ This can be caused by multiple issues:
   As an example, here is an error shown on Lassen::
 
      $ export OCL_ICD_DEBUG=7
-     $ python examples/wave-eager.py
+     $ python examples/wave.py
      ocl-icd(ocl_icd_loader.c:776): __initClIcd: Reading icd list from '/g/g91/diener3/Work/emirge/miniforge3/envs/ceesd/etc/OpenCL/vendors'
      ocl-icd(ocl_icd_loader.c:234): _find_num_icds: return: 1/0x1
      ocl-icd(ocl_icd_loader.c:265): _open_driver: Considering file '/g/g91/diener3/Work/emirge/miniforge3/envs/ceesd/etc/OpenCL/vendors/pocl.icd'
@@ -43,9 +43,9 @@ This can be caused by multiple issues:
      ocl-icd(ocl_icd_loader.c:320): _open_drivers: return: 0/0x0
      ocl-icd(ocl_icd_loader.c:1060): clGetPlatformIDs: return: -1001/0xfffffffffffffc17
      Traceback (most recent call last):
-       File "examples/wave-eager.py", line 134, in <module>
+       File "examples/wave.py", line 134, in <module>
          main(use_profiling=args.profile)
-       File "examples/wave-eager.py", line 62, in main
+       File "examples/wave.py", line 62, in main
          cl_ctx = cl.create_some_context()
        File "/usr/WS1/diener3/Work/emirge/pyopencl/pyopencl/__init__.py", line 1432, in create_some_context
          platforms = get_platforms()

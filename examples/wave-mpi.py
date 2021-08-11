@@ -1,4 +1,4 @@
-"""Demonstrate wave-eager MPI example."""
+"""Demonstrate wave MPI example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+import logging
 
 import numpy as np
 import numpy.linalg as la  # noqa
@@ -29,7 +29,11 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import thaw, PyOpenCLArrayContext
+from meshmode.array_context import (PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext)
+from arraycontext import thaw, freeze
+
+from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -41,6 +45,12 @@ from mirgecom.wave import wave_operator
 
 import pyopencl.tools as cl_tools
 
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.logging_quantities import (initialize_logmgr,
+                                         logmgr_add_cl_device_info,
+                                         logmgr_add_device_memory_usage)
+
 
 def bump(actx, discr, t=0):
     """Create a bump."""
@@ -48,7 +58,7 @@ def bump(actx, discr, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -62,17 +72,29 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=None):
+def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
+         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
+    if use_profiling:
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            logmgr=logmgr)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
 
@@ -113,16 +135,15 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
 
-    if local_mesh.dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.7 / (nel_1d*order**2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.4 / (nel_1d*order**2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    current_cfl = 0.485
+    wave_speed = 1.0
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
 
-    t_final = 3
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
+
+    t_final = 1
 
     if restart_step is None:
         t = 0
@@ -149,12 +170,34 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
         else:
             fields = restart_fields
 
+    if logmgr:
+        logmgr_add_cl_device_info(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
     vis = make_visualizer(discr)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(discr, c=wave_speed, w=w)
+
+    compiled_rhs = actx.compile(rhs)
 
     while t < t_final:
+        if logmgr:
+            logmgr.tick_before()
+
         # restart must happen at beginning of step
         if istep % 100 == 0 and (
                 # Do not overwrite the restart file that we just read.
@@ -177,20 +220,42 @@ def main(snapshot_pattern="wave-eager-{step:04d}-{rank:04d}.pkl", restart_step=N
             print(istep, t, discr.norm(fields[0]))
             vis.write_parallel_vtk_file(
                 comm,
-                "fld-wave-eager-mpi-%03d-%04d.vtu" % (rank, istep),
+                "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
                 [
                     ("u", fields[0]),
                     ("v", fields[1:]),
-                ]
+                ], overwrite=True
             )
 
-        fields = rk4_step(fields, t, dt, rhs)
+        fields = thaw(freeze(fields, actx), actx)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
 
         t += dt
         istep += 1
 
+        if logmgr:
+            set_dt(logmgr, dt)
+            logmgr.tick_after()
+
+    final_soln = discr.norm(fields[0])
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14
+
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    # Turn off profiling to not overwhelm CI
+    use_profiling = False
+    use_logging = True
+
+    import argparse
+    parser = argparse.ArgumentParser(description="Wave (MPI version)")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    args = parser.parse_args()
+
+    main(use_profiling=use_profiling, use_logmgr=use_logging,
+         actx_class=PytatoPyOpenCLArrayContext if args.lazy
+         else PyOpenCLArrayContext)
+
 
 # vim: foldmethod=marker

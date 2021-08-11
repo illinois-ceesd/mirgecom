@@ -1,4 +1,4 @@
-"""An array context with profiling capabilities."""
+"""An array context with kernel profiling capabilities."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -73,7 +73,7 @@ class ProfileEvent:
 
 
 class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
-    """An array context that profiles kernel executions.
+    """An array context that profiles OpenCL kernel executions.
 
     .. automethod:: tabulate_profiling_data
     .. automethod:: call_loopy
@@ -81,6 +81,13 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     .. automethod:: reset_profiling_data_for_kernel
 
     Inherits from :class:`arraycontext.PyOpenCLArrayContext`.
+
+    .. note::
+
+       Profiling of :mod:`pyopencl` kernels (that is, kernels that do not get
+       called through :meth:`call_loopy`) is restricted to a single instance of
+       this class. If there are multiple instances, only the first one created
+       will be able to profile these kernels.
     """
 
     def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:
@@ -101,10 +108,15 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         self.kernel_stats = {}
         self.logmgr = logmgr
 
-        cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
+        # Only store the first kernel exec hook for elwise kernels
+        if cl.array.ARRAY_KERNEL_EXEC_HOOK is None:
+            cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
 
     def clone(self):
         """Return a semantically equivalent but distinct version of *self*."""
+        from warnings import warn
+        warn("Cloned PyOpenCLProfilingArrayContexts can not "
+             "profile elementwise PyOpenCL kernels.")
         return type(self)(self.queue, self.allocator, self.logmgr)
 
     def __del__(self):
@@ -112,8 +124,6 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         del self.profile_events[:]
         self.profile_results.clear()
         self.kernel_stats.clear()
-
-        cl.array.ARRAY_KERNEL_EXEC_HOOK = None
 
     def array_kernel_exec_hook(self, knl, queue, gs, ls, *actual_args, wait_for):
         """Extract data from the elementwise array kernel."""
@@ -363,17 +373,30 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             return args_tuple
 
-    def call_loopy(self, program, **kwargs) -> dict:
+    def call_loopy(self, t_unit, **kwargs) -> dict:
         """Execute the loopy kernel and profile it."""
-        program = self.transform_loopy_program(program)
-        assert program.default_entrypoint.options.return_dict
-        assert program.default_entrypoint.options.no_numpy
+        try:
+            t_unit = self._loopy_transform_cache[t_unit]
+        except KeyError:
+            orig_t_unit = t_unit
+            t_unit = self.transform_loopy_program(t_unit)
+            self._loopy_transform_cache[orig_t_unit] = t_unit
+            del orig_t_unit
 
-        evt, result = program(self.queue, **kwargs, allocator=self.allocator)
+        evt, result = t_unit(self.queue, **kwargs, allocator=self.allocator)
+
+        if self._wait_event_queue_length is not False:
+            prg_name = t_unit.default_entrypoint.name
+            wait_event_queue = self._kernel_name_to_wait_event_queue.setdefault(
+                prg_name, [])
+
+            wait_event_queue.append(evt)
+            if len(wait_event_queue) > self._wait_event_queue_length:
+                wait_event_queue.pop(0).wait()
 
         # Generate the stats here so we don't need to carry around the kwargs
-        args_tuple = self._cache_kernel_stats(program, kwargs)
+        args_tuple = self._cache_kernel_stats(t_unit, kwargs)
 
-        self.profile_events.append(ProfileEvent(evt, program, args_tuple))
+        self.profile_events.append(ProfileEvent(evt, t_unit, args_tuple))
 
         return result
