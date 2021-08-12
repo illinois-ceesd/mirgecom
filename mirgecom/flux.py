@@ -3,10 +3,9 @@
 Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: lfr_flux
 .. autofunction:: central_scalar_flux
 .. autofunction:: central_vector_flux
-
+.. autofunction:: lfr_flux
 """
 
 __copyright__ = """
