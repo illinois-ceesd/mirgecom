@@ -72,7 +72,7 @@ def central_scalar_flux(trace_pair, normal):
         return tp_avg*normal
     elif isinstance(tp_avg, ConservedVars):
         tp_join = tp_avg.join()
-    elif isinstance(tp_avg, np.ndarray):
+    elif not isinstance(tp_avg, np.ndarray):
         tp_join = tp_avg
 
     ncomp = len(tp_join)

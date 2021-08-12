@@ -265,7 +265,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         graderr_e *= relerr_scale_e
         graderr_p *= relerr_scale_p
         assert graderr_e < 5e-7
-        assert graderr_p < 1e-10
+        assert graderr_p < 5e-11
 
         zeros = discr.zeros(actx)
         ones = zeros + 1
