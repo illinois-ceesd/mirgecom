@@ -34,6 +34,7 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
+from mirgecom.flux import central_scalar_flux
 from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair
@@ -81,15 +82,14 @@ def _coord_test_func(actx=None, x_vec=None, order=1, fac=1.0, grad=False):
         return 0
 
     dim = len(x_vec)
-    ones = 0*x_vec[0] + 1.0
     if grad:
-        ret_ary = fac*order*make_obj_array([ones for _ in range(dim)])
+        ret_ary = fac*order*make_obj_array([0*x_vec[0]+1.0 for _ in range(dim)])
         for i in range(dim):
             for j in range(dim):
-                termpow = (order - 1) if j == i else order
+                termpow = (order - 1) if order and j == i else order
                 ret_ary[i] = ret_ary[i] * (x_vec[j]**termpow)
     else:
-        ret_ary = ones*fac
+        ret_ary = fac*(0*x_vec[0]+1.0)
         for i in range(dim):
             ret_ary = ret_ary * (x_vec[i]**order)
 
@@ -116,9 +116,8 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
     if x_vec is None:
         return 0
     dim = len(x_vec)
-    ones = 0*x_vec[0] + 1.0
     if grad:
-        ret_ary = make_obj_array([ones for _ in range(dim)])
+        ret_ary = make_obj_array([0*x_vec[0] + 1.0 for _ in range(dim)])
         for i in range(dim):  # component & derivative for ith dir
             for j in range(dim):  # form term for jth dir in ith component
                 if j == i:  # then this is a derivative term
@@ -141,6 +140,25 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
     return ret_ary
 
 
+def grad_flux_interior(actx, discr, int_tpair):
+    """Compute a central flux for interior faces."""
+    normal = thaw(actx, discr.normal(int_tpair.dd))
+    flux_weak = central_scalar_flux(int_tpair, normal)
+    return discr.project(int_tpair.dd, "all_faces", flux_weak)
+
+
+def grad_flux_boundary(actx, discr, soln_func, btag):
+    """Compute a central flux for boundary faces."""
+    boundary_discr = discr.discr_from_dd(btag)
+    bnd_nodes = thaw(actx, boundary_discr.nodes())
+    soln_bnd = soln_func(actx=actx, x_vec=bnd_nodes)
+    bnd_nhat = thaw(actx, discr.normal(btag))
+    from grudge.trace_pair import TracePair
+    bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
+    flux_weak = central_scalar_flux(bnd_tpair, bnd_nhat)
+    return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
+
+
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("test_func", [partial(_coord_test_func, order=0),
@@ -152,29 +170,13 @@ def test_grad_operator(actx_factory, dim, order, test_func):
     """Test the gradient operator for sanity."""
     actx = actx_factory()
 
-    from mirgecom.flux import central_scalar_flux
-
-    def grad_flux_interior(int_tpair):
-        normal = thaw(actx, discr.normal(int_tpair.dd))
-        flux_weak = central_scalar_flux(int_tpair, normal)
-        return discr.project(int_tpair.dd, "all_faces", flux_weak)
-
-    def grad_flux_boundary(btag):
-        boundary_discr = discr.discr_from_dd(btag)
-        bnd_nodes = thaw(actx, boundary_discr.nodes())
-        soln_bnd = test_func(actx, x_vec=bnd_nodes)
-        bnd_nhat = thaw(actx, discr.normal(btag))
-        from grudge.trace_pair import TracePair
-        bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
-        flux_weak = central_scalar_flux(bnd_tpair, bnd_nhat)
-        return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
-
+    tol = 1e-10 if dim < 3 else 1e-9
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
 
     for nfac in [1, 2, 4]:
 
-        npts_axis = (nfac*7,)*dim
+        npts_axis = (nfac*4,)*dim
         box_ll = (0,)*dim
         box_ur = (1,)*dim
         mesh = _get_box_mesh(dim, a=box_ll, b=box_ur, n=npts_axis)
@@ -185,6 +187,9 @@ def test_grad_operator(actx_factory, dim, order, test_func):
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
+        int_flux = partial(grad_flux_interior, actx, discr)
+        bnd_flux = partial(grad_flux_boundary, actx, discr, test_func)
+
         test_data = test_func(actx=actx, x_vec=nodes)
         exact_grad = test_func(actx=actx, x_vec=nodes, grad=True)
         err_scale = discr.norm(exact_grad, np.inf)
@@ -196,24 +201,17 @@ def test_grad_operator(actx_factory, dim, order, test_func):
 
         test_data_int_tpair = interior_trace_pair(discr, test_data)
         boundaries = [BTAG_ALL]
-        test_data_flux_bnd = _elbnd_flux(discr, grad_flux_interior,
-                                         grad_flux_boundary, test_data_int_tpair,
-                                         boundaries)
-        # print(f"{test_data_flux_bnd=}")
+        test_data_flux_bnd = _elbnd_flux(discr, int_flux, bnd_flux,
+                                         test_data_int_tpair, boundaries)
 
         from mirgecom.operators import grad_operator
         test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
 
-        from grudge.op import local_grad
-        local_grad = local_grad(discr, test_data)
-
         print(f"{test_grad=}")
-        # print(f"{local_grad=}")
         grad_err = discr.norm(test_grad - exact_grad, np.inf)/err_scale
         eoc.add_data_point(1.0 / nfac, grad_err)
-        # assert grad_err < 1e-8
 
     assert (
         eoc.order_estimate() >= order - 0.5
-        or eoc.max_error() < 1e-10
+        or eoc.max_error() < tol
     )
