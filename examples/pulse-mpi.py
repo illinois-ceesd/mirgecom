@@ -167,13 +167,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr.add_quantity(PushLogQuantity(name="cfl", value=current_cfl))
 
         logmgr.add_watches([
-            ("step.max", "\nstep = {value},\n"),
+            ("step.max", "\nstep = {value}, "),
+            ("dt.max", "dt = {value}, "),
+            ("cfl.max", "CFL number: {value:6g} {unit}\n"),
             ("t_sim.max", "        sim time: {value:1.6e} s\n"),
             ("min_pressure", "        P (min, max) (Pa) = ({value:1.9e}, "),
             ("max_pressure",    "{value:1.9e})\n"),
             ("t_step.max", "        step walltime: {value:6g} s\n"),
-            ("t_log.max", "        log walltime: {value:6g} s\n"),
-            ("cfl.max", "        CFL number: {value:6g} {unit}")
+            ("t_log.max", "        log walltime: {value:6g} s")
         ])
 
     eos = IdealSingleGas()
