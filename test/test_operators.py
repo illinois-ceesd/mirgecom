@@ -35,6 +35,10 @@ from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
 from mirgecom.flux import central_scalar_flux
+from mirgecom.fluid import (
+    ConservedVars,
+    make_conserved
+)
 from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair
@@ -140,14 +144,55 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
     return ret_ary
 
 
-def grad_flux_interior(actx, discr, int_tpair):
+def _cv_test_func(actx, x_vec, grad=False):
+    """Make a CV array container for testing.
+
+    There is no need for this CV to be physical, we are just testing whether the
+    operator machinery still gets the right answers when operating on a CV array
+    container.
+
+    Testing CV
+    ----------
+    mass = constant
+    energy = _trig_test_func
+    momentum = <_coord_test_func(order=2, fac=dim_index+1)>
+
+    Testing CV Gradient
+    -------------------
+    mass = <0>
+    energy = <_trig_test_func(grad=True)>
+    momentum = <_coord_test_func(grad=True)>
+    """
+    zeros = 0*x_vec[0]
+    dim = len(x_vec)
+    momentum = make_obj_array([zeros+1.0 for _ in range(dim)])
+    if grad:
+        dm = make_obj_array([zeros+0.0 for _ in range(dim)])
+        de = _trig_test_func(actx, x_vec, grad=True)
+        dp = make_obj_array([np.empty(0) for _ in range(dim)])
+        dy = (
+            momentum * make_obj_array([np.empty(0) for _ in range(0)]).reshape(-1, 1)
+        )
+        for i in range(dim):
+            dp[i] = _coord_test_func(actx, x_vec, order=2, fac=(i+1), grad=True)
+        return make_conserved(dim=dim, mass=dm, energy=de, momentum=np.stack(dp),
+                              species_mass=dy)
+    else:
+        mass = zeros + 1.0
+        energy = _trig_test_func(actx, x_vec)
+        for i in range(dim):
+            momentum[i] = _coord_test_func(actx, x_vec, order=2, fac=(i+1))
+        return make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum)
+
+
+def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
     normal = thaw(actx, discr.normal(int_tpair.dd))
     flux_weak = central_scalar_flux(int_tpair, normal)
     return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
 
-def grad_flux_boundary(actx, discr, soln_func, btag):
+def central_flux_boundary(actx, discr, soln_func, btag):
     """Compute a central flux for boundary faces."""
     boundary_discr = discr.discr_from_dd(btag)
     bnd_nodes = thaw(actx, boundary_discr.nodes())
@@ -165,9 +210,19 @@ def grad_flux_boundary(actx, discr, soln_func, btag):
                                        partial(_coord_test_func, order=1),
                                        partial(_coord_test_func, order=1, fac=2),
                                        partial(_coord_test_func, order=2),
-                                       _trig_test_func])
+                                       _trig_test_func,
+                                       _cv_test_func])
 def test_grad_operator(actx_factory, dim, order, test_func):
-    """Test the gradient operator for sanity."""
+    """Test the gradient operator for sanity.
+
+    Check whether we get the right answers for gradients of analytic functions with
+    some simple input fields and states:
+    - constant
+    - multilinear funcs
+    - quadratic funcs
+    - trig funcs
+    - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
+    """
     actx = actx_factory()
 
     tol = 1e-10 if dim < 3 else 1e-9
@@ -187,12 +242,16 @@ def test_grad_operator(actx_factory, dim, order, test_func):
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
-        int_flux = partial(grad_flux_interior, actx, discr)
-        bnd_flux = partial(grad_flux_boundary, actx, discr, test_func)
+        int_flux = partial(central_flux_interior, actx, discr)
+        bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
 
         test_data = test_func(actx=actx, x_vec=nodes)
         exact_grad = test_func(actx=actx, x_vec=nodes, grad=True)
-        err_scale = discr.norm(exact_grad, np.inf)
+
+        if isinstance(test_data, ConservedVars):
+            err_scale = discr.norm(exact_grad.join(), np.inf)
+        else:
+            err_scale = discr.norm(exact_grad, np.inf)
         if err_scale <= 1e-16:
             err_scale = 1
 
@@ -205,10 +264,17 @@ def test_grad_operator(actx_factory, dim, order, test_func):
                                          test_data_int_tpair, boundaries)
 
         from mirgecom.operators import grad_operator
-        test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
+        if isinstance(test_data, ConservedVars):
+            test_grad = make_conserved(
+                dim=dim, q=grad_operator(discr, test_data.join(),
+                                         test_data_flux_bnd.join())
+                )
+            grad_err = discr.norm((test_grad - exact_grad).join(), np.inf)/err_scale
+        else:
+            test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
+            grad_err = discr.norm(test_grad - exact_grad, np.inf)/err_scale
 
         print(f"{test_grad=}")
-        grad_err = discr.norm(test_grad - exact_grad, np.inf)/err_scale
         eoc.add_data_point(1.0 / nfac, grad_err)
 
     assert (
