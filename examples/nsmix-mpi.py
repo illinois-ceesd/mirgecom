@@ -303,14 +303,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_density=}, {eq_mass_fractions=}")
 
     def my_write_status(step, t, dt, state):
+        if constant_cfl:
+            cfl = current_cfl
+        else:
+            from mirgecom.viscous import get_viscous_cfl
+            cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
+            from grudge.op import nodal_max
+            cfl = nodal_max(discr, "vol", cfl_field)
         if rank == 0:
-            if constant_cfl:
-                cfl = current_cfl
-            else:
-                from mirgecom.viscous import get_viscous_cfl
-                cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
-                from grudge.op import nodal_max
-                cfl = nodal_max(discr, "vol", cfl_field)
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
 
     def my_write_viz(step, t, state, dv=None, production_rates=None):
