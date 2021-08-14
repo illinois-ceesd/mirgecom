@@ -429,6 +429,50 @@ def test_lazy_op_projection(ctx_factory, order):
     assert is_close, f"{lhs} not <= {rhs}"
 
 
+SRC = """
+#define lid(N) ((int) get_local_id(N))
+#define gid(N) ((int) get_group_id(N))
+
+__kernel void __attribute__ ((reqd_work_group_size(1, 1, 1))) _pt_kernel(__global long const *__restrict__ _actx_dw, __global long const *__restrict__ _actx_dw_0, __global long *__restrict__ _pt_out, __global long *__restrict__ _pt_temp)
+{
+  /* no-op (insn=comp__start) */
+  for (int comp_iel_init_5 = 0; comp_iel_init_5 <= 3; ++comp_iel_init_5)
+    _pt_temp[comp_iel_init_5] = -1;
+}
+
+__kernel void __attribute__ ((reqd_work_group_size(1, 1, 1))) _pt_kernel_0(__global long const *__restrict__ _actx_dw, __global long const *__restrict__ _actx_dw_0, __global long *__restrict__ _pt_out, __global long *__restrict__ _pt_temp)
+{
+  for (int comp_iel_5 = 0; comp_iel_5 <= 3; ++comp_iel_5)
+    _pt_temp[_actx_dw_0[comp_iel_5]] = _actx_dw[comp_iel_5];
+  /* no-op (insn=call_compose_index_maps) */
+  for (int _pt_out_dim0 = 0; _pt_out_dim0 <= 3; ++_pt_out_dim0)
+    _pt_out[_pt_out_dim0] = _pt_temp[_pt_out_dim0];
+}
+"""
+
+
+def test_compose_index_maps_kernel():
+    import pyopencl.array as cl_array
+
+    dw = np.arange(4, dtype=np.int64)*8
+    dw_0 = np.arange(4, dtype=np.int64)
+
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+
+    dw_dev = cl_array.to_device(queue, dw)
+    dw_0_dev = cl_array.to_device(queue, dw_0)
+    temp_dev = cl_array.empty_like(dw_dev)
+    out_dev = cl_array.empty_like(dw_dev)
+
+    prg = cl.Program(ctx, SRC).build()
+
+    prg._pt_kernel(queue, (1,), (1,), dw_dev.data, dw_0_dev.data, out_dev.data, temp_dev.data)
+    prg._pt_kernel_0(queue, (1,), (1,), dw_dev.data, dw_0_dev.data, out_dev.data, temp_dev.data)
+
+    assert (out_dev >= 0).all(), out_dev
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
