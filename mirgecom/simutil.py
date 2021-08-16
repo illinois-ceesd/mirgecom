@@ -22,7 +22,7 @@ Mesh utilities
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -44,9 +44,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
-
 import numpy as np
 import grudge.op as op
 
@@ -116,8 +114,8 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     float
         The maximum stable DT based on a viscous fluid.
     """
-    mydt = dt
     t_remaining = max(0, t_final - t)
+    mydt = dt
     if constant_cfl:
         from mirgecom.viscous import get_viscous_timestep
         from grudge.op import nodal_min
