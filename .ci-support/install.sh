@@ -17,6 +17,7 @@ bash "$MINIFORGE_INSTALL_SH" -b -p "$MINIFORGE_INSTALL_DIR"
 PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update conda --yes --quiet
 PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes --quiet
 PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file conda-env.yml --name testing --quiet
+PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda list
 
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
