@@ -8,7 +8,6 @@ pytest-pudb
 pyprof2calltree
 pyinstrument
 pylint
-pyyaml
 pydocstyle
 pep8
 flake8-docstrings
