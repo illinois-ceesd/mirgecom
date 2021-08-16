@@ -313,7 +313,6 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
                          grad_t_tpair.int)
     f_ext = viscous_flux(discr, eos, cv_tpair.ext, grad_cv_tpair.ext,
                          grad_t_tpair.ext)
-
     # This bit hard-codes BR1 central flux, use mirgecom.flux.central?
     f_avg = 0.5*(f_int + f_ext)
     flux_weak = make_conserved(cv_tpair.int.dim, q=(f_avg.join() @ normal))
