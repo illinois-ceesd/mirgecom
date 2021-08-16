@@ -312,10 +312,12 @@ def test_poiseuille_rhs(actx_factory, order):
         tol_fudge = 2e-4
         assert discr.norm(rho_resid, np.inf) < tolerance
         # assert discr.norm(rhoe_resid, np.inf) < tolerance
+        mom_err = [discr.norm(mom_resid[i], np.inf) for i in range(dim)]
+        err_max = max(mom_err)
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tol_fudge
+            assert mom_err[i] < tol_fudge
 
-        err_max = discr.norm(rho_resid, np.inf)
+        # err_max = discr.norm(rho_resid, np.inf)
         eoc_rec.add_data_point(1.0 / nfac, err_max)
 
     logger.info(
@@ -324,5 +326,5 @@ def test_poiseuille_rhs(actx_factory, order):
 
     assert (
         eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < 1e-9
+        or eoc_rec.max_error() < tol_fudge
     )
