@@ -79,4 +79,4 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw -sv -k compose_index_maps test_lazy.py
+            python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw -sv -k projection test_lazy.py
