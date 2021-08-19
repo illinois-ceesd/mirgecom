@@ -98,30 +98,42 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
         return is_close
 
 
-# FIXME: Re-enable and fix up if/when standalone gradient operator exists
-# def test_lazy_op_gradient(ctx_factory):
-#     cl_ctx = ctx_factory()
-#     actx, discr = _op_test_fixture(cl_ctx)
-#
-#     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
-#     from mirgecom.diffusion import (
-#         _gradient_operator,
-#         DirichletDiffusionBoundary,
-#         NeumannDiffusionBoundary)
-#
-#     boundaries = {
-#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
-#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
-#     }
-#
-#     def op(alpha, u):
-#         return _gradient_operator(
-#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
+@pytest.mark.parametrize("order", [1, 2, 3])
+def test_lazy_op_gradient(op_test_data, order):
+    eager_actx, lazy_actx, get_discr = op_test_data
+    discr = get_discr(order)
 
-#     compiled_op = actx.compile(op)
-#     alpha = discr.zeros(actx) + 1
-#     u = discr.zeros(actx)
-#     compiled_op(alpha, u)
+    from grudge.trace_pair import interior_trace_pair
+    from mirgecom.operators import grad_operator
+
+    def get_flux(u_tpair):
+        dd = u_tpair.dd
+        dd_allfaces = dd.with_dtag("all_faces")
+        normal = thaw(discr.normal(dd), u_tpair.int.array_context)
+        flux = u_tpair.avg*normal
+        return discr.project(dd, dd_allfaces, flux)
+
+    def op(u):
+        return grad_operator(discr, u, get_flux(interior_trace_pair(discr, u)))
+
+    lazy_op = lazy_actx.compile(op)
+
+    def get_inputs(actx):
+        nodes = thaw(discr.nodes(), actx)
+        u = np.prod(make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)]))
+        return u,
+
+    tol = 1e-12
+    isclose = partial(
+        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
+
+    def lazy_to_eager(u):
+        return thaw(freeze(u, lazy_actx), eager_actx)
+
+    eager_result = op(*get_inputs(eager_actx))
+    lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
+    is_close, lhs, rhs = isclose(lazy_result, eager_result)
+    assert is_close, f"{lhs} not <= {rhs}"
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
