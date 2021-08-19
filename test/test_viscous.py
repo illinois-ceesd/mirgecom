@@ -397,12 +397,12 @@ def test_diffusive_heat_flux(actx_factory):
     """Test diffusive heat flux and values against exact."""
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -469,12 +469,12 @@ def test_diffusive_heat_flux(actx_factory):
 def test_viscous_timestep(actx_factory, dim, mu, vel):
     """Test timestep size."""
     actx = actx_factory()
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
