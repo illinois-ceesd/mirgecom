@@ -124,10 +124,10 @@ def diffusive_flux(discr, eos, cv, grad_cv):
 
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
+    if len(d) == 0:
+        return cv.momentum * cv.species_mass(-1, 1)
 
-    diffusive_flux = -cv.mass*d.reshape(-1, 1)*grad_y
-
-    return diffusive_flux
+    return -cv.mass*d.reshape(-1, 1)*grad_y
 
 
 def conductive_heat_flux(discr, eos, cv, grad_t):
@@ -198,14 +198,11 @@ def diffusive_heat_flux(discr, eos, cv, j):
     numpy.ndarray
         The total diffusive heat flux vector
     """
-    nspec = cv.nspecies
-    if nspec > 0:
-        try:
-            h_alpha = eos.get_species_enthalpies(cv)
-            return sum(h_alpha.reshape(-1, 1) * j)
-        except NotImplementedError:
-            return 0
-    return 0
+    try:
+        h_alpha = eos.get_species_enthalpies(cv)
+        return sum(h_alpha.reshape(-1, 1) * j)
+    except NotImplementedError:
+        return 0
 
 
 # TODO: We could easily make this more general (dv, grad_dv)
@@ -257,14 +254,16 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     dim = cv.dim
     viscous_mass_flux = 0 * cv.momentum
 
-    nspecies = cv.nspecies
-    if nspecies > 0:
-        j = diffusive_flux(discr, eos, cv, grad_cv)
-        heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
-    else:
-        # passes the right (empty) shape for diffusive flux when no species
-        j = cv.momentum * cv.species_mass.reshape(-1, 1)
-        heat_flux_diffusive = 0
+    #     nspecies = cv.nspecies
+    # if nspecies > 0:
+
+    j = diffusive_flux(discr, eos, cv, grad_cv)
+    heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
+
+    # else:
+    #     # passes the right (empty) shape for diffusive flux when no species
+    #     j = cv.momentum * cv.species_mass.reshape(-1, 1)
+    #     heat_flux_diffusive = 0
 
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_energy_flux = (
