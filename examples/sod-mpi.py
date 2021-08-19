@@ -162,10 +162,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
         logmgr.add_quantity(PushLogQuantity(name="cfl", value=current_cfl))
+        logmgr.add_quantity(PushLogQuantity(name="timestep", value=current_dt))
 
         logmgr.add_watches([
             ("step.max", "\nstep = {value}, "),
-            ("dt.max", "dt = {value}, "),
+            ("timestep.max", "dt = {value}, "),
             ("cfl.max", "CFL number: {value:6g} {unit}\n"),
             ("t_sim.max", "        sim time: {value:1.6e} s\n"),
             ("min_pressure", "        P (min, max) (Pa) = ({value:1.9e}, "),
@@ -213,6 +214,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if cfl is None:
             if constant_cfl:
                 cfl = current_cfl
+                from grudge.op import nodal_max
+                from mirgecom.inviscid import get_inviscid_timestep
+                updated_dt = nodal_max(
+                    discr, "vol",
+                    get_inviscid_timestep(discr, eos, cv=state)
+                )
+                logmgr.set_quantity_value("timestep", updated_dt)
             else:
                 from grudge.op import nodal_max
                 from mirgecom.inviscid import get_inviscid_cfl
