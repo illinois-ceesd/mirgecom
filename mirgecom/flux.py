@@ -74,16 +74,12 @@ def central_scalar_flux(trace_pair, normal):
     elif isinstance(tp_avg, ConservedVars):
         tp_join = tp_avg.join()
 
-    ncomp = len(tp_join)
-    if ncomp > 1:
-        result = np.empty((ncomp, len(normal)), dtype=object)
-        for i in range(ncomp):
-            result[i] = tp_join[i] * normal
-    else:
-        result = tp_join*normal
+    result = np.outer(tp_join, normal)
+    
     if isinstance(tp_avg, ConservedVars):
         return make_conserved(tp_avg.dim, q=result)
-    return result
+    else:
+        return result
 
 
 def lfr_flux(cv_tpair, f_tpair, normal, lam):
