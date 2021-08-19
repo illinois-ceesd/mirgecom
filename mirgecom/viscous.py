@@ -125,7 +125,7 @@ def diffusive_flux(discr, eos, cv, grad_cv):
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
     if len(d) == 0:
-        return cv.momentum * cv.species_mass(-1, 1)
+        return cv.momentum * cv.species_mass.reshape(-1, 1)
 
     return -cv.mass*d.reshape(-1, 1)*grad_y
 
