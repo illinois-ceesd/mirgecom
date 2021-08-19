@@ -92,7 +92,7 @@ def viscous_stress_tensor(discr, eos, cv, grad_cv):
 def diffusive_flux(discr, eos, cv, grad_cv):
     r"""Compute the species diffusive flux vector, ($\mathbf{J}_{\alpha}$).
 
-    The species diffussive flux is defined by:
+    The species diffusive flux is defined by:
 
     .. math::
 
@@ -117,17 +117,12 @@ def diffusive_flux(discr, eos, cv, grad_cv):
     numpy.ndarray
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
-    nspecies = cv.nspecies
     transport = eos.transport_model()
 
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
 
-    # TODO: Better way?
-    obj_ary = -make_obj_array([cv.mass*d[i]*grad_y[i] for i in range(nspecies)])
-    diffusive_flux = np.empty(shape=(nspecies, discr.dim), dtype=object)
-    for idx, v in enumerate(obj_ary):
-        diffusive_flux[idx] = v
+    diffusive_flux = -cv.mass*d.reshape(-1, 1)*grad_y
 
     return diffusive_flux
 
@@ -194,13 +189,13 @@ def diffusive_heat_flux(discr, eos, cv, j):
     Returns
     -------
     numpy.ndarray
-        The total diffusive heath flux vector
+        The total diffusive heat flux vector
     """
     nspec = cv.nspecies
     if nspec > 0:
         try:
             h_alpha = eos.get_species_enthalpies(cv)
-            return sum(h_alpha[i]*j[i] for i in range(nspec))
+            return sum(h.reshape(-1, 1) * j)
         except NotImplementedError:
             return 0
     return 0
