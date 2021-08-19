@@ -38,24 +38,28 @@ from mirgecom.fluid import (
 )
 
 
-def central_scalar_flux(trace_pair, normal):
+def central_scalar_flux(u_tpair, normal):
     r"""Compute a central scalar flux.
 
-    The central scalar flux, $h$, is calculated as:
+    The central scalar flux, $h$, of a scalar quantity $u$ is calculated as:
 
     .. math::
 
-        h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
-        \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
+        h({u}^-, {u}^+; \mathbf{n}) = \frac{1}{2}
+        \left({u}^{+}+{u}^{-}\right)\hat{n}
 
-    where $\mathbf{u}^-, \mathbf{u}^+$, are the vector of independent scalar
-    components and scalar solution components on the interior and exterior of the
-    face on which the central flux is to be calculated, and $\hat{n}$ is the normal
-    vector.
+    where ${u}^-, {u}^+$, are the scalar function values on the interior
+    and exterior of the face on which the central flux is to be calculated, and
+    $\hat{n}$ is the *normal* vector.
+
+    *u_tpair* is the :class:`~grudge.trace_pair.TracePair` representing the scalar
+    quantities ${u}^-, {u}^+$. *u_tpair* may also represent a vector-quantity
+    :class:`~grudge.trace_pair.TracePair`, and in this case the central scalar flux
+    is computed on each component of the vector quantity as an independent scalar.
 
     Parameters
     ----------
-    trace_pair: `grudge.trace_pair.TracePair`
+    u_tpair: `grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
@@ -67,7 +71,7 @@ def central_scalar_flux(trace_pair, normal):
         object array of `meshmode.dof_array.DOFArray` with the central scalar flux
         for each scalar component.
     """
-    tp_avg = trace_pair.avg
+    tp_avg = u_tpair.avg
     tp_join = tp_avg
     if isinstance(tp_avg, DOFArray):
         return tp_avg*normal
