@@ -75,7 +75,7 @@ def central_scalar_flux(trace_pair, normal):
         tp_join = tp_avg.join()
 
     result = np.outer(tp_join, normal)
-    
+
     if isinstance(tp_avg, ConservedVars):
         return make_conserved(tp_avg.dim, q=result)
     else:

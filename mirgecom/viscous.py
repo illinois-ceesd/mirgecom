@@ -42,7 +42,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import make_obj_array
 from mirgecom.fluid import (
     velocity_gradient,
     species_mass_fraction_gradient,
@@ -64,6 +63,8 @@ def viscous_stress_tensor(discr, eos, cv, grad_cv):
 
     Parameters
     ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
         A gas equation of state with a non-empty
         :class:`~mirgecom.transport.TransportModel`.
@@ -104,6 +105,8 @@ def diffusive_flux(discr, eos, cv, grad_cv):
 
     Parameters
     ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
         A gas equation of state with a non-empty
         :class:`~mirgecom.transport.TransportModel`
@@ -140,6 +143,8 @@ def conductive_heat_flux(discr, eos, cv, grad_t):
 
     Parameters
     ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
         A gas equation of state with a non-empty
         :class:`~mirgecom.transport.TransportModel`
@@ -178,6 +183,8 @@ def diffusive_heat_flux(discr, eos, cv, j):
 
     Parameters
     ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
     eos: mirgecom.eos.GasEOS
         A gas equation of state with a non-empty
         :class:`~mirgecom.transport.TransportModel`
@@ -195,7 +202,7 @@ def diffusive_heat_flux(discr, eos, cv, j):
     if nspec > 0:
         try:
             h_alpha = eos.get_species_enthalpies(cv)
-            return sum(h.reshape(-1, 1) * j)
+            return sum(h_alpha.reshape(-1, 1) * j)
         except NotImplementedError:
             return 0
     return 0
@@ -227,9 +234,10 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
 
     Parameters
     ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
-        A gas equation of state with a non-empty
-        :class:`~mirgecom.transport.TransportModel`
+        A gas equation of state
     cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid state
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
@@ -277,9 +285,10 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
 
     Parameters
     ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+        A gas equation of state
     cv_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the fluid solution
         on the faces
@@ -325,7 +334,7 @@ def get_viscous_timestep(discr, eos, cv):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
-        An equation of state implementing the speed_of_sound method
+        A gas equation of state
     cv: :class:`~mirgecom.fluid.ConservedVars`
         Fluid solution
 
@@ -357,8 +366,7 @@ def get_viscous_cfl(discr, eos, dt, cv):
     discr: :class:`grudge.eager.EagerDGDiscretization`
         the discretization to use
     eos: :class:`~mirgecom.eos.GasEOS`
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+        A gas equation of state
     dt: float or :class:`~meshmode.dof_array.DOFArray`
         A constant scalar dt or node-local dt
     cv: :class:`~mirgecom.fluid.ConservedVars`
