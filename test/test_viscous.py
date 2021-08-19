@@ -326,7 +326,7 @@ def test_species_diffusive_flux(actx_factory):
     """Test species diffusive flux and values against exact."""
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
