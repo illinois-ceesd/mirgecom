@@ -199,7 +199,7 @@ def diffusive_heat_flux(discr, eos, cv, j):
         The total diffusive heat flux vector
     """
     try:
-        h_alpha = eos.get_species_enthalpies(cv)
+        h_alpha = eos.species_enthalpies(cv)
         return sum(h_alpha.reshape(-1, 1) * j)
     except NotImplementedError:
         return 0
