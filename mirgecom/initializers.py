@@ -877,7 +877,7 @@ class PlanarPoiseuille:
     Here, $P'$ is the constant slope of the linear pressure gradient from the inlet
     to the outlet and is calculated as:
     $$
-    P' = \frac{(P_{\text{hi}}-P_{\text{low}})}{\text{length}}
+    P' = \frac{(P_{\text{low}}-P_{\text{hi}})}{\text{length}}
     $$
     $v_x$, and $v_y$ are respectively the x and y components of the velocity,
     $\mathbf{v}$, and $\rho_0$ is the supplied constant density of the fluid.
