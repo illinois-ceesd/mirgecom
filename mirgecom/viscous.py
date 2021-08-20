@@ -48,6 +48,7 @@ from mirgecom.fluid import (
     make_conserved
 )
 from meshmode.dof_array import thaw
+from mirgecom.eos import MixtureEOS
 
 
 def viscous_stress_tensor(discr, eos, cv, grad_cv):
@@ -124,9 +125,6 @@ def diffusive_flux(discr, eos, cv, grad_cv):
 
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
-    if len(d) == 0:
-        return cv.momentum * cv.species_mass.reshape(-1, 1)
-
     return -cv.mass*d.reshape(-1, 1)*grad_y
 
 
@@ -198,11 +196,10 @@ def diffusive_heat_flux(discr, eos, cv, j):
     numpy.ndarray
         The total diffusive heat flux vector
     """
-    try:
+    if isinstance(eos, MixtureEOS):
         h_alpha = eos.get_species_enthalpies(cv)
         return sum(h_alpha.reshape(-1, 1) * j)
-    except NotImplementedError:
-        return 0
+    return 0
 
 
 # TODO: We could easily make this more general (dv, grad_dv)
