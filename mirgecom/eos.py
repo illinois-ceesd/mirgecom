@@ -152,7 +152,7 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_density
     .. automethod:: get_species_molecular_weights
     .. automethod:: get_production_rates
-    .. automethod:: get_species_enthalpies
+    .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
     """
 
@@ -164,7 +164,7 @@ class MixtureEOS(GasEOS):
         """Get the species molecular weights."""
         raise NotImplementedError()
 
-    def get_species_enthalpies(self, cv: ConservedVars):
+    def species_enthalpies(self, cv: ConservedVars):
         """Get the species specific enthalpies."""
         raise NotImplementedError()
 
