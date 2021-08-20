@@ -244,8 +244,9 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
 
     Returns
     -------
-    :class:`~mirgecom.fluid.ConservedVars`
-        The viscous transport flux vector
+    :class:`~mirgecom.fluid.ConservedVars` or float
+        The viscous transport flux vector if viscous transport properties
+        are provided, scalar zero otherwise.
     """
     transport = eos.transport_model()
     if transport is None:
