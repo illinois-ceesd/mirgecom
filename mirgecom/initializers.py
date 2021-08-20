@@ -877,7 +877,7 @@ class PlanarPoiseuille:
     Here, $P'$ is the constant slope of the linear pressure gradient from the inlet
     to the outlet and is calculated as:
     $$
-    P' = \frac{(P_{\text{hi}}-P_{\text{low}})}{\text{length}}
+    P' = \frac{(P_{\text{low}}-P_{\text{hi}})}{\text{length}}
     $$
     $v_x$, and $v_y$ are respectively the x and y components of the velocity,
     $\mathbf{v}$, and $\rho_0$ is the supplied constant density of the fluid.
@@ -904,7 +904,7 @@ class PlanarPoiseuille:
         """
         self.length = length
         self.height = height
-        self.dpdx = (p_hi - p_low)/length
+        self.dpdx = (p_low - p_hi)/length
         self.rho = density
         self.mu = mu
         self.p_hi = p_hi
@@ -929,14 +929,14 @@ class PlanarPoiseuille:
         """
         x = x_vec[0]
         y = x_vec[1]
-        p_x = self.p_hi - self.dpdx*x
+        p_x = self.p_hi + self.dpdx*x
 
         if cv is not None:
             mass = cv.mass
             velocity = cv.velocity
         else:
             mass = self.rho*x/x
-            u_x = self.dpdx*y*(self.height - y)/(2*self.mu)
+            u_x = -self.dpdx*y*(self.height - y)/(2*self.mu)
             velocity = make_obj_array([u_x, 0*x])
 
         ke = .5*np.dot(velocity, velocity)*mass
@@ -951,9 +951,9 @@ class PlanarPoiseuille:
         ones = x / x
         mass = cv_exact.mass
         velocity = cv_exact.velocity
-        dvxdy = self.dpdx*(self.height-2*y)/(2*self.mu)
+        dvxdy = -self.dpdx*(self.height-2*y)/(2*self.mu)
         dvdy = make_obj_array([dvxdy, 0*x])
-        dedx = -self.dpdx/(eos.gamma(cv_exact)-1)*ones
+        dedx = self.dpdx/(eos.gamma(cv_exact)-1)*ones
         dedy = mass*np.dot(velocity, dvdy)
         dmass = make_obj_array([0*x, 0*x])
         denergy = make_obj_array([dedx, dedy])

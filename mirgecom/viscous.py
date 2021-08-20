@@ -216,8 +216,8 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
         \tau,-\mathbf{J}_\alpha],
 
     with fluid velocity ($\mathbf{v}$), viscous stress tensor
-    ($\mathbf{\tau}$), and diffusive flux for each species
-    ($\mathbf{J}_\alpha$).
+    ($\mathbf{\tau}$), heat flux (\mathbf{q}), and diffusive flux
+    for each species ($\mathbf{J}_\alpha$).
 
     .. note::
 
@@ -257,11 +257,6 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
 
     j = diffusive_flux(discr, eos, cv, grad_cv)
     heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
-
-    # else:
-    #     # passes the right (empty) shape for diffusive flux when no species
-    #     j = cv.momentum * cv.species_mass.reshape(-1, 1)
-    #     heat_flux_diffusive = 0
 
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_energy_flux = (

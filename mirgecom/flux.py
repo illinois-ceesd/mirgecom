@@ -41,16 +41,16 @@ from mirgecom.fluid import (
 def central_scalar_flux(u_tpair, normal):
     r"""Compute a central scalar flux.
 
-    The central scalar flux, $h$, of a scalar quantity $u$ is calculated as:
+    The central scalar flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
 
     .. math::
 
-        h({u}^-, {u}^+; \mathbf{n}) = \frac{1}{2}
-        \left({u}^{+}+{u}^{-}\right)\hat{n}
+        \mathbf{h}({u}^-, {u}^+; \mathbf{n}) = \frac{1}{2}
+        \left({u}^{+}+{u}^{-}\right)\mathbf{\hat{n}}
 
     where ${u}^-, {u}^+$, are the scalar function values on the interior
     and exterior of the face on which the central flux is to be calculated, and
-    $\hat{n}$ is the *normal* vector.
+    $\mathbf{\hat{n}}$ is the *normal* vector.
 
     *u_tpair* is the :class:`~grudge.trace_pair.TracePair` representing the scalar
     quantities ${u}^-, {u}^+$. *u_tpair* may also represent a vector-quantity

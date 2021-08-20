@@ -80,7 +80,7 @@ class GasEOS:
     .. automethod:: gamma
     .. automethod:: transport_model
     .. automethod:: get_internal_energy
-    .. automethod:: get_species_enthalpies
+    .. automethod:: species_enthalpies
     """
 
     def pressure(self, cv: ConservedVars):
@@ -131,7 +131,7 @@ class GasEOS:
         """Get the fluid internal energy from temperature and mass."""
         raise NotImplementedError()
 
-    def get_species_enthalpies(self, cv: ConservedVars):
+    def species_enthalpies(self, cv: ConservedVars):
         """Get specific enthalpies for each mixture species."""
         raise NotImplementedError()
 
@@ -450,7 +450,7 @@ class PyrometheusMixture(MixtureEOS):
     .. automethod:: get_density
     .. automethod:: get_species_molecular_weights
     .. automethod:: get_production_rates
-    .. automethod:: get_species_enthalpies
+    .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
     """
 
@@ -644,7 +644,7 @@ class PyrometheusMixture(MixtureEOS):
         """Get the species molecular weights."""
         return self._pyrometheus_mech.wts
 
-    def get_species_enthalpies(self, cv: ConservedVars):
+    def species_enthalpies(self, cv: ConservedVars):
         """Get the species specific enthalpies."""
         return self._pyrometheus_mech.get_species_enthalpies_rt(self.temperature(cv))
 
