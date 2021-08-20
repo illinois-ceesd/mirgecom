@@ -3,8 +3,8 @@
 Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: central_scalar_flux
-.. autofunction:: lfr_flux
+.. autofunction:: gradient_flux_central
+.. autofunction:: divergence_flux_lfr
 """
 
 __copyright__ = """
@@ -38,8 +38,8 @@ from mirgecom.fluid import (
 )
 
 
-def central_scalar_flux(u_tpair, normal):
-    r"""Compute a central scalar flux.
+def gradient_flux_central(u_tpair, normal):
+    r"""Compute a central scalar flux for the gradient operator.
 
     The central scalar flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
 
@@ -86,7 +86,7 @@ def central_scalar_flux(u_tpair, normal):
         return result
 
 
-def lfr_flux(cv_tpair, f_tpair, normal, lam):
+def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
