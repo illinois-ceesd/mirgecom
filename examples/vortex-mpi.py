@@ -165,24 +165,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                              extract_vars_for_logging, units_for_logging)
 
         logmgr.add_quantity(PushLogQuantity(name="cfl", value=current_cfl))
+        logmgr.add_quantity(PushLogQuantity(name="timestep", value=current_dt))
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
         logmgr.add_watches([
-            ("step.max", "\nstep = {value},\n"),
+            ("step.max", "\nstep = {value}, "),
+            ("timestep.max", "dt = {value}, "),
+            ("cfl.max", "CFL number: {value:6g} {unit}\n"),
             ("t_sim.max", "        sim time: {value:1.6e} s\n"),
             ("min_pressure", "        P (min, max) (Pa) = ({value:1.9e}, "),
             ("max_pressure",    "{value:1.9e})\n"),
             ("t_step.max", "        step walltime: {value:6g} s\n"),
-            ("t_log.max", "        log walltime: {value:6g} s\n"),
-            ("cfl.max", "        CFL number: {value:6g} {unit}\n")
+            ("t_log.max", "        log walltime: {value:6g} s")
         ])
 
         try:
             logmgr.add_watches([
                 ("memory_usage_python.max",
-                 "        memory_usage_gpu: {value:g} {unit}")
-            ])
+                "        memory_usage_gpu: {value:g} {unit}")
+                ])
         except KeyError:
             pass
 
@@ -228,13 +230,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if cfl is None:
             if constant_cfl:
                 cfl = current_cfl
+                from grudge.op import nodal_max
+                from mirgecom.inviscid import get_inviscid_timestep
+                updated_dt = nodal_max(
+                    discr, "vol",
+                    get_inviscid_timestep(discr, eos, cv=state)
+                )
+                logmgr.set_quantity_value("timestep", updated_dt)
             else:
                 from grudge.op import nodal_max
                 from mirgecom.inviscid import get_inviscid_cfl
                 cfl = nodal_max(discr, "vol",
                                 get_inviscid_cfl(discr, eos, current_dt, cv=state))
-
-        logmgr.set_quantity_value("cfl", cfl)
+                logmgr.set_quantity_value("cfl", cfl)
 
         if rank == 0:
             logger.info(
