@@ -863,17 +863,20 @@ class PlanarPoiseuille:
     .. image:: ../figures/poiseuille.png
 
     The exact Poiseuille solution is defined by the following:
-    $P(x) = P_{\text{hi}} + P'x$
-    $v_y = 0$
-    $v_x = \frac{-P'}{2\mu}y(h-y)$
-    $\rho = \rho_0$
-    $\rho{E} = \frac{P(x)}{(\gamma-1)} + \frac{\rho}{2}(\mathbf{v}\cdot\mathbf{v})$
+    $$
+    P(x) &= P_{\text{hi}} + P'x\\
+    v_x &= \frac{-P'}{2\mu}y(h-y), v_y = 0\\
+    \rho &= \rho_0\\
+    \rho{E} &= \frac{P(x)}{(\gamma-1)} + \frac{\rho}{2}(\mathbf{v}\cdot\mathbf{v})
+    $$
 
     Here, $P'$ is the constant slope of the linear pressure gradient from the inlet
     to the outlet and is calculated as:
-    $P' = \frac{(P_{\text{hi}}-P_{\text{low}})}{\text{length}}$
+    $$
+    P' = \frac{(P_{\text{hi}}-P_{\text{low}})}{\text{length}}
+    $$
     $v_x$, and $v_y$ are respectively the x and y components of the velocity,
-    $\mathbf{v}$, and $rho_0$ is the supplied constant density of the fluid.
+    $\mathbf{v}$, and $\rho_0$ is the supplied constant density of the fluid.
     """
 
     def __init__(self, p_hi=100100., p_low=100000., mu=1.0, height=.02, length=.1,
