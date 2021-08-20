@@ -858,9 +858,13 @@ class PlanarPoiseuille:
 
     The planar Poiseuille case is defined as a viscous flow between two
     stationary parallel sides with a uniform pressure drop prescribed
-    as *p_hi* at the inlet and *p_low* at the outlet. See the following image:
+    as *p_hi* at the inlet and *p_low* at the outlet. See the figure below:
 
-    .. image:: ../figures/poiseuille.png
+    .. figure:: ../figures/poiseuille.png
+        :scale: 50 %
+        :alt: Poiseuille domain illustration
+
+        Illustration of the Poiseuille case setup
 
     The exact Poiseuille solution is defined by the following:
     $$
