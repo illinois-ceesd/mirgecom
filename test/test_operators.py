@@ -241,6 +241,10 @@ def test_grad_operator(actx_factory, dim, order, test_func):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
+        # compute max element size
+        from grudge.dt_utils import h_max_from_volume
+        h_max = h_max_from_volume(discr)
+
         nodes = thaw(actx, discr.nodes())
         int_flux = partial(central_flux_interior, actx, discr)
         bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
@@ -275,7 +279,7 @@ def test_grad_operator(actx_factory, dim, order, test_func):
             grad_err = discr.norm(test_grad - exact_grad, np.inf)/err_scale
 
         print(f"{test_grad=}")
-        eoc.add_data_point(1.0 / nfac, grad_err)
+        eoc.add_data_point(h_max, grad_err)
 
     assert (
         eoc.order_estimate() >= order - 0.5

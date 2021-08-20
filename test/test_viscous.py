@@ -147,47 +147,12 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     p_low = base_pressure
     p_hi = pressure_ratio*base_pressure
     dpdx = (p_hi - p_low) / xlen
-    h = ytop - ybottom
     rho = 1.0
 
     eos = IdealSingleGas(transport_model=transport_model)
-    gamma = eos.gamma()
+
     from mirgecom.initializers import PlanarPoiseuille
     initializer = PlanarPoiseuille(density=rho, mu=mu)
-
-    def _poiseuille_2d(x_vec, eos):
-        y = x_vec[1]
-        x = x_vec[0]
-        ones = x / x
-        u_x = dpdx*y*(h - y)/(2*mu)
-        p_x = p_hi - dpdx*x
-        mass = rho*ones
-        u_y = 0*x
-        velocity = make_obj_array([u_x, u_y])
-        ke = .5*np.dot(velocity, velocity)*mass
-        rho_e = p_x/(gamma-1) + ke
-        return make_conserved(2, mass=mass, energy=rho_e,
-                              momentum=mass*velocity)
-
-    def _exact_grad(x_vec, eos, cv_exact):
-        y = x_vec[1]
-        x = x_vec[0]
-        ones = x / x
-        mass = cv_exact.mass
-        velocity = cv_exact.velocity
-        dvxdy = dpdx*(h-2*y)/(2*mu)
-        dvdy = make_obj_array([dvxdy, 0*x])
-        dedx = -dpdx/(gamma-1)*ones
-        dedy = mass*np.dot(velocity, dvdy)
-        dmass = make_obj_array([0*x, 0*x])
-        denergy = make_obj_array([dedx, dedy])
-        dvx = make_obj_array([0*x, dvxdy])
-        dvy = make_obj_array([0*x, 0*x])
-        dv = np.stack((dvx, dvy))
-        dmom = mass*dv
-        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
-        return make_conserved(2, mass=dmass, energy=denergy,
-                              momentum=dmom, species_mass=species_mass)
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                     int_tpair, boundaries):
@@ -225,13 +190,12 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
 
+        # compute max element size
+        from grudge.dt_utils import h_max_from_volume
+        h_max = h_max_from_volume(discr)
+
         # form exact cv
         cv = initializer(x_vec=nodes, eos=eos)
-        cv2 = _poiseuille_2d(x_vec=nodes, eos=eos)
-        print(f"{cv=}")
-        print(f"{cv2=}")
-        cver = discr.norm((cv2 - cv).join(), np.inf)
-        print(f"{cver=}")
         cv_int_tpair = interior_trace_pair(discr, cv)
         boundaries = [BTAG_ALL]
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
@@ -240,7 +204,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
                                                       cv_flux_bnd.join()))
 
-        xp_grad_cv = _exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
+        xp_grad_cv = initializer.exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
         xp_grad_v = 1/cv.mass * xp_grad_cv.momentum
         xp_tau = mu * (xp_grad_v + xp_grad_v.transpose())
 
@@ -296,8 +260,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         )
 
         assert discr.norm(vflux.mass, np.inf) == 0
-        e_eoc_rec.add_data_point(1.0 / nfac, efluxerr)
-        p_eoc_rec.add_data_point(1.0 / nfac, momfluxerr)
+        e_eoc_rec.add_data_point(h_max, efluxerr)
+        p_eoc_rec.add_data_point(h_max, momfluxerr)
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5
