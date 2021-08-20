@@ -216,7 +216,7 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     .. math::
 
         \mathbf{F}_V = [0,\tau\cdot\mathbf{v} - \mathbf{q},
-        \tau_{:i},-\mathbf{J}_\alpha],
+        \tau,-\mathbf{J}_\alpha],
 
     with fluid velocity ($\mathbf{v}$), viscous stress tensor
     ($\mathbf{\tau}$), and diffusive flux for each species
