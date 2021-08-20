@@ -170,6 +170,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     eos = IdealSingleGas(transport_model=transport_model)
     gamma = eos.gamma()
+    from mirgecom.initializers import PlanarPoiseuille
+    initializer = PlanarPoiseuille(density=rho, mu=mu)
 
     def _poiseuille_2d(x_vec, eos):
         y = x_vec[1]
@@ -204,8 +206,6 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
         return make_conserved(2, mass=dmass, energy=denergy,
                               momentum=dmom, species_mass=species_mass)
-
-    initializer = _poiseuille_2d
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                     int_tpair, boundaries):
@@ -245,6 +245,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
         # form exact cv
         cv = initializer(x_vec=nodes, eos=eos)
+        cv2 = _poiseuille_2d(x_vec=nodes, eos=eos)
+        print(f"{cv=}")
+        print(f"{cv2=}")
+        cver = discr.norm((cv2 - cv).join(), np.inf)
+        print(f"{cver=}")
         cv_int_tpair = interior_trace_pair(discr, cv)
         boundaries = [BTAG_ALL]
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
