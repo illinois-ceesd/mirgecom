@@ -59,11 +59,11 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     """Test tau data structure and values against exact."""
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -117,7 +117,7 @@ def _get_box_mesh(dim, a, b, n, t=None):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
+    return gen(a=a, b=b, npoints_per_axis=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])

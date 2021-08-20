@@ -252,9 +252,6 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     dim = cv.dim
     viscous_mass_flux = 0 * cv.momentum
 
-    #     nspecies = cv.nspecies
-    # if nspecies > 0:
-
     j = diffusive_flux(discr, eos, cv, grad_cv)
     heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
 
@@ -292,7 +289,7 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
     local: bool
         Indicates whether to skip projection of fluxes to "all_faces" or not. If
         set to *False* (the default), the returned fluxes are projected to
-        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces".  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
 
     Returns
@@ -313,7 +310,7 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
     f_avg = 0.5*(f_int + f_ext)
     flux_weak = make_conserved(cv_tpair.int.dim, q=(f_avg.join() @ normal))
 
-    if local is False:
+    if not local:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
     return flux_weak
 
