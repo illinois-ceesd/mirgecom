@@ -53,24 +53,6 @@ from mirgecom.eos import IdealSingleGas
 logger = logging.getLogger(__name__)
 
 
-def dont_test_actx_power(actx_factory):
-    """Test power of DOFArrays and the likes."""
-    actx = actx_factory()
-    dim = 3
-    nel_1d = 5
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
-    )
-    order = 1
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-
-    actx.np.power(nodes, .5)
-    actx.np.power(nodes[0], .5)
-    actx.np.power(nodes[0][0], .5)
-
-
 # TODO: Bring back transport_model 0 when *actx.np.power* is fixed
 @pytest.mark.parametrize("transport_model", [1])
 def test_viscous_stress_tensor(actx_factory, transport_model):
