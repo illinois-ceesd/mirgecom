@@ -70,7 +70,7 @@ from mirgecom.viscous import (
     viscous_facial_flux
 )
 from mirgecom.flux import (
-    central_scalar_flux
+    gradient_flux_central
 )
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
@@ -127,7 +127,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     def scalar_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = central_scalar_flux(int_tpair, normal)
+        flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def get_q_flux_bnd(btag):

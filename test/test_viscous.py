@@ -53,35 +53,17 @@ from mirgecom.eos import IdealSingleGas
 logger = logging.getLogger(__name__)
 
 
-def dont_test_actx_power(actx_factory):
-    """Test power of DOFArrays and the likes."""
-    actx = actx_factory()
-    dim = 3
-    nel_1d = 5
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
-    )
-    order = 1
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-
-    actx.np.power(nodes, .5)
-    actx.np.power(nodes[0], .5)
-    actx.np.power(nodes[0][0], .5)
-
-
 # TODO: Bring back transport_model 0 when *actx.np.power* is fixed
 @pytest.mark.parametrize("transport_model", [1])
 def test_viscous_stress_tensor(actx_factory, transport_model):
     """Test tau data structure and values against exact."""
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -135,7 +117,7 @@ def _get_box_mesh(dim, a, b, n, t=None):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
+    return gen(a=a, b=b, npoints_per_axis=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])
@@ -165,58 +147,23 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     p_low = base_pressure
     p_hi = pressure_ratio*base_pressure
     dpdx = (p_hi - p_low) / xlen
-    h = ytop - ybottom
     rho = 1.0
 
     eos = IdealSingleGas(transport_model=transport_model)
-    gamma = eos.gamma()
 
-    def _poiseuille_2d(x_vec, eos):
-        y = x_vec[1]
-        x = x_vec[0]
-        ones = x / x
-        u_x = dpdx*y*(h - y)/(2*mu)
-        p_x = p_hi - dpdx*x
-        mass = rho*ones
-        u_y = 0*x
-        velocity = make_obj_array([u_x, u_y])
-        ke = .5*np.dot(velocity, velocity)*mass
-        rho_e = p_x/(gamma-1) + ke
-        return make_conserved(2, mass=mass, energy=rho_e,
-                              momentum=mass*velocity)
-
-    def _exact_grad(x_vec, eos, cv_exact):
-        y = x_vec[1]
-        x = x_vec[0]
-        ones = x / x
-        mass = cv_exact.mass
-        velocity = cv_exact.velocity
-        dvxdy = dpdx*(h-2*y)/(2*mu)
-        dvdy = make_obj_array([dvxdy, 0*x])
-        dedx = -dpdx/(gamma-1)*ones
-        dedy = mass*np.dot(velocity, dvdy)
-        dmass = make_obj_array([0*x, 0*x])
-        denergy = make_obj_array([dedx, dedy])
-        dvx = make_obj_array([0*x, dvxdy])
-        dvy = make_obj_array([0*x, 0*x])
-        dv = np.stack((dvx, dvy))
-        dmom = mass*dv
-        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
-        return make_conserved(2, mass=dmass, energy=denergy,
-                              momentum=dmom, species_mass=species_mass)
-
-    initializer = _poiseuille_2d
+    from mirgecom.initializers import PlanarPoiseuille
+    initializer = PlanarPoiseuille(density=rho, mu=mu)
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                     int_tpair, boundaries):
         return (compute_interior_flux(int_tpair)
                 + sum(compute_boundary_flux(btag) for btag in boundaries))
 
-    from mirgecom.flux import central_scalar_flux
+    from mirgecom.flux import gradient_flux_central
 
     def cv_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
-        flux_weak = central_scalar_flux(int_tpair, normal)
+        flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def cv_flux_boundary(btag):
@@ -226,7 +173,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         bnd_nhat = thaw(actx, discr.normal(btag))
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(btag, interior=cv_bnd, exterior=cv_bnd)
-        flux_weak = central_scalar_flux(bnd_tpair, bnd_nhat)
+        flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
         return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
 
     for nfac in [1, 2, 4]:
@@ -243,6 +190,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
 
+        # compute max element size
+        from grudge.dt_utils import h_max_from_volume
+        h_max = h_max_from_volume(discr)
+
         # form exact cv
         cv = initializer(x_vec=nodes, eos=eos)
         cv_int_tpair = interior_trace_pair(discr, cv)
@@ -253,7 +204,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
                                                       cv_flux_bnd.join()))
 
-        xp_grad_cv = _exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
+        xp_grad_cv = initializer.exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
         xp_grad_v = 1/cv.mass * xp_grad_cv.momentum
         xp_tau = mu * (xp_grad_v + xp_grad_v.transpose())
 
@@ -309,8 +260,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         )
 
         assert discr.norm(vflux.mass, np.inf) == 0
-        e_eoc_rec.add_data_point(1.0 / nfac, efluxerr)
-        p_eoc_rec.add_data_point(1.0 / nfac, momfluxerr)
+        e_eoc_rec.add_data_point(h_max, efluxerr)
+        p_eoc_rec.add_data_point(h_max, momfluxerr)
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5
@@ -326,12 +277,12 @@ def test_species_diffusive_flux(actx_factory):
     """Test species diffusive flux and values against exact."""
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -397,12 +348,12 @@ def test_diffusive_heat_flux(actx_factory):
     """Test diffusive heat flux and values against exact."""
     actx = actx_factory()
     dim = 3
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -469,12 +420,12 @@ def test_diffusive_heat_flux(actx_factory):
 def test_viscous_timestep(actx_factory, dim, mu, vel):
     """Test timestep size."""
     actx = actx_factory()
-    nel_1d = 5
+    nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, n=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1

@@ -34,7 +34,7 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
-from mirgecom.flux import central_scalar_flux
+from mirgecom.flux import gradient_flux_central
 from mirgecom.fluid import (
     ConservedVars,
     make_conserved
@@ -188,7 +188,7 @@ def _cv_test_func(actx, x_vec, grad=False):
 def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
     normal = thaw(actx, discr.normal(int_tpair.dd))
-    flux_weak = central_scalar_flux(int_tpair, normal)
+    flux_weak = gradient_flux_central(int_tpair, normal)
     return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
 
@@ -200,7 +200,7 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     bnd_nhat = thaw(actx, discr.normal(btag))
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
-    flux_weak = central_scalar_flux(bnd_tpair, bnd_nhat)
+    flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
     return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
 
 
@@ -241,6 +241,10 @@ def test_grad_operator(actx_factory, dim, order, test_func):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
+        # compute max element size
+        from grudge.dt_utils import h_max_from_volume
+        h_max = h_max_from_volume(discr)
+
         nodes = thaw(actx, discr.nodes())
         int_flux = partial(central_flux_interior, actx, discr)
         bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
@@ -275,7 +279,7 @@ def test_grad_operator(actx_factory, dim, order, test_func):
             grad_err = discr.norm(test_grad - exact_grad, np.inf)/err_scale
 
         print(f"{test_grad=}")
-        eoc.add_data_point(1.0 / nfac, grad_err)
+        eoc.add_data_point(h_max, grad_err)
 
     assert (
         eoc.order_estimate() >= order - 0.5

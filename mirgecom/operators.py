@@ -58,9 +58,9 @@ def div_operator(discr, u, flux):
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    u: np.ndarray
+    u: numpy.ndarray
         the vector-valued function for which divergence is to be calculated
-    flux: np.ndarray
+    flux: numpy.ndarray
         the boundary fluxes across the faces of the element
     Returns
     -------
