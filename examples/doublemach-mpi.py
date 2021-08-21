@@ -116,7 +116,8 @@ def get_doublemach_mesh():
                 Physical Curve('ic3') = {1};
                 Physical Curve('wall') = {2};
                 Physical Curve('out') = {5};
-        """, "geo"), force_ambient_dim=2, dimensions=2, target_unit="M")
+        """, "geo"), force_ambient_dim=2, dimensions=2, target_unit="M",
+            output_file_name=meshfile)
     else:
         mesh = read_gmsh(meshfile, force_ambient_dim=2)
 
