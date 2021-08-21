@@ -227,12 +227,12 @@ def test_noslip(actx_factory, dim):
     print(f"{nhat=}")
     # h = 1.0 / np1
 
-    from mirgecom.flux import central_scalar_flux
+    from mirgecom.flux import gradient_flux_central
 
     def scalar_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = central_scalar_flux(int_tpair, normal)
+        flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     # utility to compare stuff on the boundary only
@@ -279,11 +279,11 @@ def test_noslip(actx_factory, dim):
             print(f"{t_flux_bnd=}")
             print(f"{i_flux_bnd=}")
 
-            from mirgecom.operators import dg_grad
+            from mirgecom.operators import grad_operator
             grad_cv = make_conserved(
-                dim, q=dg_grad(discr, uniform_state.join(), cv_flux_bnd.join())
+                dim, q=grad_operator(discr, uniform_state.join(), cv_flux_bnd.join())
             )
-            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            grad_t = grad_operator(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 
@@ -347,12 +347,12 @@ def test_prescribedviscous(actx_factory, dim):
     nhat = thaw(actx, discr.normal(BTAG_ALL))
     print(f"{nhat=}")
 
-    from mirgecom.flux import central_scalar_flux
+    from mirgecom.flux import gradient_flux_central
 
     def scalar_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = central_scalar_flux(int_tpair, normal)
+        flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     # utility to compare stuff on the boundary only
@@ -398,11 +398,11 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{t_flux_bnd=}")
             print(f"{i_flux_bnd=}")
 
-            from mirgecom.operators import dg_grad
+            from mirgecom.operators import grad_operator
             grad_cv = make_conserved(
-                dim, q=dg_grad(discr, cv.join(), cv_flux_bnd.join())
+                dim, q=grad_operator(discr, cv.join(), cv_flux_bnd.join())
             )
-            grad_t = dg_grad(discr, temper, t_flux_bnd)
+            grad_t = grad_operator(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 

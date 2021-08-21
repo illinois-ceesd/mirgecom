@@ -29,15 +29,19 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
+from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.transport import SimpleTransport
+from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
-# from mirgecom.heat import heat_operator
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -55,7 +59,6 @@ import pyrometheus as pyro
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -74,9 +77,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_leap=False,
-         use_profiling=False, rst_step=None, rst_name=None,
-         casename="nsmix", use_logmgr=True):
+def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None,
+         rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -92,50 +95,48 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            logmgr=logmgr)
+        queue = cl.CommandQueue(
+            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 2
-    nel_1d = 8
-    order = 1
+    actx = actx_class(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    # Timestepping control
     # This example runs only 3 steps by default (to keep CI ~short)
-    # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
     t_final = 3e-9
-    current_cfl = 1.0
-    velocity = np.zeros(shape=(dim,))
+    current_cfl = .0009
     current_dt = 1e-9
     current_t = 0
-    constant_cfl = False
-    nviz = 5
-    nrestart = 5
-    nhealth = 1
+    constant_cfl = True
     current_step = 0
     timestepper = rk4_step
     debug = False
 
+    # Some i/o frequencies
+    nstatus = 1
+    nviz = 5
+    nrestart = 5
+    nhealth = 1
+
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-    if rst_step:  # read the grid from restart data
-        rst_fname = rst_pattern.format(cname=rst_name, step=rst_step, rank=rank)
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
 
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, rst_fname)
+        restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
+        nel_1d = 8
         box_ll = -0.005
         box_ur = 0.005
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -146,6 +147,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    order = 1
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -238,6 +240,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     # }}}
 
     # {{{ MIRGE-Com state initialization
+    velocity = np.zeros(shape=(dim,))
 
     # Initialize the fluid/gas state with Cantera-consistent data:
     # (density, pressure, temperature, mass_fractions)
@@ -250,9 +253,9 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
-    if rst_step:
+    if rst_filename:
         current_t = restart_data["t"]
-        current_step = rst_step
+        current_step = restart_data["step"]
         current_state = restart_data["state"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
@@ -299,6 +302,17 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
+    def my_write_status(step, t, dt, state):
+        if constant_cfl:
+            cfl = current_cfl
+        else:
+            from mirgecom.viscous import get_viscous_cfl
+            cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
+            from grudge.op import nodal_max
+            cfl = nodal_max(discr, "vol", cfl_field)
+        if rank == 0:
+            logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
+
     def my_write_viz(step, t, state, dv=None, production_rates=None):
         if dv is None:
             dv = eos.dependent_vars(state)
@@ -313,20 +327,21 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
-        rst_data = {
-            "local_mesh": local_mesh,
-            "state": state,
-            "t": t,
-            "step": step,
-            "order": order,
-            "global_nelements": global_nelements,
-            "num_parts": nparts
-        }
-        from mirgecom.restart import write_restart_file
-        write_restart_file(actx, rst_data, rst_fname, comm)
+        if rst_fname != rst_filename:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "state": state,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": nparts
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(state, dv):
-        # Note: This health check is tuned to 3-step expectations
+        # Note: This health check is tuned to expected results
         #       which effectively makes this example a CI test that
         #       the case gets the expected solution.  If dt,t_final or
         #       other run parameters are changed, this check should
@@ -338,7 +353,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.05e5),
+        if allsync(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.06e5),
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
@@ -350,7 +365,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(check_range_local(discr, "vol", dv.temperature, 1450, 1550),
+        if allsync(check_range_local(discr, "vol", dv.temperature, 1450, 1570),
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
@@ -359,12 +374,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
-
-    def my_rhs(t, state):
-        ns_rhs = ns_operator(discr, cv=state, t=t,
-                             boundaries=visc_bnds, eos=eos)
-        reaction_source = eos.get_species_source_terms(state)
-        return ns_rhs + reaction_source
 
     def my_pre_step(step, t, dt, state):
         try:
@@ -377,6 +386,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step, interval=nstatus)
 
             if do_health:
                 dv = eos.dependent_vars(state)
@@ -388,10 +398,6 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            if step == rst_step:  # don't do viz or restart @ restart
-                do_viz = False
-                do_restart = False
-
             if do_restart:
                 my_write_restart(step=step, t=t, state=state)
 
@@ -402,6 +408,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
                 my_write_viz(step=step, t=t, state=state, dv=dv,
                              production_rates=production_rates)
 
+            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+                                  t_final, constant_cfl)
+            if do_status:
+                my_write_status(step, t, dt, state)
+
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
@@ -409,8 +420,7 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        t_remaining = max(0, t_final - t)
-        return state, min(dt, t_remaining)
+        return state, dt
 
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
@@ -420,6 +430,16 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
+
+    def my_rhs(t, state):
+        ns_rhs = ns_operator(discr, cv=state, t=t,
+                             boundaries=visc_bnds, eos=eos)
+        reaction_source = eos.get_species_source_terms(state)
+        return ns_rhs + reaction_source
+
+    current_dt = get_sim_timestep(discr, current_state, current_t,
+                                  current_dt, current_cfl, eos,
+                                  t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -431,8 +451,11 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = eos.dependent_vars(current_state)
+    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+                                current_cfl, eos, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_status(current_step, current_t, final_dt, current_state)
 
     if logmgr:
         logmgr.close()
@@ -444,7 +467,36 @@ def main(ctx_factory=cl.create_some_context, use_leap=False,
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    main()
+    import argparse
+    casename = "nsmix"
+    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="turn on logging")
+    parser.add_argument("--leap", action="store_true",
+        help="use leap timestepper")
+    parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--casename", help="casename to use for i/o")
+    args = parser.parse_args()
+    if args.profiling:
+        if args.lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+        actx_class = PyOpenCLProfilingArrayContext
+    else:
+        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+            else PyOpenCLArrayContext
+
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    if args.casename:
+        casename = args.casename
+    rst_filename = None
+    if args.restart_file:
+        rst_filename = args.restart_file
+
+    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

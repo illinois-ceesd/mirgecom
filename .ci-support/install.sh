@@ -1,7 +1,6 @@
 if [ "$(uname)" = "Darwin" ]; then
 PLATFORM=MacOSX
 brew update
-brew upgrade
 brew install open-mpi
 brew install octave
 else
@@ -20,6 +19,7 @@ PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes --quiet
 PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file conda-env.yml --name testing --quiet
 
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+conda list
 
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing

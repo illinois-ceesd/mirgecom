@@ -70,12 +70,11 @@ from mirgecom.viscous import (
     viscous_facial_flux
 )
 from mirgecom.flux import (
-    central_scalar_flux
+    gradient_flux_central
 )
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
-    elbnd_flux,
-    dg_div, dg_grad
+    div_operator, grad_operator
 )
 from meshmode.dof_array import thaw
 
@@ -118,10 +117,17 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     dim = discr.dim
     actx = cv.array_context
 
+    def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
+                    int_tpair, xrank_pairs, boundaries):
+        return (compute_interior_flux(int_tpair)
+                + sum(compute_interior_flux(part_tpair)
+                      for part_tpair in xrank_pairs)
+                + sum(compute_boundary_flux(btag) for btag in boundaries))
+
     def scalar_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = central_scalar_flux(int_tpair, normal)
+        flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     def get_q_flux_bnd(btag):
@@ -135,11 +141,12 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                   interior=make_conserved(dim, q=part_tpair.int),
                   exterior=make_conserved(dim, q=part_tpair.ext))
         for part_tpair in cross_rank_trace_pairs(discr, cv.join())]
-    cv_flux_bnd = elbnd_flux(discr, scalar_flux_interior, get_q_flux_bnd,
-                            cv_int_tpair, cv_part_pairs, boundaries)
+    cv_flux_bnd = _elbnd_flux(discr, scalar_flux_interior, get_q_flux_bnd,
+                              cv_int_tpair, cv_part_pairs, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_cv = make_conserved(dim, q=dg_grad(discr, cv.join(), cv_flux_bnd.join()))
+    grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
+                                                  cv_flux_bnd.join()))
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
@@ -156,9 +163,9 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                   interior=eos.temperature(part_tpair.int),
                   exterior=eos.temperature(part_tpair.ext))
         for part_tpair in cv_part_pairs]
-    t_flux_bnd = elbnd_flux(discr, scalar_flux_interior, get_t_flux_bnd,
-                            t_int_tpair, t_part_pairs, boundaries)
-    grad_t = dg_grad(discr, gas_t, t_flux_bnd)
+    t_flux_bnd = _elbnd_flux(discr, scalar_flux_interior, get_t_flux_bnd,
+                             t_int_tpair, t_part_pairs, boundaries)
+    grad_t = grad_operator(discr, gas_t, t_flux_bnd)
 
     # inviscid parts
     def finv_interior_face(cv_tpair):
@@ -180,20 +187,18 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
     num_partition_interfaces = len(cv_part_pairs)
 
-    # glob the inputs together in a tuple to use the elbnd_flux wrapper
+    # glob the inputs together in a tuple to use the _elbnd_flux wrapper
     visc_part_inputs = [
         (cv_part_pairs[bnd_index], s_part_pairs[bnd_index],
-         t_part_pairs[bnd_index], delt_part_pairs[bnd_index])
+         delt_part_pairs[bnd_index])
         for bnd_index in range(num_partition_interfaces)]
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def fvisc_interior_face(tpair_tuple):
         cv_pair_int = tpair_tuple[0]
         s_pair_int = tpair_tuple[1]
-        t_pair_int = tpair_tuple[2]
-        dt_pair_int = tpair_tuple[3]
-        return viscous_facial_flux(discr, eos, cv_pair_int, s_pair_int,
-                                   t_pair_int, dt_pair_int)
+        dt_pair_int = tpair_tuple[2]
+        return viscous_facial_flux(discr, eos, cv_pair_int, s_pair_int, dt_pair_int)
 
     # viscous part of bcs applied here
     def visc_bnd_flux(btag):
@@ -202,19 +207,19 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                                                       grad_t=grad_t, time=t)
 
     vol_term = (
-        viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, t=gas_t, grad_t=grad_t)
+        viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
         - inviscid_flux(discr, eos=eos, cv=cv)
     ).join()
 
     bnd_term = (
-        elbnd_flux(
+        _elbnd_flux(
             discr, fvisc_interior_face, visc_bnd_flux,
-            (cv_int_tpair, s_int_pair, t_int_tpair, delt_int_pair),
+            (cv_int_tpair, s_int_pair, delt_int_pair),
             visc_part_inputs, boundaries)
-        - elbnd_flux(
+        - _elbnd_flux(
             discr, finv_interior_face, finv_domain_boundary, cv_int_tpair,
             cv_part_pairs, boundaries)
     ).join()
 
     # NS RHS
-    return make_conserved(dim, q=dg_div(discr, vol_term, bnd_term))
+    return make_conserved(dim, q=div_operator(discr, vol_term, bnd_term))

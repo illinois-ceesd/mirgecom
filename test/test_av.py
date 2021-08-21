@@ -183,8 +183,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                  interior=soln_int,
                                  exterior=soln_int)
             nhat = thaw(actx, disc.normal(btag))
-            from mirgecom.flux import central_scalar_flux
-            flux_weak = central_scalar_flux(bnd_pair, normal=nhat)
+            from mirgecom.flux import gradient_flux_central
+            flux_weak = gradient_flux_central(bnd_pair, normal=nhat)
             return disc.project(btag, "all_faces", flux_weak)
 
         def av_flux(self, disc, btag, diffusion, **kwargs):
@@ -194,8 +194,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
             from grudge.trace_pair import TracePair
             bnd_grad_pair = TracePair(btag, interior=grad_soln_minus,
                                       exterior=grad_soln_plus)
-            from mirgecom.flux import central_vector_flux
-            flux_weak = central_vector_flux(bnd_grad_pair, normal=nhat)
+            from mirgecom.flux import gradient_flux_central
+            flux_weak = gradient_flux_central(bnd_grad_pair, normal=nhat)
             return disc.project(btag, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
