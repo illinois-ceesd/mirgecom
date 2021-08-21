@@ -41,7 +41,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
-from mirgecom.flux import lfr_flux
+from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
@@ -103,7 +103,7 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
+    flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)

@@ -41,9 +41,6 @@ test/nodal-dg
 *.sqlite
 *.sqlite-journal
 
-# Emacs backups
-.#*
-\#*
 
 # Linting temp files
 .run-pylint.py

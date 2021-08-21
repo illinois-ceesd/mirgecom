@@ -148,14 +148,14 @@ class PrescribedInviscidBoundary(FluidBC):
         self._fluid_soln_func = fluid_solution_func
         self._fluid_soln_flux_func = fluid_solution_flux_func
         self._scalar_num_flux_func = scalar_numerical_flux_func
-        from mirgecom.flux import central_scalar_flux
+        from mirgecom.flux import gradient_flux_central
         if not self._scalar_num_flux_func:
-            self._scalar_num_flux_func = central_scalar_flux
+            self._scalar_num_flux_func = gradient_flux_central
         self._fluid_soln_grad_func = fluid_solution_gradient_func
         self._fluid_soln_grad_flux_func = fluid_solution_gradient_flux_func
-        from mirgecom.flux import central_vector_flux
+        from mirgecom.flux import divergence_flux_central
         if not self._fluid_soln_grad_flux_func:
-            self._fluid_soln_grad_flux_func = central_vector_flux
+            self._fluid_soln_grad_flux_func = divergence_flux_central
         self._fluid_temperature_func = fluid_temperature_func
 
     def _boundary_quantity(self, discr, btag, quantity, **kwargs):
@@ -534,8 +534,8 @@ class PrescribedViscousBoundary(FluidBC):
 
         cv_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
 
-        from mirgecom.flux import central_scalar_flux
-        flux_func = central_scalar_flux
+        from mirgecom.flux import gradient_flux_central
+        flux_func = gradient_flux_central
         if "numerical_flux_func" in kwargs:
             flux_func = kwargs["numerical_flux_func"]
 
@@ -566,8 +566,8 @@ class PrescribedViscousBoundary(FluidBC):
 
             bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 
-            from mirgecom.flux import central_scalar_flux
-            flux_func = central_scalar_flux
+            from mirgecom.flux import gradient_flux_central
+            flux_func = gradient_flux_central
             if "numerical_flux_func" in kwargs:
                 flux_func = kwargs["numerical_flux_func"]
 

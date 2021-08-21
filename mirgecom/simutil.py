@@ -103,9 +103,8 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     cfl: float
         The current CFL number
     eos: :class:`~mirgecom.eos.GasEOS`
-        Gas equation-of-state supporting speed_of_sound, and, optionally for viscous
-        fluids, a non-empty :class:`~mirgecom.transport.TransportModel` for viscous
-        transport properties.
+        Gas equation-of-state optionally with a non-empty
+        :class:`~mirgecom.transport.TransportModel` for viscous transport properties.
     constant_cfl: bool
         True if running constant CFL mode
 

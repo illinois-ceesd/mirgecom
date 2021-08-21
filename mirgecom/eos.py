@@ -8,6 +8,7 @@ manage the relationships between and among state and thermodynamic variables.
 
 .. autoclass:: EOSDependentVars
 .. autoclass:: GasEOS
+.. autoclass:: MixtureEOS
 .. autoclass:: IdealSingleGas
 .. autoclass:: PyrometheusMixture
 """
@@ -79,6 +80,7 @@ class GasEOS:
     .. automethod:: gamma
     .. automethod:: transport_model
     .. automethod:: get_internal_energy
+    .. automethod:: species_enthalpies
     """
 
     def pressure(self, cv: ConservedVars):
@@ -129,12 +131,50 @@ class GasEOS:
         """Get the fluid internal energy from temperature and mass."""
         raise NotImplementedError()
 
+    def species_enthalpies(self, cv: ConservedVars):
+        """Get specific enthalpies for each mixture species."""
+        raise NotImplementedError()
+
     def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
             pressure=self.pressure(cv),
             temperature=self.temperature(cv),
         )
+
+
+class MixtureEOS(GasEOS):
+    r"""Abstract interface to gas mixture equation of state class.
+
+    This EOS base class extends the GasEOS base class to include the
+    necessary interface for dealing with gas mixtures.
+
+    .. automethod:: get_density
+    .. automethod:: get_species_molecular_weights
+    .. automethod:: get_production_rates
+    .. automethod:: species_enthalpies
+    .. automethod:: get_species_source_terms
+    """
+
+    def get_density(self, pressure, temperature, species_mass_fractions):
+        """Get the density from pressure, temperature, and species fractions (Y)."""
+        raise NotImplementedError()
+
+    def get_species_molecular_weights(self):
+        """Get the species molecular weights."""
+        raise NotImplementedError()
+
+    def species_enthalpies(self, cv: ConservedVars):
+        """Get the species specific enthalpies."""
+        raise NotImplementedError()
+
+    def get_production_rates(self, cv: ConservedVars):
+        """Get the production rate for each species."""
+        raise NotImplementedError()
+
+    def get_species_source_terms(self, cv: ConservedVars):
+        r"""Get the species mass source terms to be used on the RHS for chemistry."""
+        raise NotImplementedError()
 
 
 class IdealSingleGas(GasEOS):
@@ -379,7 +419,7 @@ class IdealSingleGas(GasEOS):
         return self._gas_const * mass * temperature / (self._gamma - 1)
 
 
-class PyrometheusMixture(GasEOS):
+class PyrometheusMixture(MixtureEOS):
     r"""Ideal gas mixture ($p = \rho{R}_\mathtt{mix}{T}$).
 
     This is the :mod:`pyrometheus`-based EOS. Please refer to the :any:`documentation
@@ -410,6 +450,7 @@ class PyrometheusMixture(GasEOS):
     .. automethod:: get_density
     .. automethod:: get_species_molecular_weights
     .. automethod:: get_production_rates
+    .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
     """
 
@@ -602,6 +643,10 @@ class PyrometheusMixture(GasEOS):
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
         return self._pyrometheus_mech.wts
+
+    def species_enthalpies(self, cv: ConservedVars):
+        """Get the species specific enthalpies."""
+        return self._pyrometheus_mech.get_species_enthalpies_rt(self.temperature(cv))
 
     def get_production_rates(self, cv: ConservedVars):
         r"""Get the production rate for each species.
