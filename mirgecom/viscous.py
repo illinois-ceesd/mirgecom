@@ -197,7 +197,7 @@ def diffusive_heat_flux(discr, eos, cv, j):
         The total diffusive heat flux vector
     """
     if isinstance(eos, MixtureEOS):
-        h_alpha = eos.get_species_enthalpies(cv)
+        h_alpha = eos.species_enthalpies(cv)
         return sum(h_alpha.reshape(-1, 1) * j)
     return 0
 
