@@ -1,13 +1,13 @@
 r""":mod:`mirgecom.inviscid` provides helper functions for inviscid flow.
 
-Flux Calculation
-^^^^^^^^^^^^^^^^
+Inviscid Flux Calculation
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
 .. autofunction:: inviscid_facial_flux
 
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
+Inviscid Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
@@ -41,7 +41,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
-from mirgecom.flux import lfr_flux
+from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
@@ -90,24 +90,20 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         "all_faces"; remaining instead on the boundary restriction.
     """
     actx = cv_tpair.int.array_context
-    dim = discr.dim
 
     flux_tpair = TracePair(cv_tpair.dd,
                            interior=inviscid_flux(discr, eos, cv_tpair.int),
                            exterior=inviscid_flux(discr, eos, cv_tpair.ext))
 
     lam = actx.np.maximum(
-        compute_wavespeed(dim, eos=eos, cv=cv_tpair.int),
-        compute_wavespeed(dim, eos=eos, cv=cv_tpair.ext)
+        compute_wavespeed(eos=eos, cv=cv_tpair.int),
+        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
     )
 
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    # flux_weak = make_conserved(
-    #     dim, q=lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
-    # )
-    flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
+    flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
@@ -115,24 +111,51 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     return flux_weak
 
 
-def get_inviscid_timestep(discr, eos, cfl, cv):
-    """Routine (will) return the (local) maximum stable inviscid timestep.
+def get_inviscid_timestep(discr, eos, cv):
+    """Return node-local stable timestep estimate for an inviscid fluid.
 
-    Currently, it's a hack waiting for the geometric_factor helpers port
-    from grudge.
+    The maximum stable timestep is computed from the acoustic wavespeed.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid solution
+    Returns
+    -------
+    class:`~meshmode.dof_array.DOFArray`
+        The maximum stable timestep at each node.
     """
-    dim = discr.dim
-    mesh = discr.mesh
-    order = max([grp.order for grp in discr.discr_from_dd("vol").groups])
-    nelements = mesh.nelements
-    nel_1d = nelements ** (1.0 / (1.0 * dim))
-
-    # This roughly reproduces the timestep AK used in wave toy
-    dt = (1.0 - 0.25 * (dim - 1)) / (nel_1d * order ** 2)
-    return cfl * dt
+    from grudge.dt_utils import characteristic_lengthscales
+    from mirgecom.fluid import compute_wavespeed
+    return (
+        characteristic_lengthscales(cv.array_context, discr)
+        / compute_wavespeed(eos, cv)
+    )
 
 
 def get_inviscid_cfl(discr, eos, dt, cv):
-    """Calculate and return CFL based on current state and timestep."""
-    wanted_dt = get_inviscid_timestep(discr, eos=eos, cfl=1.0, cv=cv)
-    return dt / wanted_dt
+    """Return node-local CFL based on current state and timestep.
+
+    Parameters
+    ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        the discretization to use
+    eos: mirgecom.eos.GasEOS
+        Implementing the pressure and temperature functions for
+        returning pressure and temperature as a function of the state q.
+    dt: float or :class:`~meshmode.dof_array.DOFArray`
+        A constant scalar dt or node-local dt
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        The fluid conserved variables
+
+    Returns
+    -------
+    :class:`meshmode.dof_array.DOFArray`
+        The CFL at each node.
+    """
+    return dt / get_inviscid_timestep(discr, eos=eos, cv=cv)

@@ -88,7 +88,8 @@ above when the viscous fluxes vanish. That is, when $\b{F}^V=0$, we are left wit
 system of nonlinear equations for a completely inviscid fluid. |mirgecom| provides an
 Euler operator, with associated utilities functions, for solving flows of this type.
 Inviscid fluxes and utilities are found in :mod:`mirgecom.inviscid`, and the Euler
-operator for the RHS in :mod:`mirgecom.euler`.
+operator for the RHS in :mod:`mirgecom.euler`.  Viscous fluxes and utilities for
+calculating the components of the viscous fluxes are found in :mod:`mirgecom.viscous`.
 
 .. _viscous-stress-tensor:
 
@@ -102,8 +103,8 @@ $$
 $$
 
 with fluid velocity components ${v}_{i}$, the first coefficient of fluid viscosity $\mu$,
-and bulk viscosity $\mu_B$.
-
+and bulk viscosity $\mu_B$.  The viscous stress tensor is computed by |mirgecom| in the
+:mod:`~mirgecom.viscous` module routine :func:`~mirgecom.viscous.viscous_stress_tensor`.
 
 .. _diffusive-flux:
 

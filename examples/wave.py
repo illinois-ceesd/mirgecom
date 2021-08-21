@@ -1,4 +1,4 @@
-"""Demonstrate wave-eager serial example."""
+"""Demonstrate wave serial example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
 
@@ -26,16 +26,27 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-from pytools.obj_array import flat_obj_array
-from grudge.eager import EagerDGDiscretization
-from grudge.shortcuts import make_visualizer
-from mirgecom.wave import wave_operator
-from mirgecom.integrators import rk4_step
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
 import pyopencl.tools as cl_tools
 
+from pytools.obj_array import flat_obj_array
+
+from grudge.eager import EagerDGDiscretization
+from grudge.shortcuts import make_visualizer
+
+from mirgecom.wave import wave_operator
+from mirgecom.integrators import rk4_step
+
+from meshmode.array_context import (PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext)
+from arraycontext import thaw, freeze
+
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
+
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.logging_quantities import (initialize_logmgr,
+                                         logmgr_add_cl_device_info,
+                                         logmgr_add_device_memory_usage)
 
 
 def bump(actx, discr, t=0):
@@ -44,7 +55,7 @@ def bump(actx, discr, t=0):
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
         for i in range(discr.dim)
@@ -57,18 +68,27 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False):
+def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
+
+    logmgr = initialize_logmgr(use_logmgr,
+        filename="wave.sqlite", mode="wu")
+
     if use_profiling:
+        if lazy_eval:
+            raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
         actx = PyOpenCLProfilingArrayContext(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = PyOpenCLArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        if lazy_eval:
+            actx = PytatoPyOpenCLArrayContext(queue)
+        else:
+            actx = PyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     dim = 2
     nel_1d = 16
@@ -81,56 +101,83 @@ def main(use_profiling=False):
 
     order = 3
 
-    if dim == 2:
-        # no deep meaning here, just a fudge factor
-        dt = 0.7 / (nel_1d * order ** 2)
-    elif dim == 3:
-        # no deep meaning here, just a fudge factor
-        dt = 0.4 / (nel_1d * order ** 2)
-    else:
-        raise ValueError("don't have a stable time step guesstimate")
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+
+    current_cfl = 0.485
+    wave_speed = 1.0
+    from grudge.dt_utils import characteristic_lengthscales
+    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+    from grudge.op import nodal_min
+    dt = nodal_min(discr, "vol", dt)
 
     print("%d elements" % mesh.nelements)
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    fields = flat_obj_array(bump(actx, discr),
+                            [discr.zeros(actx) for i in range(discr.dim)])
 
-    fields = flat_obj_array(
-        bump(actx, discr),
-        [discr.zeros(actx) for i in range(discr.dim)]
-        )
+    if logmgr:
+        logmgr_add_cl_device_info(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
 
     vis = make_visualizer(discr)
 
     def rhs(t, w):
-        return wave_operator(discr, c=1, w=w)
+        return wave_operator(discr, c=wave_speed, w=w)
+
+    compiled_rhs = actx.compile(rhs)
 
     t = 0
-    t_final = 3
+    t_final = 1
     istep = 0
     while t < t_final:
-        fields = rk4_step(fields, t, dt, rhs)
+        if logmgr:
+            logmgr.tick_before()
+
+        fields = thaw(freeze(fields, actx), actx)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
             print(istep, t, discr.norm(fields[0], np.inf))
-            vis.write_vtk_file("fld-wave-eager-%04d.vtu" % istep,
+            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
-                        ])
+                        ], overwrite=True)
 
         t += dt
         istep += 1
 
+        if logmgr:
+            set_dt(logmgr, dt)
+            logmgr.tick_after()
+
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Wave-eager (non-MPI version)")
+    parser = argparse.ArgumentParser(description="Wave (non-MPI version)")
     parser.add_argument("--profile", action="store_true",
         help="enable kernel profiling")
+    parser.add_argument("--logging", action="store_true",
+        help="enable logging")
+    parser.add_argument("--lazy", action="store_true",
+        help="enable lazy evaluation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile)
+    main(use_profiling=args.profile, use_logmgr=args.logging, lazy_eval=args.lazy)
 
 # vim: foldmethod=marker

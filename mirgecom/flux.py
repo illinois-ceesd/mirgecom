@@ -3,10 +3,9 @@
 Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: lfr_flux
-.. autofunction:: central_scalar_flux
-.. autofunction:: central_vector_flux
-
+.. autofunction:: gradient_flux_central
+.. autofunction:: divergence_flux_central
+.. autofunction:: divergence_flux_lfr
 """
 
 __copyright__ = """
@@ -34,31 +33,34 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray
-from mirgecom.operators import jump
 from mirgecom.fluid import (
     ConservedVars,
     make_conserved
 )
 
 
-def central_scalar_flux(trace_pair, normal):
-    r"""Compute a central scalar flux.
+def gradient_flux_central(u_tpair, normal):
+    r"""Compute a central scalar flux for the gradient operator.
 
-    The central scalar flux, $h$, is calculated as:
+    The central scalar flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
 
     .. math::
 
-        h(\mathbf{u}^-, \mathbf{u}^+; \mathbf{n}) = \frac{1}{2}
-        \left(\mathbf{u}^{+}+\mathbf{u}^{-}\right)\hat{n}
+        \mathbf{h}({u}^-, {u}^+; \mathbf{n}) = \frac{1}{2}
+        \left({u}^{+}+{u}^{-}\right)\mathbf{\hat{n}}
 
-    where $\mathbf{u}^-, \mathbf{u}^+$, are the vector of independent scalar
-    components and scalar solution components on the interior and exterior of the
-    face on which the central flux is to be calculated, and $\hat{n}$ is the normal
-    vector.
+    where ${u}^-, {u}^+$, are the scalar function values on the interior
+    and exterior of the face on which the central flux is to be calculated, and
+    $\mathbf{\hat{n}}$ is the *normal* vector.
+
+    *u_tpair* is the :class:`~grudge.trace_pair.TracePair` representing the scalar
+    quantities ${u}^-, {u}^+$. *u_tpair* may also represent a vector-quantity
+    :class:`~grudge.trace_pair.TracePair`, and in this case the central scalar flux
+    is computed on each component of the vector quantity as an independent scalar.
 
     Parameters
     ----------
-    trace_pair: `grudge.trace_pair.TracePair`
+    u_tpair: `grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
@@ -70,28 +72,23 @@ def central_scalar_flux(trace_pair, normal):
         object array of `meshmode.dof_array.DOFArray` with the central scalar flux
         for each scalar component.
     """
-    tp_avg = trace_pair.avg
+    tp_avg = u_tpair.avg
+    tp_join = tp_avg
     if isinstance(tp_avg, DOFArray):
         return tp_avg*normal
     elif isinstance(tp_avg, ConservedVars):
         tp_join = tp_avg.join()
-    elif isinstance(tp_avg, np.ndarray):
-        tp_join = tp_avg
 
-    ncomp = len(tp_join)
-    if ncomp > 1:
-        result = np.empty((ncomp, len(normal)), dtype=object)
-        for i in range(ncomp):
-            result[i] = tp_join[i] * normal
-    else:
-        result = tp_join*normal
+    result = np.outer(tp_join, normal)
+
     if isinstance(tp_avg, ConservedVars):
         return make_conserved(tp_avg.dim, q=result)
-    return result
+    else:
+        return result
 
 
-def central_vector_flux(trace_pair, normal):
-    r"""Compute a central vector flux.
+def divergence_flux_central(trace_pair, normal):
+    r"""Compute a central flux for the divergence operator.
 
     The central vector flux, $h$, is calculated as:
 
@@ -121,7 +118,7 @@ def central_vector_flux(trace_pair, normal):
     return trace_pair.avg@normal
 
 
-def lfr_flux(cv_tpair, f_tpair, normal, lam):
+def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -162,4 +159,4 @@ def lfr_flux(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg@normal - lam*jump(cv_tpair)/2
+    return f_tpair.avg@normal - lam*cv_tpair.diff/2

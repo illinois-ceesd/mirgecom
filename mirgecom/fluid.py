@@ -40,9 +40,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray  # noqa
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
@@ -239,6 +238,21 @@ class ConservedVars:
         """Return the number of physical dimensions."""
         return len(self.momentum)
 
+    @property
+    def velocity(self):
+        """Return the fluid velocity = momentum / mass."""
+        return self.momentum / self.mass
+
+    @property
+    def nspecies(self):
+        """Return the number of mixture species."""
+        return len(self.species_mass)
+
+    @property
+    def species_mass_fractions(self):
+        """Return the species mass fractions y = species_mass / mass."""
+        return self.species_mass / self.mass
+
     def join(self):
         """Call :func:`join_conserved` on *self*."""
         return join_conserved(
@@ -247,6 +261,11 @@ class ConservedVars:
             energy=self.energy,
             momentum=self.momentum,
             species_mass=self.species_mass)
+
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return (ConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(ConservedVars)))
 
     def replace(self, **kwargs):
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
@@ -321,8 +340,12 @@ def join_conserved(dim, mass, energy, momentum, species_mass=None):
 
 
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
-                   q=None):
+                   q=None, scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
+    if scalar_quantities is not None:
+        return split_conserved(dim, q=scalar_quantities)
+    if vector_quantities is not None:
+        return split_conserved(dim, q=vector_quantities)
     if q is not None:
         return split_conserved(dim, q=q)
     if mass is None or energy is None or momentum is None:
@@ -377,14 +400,7 @@ def velocity_gradient(discr, cv, grad_cv):
         \partial_{x}\mathbf{v}_{y}&\partial_{y}\mathbf{v}_{y} \end{array} \right)$
 
     """
-    velocity = cv.momentum / cv.mass
-    obj_ary = (1/cv.mass)*make_obj_array([grad_cv.momentum[i]
-                                       - velocity[i]*grad_cv.mass
-                                       for i in range(cv.dim)])
-    grad_v = np.empty(shape=(cv.dim, cv.dim), dtype=object)
-    for idx, v in enumerate(obj_ary):
-        grad_v[idx] = v
-    return grad_v
+    return (grad_cv.momentum - np.outer(cv.velocity, grad_cv.mass))/cv.mass
 
 
 def species_mass_fraction_gradient(discr, cv, grad_cv):
@@ -415,18 +431,11 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    nspecies = len(cv.species_mass)
     y = cv.species_mass / cv.mass
-    obj_ary = (1/cv.mass)*make_obj_array([grad_cv.species_mass[i]
-                                       - y[i]*grad_cv.mass
-                                       for i in range(nspecies)])
-    grad_y = np.empty(shape=(nspecies, cv.dim), dtype=object)
-    for idx, v in enumerate(obj_ary):
-        grad_y[idx] = v
-    return grad_y
+    return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
 
 
-def compute_wavespeed(dim, eos, cv: ConservedVars):
+def compute_wavespeed(eos, cv: ConservedVars):
     r"""Return the wavespeed in the flow.
 
     The wavespeed is calculated as:
@@ -438,5 +447,5 @@ def compute_wavespeed(dim, eos, cv: ConservedVars):
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
     actx = cv.array_context
-    v = cv.momentum / cv.mass
+    v = cv.velocity
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
