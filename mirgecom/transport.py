@@ -147,8 +147,6 @@ class SimpleTransport(TransportModel):
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        nspecies = len(cv.species_mass)
-        assert nspecies == len(self._d_alpha)
         return self._d_alpha
 
 
@@ -170,9 +168,6 @@ class PowerLawTransport(TransportModel):
     def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
                  species_diffusivity=None):
         """Initialize power law coefficients and parameters."""
-        raise NotImplementedError("This class is not yet supported, awaits "
-                                  "implementation of array_context.np.power.")
-
         if species_diffusivity is None:
             species_diffusivity = np.empty((0,), dtype=object)
         self._alpha = alpha
@@ -194,10 +189,7 @@ class PowerLawTransport(TransportModel):
 
         $\mu = \beta{T}^n$
         """
-        actx = cv.array_context
-        gas_t = eos.temperature(cv)
-        # TODO: actx.np.power is unimplemented
-        return self._beta * actx.np.power(gas_t, self._n)
+        return self._beta * eos.temperature(cv)**self._n
 
     def volume_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the 2nd viscosity coefficent, $\lambda$.
@@ -217,6 +209,4 @@ class PowerLawTransport(TransportModel):
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        nspecies = len(cv.species_mass)
-        assert nspecies == len(self._d_alpha)
         return self._d_alpha
