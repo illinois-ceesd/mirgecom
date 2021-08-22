@@ -53,8 +53,7 @@ from mirgecom.eos import IdealSingleGas
 logger = logging.getLogger(__name__)
 
 
-# TODO: Bring back transport_model 0 when *actx.np.power* is fixed
-@pytest.mark.parametrize("transport_model", [1])
+@pytest.mark.parametrize("transport_model", [0, 1])
 def test_viscous_stress_tensor(actx_factory, transport_model):
     """Test tau data structure and values against exact."""
     actx = actx_factory()
