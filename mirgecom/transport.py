@@ -147,8 +147,6 @@ class SimpleTransport(TransportModel):
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        nspecies = len(cv.species_mass)
-        assert nspecies == len(self._d_alpha)
         return self._d_alpha
 
 
@@ -211,6 +209,4 @@ class PowerLawTransport(TransportModel):
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        nspecies = len(cv.species_mass)
-        assert nspecies == len(self._d_alpha)
         return self._d_alpha
