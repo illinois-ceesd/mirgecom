@@ -380,7 +380,7 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
-        num_equations, dim = grad_cv.mass.shape
+        dim, = grad_cv.mass.shape
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
