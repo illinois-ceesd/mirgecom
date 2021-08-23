@@ -152,7 +152,7 @@ def get_decaying_trig_truncated_domain(dim, alpha):
             return sym.EvaluationMapper({"x": nodes, "t": t})(expr)
 
         exact_u = sym_eval(sym_u)
-        exact_grad_u = make_obj_array(sym_eval(sym.grad(dim, sym_u)))
+        exact_grad_u = sym_eval(sym.grad(dim, sym_u))
 
         boundaries = {}
 
@@ -219,7 +219,7 @@ def get_static_trig_var_diff(dim):
 def sym_diffusion(dim, sym_alpha, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
-    return sym.div([sym_alpha * grad_i for grad_i in sym.grad(dim, sym_u)])
+    return sym.div(sym_alpha * sym.grad(dim, sym_u))
 
 
 # Note: Must integrate in time for a while in order to achieve expected spatial
