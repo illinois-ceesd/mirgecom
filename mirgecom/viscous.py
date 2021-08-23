@@ -401,12 +401,12 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
         return max(d_alpha)
 
     return_dof = []
-    for i in range(len(d_alpha[0])):
-        stacked_diffusivity = actx.np.stack([x[i] for x in d_alpha])
+    for igrp in range(len(d_alpha[0])):
+        stacked_diffusivity = actx.np.stack([x[igrp] for x in d_alpha])
 
         n_species, ni1, ni0 = stacked_diffusivity.shape
 
-        @memoize_in(discr, ("max_species_diffusivity", n_species, i))
+        @memoize_in(discr, ("max_species_diffusivity", n_species, igrp))
         def make_max_kernel():
             # fun fact: arraycontext needs these exact loop names to work (even
             # though a loopy kernel can have whatever iterator names the user wants)
