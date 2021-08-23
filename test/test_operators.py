@@ -132,14 +132,12 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
 
     sym_cos = pmbl.var("cos")
     sym_sin = pmbl.var("sin")
-    sym_f = sym_cos(2*np.pi*sym_coords[dim-1])
+    sym_result = sym_cos(2*np.pi*sym_coords[dim-1])
     for i in range(dim-1):
-        sym_f = sym_f * sym_sin(2*np.pi*sym_coords[i])
+        sym_result = sym_result * sym_sin(2*np.pi*sym_coords[i])
 
     if grad:
-        sym_result = sym.grad(dim, sym_f)
-    else:
-        sym_result = sym_f
+        sym_result = sym.grad(dim, sym_result)
 
     return sym.EvaluationMapper({"x": x_vec})(sym_result)
 
