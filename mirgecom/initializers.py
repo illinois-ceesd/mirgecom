@@ -1088,15 +1088,17 @@ class PlanarDiscontinuity:
         y = self._yl + (self._yr - self._yl)*weight
 
         if self._nspecies:
-            mass = eos.get_density(pressure, temperature, y)
+            mass = eos.get_density(pressure, temperature,
+                                   species_mass_fractions=y)
         else:
             mass = pressure/temperature/eos.gas_const()
 
         specmass = mass * y
         mom = mass * velocity
         if self._nspecies:
-            internal_energy = eos.get_internal_energy(temperature,
-                                                      species_mass_fractions=y)
+            internal_energy = \
+                eos.get_internal_energy(temperature,
+                                        species_mass_fractions=y)
         else:
             internal_energy = pressure/mass/(eos.gamma() - 1)
 
