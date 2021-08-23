@@ -15,6 +15,7 @@ Viscous Time Step Computation
 
 .. autofunction:: get_viscous_timestep
 .. autofunction:: get_viscous_cfl
+.. autofunction:: get_local_max_species_diffusivity
 """
 
 __copyright__ = """
@@ -344,12 +345,11 @@ def get_viscous_timestep(discr, eos, cv):
     transport = eos.transport_model()
     if transport:
         mu = transport.viscosity(eos, cv)
-        d_alpha = transport.species_diffusivity(eos, cv)
-        if len(d_alpha) > 0:
-            d_alpha_max = \
-                get_local_max_species_diffusivity(
-                    cv.array_context, discr, d_alpha
-                )
+        d_alpha_max = \
+            get_local_max_species_diffusivity(
+                cv.array_context, discr,
+                transport.species_diffusivity(eos, cv)
+            )
 
     return(
         length_scales / (compute_wavespeed(eos, cv)
@@ -388,9 +388,11 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
         Array context to use
     discr: :class:`grudge.eager.EagerDGDiscretization`
         the discretization to use
-    d_alpha: np.ndarray
+    d_alpha: numpy.ndarray
         Species diffusivities
     """
+    if len(d_alpha) <= 0:
+        return 0
     if not isinstance(d_alpha[0], DOFArray):
         return max(d_alpha)
 
@@ -413,4 +415,5 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
 
         return_dof.append(
             actx.call_loopy(make_max_kernel(), a=stacked_diffusivity)["out"])
+
     return DOFArray(actx, tuple(return_dof))
