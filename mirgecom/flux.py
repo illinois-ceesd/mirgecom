@@ -4,6 +4,7 @@ Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: gradient_flux_central
+.. autofunction:: divergence_flux_central
 .. autofunction:: divergence_flux_lfr
 """
 
@@ -84,6 +85,37 @@ def gradient_flux_central(u_tpair, normal):
         return make_conserved(tp_avg.dim, q=result)
     else:
         return result
+
+
+def divergence_flux_central(trace_pair, normal):
+    r"""Compute a central flux for the divergence operator.
+
+    The central vector flux, $h$, is calculated as:
+
+    .. math::
+
+        h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
+        \left(\mathbf{v}^{+}+\mathbf{v}^{-}\right) \cdot \hat{n}
+
+    where $\mathbf{v}^-, \mathbf{v}^+$, are the vectors on the interior and exterior
+    of the face across which the central flux is to be calculated, and $\hat{n}$ is
+    the unit normal to the face.
+
+    Parameters
+    ----------
+    trace_pair: `grudge.trace_pair.TracePair`
+        Trace pair for the face upon which flux calculation is to be performed
+    normal: numpy.ndarray
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
+        for each scalar component.
+    """
+    return trace_pair.avg@normal
 
 
 def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):

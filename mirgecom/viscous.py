@@ -44,13 +44,16 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools import memoize_in
+import arraycontext
+from grudge.trace_pair import TracePair
+from meshmode.dof_array import thaw, DOFArray
+
+from mirgecom.flux import divergence_flux_central
 from mirgecom.fluid import (
     velocity_gradient,
     species_mass_fraction_gradient,
     make_conserved
 )
-from meshmode.dof_array import thaw, DOFArray
-import arraycontext
 from mirgecom.eos import MixtureEOS
 
 
@@ -304,14 +307,15 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
     actx = cv_tpair.int.array_context
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
-    # todo: user-supplied flux routine
     f_int = viscous_flux(discr, eos, cv_tpair.int, grad_cv_tpair.int,
                          grad_t_tpair.int)
     f_ext = viscous_flux(discr, eos, cv_tpair.ext, grad_cv_tpair.ext,
                          grad_t_tpair.ext)
-    # This bit hard-codes BR1 central flux, use mirgecom.flux.central?
-    f_avg = 0.5*(f_int + f_ext)
-    flux_weak = make_conserved(cv_tpair.int.dim, q=(f_avg.join() @ normal))
+    f_tpair = TracePair(cv_tpair.dd, interior=f_int, exterior=f_ext)
+
+    # todo: user-supplied flux routine
+    # note: Hard-code central flux here for BR1
+    flux_weak = divergence_flux_central(f_tpair, normal)
 
     if not local:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
