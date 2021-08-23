@@ -695,7 +695,6 @@ class PyrometheusMixture(MixtureEOS):
             temperature = self.temperature(cv)
             y = cv.species_mass_fractions
             return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
-
         return get_pressure()
 
     def sound_speed(self, cv: ConservedVars):
@@ -724,7 +723,6 @@ class PyrometheusMixture(MixtureEOS):
         def get_sos():
             actx = cv.array_context
             return actx.np.sqrt((self.gamma(cv) * self.pressure(cv)) / cv.mass)
-
         return get_sos()
 
     def temperature(self, cv: ConservedVars):
@@ -757,7 +755,6 @@ class PyrometheusMixture(MixtureEOS):
             e = self.internal_energy(cv) / cv.mass
             return self._pyrometheus_mech.get_temperature(e, self._tguess,
                                                           y, True)
-
         return get_temp()
 
     def total_energy(self, cv, pressure):
