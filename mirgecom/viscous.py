@@ -43,8 +43,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools import memoize_in
-import arraycontext
 from grudge.trace_pair import TracePair
 from meshmode.dof_array import thaw, DOFArray
 
@@ -400,24 +398,5 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
     if not isinstance(d_alpha[0], DOFArray):
         return max(d_alpha)
 
-    return_dof = []
-    for igrp in range(len(d_alpha[0])):
-        stacked_diffusivity = actx.np.stack([x[igrp] for x in d_alpha])
-
-        n_species, ni1, ni0 = stacked_diffusivity.shape
-
-        @memoize_in(discr, ("max_species_diffusivity", n_species, igrp))
-        def make_max_kernel():
-            # fun fact: arraycontext needs these exact loop names to work (even
-            # though a loopy kernel can have whatever iterator names the user wants)
-            # TODO: see if the opposite order [i0, i1, i2] is faster due to higher
-            # spatial locality, causing fewer cache misses
-            return arraycontext.make_loopy_program(
-                "{ [i1,i0,i2]: 0<=i1<ni1 and 0<=i0<ni0 and 0<=i2<n_species}",
-                "out[i1,i0] = max(i2, a[i2,i1,i0])"
-            )
-
-        return_dof.append(
-            actx.call_loopy(make_max_kernel(), a=stacked_diffusivity)["out"])
-
-    return DOFArray(actx, tuple(return_dof))
+    from functools import reduce
+    return reduce(actx.np.maximum, d_alpha)
