@@ -414,6 +414,48 @@ def test_diffusive_heat_flux(actx_factory):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
+def test_local_max_species_diffusivity(actx_factory, dim):
+    """Test the mixture dt estimation."""
+    actx = actx_factory()
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 1
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    zeros = discr.zeros(actx)
+    ones = zeros + 1.0
+    vel = .32
+
+    velocity = make_obj_array([zeros+vel for _ in range(dim)])
+
+    massval = 1
+    mass = massval*ones
+
+    energy = zeros + 1.0 / (1.4*.4)
+    mom = mass * velocity
+    species_mass = np.array([1., 2., 3.], dtype=object)
+
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
+
+    tv_model = SimpleTransport(species_diffusivity=np.array([.1, .2, .3]))
+    eos = IdealSingleGas(transport_model=tv_model)
+    d_alpha = tv_model.species_diffusivity(eos, cv)
+
+    from mirgecom.viscous import get_local_max_species_diffusivity
+    expected = .3*ones
+    calculated = get_local_max_species_diffusivity(actx, discr, d_alpha)
+
+    assert discr.norm(calculated-expected, np.inf) == 0
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("mu", [-1, 0, 1, 2])
 @pytest.mark.parametrize("vel", [0, 1])
 def test_viscous_timestep(actx_factory, dim, mu, vel):
