@@ -391,7 +391,7 @@ def get_local_max_species_diffusivity(actx, discr, d_alpha):
     d_alpha: numpy.ndarray
         Species diffusivities
     """
-    if len(d_alpha) <= 0:
+    if len(d_alpha) == 0:
         return 0
     if not isinstance(d_alpha[0], DOFArray):
         return max(d_alpha)
