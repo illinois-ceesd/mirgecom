@@ -31,7 +31,7 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from pytools.obj_array import make_obj_array
+from pytools.obj_array import make_obj_array, obj_array_vectorize
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.dof_array import thaw
@@ -68,66 +68,29 @@ def _get_box_mesh(dim, a, b, n, t=None):
     return gen(a=a, b=b, npoints_per_axis=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
-def _coord_test_func(actx=None, x_vec=None, order=1, fac=1.0, grad=False):
-    """Make a coordinate-based test function or its gradient.
+def _coord_test_func(dim, order=1):
+    """Make a coordinate-based test function.
 
-    Test Function
-    -------------
-    1d: fac*x^order
-    2d: fac*x^order * y^order
-    3d: fac*x^order * y^order * z^order
-
-    Test Function Gradient
-    ----------------------
-    1d: fac*order*x^(order-1)
-    2d: fac*order*<x^(order-1)*y^order, x^order*y^(order-1)>
-    3d: fac*order*<x^(order-1)*y^order*z^order,
-                   x^order*y^(order-1)*z^order,
-                   x^order*y^order*z^(order-1)>
+    1d: x^order
+    2d: x^order * y^order
+    3d: x^order * y^order * z^order
     """
-    if x_vec is None:
-        return 0
-
-    dim = len(x_vec)
-
     sym_coords = prim.make_sym_vector("x", dim)
 
-    sym_f = fac
+    sym_result = 1
     for i in range(dim):
-        sym_f *= sym_coords[i]**order
+        sym_result *= sym_coords[i]**order
 
-    if grad:
-        sym_result = sym.grad(dim, sym_f)
-    else:
-        sym_result = sym_f
-
-    result = sym.EvaluationMapper({"x": x_vec})(sym_result)
-
-    # If expressions don't depend on coords (e.g., order 0), evaluated result
-    # will be scalar-valued, so promote to DOFArray(s) before returning
-    return result * (0*x_vec[0] + 1)
+    return sym_result
 
 
-def _trig_test_func(actx=None, x_vec=None, grad=False):
-    """Make trig test function or its gradient.
+def _trig_test_func(dim):
+    """Make trig test function.
 
-    Test Function
-    -------------
     1d: cos(2pi x)
     2d: sin(2pi x)cos(2pi y)
     3d: sin(2pi x)sin(2pi y)cos(2pi z)
-
-    Grad Test Function
-    ------------------
-    1d: 2pi * -sin(2pi x)
-    2d: 2pi * <cos(2pi x)cos(2pi y), -sin(2pi x)sin(2pi y)>
-    3d: 2pi * <cos(2pi x)sin(2pi y)cos(2pi z),
-               sin(2pi x)cos(2pi y)cos(2pi z),
-               -sin(2pi x)sin(2pi y)sin(2pi z)>
     """
-    if x_vec is None:
-        return 0
-    dim = len(x_vec)
     sym_coords = prim.make_sym_vector("x", dim)
 
     sym_cos = pmbl.var("cos")
@@ -136,51 +99,27 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
     for i in range(dim-1):
         sym_result = sym_result * sym_sin(2*np.pi*sym_coords[i])
 
-    if grad:
-        sym_result = sym.grad(dim, sym_result)
-
-    return sym.EvaluationMapper({"x": x_vec})(sym_result)
+    return sym_result
 
 
-def _cv_test_func(actx, x_vec, grad=False):
+def _cv_test_func(dim):
     """Make a CV array container for testing.
 
     There is no need for this CV to be physical, we are just testing whether the
     operator machinery still gets the right answers when operating on a CV array
     container.
 
-    Testing CV
-    ----------
     mass = constant
     energy = _trig_test_func
-    momentum = <_coord_test_func(order=2, fac=dim_index+1)>
-
-    Testing CV Gradient
-    -------------------
-    mass = <0>
-    energy = <_trig_test_func(grad=True)>
-    momentum = <_coord_test_func(grad=True)>
+    momentum = <(dim_index+1)*_coord_test_func(order=2)>
     """
-    zeros = 0*x_vec[0]
-    dim = len(x_vec)
-    momentum = make_obj_array([zeros+1.0 for _ in range(dim)])
-    if grad:
-        dm = make_obj_array([zeros+0.0 for _ in range(dim)])
-        de = _trig_test_func(actx, x_vec, grad=True)
-        dp = make_obj_array([np.empty(0) for _ in range(dim)])
-        dy = (
-            momentum * make_obj_array([np.empty(0) for _ in range(0)]).reshape(-1, 1)
-        )
-        for i in range(dim):
-            dp[i] = _coord_test_func(actx, x_vec, order=2, fac=(i+1), grad=True)
-        return make_conserved(dim=dim, mass=dm, energy=de, momentum=np.stack(dp),
-                              species_mass=dy)
-    else:
-        mass = zeros + 1.0
-        energy = _trig_test_func(actx, x_vec)
-        for i in range(dim):
-            momentum[i] = _coord_test_func(actx, x_vec, order=2, fac=(i+1))
-        return make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum)
+    sym_mass = 1
+    sym_energy = _trig_test_func(dim)
+    sym_momentum = make_obj_array([
+        (i+1)*_coord_test_func(dim, order=2)
+        for i in range(dim)])
+    return make_conserved(
+        dim=dim, mass=sym_mass, energy=sym_energy, momentum=sym_momentum)
 
 
 def central_flux_interior(actx, discr, int_tpair):
@@ -194,7 +133,7 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     """Compute a central flux for boundary faces."""
     boundary_discr = discr.discr_from_dd(btag)
     bnd_nodes = thaw(actx, boundary_discr.nodes())
-    soln_bnd = soln_func(actx=actx, x_vec=bnd_nodes)
+    soln_bnd = soln_func(x_vec=bnd_nodes)
     bnd_nhat = thaw(actx, discr.normal(btag))
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
@@ -202,15 +141,29 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
 
 
+# TODO: Generalize mirgecom.symbolic to work with array containers
+def sym_grad(dim, expr):
+    if isinstance(expr, ConservedVars):
+        return make_conserved(
+            dim, q=sym_grad(dim, expr.join()))
+    elif isinstance(expr, np.ndarray):
+        return np.stack(
+            obj_array_vectorize(lambda e: sym.grad(dim, e), expr))
+    else:
+        return sym.grad(dim, expr)
+
+
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("test_func", [partial(_coord_test_func, order=0),
-                                       partial(_coord_test_func, order=1),
-                                       partial(_coord_test_func, order=1, fac=2),
-                                       partial(_coord_test_func, order=2),
-                                       _trig_test_func,
-                                       _cv_test_func])
-def test_grad_operator(actx_factory, dim, order, test_func):
+@pytest.mark.parametrize("sym_test_func_factory", [
+    partial(_coord_test_func, order=0),
+    partial(_coord_test_func, order=1),
+    lambda dim: 2*_coord_test_func(dim, order=1),
+    partial(_coord_test_func, order=2),
+    _trig_test_func,
+    _cv_test_func
+])
+def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
     """Test the gradient operator for sanity.
 
     Check whether we get the right answers for gradients of analytic functions with
@@ -222,6 +175,8 @@ def test_grad_operator(actx_factory, dim, order, test_func):
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
     actx = actx_factory()
+
+    sym_test_func = sym_test_func_factory(dim)
 
     tol = 1e-10 if dim < 3 else 1e-9
     from pytools.convergence import EOCRecorder
@@ -243,12 +198,24 @@ def test_grad_operator(actx_factory, dim, order, test_func):
         from grudge.dt_utils import h_max_from_volume
         h_max = h_max_from_volume(discr)
 
+        def sym_eval(expr, x_vec):
+            # FIXME: When pymbolic supports array containers
+            mapper = sym.EvaluationMapper({"x": x_vec})
+            from arraycontext import rec_map_array_container
+            result = rec_map_array_container(mapper, expr)
+            # If expressions don't depend on coords (e.g., order 0), evaluated result
+            # will be scalar-valued, so promote to DOFArray(s) before returning
+            return result * (0*x_vec[0] + 1)
+
+        test_func = partial(sym_eval, sym_test_func)
+        grad_test_func = partial(sym_eval, sym_grad(dim, sym_test_func))
+
         nodes = thaw(actx, discr.nodes())
         int_flux = partial(central_flux_interior, actx, discr)
         bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
 
-        test_data = test_func(actx=actx, x_vec=nodes)
-        exact_grad = test_func(actx=actx, x_vec=nodes, grad=True)
+        test_data = test_func(nodes)
+        exact_grad = grad_test_func(nodes)
 
         if isinstance(test_data, ConservedVars):
             err_scale = discr.norm(exact_grad.join(), np.inf)
