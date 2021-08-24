@@ -5,6 +5,7 @@ Numerical Flux Routines
 
 .. autofunction:: gradient_flux_central
 .. autofunction:: divergence_flux_central
+.. autofunction:: flux_lfr
 .. autofunction:: divergence_flux_lfr
 """
 
@@ -159,4 +160,50 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg@normal - lam*cv_tpair.diff/2
+    return flux_lfr(cv_tpair, f_tpair, normal, lam)@normal
+
+
+def flux_lfr(cv_tpair, f_tpair, normal, lam):
+    r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
+
+    The Lax-Friedrichs/Rusanov flux is calculated as:
+
+    .. math::
+
+        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-) + \mathbf{F}(q^+))
+        + \frac{\lambda}{2}(q^{-} - q^{+})\hat{\mathbf{n}},
+
+    where $q^-, q^+$ are the scalar solution components on the interior and the
+    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
+    the vector flux function, $\hat{\mathbf{n}}$ is the face normal, and $\lambda$
+    is the user-supplied jump term coefficient.
+
+    Parameters
+    ----------
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
+
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`grudge.trace_pair.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
+
+    normal: numpy.ndarray
+
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    lam: :class:`meshmode.dof_array.DOFArray`
+
+        lambda parameter for Lax-Friedrichs/Rusanov flux
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`meshmode.dof_array.DOFArray` with the
+        Lax-Friedrichs/Rusanov flux.
+    """
+    return make_conserved(
+        dim=len(normal),
+        q=f_tpair.avg.join() - lam*np.outer(cv_tpair.diff.join(), normal)/2)
