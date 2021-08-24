@@ -204,4 +204,6 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return f_tpair.avg - lam*cv_tpair.diff*normal/2
+    return make_conserved(
+        dim=len(normal),
+        q=f_tpair.avg.join() - lam*np.outer(cv_tpair.diff.join(), normal)/2)
