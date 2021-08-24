@@ -317,7 +317,14 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
     The case is tested against the analytic expressions of the RHS. Checks several
     different orders and refinement levels to check error behavior.
     """
-    actx = actx_factory()
+    nonpooled_actx = actx_factory()
+    queue = nonpooled_actx.queue
+
+    import pyopencl.tools as cl_tools
+    actx = type(nonpooled_actx)(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
     nspecies = 10
     tolerance = 1e-8
     maxxerr = 0.0
