@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la # noqa
-# from pytools.obj_array import flat_obj_array
+from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
@@ -58,16 +58,13 @@ def div(vector_func):
     """Return the symbolic divergence of *vector_func*."""
     dim = len(vector_func)
     coords = prim.make_sym_vector("x", dim)
-    div = 0
-    for i in range(dim):
-        div += diff(coords[i])(vector_func[i])
-    return div
+    return sum([diff(coords[i])(vector_func[i]) for i in range(dim)])
 
 
 def grad(dim, func):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
     coords = prim.make_sym_vector("x", dim)
-    return [diff(coords[i])(func) for i in range(dim)]
+    return make_obj_array([diff(coords[i])(func) for i in range(dim)])
 
 
 class EvaluationMapper(ev.EvaluationMapper):

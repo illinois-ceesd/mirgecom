@@ -413,9 +413,10 @@ def test_diffusive_heat_flux(actx_factory):
         assert discr.norm(j[ispec+1] - exact_j, np.inf) < tol
 
 
+@pytest.mark.parametrize("array_valued", [False, True])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_local_max_species_diffusivity(actx_factory, dim):
-    """Test the mixture dt estimation."""
+def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
+    """Test the local maximum species diffusivity."""
     actx = actx_factory()
     nel_1d = 4
 
@@ -428,6 +429,7 @@ def test_local_max_species_diffusivity(actx_factory, dim):
     order = 1
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
+    nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
     vel = .32
@@ -444,12 +446,19 @@ def test_local_max_species_diffusivity(actx_factory, dim):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
 
-    tv_model = SimpleTransport(species_diffusivity=np.array([.1, .2, .3]))
+    d_alpha_input = np.array([.1, .2, .3])
+    if array_valued:
+        f = 1 + 0.1*actx.np.sin(nodes[0])
+        d_alpha_input *= f
+
+    tv_model = SimpleTransport(species_diffusivity=d_alpha_input)
     eos = IdealSingleGas(transport_model=tv_model)
     d_alpha = tv_model.species_diffusivity(eos, cv)
 
     from mirgecom.viscous import get_local_max_species_diffusivity
     expected = .3*ones
+    if array_valued:
+        expected *= f
     calculated = get_local_max_species_diffusivity(actx, discr, d_alpha)
 
     assert discr.norm(calculated-expected, np.inf) == 0
