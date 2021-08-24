@@ -32,6 +32,8 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests
 )
 from pytools.obj_array import make_obj_array
+import pymbolic as pmbl  # noqa
+import pymbolic.primitives as prim
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
 from mirgecom.flux import gradient_flux_central
@@ -39,6 +41,7 @@ from mirgecom.fluid import (
     ConservedVars,
     make_conserved
 )
+import mirgecom.symbolic as sym
 from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair
@@ -86,18 +89,23 @@ def _coord_test_func(actx=None, x_vec=None, order=1, fac=1.0, grad=False):
         return 0
 
     dim = len(x_vec)
-    if grad:
-        ret_ary = fac*order*make_obj_array([0*x_vec[0]+1.0 for _ in range(dim)])
-        for i in range(dim):
-            for j in range(dim):
-                termpow = (order - 1) if order and j == i else order
-                ret_ary[i] = ret_ary[i] * (x_vec[j]**termpow)
-    else:
-        ret_ary = fac*(0*x_vec[0]+1.0)
-        for i in range(dim):
-            ret_ary = ret_ary * (x_vec[i]**order)
 
-    return ret_ary
+    sym_coords = prim.make_sym_vector("x", dim)
+
+    sym_f = fac
+    for i in range(dim):
+        sym_f *= sym_coords[i]**order
+
+    if grad:
+        sym_result = sym.grad(dim, sym_f)
+    else:
+        sym_result = sym_f
+
+    result = sym.EvaluationMapper({"x": x_vec})(sym_result)
+
+    # If expressions don't depend on coords (e.g., order 0), evaluated result
+    # will be scalar-valued, so promote to DOFArray(s) before returning
+    return result * (0*x_vec[0] + 1)
 
 
 def _trig_test_func(actx=None, x_vec=None, grad=False):
@@ -107,7 +115,7 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
     -------------
     1d: cos(2pi x)
     2d: sin(2pi x)cos(2pi y)
-    3d: sin(2pi x)sin(2pi y)cos(2pi x)
+    3d: sin(2pi x)sin(2pi y)cos(2pi z)
 
     Grad Test Function
     ------------------
@@ -120,28 +128,18 @@ def _trig_test_func(actx=None, x_vec=None, grad=False):
     if x_vec is None:
         return 0
     dim = len(x_vec)
-    if grad:
-        ret_ary = make_obj_array([0*x_vec[0] + 1.0 for _ in range(dim)])
-        for i in range(dim):  # component & derivative for ith dir
-            for j in range(dim):  # form term for jth dir in ith component
-                if j == i:  # then this is a derivative term
-                    if j == (dim-1):  # deriv of cos term
-                        ret_ary[i] = ret_ary[i] * -actx.np.sin(2*np.pi*x_vec[j])
-                    else:  # deriv of sin term
-                        ret_ary[i] = ret_ary[i] * actx.np.cos(2*np.pi*x_vec[j])
-                    ret_ary[i] = 2*np.pi*ret_ary[i]
-                else:  # non-derivative term
-                    if j == (dim-1):  # cos term
-                        ret_ary[i] = ret_ary[i] * actx.np.cos(2*np.pi*x_vec[j])
-                    else:  # sin term
-                        ret_ary[i] = ret_ary[i] * actx.np.sin(2*np.pi*x_vec[j])
-    else:
-        # return _make_trig_term(actx, r=x_vec, term=dim-1)
-        ret_ary = actx.np.cos(2*np.pi*x_vec[dim-1])
-        for i in range(dim-1):
-            ret_ary = ret_ary * actx.np.sin(2*np.pi*x_vec[i])
+    sym_coords = prim.make_sym_vector("x", dim)
 
-    return ret_ary
+    sym_cos = pmbl.var("cos")
+    sym_sin = pmbl.var("sin")
+    sym_result = sym_cos(2*np.pi*sym_coords[dim-1])
+    for i in range(dim-1):
+        sym_result = sym_result * sym_sin(2*np.pi*sym_coords[i])
+
+    if grad:
+        sym_result = sym.grad(dim, sym_result)
+
+    return sym.EvaluationMapper({"x": x_vec})(sym_result)
 
 
 def _cv_test_func(actx, x_vec, grad=False):
