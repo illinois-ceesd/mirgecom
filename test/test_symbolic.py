@@ -25,7 +25,6 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-import pymbolic.primitives as prim
 from meshmode.dof_array import thaw
 from meshmode.mesh.generation import generate_regular_rect_mesh
 import mirgecom.symbolic as sym
@@ -101,7 +100,7 @@ def test_symbolic_div():
     expected result.
     """
     # (Equivalent to make_obj_array([pmbl.var("x")[i] for i in range(3)]))
-    sym_coords = prim.make_sym_vector("x", 3)
+    sym_coords = pmbl.make_sym_vector("x", 3)
     sym_x = sym_coords[0]
     sym_y = sym_coords[1]
 
@@ -120,7 +119,7 @@ def test_symbolic_grad():
     Compute the symbolic gradient of an expression and compare it to an expected
     result.
     """
-    sym_coords = prim.make_sym_vector("x", 3)
+    sym_coords = pmbl.make_sym_vector("x", 3)
     sym_x = sym_coords[0]
     sym_y = sym_coords[1]
 
@@ -152,7 +151,7 @@ def test_symbolic_evaluation(actx_factory):
 
     nodes = thaw(actx, discr.nodes())
 
-    sym_coords = prim.make_sym_vector("x", 2)
+    sym_coords = pmbl.make_sym_vector("x", 2)
 
     sym_f = (
         pmbl.var("exp")(-pmbl.var("t"))
