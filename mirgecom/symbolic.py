@@ -33,7 +33,6 @@ import numpy as np
 import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-import pymbolic.primitives as prim
 import pymbolic.mapper.evaluator as ev
 
 
@@ -57,13 +56,13 @@ def diff(var):
 def div(vector_func):
     """Return the symbolic divergence of *vector_func*."""
     dim = len(vector_func)
-    coords = prim.make_sym_vector("x", dim)
+    coords = pmbl.make_sym_vector("x", dim)
     return sum([diff(coords[i])(vector_func[i]) for i in range(dim)])
 
 
 def grad(dim, func):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
-    coords = prim.make_sym_vector("x", dim)
+    coords = pmbl.make_sym_vector("x", dim)
     return make_obj_array([diff(coords[i])(func) for i in range(dim)])
 
 
@@ -75,7 +74,8 @@ class EvaluationMapper(ev.EvaluationMapper):
 
     def map_call(self, expr):
         """Map a symbolic code expression to actual function call."""
-        assert isinstance(expr.function, prim.Variable)
+        from pymbolic.primitives import Variable
+        assert isinstance(expr.function, Variable)
         if expr.function.name == "sin":
             par, = expr.parameters
             return self._sin(self.rec(par))
