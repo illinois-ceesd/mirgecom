@@ -40,19 +40,67 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _const_diff_pair():
+    """Return a constant ($1$) and its derivative ($0$)."""
+    return 1, 0
+
+
+def _poly_diff_pair():
+    """Return a polynomial ($x^2$) and its derivative ($2x$)."""
+    sym_x = pmbl.var("x")
+    return sym_x**2, 2*sym_x
+
+
+def _cos_diff_pair():
+    r"""Return a cosine function ($\cos(2x)$ and its derivative ($-2\sin(2x)$)."""
+    sym_x = pmbl.var("x")
+    sym_cos = pmbl.var("cos")
+    sym_sin = pmbl.var("sin")
+    # Put the factor of 2 after to match how pymbolic computes the product rule
+    return sym_cos(2*sym_x), -sym_sin(2*sym_x)*2
+
+
+def _sin_diff_pair():
+    r"""Return a sine function ($\sin(2x)$ and its derivative ($2\cos(2x)$)."""
+    sym_x = pmbl.var("x")
+    sym_cos = pmbl.var("cos")
+    sym_sin = pmbl.var("sin")
+    # Put the factor of 2 after to match how pymbolic computes the product rule
+    return sym_sin(2*sym_x), sym_cos(2*sym_x)*2
+
+
+def _exp_diff_pair():
+    r"""
+    Return an exponential function ($\exp(2x)$ and its derivative ($2\exp(2x)$).
+    """
+    sym_x = pmbl.var("x")
+    sym_exp = pmbl.var("exp")
+    # Put the factor of 2 after to match how pymbolic computes the product rule
+    return sym_exp(2*sym_x), sym_exp(2*sym_x)*2
+
+
 @pytest.mark.parametrize(("sym_f", "expected_sym_df"), [
-    (1, 0),
-    (pmbl.var("x")**2, 2*pmbl.var("x")),
-    (pmbl.var("cos")(2*pmbl.var("x")), -pmbl.var("sin")(2*pmbl.var("x"))*2),
-    (pmbl.var("sin")(2*pmbl.var("x")), pmbl.var("cos")(2*pmbl.var("x"))*2),
-    (pmbl.var("exp")(2*pmbl.var("x")), pmbl.var("exp")(2*pmbl.var("x"))*2),
+    _const_diff_pair(),
+    _poly_diff_pair(),
+    _cos_diff_pair(),
+    _sin_diff_pair(),
+    _exp_diff_pair(),
 ])
 def test_symbolic_diff(sym_f, expected_sym_df):
+    """
+    Compute the symbolic derivative of an expression and compare it to an
+    expected result.
+    """
     sym_df = sym.diff(pmbl.var("x"))(sym_f)
     assert sym_df == expected_sym_df
 
 
 def test_symbolic_div():
+    """
+    Compute the symbolic divergence of a vector expression and compare it to an
+    expected result.
+    """
+    # (Equivalent to make_obj_array([pmbl.var("x")[i] for i in range(3)]))
     sym_coords = prim.make_sym_vector("x", 3)
     sym_x = sym_coords[0]
     sym_y = sym_coords[1]
@@ -68,6 +116,10 @@ def test_symbolic_div():
 
 
 def test_symbolic_grad():
+    """
+    Compute the symbolic gradient of an expression and compare it to an expected
+    result.
+    """
     sym_coords = prim.make_sym_vector("x", 3)
     sym_x = sym_coords[0]
     sym_y = sym_coords[1]
@@ -83,6 +135,11 @@ def test_symbolic_grad():
 
 
 def test_symbolic_evaluation(actx_factory):
+    """
+    Evaluate a symbolic expression by plugging in numbers and
+    :class:`~meshmode.dof_array.DOFArray`s and compare the result to the equivalent
+    quantity computed explicitly.
+    """
     actx = actx_factory()
 
     mesh = generate_regular_rect_mesh(
