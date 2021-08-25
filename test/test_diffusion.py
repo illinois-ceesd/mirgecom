@@ -25,7 +25,7 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-import pymbolic.primitives as prim
+from pymbolic.primitives import Expression
 import mirgecom.symbolic as sym
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -76,8 +76,8 @@ class HeatProblem:
 
     dim: int
     get_mesh: Callable
-    sym_alpha: Union[prim.Expression, Number]
-    sym_u: prim.Expression
+    sym_alpha: Union[Expression, Number]
+    sym_u: Expression
     get_boundaries: Callable
 
 
@@ -100,7 +100,7 @@ def get_decaying_trig(dim, alpha):
     def get_mesh(n):
         return get_box_mesh(dim, -0.5*np.pi, 0.5*np.pi, n)
 
-    sym_coords = prim.make_sym_vector("x", dim)
+    sym_coords = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_sin = pmbl.var("sin")
@@ -134,7 +134,7 @@ def get_decaying_trig_truncated_domain(dim, alpha):
     def get_mesh(n):
         return get_box_mesh(dim, -0.5*np.pi, 0.25*np.pi, n)
 
-    sym_coords = prim.make_sym_vector("x", dim)
+    sym_coords = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
     sym_sin = pmbl.var("sin")
@@ -187,7 +187,7 @@ def get_static_trig_var_diff(dim):
     def get_mesh(n):
         return get_box_mesh(dim, -0.5*np.pi, 0.5*np.pi, n)
 
-    sym_coords = prim.make_sym_vector("x", dim)
+    sym_coords = pmbl.make_sym_vector("x", dim)
     sym_cos = pmbl.var("cos")
     sym_sin = pmbl.var("sin")
 
