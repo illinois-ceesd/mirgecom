@@ -257,7 +257,8 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     viscous_mass_flux = 0 * cv.momentum
 
     j = diffusive_flux(discr, eos, cv, grad_cv)
-    heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
+    # heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
+    heat_flux_diffusive = 0
 
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_energy_flux = (
@@ -347,11 +348,11 @@ def get_viscous_timestep(discr, eos, cv):
     transport = eos.transport_model()
     if transport:
         mu = transport.viscosity(eos, cv)
-        d_alpha_max = \
-            get_local_max_species_diffusivity(
-                cv.array_context, discr,
-                transport.species_diffusivity(eos, cv)
-            )
+        # d_alpha_max = \
+        #     get_local_max_species_diffusivity(
+        #         cv.array_context, discr,
+        #         transport.species_diffusivity(eos, cv)
+        #     )
 
     return(
         length_scales / (compute_wavespeed(eos, cv)
