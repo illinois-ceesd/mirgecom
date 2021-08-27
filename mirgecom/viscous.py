@@ -220,7 +220,7 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
         \tau,-\mathbf{J}_\alpha],
 
     with fluid velocity ($\mathbf{v}$), viscous stress tensor
-    ($\mathbf{\tau}$), heat flux (\mathbf{q}), and diffusive flux
+    ($\mathbf{\tau}$), heat flux ($\mathbf{q}$), and diffusive flux
     for each species ($\mathbf{J}_\alpha$).
 
     .. note::

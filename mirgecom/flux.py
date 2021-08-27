@@ -41,9 +41,9 @@ from mirgecom.fluid import (
 
 
 def gradient_flux_central(u_tpair, normal):
-    r"""Compute a central scalar flux for the gradient operator.
+    r"""Compute a central flux for the gradient operator.
 
-    The central scalar flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
+    The central gradient flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
 
     .. math::
 
@@ -61,7 +61,7 @@ def gradient_flux_central(u_tpair, normal):
 
     Parameters
     ----------
-    u_tpair: `grudge.trace_pair.TracePair`
+    u_tpair: grudge.trace_pair.TracePair
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
@@ -70,8 +70,8 @@ def gradient_flux_central(u_tpair, normal):
     Returns
     -------
     numpy.ndarray
-        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
-        for each scalar component.
+        object array of `meshmode.dof_array.DOFArray` with the flux for each
+        scalar component.
     """
     tp_avg = u_tpair.avg
     tp_join = tp_avg
@@ -91,7 +91,7 @@ def gradient_flux_central(u_tpair, normal):
 def divergence_flux_central(trace_pair, normal):
     r"""Compute a central flux for the divergence operator.
 
-    The central vector flux, $h$, is calculated as:
+    The central divergence flux, $h$, is calculated as:
 
     .. math::
 
@@ -104,7 +104,7 @@ def divergence_flux_central(trace_pair, normal):
 
     Parameters
     ----------
-    trace_pair: `grudge.trace_pair.TracePair`
+    trace_pair: grudge.trace_pair.TracePair
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
@@ -113,8 +113,8 @@ def divergence_flux_central(trace_pair, normal):
     Returns
     -------
     numpy.ndarray
-        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
-        for each scalar component.
+        object array of `meshmode.dof_array.DOFArray` with the flux for each
+        scalar component.
     """
     return trace_pair.avg@normal
 
