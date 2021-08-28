@@ -145,7 +145,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     xlen = right_boundary_location - left_boundary_location
     p_low = base_pressure
     p_hi = pressure_ratio*base_pressure
-    dpdx = (p_hi - p_low) / xlen
+    dpdx = (p_low - p_hi) / xlen
     rho = 1.0
 
     eos = IdealSingleGas(transport_model=transport_model)
@@ -221,17 +221,18 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         ones = zeros + 1
         pressure = eos.pressure(cv)
         # grad of p should be dp/dx
-        xp_grad_p = -make_obj_array([dpdx*ones, zeros])
+        xp_grad_p = make_obj_array([dpdx*ones, zeros])
         grad_p = op.local_grad(discr, pressure)
+        dpscal = 1.0/np.abs(dpdx)
 
         temperature = eos.temperature(cv)
-        tscal = dpdx/(rho*eos.gas_const())
+        tscal = rho*eos.gas_const()*dpscal
         xp_grad_t = xp_grad_p/(cv.mass*eos.gas_const())
         grad_t = op.local_grad(discr, temperature)
 
         # sanity check
-        assert discr.norm(grad_p - xp_grad_p, np.inf)/dpdx < 5e-9
-        assert discr.norm(grad_t - xp_grad_t, np.inf)/tscal < 5e-9
+        assert discr.norm(grad_p - xp_grad_p, np.inf)*dpscal < 5e-9
+        assert discr.norm(grad_t - xp_grad_t, np.inf)*tscal < 5e-9
 
         # verify heat flux
         from mirgecom.viscous import conductive_heat_flux

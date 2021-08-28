@@ -43,7 +43,8 @@ from mirgecom.fluid import (
 def gradient_flux_central(u_tpair, normal):
     r"""Compute a central flux for the gradient operator.
 
-    The central gradient flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
+    The central gradient flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated
+    as:
 
     .. math::
 
