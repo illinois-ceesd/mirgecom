@@ -62,16 +62,16 @@ def gradient_flux_central(u_tpair, normal):
 
     Parameters
     ----------
-    u_tpair: grudge.trace_pair.TracePair
+    u_tpair: :class:`~grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
     Returns
     -------
     numpy.ndarray
-        object array of `meshmode.dof_array.DOFArray` with the flux for each
+        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
         scalar component.
     """
     tp_avg = u_tpair.avg
@@ -105,16 +105,16 @@ def divergence_flux_central(trace_pair, normal):
 
     Parameters
     ----------
-    trace_pair: grudge.trace_pair.TracePair
+    trace_pair: :class:`~grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
     Returns
     -------
     numpy.ndarray
-        object array of `meshmode.dof_array.DOFArray` with the flux for each
+        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
         scalar component.
     """
     return trace_pair.avg@normal
@@ -137,11 +137,11 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
 
     Parameters
     ----------
-    cv_tpair: :class:`grudge.trace_pair.TracePair`
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 
-    f_tpair: :class:`grudge.trace_pair.TracePair`
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Physical flux trace pair on faces on which numerical flux is to be calculated
 
@@ -150,7 +150,7 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
-    lam: :class:`meshmode.dof_array.DOFArray`
+    lam: :class:`~meshmode.dof_array.DOFArray`
 
         lambda parameter for Lax-Friedrichs/Rusanov flux
 
@@ -158,7 +158,7 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
     -------
     numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with the
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
     return flux_lfr(cv_tpair, f_tpair, normal, lam)@normal
@@ -181,20 +181,20 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
 
     Parameters
     ----------
-    cv_tpair: :class:`grudge.trace_pair.TracePair`
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 
-    f_tpair: :class:`grudge.trace_pair.TracePair`
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Physical flux trace pair on faces on which numerical flux is to be calculated
 
     normal: numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
-    lam: :class:`meshmode.dof_array.DOFArray`
+    lam: :class:`~meshmode.dof_array.DOFArray`
 
         lambda parameter for Lax-Friedrichs/Rusanov flux
 
@@ -202,7 +202,7 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
     -------
     numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with the
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
     return make_conserved(
