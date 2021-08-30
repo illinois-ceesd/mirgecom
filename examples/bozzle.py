@@ -23,7 +23,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import os
 import yaml
 import logging
 import numpy as np
@@ -87,69 +86,6 @@ class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
     pass
-
-
-def get_pseudo_y0_mesh():
-    """Generate or import a grid using `gmsh`.
-
-    Input required:
-        data/pseudoY0.brep  (for mesh gen)
-        -or-
-        data/pseudoY0.msh   (read existing mesh)
-
-    This routine will generate a new grid if it does
-    not find the grid file (data/pseudoY0.msh), but
-    note that if the grid is generated in millimeters,
-    then the solution initialization and BCs need to be
-    adjusted or the grid needs to be scaled up to meters
-    before being used with the current main driver in this
-    example.
-    """
-    from meshmode.mesh.io import (read_gmsh, generate_gmsh,
-                                  ScriptWithFilesSource)
-    if os.path.exists("data/pseudoY1nozzle.msh") is False:
-        mesh = generate_gmsh(ScriptWithFilesSource(
-            """
-            Merge "data/pseudoY1nozzle.brep";
-            Mesh.CharacteristicLengthMin = 1;
-            Mesh.CharacteristicLengthMax = 10;
-            Mesh.ElementOrder = 2;
-            Mesh.CharacteristicLengthExtendFromBoundary = 0;
-
-            // Inside and end surfaces of nozzle/scramjet
-            Field[1] = Distance;
-            Field[1].NNodesByEdge = 100;
-            Field[1].FacesList = {5,7,8,9,10};
-            Field[2] = Threshold;
-            Field[2].IField = 1;
-            Field[2].LcMin = 1;
-            Field[2].LcMax = 10;
-            Field[2].DistMin = 0;
-            Field[2].DistMax = 20;
-
-            // Edges separating surfaces with boundary layer
-            // refinement from those without
-            // (Seems to give a smoother transition)
-            Field[3] = Distance;
-            Field[3].NNodesByEdge = 100;
-            Field[3].EdgesList = {5,10,14,16};
-            Field[4] = Threshold;
-            Field[4].IField = 3;
-            Field[4].LcMin = 1;
-            Field[4].LcMax = 10;
-            Field[4].DistMin = 0;
-            Field[4].DistMax = 20;
-
-            // Min of the two sections above
-            Field[5] = Min;
-            Field[5].FieldsList = {2,4};
-
-            Background Field = 5;
-        """, ["data/pseudoY1nozzle.brep"]), 3, target_unit="MM")
-    else:
-        mesh = read_gmsh("data/pseudoY1nozzle.msh")
-
-    return mesh
 
 
 @mpi_entry_point
@@ -528,18 +464,19 @@ def main(ctx_factory=cl.create_some_context, restart_filename=None,
             "Outflow": ["+x"],
             "Wall": ["-y", "+y", "-z", "+z"]
         }
+
+        # scale the problem size while retaining space-time resolution
         scale = np.power(weak_scale, 1/dim)
         box_ll = 0
         box_ur = .5*scale
-        nel_1d = int(8*scale)
+        nel_1d = int(4*scale)
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,) * dim,
                                 b=(box_ur,) * dim,
                                 nelements_per_axis=(nel_1d,) * dim,
                                 boundary_tag_to_face=boundary_tag_to_face)
         local_mesh, global_nelements = generate_and_distribute_mesh(
-            comm,
-            generate_mesh
+            comm, generate_mesh
         )
         local_nelements = local_mesh.nelements
 
