@@ -206,9 +206,6 @@ def diffusive_heat_flux(discr, eos, cv, j):
     return 0
 
 
-# TODO: We could easily make this more general (dv, grad_dv)
-# so that user can define arbitrary array containers for *dv*,
-# enabling support for other models and simultaneous eqns.
 def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     r"""Compute the viscous flux vectors.
 
