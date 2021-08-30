@@ -856,7 +856,7 @@ class MixtureInitializer:
 class PlanarPoiseuille:
     r"""Initializer for the planar Poiseuille case.
 
-    The planar Poiseuille case is defined as a viscous flow between two
+    The 2D planar Poiseuille case is defined as a viscous flow between two
     stationary parallel sides with a uniform pressure drop prescribed
     as *p_hi* at the inlet and *p_low* at the outlet. See the figure below:
 
@@ -927,6 +927,12 @@ class PlanarPoiseuille:
         :class:`~mirgecom.fluid.ConservedVars`
             The Poiseuille solution state
         """
+        dim_mismatch = len(x_vec) != 2
+        if cv is not None:
+            dim_mismatch = dim_mismatch or cv.dim != 2
+        if dim_mismatch:
+            raise ValueError("PlanarPoiseuille initializer is 2D only.")
+
         x = x_vec[0]
         y = x_vec[1]
         p_x = self.p_hi + self.dpdx*x
@@ -948,6 +954,7 @@ class PlanarPoiseuille:
         """Return the exact gradient of the Poiseuille state."""
         y = x_vec[1]
         x = x_vec[0]
+        # FIXME: Symbolic infrastructure could perhaps do this better
         ones = x / x
         mass = cv_exact.mass
         velocity = cv_exact.velocity
