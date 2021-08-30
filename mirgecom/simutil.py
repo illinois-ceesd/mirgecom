@@ -178,8 +178,32 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 def allsync(local_values, comm=None, op=None):
     """Perform allreduce if MPI comm is provided.
 
+    This routine is a convenience wrapper for the MPI AllReduce operation.
+    The common use case is to synchronize error indicators across all MPI
+    ranks. If an MPI communicator is not provided, the *local_values* is
+    simply returned.  The reduction operation must be an MPI-supported
+    reduction operation and it defaults to MPI.MAX.
+
     .. note::
         This is a collective routine and must be called by all MPI ranks.
+
+    Parameters
+    ----------
+    local_values: Any
+        The (MPI-compatible) value or collection of values on which the
+        reduction operation is to be performed.
+
+    comm: *MPI.Comm*
+        Optional parameter specifying the MPI communicator on which the
+        reduction operation (if any) is to be performed
+
+    op: *MPI.op*
+        Reduction operation to be performed. Defaults to *MPI.MAX*.
+
+    Returns
+    -------
+    Any ( like *local_values* )
+        Returns the result of the reduction operation on *local_values*
     """
     if comm is None:
         return local_values
