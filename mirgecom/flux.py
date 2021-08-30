@@ -135,6 +135,16 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
     the vector flux function, $\hat{n}$ is the face normal, and $\lambda$ is the
     user-supplied jump term coefficient.
 
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux Jacobian:
+
+    .. math::
+        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
+
+    Here, $\lambda$ is a function parameter, leaving the responsibility for the
+    calculation of the eigenvalues of the system-dependent flux Jacobian to the
+    caller.
+
     Parameters
     ----------
     cv_tpair: :class:`~grudge.trace_pair.TracePair`
@@ -178,6 +188,16 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
     exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
     the vector flux function, $\hat{\mathbf{n}}$ is the face normal, and $\lambda$
     is the user-supplied jump term coefficient.
+
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux jacobian:
+
+    .. math::
+        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
+
+    Here, $\lambda$ is a function parameter, leaving the responsibility for the
+    calculation of the eigenvalues of the system-dependent flux Jacobian to the
+    caller.
 
     Parameters
     ----------
