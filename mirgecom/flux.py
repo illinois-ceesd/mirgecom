@@ -76,6 +76,9 @@ def gradient_flux_central(u_tpair, normal):
     """
     tp_avg = u_tpair.avg
     tp_join = tp_avg
+
+    # FIXME: There's a better way in-the-works through an improved "outer".
+    # Update when https://github.com/inducer/arraycontext/pull/46 lands.
     if isinstance(tp_avg, DOFArray):
         return tp_avg*normal
     elif isinstance(tp_avg, ConservedVars):
