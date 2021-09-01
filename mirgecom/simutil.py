@@ -263,10 +263,10 @@ def generate_and_distribute_mesh(comm, generate_mesh):
 
     return local_mesh, global_nelements
 
+
 def boundary_report(discr, boundaries, outfile_name):
     """Generate a report of the grid boundaries."""
     comm = discr.mpi_communicator
-    actx = discr._setup_actx
     nproc = 1
     rank = 0
     if comm is not None:
@@ -277,7 +277,7 @@ def boundary_report(discr, boundaries, outfile_name):
     from io import StringIO
     local_report = StringIO(local_header)
     local_report.seek(0, 2)
-    from meshmode.dof_array import thaw
+
     for btag in boundaries:
         boundary_discr = discr.discr_from_dd(btag)
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
@@ -306,7 +306,7 @@ def boundary_report(discr, boundaries, outfile_name):
         if comm is not None:
             comm.barrier()
 
-        
+
 def create_parallel_grid(comm, generate_grid):
     """Generate and distribute mesh compatibility interface."""
     from warnings import warn
