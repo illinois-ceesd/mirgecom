@@ -14,6 +14,7 @@ Diagnostic utilities
 .. autofunction:: compare_fluid_solutions
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
+.. autofunction:: boundary_report
 
 Mesh utilities
 --------------
@@ -262,7 +263,50 @@ def generate_and_distribute_mesh(comm, generate_mesh):
 
     return local_mesh, global_nelements
 
+def boundary_report(discr, boundaries, outfile_name):
+    """Generate a report of the grid boundaries."""
+    comm = discr.mpi_communicator
+    actx = discr._setup_actx
+    nproc = 1
+    rank = 0
+    if comm is not None:
+        nproc = comm.Get_size()
+        rank = comm.Get_rank()
 
+    local_header = f"nproc: {nproc}\nrank: {rank}\n"
+    from io import StringIO
+    local_report = StringIO(local_header)
+    local_report.seek(0, 2)
+    from meshmode.dof_array import thaw
+    for btag in boundaries:
+        boundary_discr = discr.discr_from_dd(btag)
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        local_report.write(f"{btag}: {nnodes}\n")
+
+    if nproc > 1:
+        from meshmode.mesh import BTAG_PARTITION
+        from grudge.trace_pair import connected_ranks
+        remote_ranks = connected_ranks(discr)
+        local_report.write(f"remote_ranks: {remote_ranks}\n")
+        rank_nodes = []
+        for remote_rank in remote_ranks:
+            boundary_discr = discr.discr_from_dd(BTAG_PARTITION(remote_rank))
+            nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+            rank_nodes.append(nnodes)
+        local_report.write(f"nnodes_pb: {rank_nodes}\n")
+
+    local_report.write("-----\n")
+    local_report.seek(0)
+
+    for irank in range(nproc):
+        if irank == rank:
+            f = open(outfile_name, "a+")
+            f.write(local_report.read())
+            f.close()
+        if comm is not None:
+            comm.barrier()
+
+        
 def create_parallel_grid(comm, generate_grid):
     """Generate and distribute mesh compatibility interface."""
     from warnings import warn
