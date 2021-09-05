@@ -5,7 +5,6 @@ memory-profiler
 jedi
 pudb
 pytest-pudb
-pytest-cov
 pyprof2calltree
 pyinstrument
 pylint
