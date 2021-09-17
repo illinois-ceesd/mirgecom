@@ -213,7 +213,7 @@ def compare_files_xdmf(first_file, second_file, tolerance = 1e-12):
         # check values w/in tolerance
         for i in range(len(values1)):
             if abs(values1[i] - values2[i]) > tolerance:
-                print("Tolerance:", tolerance, "\n", "Cell:", curr_cell1.get("Name"), )
+                print("Tolerance:", tolerance, "\n", "Cell:", curr_cell1.get("Name"), abs(values1[i] - values2[i]))
                 raise ValueError("Fidelity test failed: Mismatched data values with given tolerance")
 
     print("XDMF Fidelity test completed successfully with tolerance", tolerance)
