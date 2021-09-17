@@ -46,7 +46,7 @@ def compare_files_vtu(first_file, second_file, file_type, tolerance = 1e-12):
         # verify individual values w/in given tolerance
         for j in range(arr1.GetSize()):
             if abs(arr1.GetValue(j) - arr2.GetValue(j)) > tolerance: 
-                print("Tolerance:", tolerance)
+                print("Tolerance:", tolerance, "Error:", abs(arr1.GetValue(j) - arr2.GetValue(j)))
                 raise ValueError("Fidelity test failed: Mismatched data array values with given tolerance")
 
     print("VTU Fidelity test completed successfully with tolerance", tolerance)
@@ -213,7 +213,7 @@ def compare_files_xdmf(first_file, second_file, tolerance = 1e-12):
         # check values w/in tolerance
         for i in range(len(values1)):
             if abs(values1[i] - values2[i]) > tolerance:
-                print("Tolerance:", tolerance, "\n", "Cell:", curr_cell1.get("Name"))
+                print("Tolerance:", tolerance, "\n", "Cell:", curr_cell1.get("Name"), )
                 raise ValueError("Fidelity test failed: Mismatched data values with given tolerance")
 
     print("XDMF Fidelity test completed successfully with tolerance", tolerance)
