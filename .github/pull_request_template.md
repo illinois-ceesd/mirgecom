@@ -1,0 +1,8 @@
+- [ ] Is the scope and purpose of the PR clear?
+  - [ ] The PR should have a description
+  - [ ] The PR should have a guide if needed (e.g., an ordering)
+- [ ] Is every top-level method and class documented? Are things that should be documented actually so?
+- [ ] Is the interface understandable? (I.e. can someone figure out what stuff does?) Is it well-defined?
+- [ ] Does the implementation do what docstring claims?
+- [ ] Is everything that’s implemented covered by test?
+- [ ] Do you see any immediate risks or performance disadvantages with the design? Example: what do interface normals attach to?
