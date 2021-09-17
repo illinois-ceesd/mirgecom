@@ -434,7 +434,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
 
         # Form the external boundary solution with the new momentum
         return make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
-                              momentum=ext_mom)
+                              momentum=ext_mom, species_mass=int_cv.species_mass)
 
     def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
         """Get the exterior solution on the boundary."""
