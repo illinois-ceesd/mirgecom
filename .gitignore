@@ -44,3 +44,7 @@ test/nodal-dg
 
 # Linting temp files
 .run-pylint.py
+
+# Emacs backups
+.#*
+\#*
