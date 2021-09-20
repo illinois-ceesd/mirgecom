@@ -41,9 +41,10 @@ from mirgecom.fluid import (
 
 
 def gradient_flux_central(u_tpair, normal):
-    r"""Compute a central scalar flux for the gradient operator.
+    r"""Compute a central flux for the gradient operator.
 
-    The central scalar flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated as:
+    The central gradient flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated
+    as:
 
     .. math::
 
@@ -61,20 +62,23 @@ def gradient_flux_central(u_tpair, normal):
 
     Parameters
     ----------
-    u_tpair: `grudge.trace_pair.TracePair`
+    u_tpair: :class:`~grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
     Returns
     -------
     numpy.ndarray
-        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
-        for each scalar component.
+        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
+        scalar component.
     """
     tp_avg = u_tpair.avg
     tp_join = tp_avg
+
+    # FIXME: There's a better way in-the-works through an improved "outer".
+    # Update when https://github.com/inducer/arraycontext/pull/46 lands.
     if isinstance(tp_avg, DOFArray):
         return tp_avg*normal
     elif isinstance(tp_avg, ConservedVars):
@@ -91,7 +95,7 @@ def gradient_flux_central(u_tpair, normal):
 def divergence_flux_central(trace_pair, normal):
     r"""Compute a central flux for the divergence operator.
 
-    The central vector flux, $h$, is calculated as:
+    The central divergence flux, $h$, is calculated as:
 
     .. math::
 
@@ -104,17 +108,17 @@ def divergence_flux_central(trace_pair, normal):
 
     Parameters
     ----------
-    trace_pair: `grudge.trace_pair.TracePair`
+    trace_pair: :class:`~grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
     normal: numpy.ndarray
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
     Returns
     -------
     numpy.ndarray
-        object array of `meshmode.dof_array.DOFArray` with the central scalar flux
-        for each scalar component.
+        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
+        scalar component.
     """
     return trace_pair.avg@normal
 
@@ -134,13 +138,23 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
     the vector flux function, $\hat{n}$ is the face normal, and $\lambda$ is the
     user-supplied jump term coefficient.
 
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux Jacobian:
+
+    .. math::
+        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
+
+    Here, $\lambda$ is a function parameter, leaving the responsibility for the
+    calculation of the eigenvalues of the system-dependent flux Jacobian to the
+    caller.
+
     Parameters
     ----------
-    cv_tpair: :class:`grudge.trace_pair.TracePair`
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 
-    f_tpair: :class:`grudge.trace_pair.TracePair`
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Physical flux trace pair on faces on which numerical flux is to be calculated
 
@@ -149,7 +163,7 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
         object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
-    lam: :class:`meshmode.dof_array.DOFArray`
+    lam: :class:`~meshmode.dof_array.DOFArray`
 
         lambda parameter for Lax-Friedrichs/Rusanov flux
 
@@ -157,7 +171,7 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
     -------
     numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with the
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
     return flux_lfr(cv_tpair, f_tpair, normal, lam)@normal
@@ -178,22 +192,32 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
     the vector flux function, $\hat{\mathbf{n}}$ is the face normal, and $\lambda$
     is the user-supplied jump term coefficient.
 
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux jacobian:
+
+    .. math::
+        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
+
+    Here, $\lambda$ is a function parameter, leaving the responsibility for the
+    calculation of the eigenvalues of the system-dependent flux Jacobian to the
+    caller.
+
     Parameters
     ----------
-    cv_tpair: :class:`grudge.trace_pair.TracePair`
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Solution trace pair for faces for which numerical flux is to be calculated
 
-    f_tpair: :class:`grudge.trace_pair.TracePair`
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
 
         Physical flux trace pair on faces on which numerical flux is to be calculated
 
     normal: numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
 
-    lam: :class:`meshmode.dof_array.DOFArray`
+    lam: :class:`~meshmode.dof_array.DOFArray`
 
         lambda parameter for Lax-Friedrichs/Rusanov flux
 
@@ -201,7 +225,7 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
     -------
     numpy.ndarray
 
-        object array of :class:`meshmode.dof_array.DOFArray` with the
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
     return make_conserved(

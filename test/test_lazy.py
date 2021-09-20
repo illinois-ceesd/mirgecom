@@ -188,7 +188,7 @@ def test_lazy_op_diffusion(op_test_data, order):
         u = actx.np.cos(np.pi*nodes[0])
         return alpha, u
 
-    tol = 1e-12
+    tol = 1e-11
     isclose = partial(
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
@@ -218,7 +218,7 @@ def _get_pulse():
         BTAG_ALL: AdiabaticSlipBoundary()
     }
 
-    return eos, init, boundaries, 1e-12
+    return eos, init, boundaries, 3e-12
 
 
 def _get_scalar_lump():
@@ -236,7 +236,7 @@ def _get_scalar_lump():
         BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=init)
     }
 
-    return eos, init, boundaries, 1e-12
+    return eos, init, boundaries, 5e-12
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
