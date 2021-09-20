@@ -81,7 +81,6 @@ class GasEOS(metaclass=ABCMeta):
     .. automethod:: gamma
     .. automethod:: transport_model
     .. automethod:: get_internal_energy
-    .. automethod:: species_enthalpies
     """
 
     @abstractmethod
@@ -131,10 +130,6 @@ class GasEOS(metaclass=ABCMeta):
     @abstractmethod
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
-
-    def species_enthalpies(self, cv: ConservedVars):
-        """Get specific enthalpies for each mixture species."""
-        raise NotImplementedError()
 
     def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
