@@ -1210,6 +1210,7 @@ class PlanarPoiseuille:
         """Return the exact gradient of the Poiseuille state."""
         y = x_vec[1]
         x = x_vec[0]
+
         # FIXME: Symbolic infrastructure could perhaps do this better
         ones = x / x
         mass = cv_exact.mass
