@@ -15,7 +15,7 @@ set -x
 # patched by the incoming development. The following vars control the
 # production environment:
 #
-# export PRODUCTION_BRANCH=""   # The base production branch to be installed by emirge
+export PRODUCTION_BRANCH="test-y1"   # The base production branch to be installed by emirge
 # export PRODUCTION_FORK=""  # The fork/home of production changes (if any)
 #
 # Multiple production drivers are supported. The user should provide a ':'-delimited
