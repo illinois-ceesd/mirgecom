@@ -34,7 +34,7 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
 fi
 DEVELOPMENT_BRANCH=${DEVELOPMENT_BRANCH:-"main"}
 DEVELOPMENT_FORK=${DEVELOPMENT_FORK:-"illinois-ceesd"}
-PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"y1-production"}
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"tesy-y1"}
 PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
 
 echo "Production environment settings:"
