@@ -326,7 +326,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
     eoc_rec = EOCRecorder()
 
-    for nel_1d in [4, 8, 16]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import (
             generate_regular_rect_mesh,
         )
