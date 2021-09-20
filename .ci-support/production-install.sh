@@ -38,7 +38,7 @@ fi
 
 DEVELOPMENT_BRANCH=${DEVELOPMENT_BRANCH:-"main"}
 DEVELOPMENT_FORK=${DEVELOPMENT_FORK:-"illinois-ceesd"}
-PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"test-y1"}
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"y1-production"}
 PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
 
 echo "Production environment settings:"
