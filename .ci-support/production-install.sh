@@ -23,6 +23,7 @@
 set -x
 
 if [ -n "$DEVELOPMENT_BRANCH" ]; then
+    echo "Preparing production environment for branch: ${DEVELOPMENT_BRANCH}."
     PRODUCTION_ENV_FILE="$1"
     if [ -e "$PRODUCTION_ENV_FILE" ]; then
         echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
@@ -31,10 +32,13 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
         echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
         echo "To customize, set up .ci-support/production-testing-env.sh."
     fi
+else
+    echo "No development branch specified, probably main branch."
 fi
+
 DEVELOPMENT_BRANCH=${DEVELOPMENT_BRANCH:-"main"}
 DEVELOPMENT_FORK=${DEVELOPMENT_FORK:-"illinois-ceesd"}
-PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"tesy-y1"}
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"test-y1"}
 PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
 
 echo "Production environment settings:"
