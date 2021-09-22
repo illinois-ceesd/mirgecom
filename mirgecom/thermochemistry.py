@@ -1,6 +1,6 @@
 r""":mod:`mirgecom.thermochem` provides a wrapper class for :mod:`pyrometheus`..
 
-.. autofunction:: make_thermochemistry_class
+.. autofunction:: make_pyrometheus_mechanism
 """
 
 __copyright__ = """
@@ -28,22 +28,32 @@ THE SOFTWARE.
 """
 
 
-def make_thermochemisty_class(cantera_soln):
-    """Create thermochemistry class."""
+def _pyro_thermochem_class(cantera_soln):
+    """Return Pyrometheus thermochemistry class.
+
+    Dynamically creates a class that inherits from a :mod:`pyrometheus.ThermoChem`
+    and overrides a couple of the functions for MIRGE-Com compatibility.
+    """
     import pyrometheus as pyro
     pyro_class = pyro.get_thermochem_class(cantera_soln)
 
     class ThermoChem(pyro_class):
 
+        # This bit disallows negative concentrations and instead
+        # pins them to 0. mass_fractions can sometimes be slightly
+        # negative and that's ok.
         def get_concentrations(self, rho, mass_fractions):
             concs = self.iwts * rho * mass_fractions
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
-            for i, conc in enumerate(concs):
+            for i in range(self.num_species):
                 concs[i] = self.usr_np.where(self.usr_np.less(concs[i], 0),
                                              zero, concs[i])
             return concs
 
+        # This hard-codes the Newton iterations to 10 because the convergence
+        # check is not compatible with lazy evaluation. Instead, we plan to check
+        # the temperature residual at simulation health checking time.
         def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
             if do_energy is False:
                 pv_fun = self.get_mixture_specific_heat_cp_mass
@@ -66,3 +76,7 @@ def make_thermochemisty_class(cantera_soln):
             return t_i
 
     return ThermoChem
+
+
+def make_pyrometheus_mechanism(actx, cantera_soln):
+    return _pyro_thermochem_class(cantera_soln)(actx.np)

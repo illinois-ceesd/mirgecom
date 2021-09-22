@@ -246,10 +246,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import make_thermochemistry_class
-    thermo_chem_class = make_thermochemistry_class(cantera_soln)
-    pyrometheus_mechanism = thermo_chem_class(actx)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    eos = PyrometheusMixture(make_pyrometheus_mechanism(actx, cantera_soln),
                              temperature_guess=init_temperature)
 
     # }}}
