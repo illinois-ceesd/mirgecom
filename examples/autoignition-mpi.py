@@ -67,7 +67,6 @@ from mirgecom.logging_quantities import (
 )
 
 import cantera
-# import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
