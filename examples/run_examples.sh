@@ -17,10 +17,10 @@ do
     if [[ "$example" == *"-mpi-lazy.py" ]]
     then
         echo "*** Running parallel lazy example (1 rank): $example"
-        mpiexec -n 1 python -m mpi4py ${example} --lazy
+        mpiexec -n 1 python -m mpi4py ${example} --mpi --lazy
     elif [[ "$example" == *"-mpi.py" ]]; then
         echo "*** Running parallel example (2 ranks): $example"
-        mpiexec -n 2 python -m mpi4py ${example}
+        mpiexec -n 2 python -m mpi4py ${example} --mpi
     elif [[ "$example" == *"-lazy.py" ]]; then
         echo "*** Running serial lazy example: $example"
         python ${example} --lazy
