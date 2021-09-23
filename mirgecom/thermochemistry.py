@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.thermochem` provides a wrapper class for :mod:`pyrometheus`..
+r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`..
 
 .. autofunction:: make_pyrometheus_mechanism
 """
@@ -28,16 +28,16 @@ THE SOFTWARE.
 """
 
 
-def _pyro_thermochem_class(cantera_soln):
-    """Return Pyrometheus thermochemistry class.
+def _pyro_thermochem_wrapper_class(cantera_soln):
+    """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
-    Dynamically creates a class that inherits from a :mod:`pyrometheus.ThermoChem`
+    Dynamically creates a class that inherits from a :mod:`pyrometheus` instance
     and overrides a couple of the functions for MIRGE-Com compatibility.
     """
     import pyrometheus as pyro
     pyro_class = pyro.get_thermochem_class(cantera_soln)
 
-    class ThermoChem(pyro_class):
+    class PyroWrapper(pyro_class):
 
         # This bit disallows negative concentrations and instead
         # pins them to 0. mass_fractions can sometimes be slightly
@@ -54,6 +54,7 @@ def _pyro_thermochem_class(cantera_soln):
         # This hard-codes the Newton iterations to 10 because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
+        # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
         def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
             if do_energy is False:
                 pv_fun = self.get_mixture_specific_heat_cp_mass
@@ -75,8 +76,26 @@ def _pyro_thermochem_class(cantera_soln):
 
             return t_i
 
-    return ThermoChem
+    return PyroWrapper
 
 
 def make_pyrometheus_mechanism(actx, cantera_soln):
-    return _pyro_thermochem_class(cantera_soln)(actx.np)
+    """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism object.
+
+    This routine creates and returns an instance of a :mod:`pyrometheus`
+    thermochemical mechanism for use in a MIRGE-Com fluid EOS. It requires a
+    Cantera Solution and an array context.
+
+    Parameters
+    ----------
+    actx: :class:`arraycontext.ArrayContext`
+        Array context from which to get the numpy-like namespace for
+        :mod:`pyrometheus`
+    cantera_soln:
+        Cantera Solution for the thermochemical mechanism to be used
+
+    Returns
+    -------
+    :mod:`pyrometheus` ThermoChem class
+    """
+    return _pyro_thermochem_wrapper_class(cantera_soln)(actx.np)
