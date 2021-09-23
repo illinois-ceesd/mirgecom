@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import sys
 import logging
 
 import numpy as np
@@ -41,6 +42,9 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
+from mirgecom.simutil import (
+    generate_and_distribute_mesh
+)
 from mirgecom.wave import wave_operator
 
 import pyopencl.tools as cl_tools
@@ -71,17 +75,21 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-@mpi_entry_point
 def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
          use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    num_parts = comm.Get_size()
+    if "mpi4py.MPI" in sys.modules:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        nproc = comm.Get_size()
+    else:
+        comm = None
+        rank = 0
+        nproc = 1
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
@@ -97,29 +105,17 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
-
-        from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-        mesh_dist = MPIMeshDistributor(comm)
-
         dim = 2
         nel_1d = 16
 
-        if mesh_dist.is_mananger_rank():
+        def generate_mesh():
             from meshmode.mesh.generation import generate_regular_rect_mesh
-            mesh = generate_regular_rect_mesh(
+            return generate_regular_rect_mesh(
                 a=(-0.5,)*dim, b=(0.5,)*dim,
                 nelements_per_axis=(nel_1d,)*dim)
 
-            print("%d elements" % mesh.nelements)
-            part_per_element = get_partition_by_pymetis(mesh, num_parts)
-            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-
-            del mesh
-
-        else:
-            local_mesh = mesh_dist.receive_mesh_part()
-
-        fields = None
+        local_mesh, global_nelements = generate_and_distribute_mesh(
+            comm, generate_mesh)
 
     else:
         from mirgecom.restart import read_restart_data
@@ -128,7 +124,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         )
         local_mesh = restart_data["local_mesh"]
         nel_1d = restart_data["nel_1d"]
-        assert comm.Get_size() == restart_data["num_parts"]
+        assert restart_data["num_parts"] == nproc
 
     order = 3
 
@@ -211,7 +207,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
                     "t": t,
                     "step": istep,
                     "nel_1d": nel_1d,
-                    "num_parts": num_parts},
+                    "num_parts": nproc},
                 filename=snapshot_pattern.format(step=istep, rank=rank),
                 comm=comm
             )
@@ -249,11 +245,17 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser(description="Wave (MPI version)")
+    parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging,
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
+
+    main_func(use_profiling=use_profiling, use_logmgr=use_logging,
          actx_class=PytatoPyOpenCLArrayContext if args.lazy
          else PyOpenCLArrayContext)
 

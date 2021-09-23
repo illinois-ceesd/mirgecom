@@ -23,6 +23,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import sys
 import logging
 import numpy as np
 import pyopencl as cl
@@ -78,7 +79,6 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-@mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext):
@@ -88,10 +88,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if casename is None:
         casename = "mirgecom"
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    nproc = comm.Get_size()
+    if "mpi4py.MPI" in sys.modules:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        nproc = comm.Get_size()
+    else:
+        comm = None
+        rank = 0
+        nproc = 1
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -485,6 +490,7 @@ if __name__ == "__main__":
     import argparse
     casename = "autoignition"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -496,6 +502,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -504,6 +511,11 @@ if __name__ == "__main__":
         actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
@@ -511,7 +523,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+    main_func(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

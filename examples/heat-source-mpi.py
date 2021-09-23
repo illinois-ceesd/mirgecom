@@ -21,8 +21,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import sys
 import logging
-
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
@@ -43,6 +43,9 @@ from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
+from mirgecom.simutil import (
+    generate_and_distribute_mesh
+)
 from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
@@ -53,7 +56,6 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 from logpyle import IntervalTimer, set_dt
 
 
-@mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext):
@@ -61,9 +63,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    num_parts = comm.Get_size()
+    if "mpi4py.MPI" in sys.modules:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+    else:
+        comm = None
+        rank = 0
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
@@ -78,9 +84,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-    mesh_dist = MPIMeshDistributor(comm)
-
     dim = 2
     nel_1d = 16
 
@@ -88,28 +91,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     t_final = 0.0002
     istep = 0
 
-    if mesh_dist.is_mananger_rank():
+    def generate_mesh():
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(-0.5,)*dim,
-            b=(0.5,)*dim,
+        return generate_regular_rect_mesh(
+            a=(-0.5,)*dim, b=(0.5,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
             boundary_tag_to_face={
                 "dirichlet": ["+x", "-x"],
                 "neumann": ["+y", "-y"]
-                }
-            )
+            })
 
-        print("%d elements" % mesh.nelements)
-
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-
-        del mesh
-
-    else:
-        local_mesh = mesh_dist.receive_mesh_part()
+    local_mesh, global_nelements = generate_and_distribute_mesh(
+        comm, generate_mesh)
 
     order = 3
 
@@ -192,6 +185,7 @@ if __name__ == "__main__":
     import argparse
     casename = "heat-source"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -203,6 +197,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -211,6 +206,11 @@ if __name__ == "__main__":
         actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+    main_func(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
