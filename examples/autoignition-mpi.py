@@ -67,7 +67,6 @@ from mirgecom.logging_quantities import (
 )
 
 import cantera
-import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -246,8 +245,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    eos = PyrometheusMixture(make_pyrometheus_mechanism(actx, cantera_soln),
                              temperature_guess=init_temperature)
 
     # }}}
