@@ -69,8 +69,8 @@ from mirgecom.logging_quantities import (
 logger = logging.getLogger(__name__)
 
 
-class MyRuntimeError(RuntimeError):
-    """Simple exception to kill the simulation."""
+class SimError(RuntimeError):
+    """Simple exception for fatal driver errors."""
 
     pass
 
@@ -219,13 +219,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(component_errors):
+    def write_status(component_errors):
         if rank == 0:
             logger.info(
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
 
-    def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
+    def write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
             dv = eos.dependent_vars(state)
         if exact is None:
@@ -240,7 +240,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
-    def my_write_restart(step, t, state):
+    def write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != rst_filename:
             rst_data = {
@@ -255,7 +255,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(pressure, component_errors):
+    def health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", pressure) \
@@ -271,7 +271,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-    def my_pre_step(step, t, dt, state):
+    def pre_step(step, t, dt, state):
         try:
             dv = None
             exact = None
@@ -292,14 +292,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 health_errors = global_reduce(
-                    my_health_check(dv.pressure, component_errors), op="lor")
+                    health_check(dv.pressure, component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
-                    raise MyRuntimeError("Failed simulation health check.")
+                    raise SimError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+                write_restart(step=step, t=t, state=state)
 
             if do_viz:
                 if dv is None:
@@ -307,7 +307,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 if exact is None:
                     exact = initializer(x_vec=nodes, eos=eos, time=t)
                 resid = state - exact
-                my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
+                write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
                              resid=resid)
 
             if do_status:
@@ -316,20 +316,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         exact = initializer(x_vec=nodes, eos=eos, time=t)
                     from mirgecom.simutil import compare_fluid_solutions
                     component_errors = compare_fluid_solutions(discr, state, exact)
-                my_write_status(component_errors)
+                write_status(component_errors)
 
-        except MyRuntimeError:
+        except SimError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
-            my_write_restart(step=step, t=t, state=state)
+            write_viz(step=step, t=t, state=state)
+            write_restart(step=step, t=t, state=state)
             raise
 
         dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
                               constant_cfl)
         return state, dt
 
-    def my_post_step(step, t, dt, state):
+    def post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
         if logmgr:
@@ -338,7 +338,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
+    def rhs(t, state):
         return euler_operator(discr, cv=state, time=t,
                               boundaries=boundaries, eos=eos)
 
@@ -346,9 +346,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_cfl, eos, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=my_pre_step, dt=current_dt,
-                      post_step_callback=my_post_step,
+        advance_state(rhs=rhs, timestepper=timestepper,
+                      pre_step_callback=pre_step, dt=current_dt,
+                      post_step_callback=post_step,
                       state=current_state, t=current_t, t_final=t_final)
 
     # Dump the final data
@@ -358,9 +358,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_dv = eos.dependent_vars(current_state)
     final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
     final_resid = current_state - final_exact
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
+    write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
                  exact=final_exact, resid=final_resid)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()
