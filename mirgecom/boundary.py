@@ -58,63 +58,54 @@ from abc import ABCMeta, abstractmethod
 class FluidBoundary(metaclass=ABCMeta):
     r"""Abstract interface to fluid boundary treatment.
 
-    .. automethod:: inviscid_boundary_flux
-    .. automethod:: viscous_boundary_flux
-    .. automethod:: q_boundary_flux
-    .. automethod:: s_boundary_flux
-    .. automethod:: t_boundary_flux
+    .. automethod:: inviscid_divergence_flux
+    .. automethod:: viscous_divergence_flux
+    .. automethod:: cv_gradient_flux
+    .. automethod:: t_gradient_flux
     """
 
     @abstractmethod
-    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
+    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
+        """Get the inviscid boundary flux for the divergence operator."""
 
     @abstractmethod
-    def viscous_boundary_flux(self, discr, btag, cv, grad_cv, grad_t,
+    def viscous_divergence_flux(self, discr, btag, cv, grad_cv, grad_t,
                               eos, **kwargs):
-        """Get the viscous flux across the boundary faces."""
+        """Get the viscous boundary flux for the divergence operator."""
 
     @abstractmethod
-    def q_boundary_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the scalar conserved quantity flux across the boundary faces."""
+    def cv_gradient_flux(self, discr, btag, cv, eos, **kwargs):
+        """Get the fluid soln boundary flux for the gradient operator."""
 
     @abstractmethod
-    def s_boundary_flux(self, discr, btag, grad_cv, eos, **kwargs):
-        r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
-
-    @abstractmethod
-    def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
         r"""Get temperature flux across the boundary faces."""
 
 
 class FluidBC(FluidBoundary):
     r"""Abstract interface to viscous boundary conditions.
 
-    .. automethod:: q_boundary_flux
-    .. automethod:: t_boundary_flux
-    .. automethod:: s_boundary_flux
-    .. automethod:: inviscid_boundary_flux
-    .. automethod:: viscous_boundary_flux
+    .. automethod:: cv_gradient_flux
+    .. automethod:: t_gradient_flux
+    .. automethod:: inviscid_divergence_flux
+    .. automethod:: viscous_divergence_flux
     .. automethod:: boundary_pair
     """
 
-    def q_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def cv_gradient_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the flux through boundary *btag* for each scalar in *q*."""
         raise NotImplementedError()
 
-    def s_boundary_flux(self, discr, btag, grad_cv, eos, **kwargs):
-        r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
-        raise NotImplementedError()
-
-    def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
         raise NotImplementedError()
 
-    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
         raise NotImplementedError()
 
-    def viscous_boundary_flux(self, discr, btag, cv, grad_cv, grad_t, eos, **kwargs):
+    def viscous_divergence_flux(self, discr, btag, cv, grad_cv, grad_t, eos,
+                                **kwargs):
         """Get the viscous part of the physical flux across the boundary *btag*."""
         raise NotImplementedError()
 
@@ -128,11 +119,11 @@ class PrescribedInviscidBoundary(FluidBC):
 
     .. automethod:: __init__
     .. automethod:: boundary_pair
-    .. automethod:: inviscid_boundary_flux
+    .. automethod:: inviscid_divergence_flux
     .. automethod:: soln_gradient_flux
     """
 
-    def __init__(self, inviscid_boundary_flux_func=None, boundary_pair_func=None,
+    def __init__(self, inviscid_divergence_flux_func=None, boundary_pair_func=None,
                  inviscid_facial_flux_func=None, fluid_solution_func=None,
                  fluid_solution_flux_func=None, scalar_numerical_flux_func=None,
                  fluid_solution_gradient_func=None,
@@ -140,7 +131,7 @@ class PrescribedInviscidBoundary(FluidBC):
                  fluid_temperature_func=None):
         """Initialize the PrescribedInviscidBoundary and methods."""
         self._bnd_pair_func = boundary_pair_func
-        self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
+        self._inviscid_bnd_flux_func = inviscid_divergence_flux_func
         self._inviscid_facial_flux_func = inviscid_facial_flux_func
         if not self._inviscid_facial_flux_func:
             self._inviscid_facial_flux_func = inviscid_facial_flux
@@ -178,7 +169,7 @@ class PrescribedInviscidBoundary(FluidBC):
         ext_soln = self._fluid_soln_func(nodes, cv=int_soln, normal=nhat, **kwargs)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
-    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid flux across the boundary faces."""
         if self._inviscid_bnd_flux_func:
             actx = cv.array_context
@@ -191,7 +182,7 @@ class PrescribedInviscidBoundary(FluidBC):
         bnd_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
         return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
 
-    def q_boundary_flux(self, discr, btag, cv, **kwargs):
+    def cv_gradient_flux(self, discr, btag, cv, **kwargs):
         """Get the flux through boundary *btag* for each scalar in *q*."""
         actx = cv.array_context
         boundary_discr = discr.discr_from_dd(btag)
@@ -211,29 +202,9 @@ class PrescribedInviscidBoundary(FluidBC):
     def soln_gradient_flux(self, discr, btag, soln, **kwargs):
         """Get the flux for solution gradient with AV API."""
         cv = make_conserved(discr.dim, q=soln)
-        return self.q_boundary_flux(discr, btag, cv, **kwargs).join()
+        return self.cv_gradient_flux(discr, btag, cv, **kwargs).join()
 
-    def s_boundary_flux(self, discr, btag, grad_cv, **kwargs):
-        r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
-        actx = grad_cv.mass[0].array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        grad_cv_minus = discr.project("vol", btag, grad_cv)
-        if self._fluid_soln_grad_func:
-            grad_cv_plus = self._fluid_soln_grad_func(nodes, nhat=nhat,
-                                                     grad_cv=grad_cv_minus, **kwargs)
-        else:
-            grad_cv_plus = grad_cv_minus
-        bnd_grad_pair = TracePair(btag, interior=grad_cv_minus,
-                                  exterior=grad_cv_plus)
-
-        return self._boundary_quantity(
-            discr, btag, self._fluid_soln_grad_flux_func(bnd_grad_pair, nhat),
-            **kwargs
-        )
-
-    def t_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
         cv_minus = discr.project("vol", btag, cv)
         t_minus = eos.temperature(cv_minus)
@@ -253,7 +224,8 @@ class PrescribedInviscidBoundary(FluidBC):
                                        self._scalar_num_flux_func(bnd_tpair, nhat),
                                        **kwargs)
 
-    def viscous_boundary_flux(self, discr, btag, eos, cv, grad_cv, grad_t, **kwargs):
+    def viscous_divergence_flux(self, discr, btag, eos, cv, grad_cv, grad_t,
+                                **kwargs):
         """Get the viscous part of the physical flux across the boundary *btag*."""
         cv_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
 
@@ -488,7 +460,7 @@ class PrescribedViscousBoundary(FluidBC):
                 return quantity
         return discr.project(btag, "all_faces", quantity)
 
-    def q_boundary_flux(self, discr, btag, eos, cv, **kwargs):
+    def cv_gradient_flux(self, discr, btag, eos, cv, **kwargs):
         """Get the flux through boundary *btag* for each scalar in *q*."""
         actx = cv.array_context
         boundary_discr = discr.discr_from_dd(btag)
@@ -515,7 +487,7 @@ class PrescribedViscousBoundary(FluidBC):
 
         return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
 
-    def t_boundary_flux(self, discr, btag, eos, cv, **kwargs):
+    def t_gradient_flux(self, discr, btag, eos, cv, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""
         actx = cv.array_context
         boundary_discr = discr.discr_from_dd(btag)
@@ -547,7 +519,7 @@ class PrescribedViscousBoundary(FluidBC):
 
         return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
 
-    def inviscid_boundary_flux(self, discr, btag, eos, cv, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, eos, cv, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
         actx = cv.array_context
         boundary_discr = discr.discr_from_dd(btag)
@@ -571,7 +543,8 @@ class PrescribedViscousBoundary(FluidBC):
 
         return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
 
-    def viscous_boundary_flux(self, discr, btag, eos, cv, grad_cv, grad_t, **kwargs):
+    def viscous_divergence_flux(self, discr, btag, eos, cv, grad_cv, grad_t,
+                                **kwargs):
         """Get the viscous part of the physical flux across the boundary *btag*."""
         actx = cv.array_context
         boundary_discr = discr.discr_from_dd(btag)
