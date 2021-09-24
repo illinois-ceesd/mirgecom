@@ -137,14 +137,17 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
-        for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
-        for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
 
-        err_max = discr.norm(rho_resid, np.inf)
+        assert inf_norm(rho_resid) < tolerance
+        assert inf_norm(rhoe_resid) < tolerance
+        for i in range(dim):
+            assert inf_norm(mom_resid[i]) < tolerance
+        for i in range(nspecies):
+            assert inf_norm(rhoy_resid[i]) < tolerance
+
+        err_max = inf_norm(rho_resid)
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
@@ -165,15 +168,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        assert inf_norm(rho_resid) < tolerance
+        assert inf_norm(rhoe_resid) < tolerance
 
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            assert inf_norm(mom_resid[i]) < tolerance
         for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+            assert inf_norm(rhoy_resid[i]) < tolerance
 
-        err_max = discr.norm(rho_resid, np.inf)
+        err_max = inf_norm(rho_resid)
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -231,7 +234,7 @@ def test_vortex_rhs(actx_factory, order):
             discr, eos=IdealSingleGas(), boundaries=boundaries,
             cv=vortex_soln, time=0.0)
 
-        err_max = discr.norm(inviscid_rhs.join(), np.inf)
+        err_max = actx.to_numpy(discr.norm(inviscid_rhs.join(), np.inf))
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -290,7 +293,8 @@ def test_lump_rhs(actx_factory, dim, order):
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
-        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
+        err_max = actx.to_numpy(
+            discr.norm((inviscid_rhs-expected_rhs).join(), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -365,7 +369,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
-        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
+
+        err_max = actx.to_numpy(
+            discr.norm((inviscid_rhs-expected_rhs).join(), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -500,7 +506,7 @@ def _euler_flow_stepper(actx, parameters):
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, time=t)
-        maxerr = discr.norm((cv - expected_result).join(), np.inf)
+        maxerr = actx.to_numpy(discr.norm((cv - expected_result).join(), np.inf))
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:

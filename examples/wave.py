@@ -152,7 +152,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, discr.norm(fields[0], np.inf))
+            print(istep, t, actx.to_numpy(discr.norm(fields[0], np.inf)))
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),

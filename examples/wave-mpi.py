@@ -217,7 +217,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             )
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
+            print(istep, t, actx.to_numpy(discr.norm(fields[0])))
             vis.write_parallel_vtk_file(
                 comm,
                 "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
@@ -237,7 +237,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
-    final_soln = discr.norm(fields[0])
+    final_soln = actx.to_numpy(discr.norm(fields[0]))
     assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
 

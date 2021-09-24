@@ -175,16 +175,20 @@ def test_inviscid_flux_components(actx_factory, dim):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
     flux = inviscid_flux(discr, eos, cv)
-    assert discr.norm(p - p_exact, np.inf) < tolerance
+
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
+    assert inf_norm(p - p_exact) < tolerance
     logger.info(f"{dim}d flux = {flux}")
 
     # for velocity zero, these components should be == zero
-    assert discr.norm(flux.mass, 2) == 0.0
-    assert discr.norm(flux.energy, 2) == 0.0
+    assert inf_norm(flux.mass) == 0.0
+    assert inf_norm(flux.energy) == 0.0
 
     # The momentum diagonal should be p
     # Off-diagonal should be identically 0
-    assert discr.norm(flux.momentum - p0*np.identity(dim), np.inf) < tolerance
+    assert inf_norm(flux.momentum - p0*np.identity(dim)) < tolerance
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -230,19 +234,23 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
         )
         cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(cv)
-        assert discr.norm(p - p_exact, np.inf) < tolerance
+
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
+
+        assert inf_norm(p - p_exact) < tolerance
         flux = inviscid_flux(discr, eos, cv)
         logger.info(f"{dim}d flux = {flux}")
         vel_exact = mom / mass
 
         # first two components should be nonzero in livedim only
-        assert discr.norm(flux.mass - mom, np.inf) == 0
+        assert inf_norm(flux.mass - mom) == 0
         eflux_exact = (energy + p_exact)*vel_exact
-        assert discr.norm(flux.energy - eflux_exact, np.inf) == 0
+        assert inf_norm(flux.energy - eflux_exact) == 0
 
         logger.info("Testing momentum")
         xpmomflux = mass*np.outer(vel_exact, vel_exact) + p_exact*np.identity(dim)
-        assert discr.norm(flux.momentum - xpmomflux, np.inf) < tolerance
+        assert inf_norm(flux.momentum - xpmomflux) < tolerance
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
@@ -302,7 +310,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         def inf_norm(data):
             if len(data) > 0:
-                return discr.norm(data, np.inf, dd="all_faces")
+                return actx.to_numpy(discr.norm(data, np.inf, dd="all_faces"))
             else:
                 return 0.0
 
