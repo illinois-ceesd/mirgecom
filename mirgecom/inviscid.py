@@ -1,13 +1,13 @@
 r""":mod:`mirgecom.inviscid` provides helper functions for inviscid flow.
 
-Flux Calculation
-^^^^^^^^^^^^^^^^
+Inviscid Flux Calculation
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
 .. autofunction:: inviscid_facial_flux
 
-Time Step Computation
-^^^^^^^^^^^^^^^^^^^^^
+Inviscid Time Step Computation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: get_inviscid_timestep
 .. autofunction:: get_inviscid_cfl
@@ -41,7 +41,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
-from mirgecom.flux import lfr_flux
+from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
@@ -72,7 +72,21 @@ def inviscid_flux(discr, eos, cv):
 
 
 def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
-    """Return the flux across a face given the solution on both sides *q_tpair*.
+    r"""Return the flux across a face given the solution on both sides *q_tpair*.
+
+    This flux is currently hard-coded to use a Rusanov-type  local Lax-Friedrichs
+    (LFR) numerical flux at element boundaries. The numerical inviscid flux $F^*$ is
+    calculated as:
+
+    .. math::
+
+        \mathbf{F}^{*}_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-)
+        +\mathbf{F}(q^+)) \cdot \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
+
+    where $q^-, q^+$ are the fluid solution state on the interior and the
+    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
+    the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
+    *local* maximum fluid wavespeed.
 
     Parameters
     ----------
@@ -95,6 +109,8 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
                            interior=inviscid_flux(discr, eos, cv_tpair.int),
                            exterior=inviscid_flux(discr, eos, cv_tpair.ext))
 
+    # This calculates the local maximum eigenvalue of the flux Jacobian
+    # for a single component gas, i.e. the element-local max wavespeed |v| + c.
     lam = actx.np.maximum(
         compute_wavespeed(eos=eos, cv=cv_tpair.int),
         compute_wavespeed(eos=eos, cv=cv_tpair.ext)
@@ -103,7 +119,7 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
     # todo: user-supplied flux routine
-    flux_weak = lfr_flux(cv_tpair, flux_tpair, normal=normal, lam=lam)
+    flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)

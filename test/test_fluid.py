@@ -61,6 +61,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     )
 
     order = 3
+
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     zeros = discr.zeros(actx)
@@ -69,6 +70,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     mass = 1*ones
     for i in range(mass_exp):
         mass *= (mass + i)
+
     energy = zeros + 2.5
     velocity = vel_fac * nodes
     mom = mass * velocity
@@ -113,9 +115,9 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
         zeros = discr.zeros(actx)
-        energy = zeros + 2.5
 
         mass = nodes[dim-1]*nodes[dim-1]
+        energy = zeros + 2.5
         velocity = make_obj_array([actx.np.cos(nodes[i]) for i in range(dim)])
         mom = mass*velocity
 

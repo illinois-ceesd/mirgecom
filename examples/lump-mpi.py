@@ -134,7 +134,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["nparts"] == nparts
+        assert restart_data["num_parts"] == nparts
     else:  # generate the grid from scratch
         box_ll = -5.0
         box_ur = 5.0

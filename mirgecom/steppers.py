@@ -60,7 +60,6 @@ def compile_rhs(actx, rhs, state):
 def _advance_state_stepper_func(rhs, timestepper,
                                 state, t_final, dt=0,
                                 t=0.0, istep=0,
-                                get_timestep=None,
                                 pre_step_callback=None,
                                 post_step_callback=None,
                                 logmgr=None, eos=None, dim=None,
@@ -77,10 +76,6 @@ def _advance_state_stepper_func(rhs, timestepper,
         Function that advances the state from t=time to t=(time+dt), and
         returns the advanced state. Has a call with signature
         ``timestepper(state, t, dt, rhs)``.
-    get_timestep
-        Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully. Takes only state as an argument.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -148,7 +143,6 @@ def _advance_state_leap(rhs, timestepper, state,
                         t_final, dt=0,
                         component_id="state",
                         t=0.0, istep=0,
-                        get_timestep=None,
                         pre_step_callback=None,
                         post_step_callback=None,
                         logmgr=None, eos=None, dim=None,
@@ -163,10 +157,6 @@ def _advance_state_leap(rhs, timestepper, state,
         a call with signature ``rhs(t, state)``.
     timestepper
         An instance of :class:`leap.MethodBuilder`.
-    get_timestep
-        Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -279,7 +269,6 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 def advance_state(rhs, timestepper, state, t_final,
                   component_id="state",
                   t=0.0, istep=0, dt=0,
-                  get_timestep=None,
                   pre_step_callback=None,
                   post_step_callback=None,
                   logmgr=None, eos=None, dim=None,
@@ -302,10 +291,6 @@ def advance_state(rhs, timestepper, state, t_final,
         to be integrated, the initial time and timestep, and the RHS function.
     component_id
         State id (required input for leap method generation)
-    get_timestep
-        Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully. Takes only state as an argument.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -346,13 +331,6 @@ def advance_state(rhs, timestepper, state, t_final,
              "signature. See the examples for the current and preferred usage.",
              DeprecationWarning, stacklevel=2)
 
-    if get_timestep is not None:
-        from warnings import warn
-        warn("Passing the get_timestep function into the stepper is deprecated. "
-             "Users should use the dt argument for constant timestep, and "
-             "perform any dt modification in the {pre,post}-step callbacks.",
-             DeprecationWarning, stacklevel=2)
-
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
@@ -364,8 +342,7 @@ def advance_state(rhs, timestepper, state, t_final,
         (current_step, current_t, current_state) = \
             _advance_state_leap(
                 rhs=rhs, timestepper=timestepper,
-                get_timestep=get_timestep, state=state,
-                t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
@@ -376,12 +353,11 @@ def advance_state(rhs, timestepper, state, t_final,
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
-                get_timestep=get_timestep, state=state,
-                t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep,
-                logmgr=logmgr, eos=eos, dim=dim, actx=actx
+                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
+                actx=actx
             )
 
     return current_step, current_t, current_state
