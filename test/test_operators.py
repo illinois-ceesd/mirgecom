@@ -217,10 +217,13 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
 
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
+
         if isinstance(test_data, ConservedVars):
-            err_scale = discr.norm(exact_grad.join(), np.inf)
+            err_scale = inf_norm(exact_grad.join())
         else:
-            err_scale = discr.norm(exact_grad, np.inf)
+            err_scale = inf_norm(exact_grad)
         if err_scale <= 1e-16:
             err_scale = 1
 
@@ -238,10 +241,10 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
                 dim=dim, q=grad_operator(discr, test_data.join(),
                                          test_data_flux_bnd.join())
                 )
-            grad_err = discr.norm((test_grad - exact_grad).join(), np.inf)/err_scale
+            grad_err = inf_norm((test_grad - exact_grad).join())/err_scale
         else:
             test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
-            grad_err = discr.norm(test_grad - exact_grad, np.inf)/err_scale
+            grad_err = inf_norm(test_grad - exact_grad)/err_scale
 
         print(f"{test_grad=}")
         eoc.add_data_point(h_max, grad_err)
