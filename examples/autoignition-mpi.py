@@ -372,7 +372,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         temp_resid = pyro_mechanism.get_temperature_residual(
             e, dv.temperature, y, True
         )
-        if temp_resid < 1e-32:
+        temp_resid = discr.norm(temp_resid, np.inf)
+        if temp_resid > 1e-12:
             health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 

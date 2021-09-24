@@ -27,8 +27,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-
 
 def _pyro_thermochem_wrapper_class(cantera_soln):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
@@ -97,7 +95,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
             f = enthalpy_or_energy - he_fun(t_i, y)
             j = -pv_fun(t_i, y)
 
-            return self._pryo_norm(-f / j, np.inf)
+            return -f / j
 
     return PyroWrapper
 
