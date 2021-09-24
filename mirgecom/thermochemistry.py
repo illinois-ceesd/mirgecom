@@ -27,6 +27,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
+
 
 def _pyro_thermochem_wrapper_class(cantera_soln):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
@@ -75,6 +77,27 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
                 # if self._pyro_norm(dt, np.inf) < tol:
 
             return t_i
+
+        # This hard-codes the Newton iterations to 10 because the convergence
+        # check is not compatible with lazy evaluation. Instead, we plan to check
+        # the temperature residual at simulation health checking time.
+        # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
+        def get_temperature_residual(self, enthalpy_or_energy, t_guess, y,
+                                     do_energy=False):
+            if do_energy is False:
+                pv_fun = self.get_mixture_specific_heat_cp_mass
+                he_fun = self.get_mixture_enthalpy_mass
+            else:
+                pv_fun = self.get_mixture_specific_heat_cv_mass
+                he_fun = self.get_mixture_internal_energy_mass
+
+            ones = self._pyro_zeros_like(enthalpy_or_energy) + 1.0
+            t_i = t_guess * ones
+
+            f = enthalpy_or_energy - he_fun(t_i, y)
+            j = -pv_fun(t_i, y)
+
+            return self._pryo_norm(-f / j, np.inf)
 
     return PyroWrapper
 
