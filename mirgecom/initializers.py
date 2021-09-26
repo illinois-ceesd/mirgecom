@@ -11,6 +11,7 @@ Solution Initializers
 .. autoclass:: AcousticPulse
 .. automethod: make_pulse
 .. autoclass:: MixtureInitializer
+.. autoclass:: PlanarPoiseuille
 """
 
 __copyright__ = """
@@ -850,3 +851,123 @@ class MixtureInitializer:
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
+
+
+class PlanarPoiseuille:
+    r"""Initializer for the planar Poiseuille case.
+
+    The 2D planar Poiseuille case is defined as a viscous flow between two
+    stationary parallel sides with a uniform pressure drop prescribed
+    as *p_hi* at the inlet and *p_low* at the outlet. See the figure below:
+
+    .. figure:: ../figures/poiseuille.png
+        :scale: 50 %
+        :alt: Poiseuille domain illustration
+
+        Illustration of the Poiseuille case setup
+
+    The exact Poiseuille solution is defined by the following:
+    $$
+    P(x) &= P_{\text{hi}} + P'x\\
+    v_x &= \frac{-P'}{2\mu}y(h-y), v_y = 0\\
+    \rho &= \rho_0\\
+    \rho{E} &= \frac{P(x)}{(\gamma-1)} + \frac{\rho}{2}(\mathbf{v}\cdot\mathbf{v})
+    $$
+
+    Here, $P'$ is the constant slope of the linear pressure gradient from the inlet
+    to the outlet and is calculated as:
+    $$
+    P' = \frac{(P_{\text{low}}-P_{\text{hi}})}{\text{length}}
+    $$
+    $v_x$, and $v_y$ are respectively the x and y components of the velocity,
+    $\mathbf{v}$, and $\rho_0$ is the supplied constant density of the fluid.
+    """
+
+    def __init__(self, p_hi=100100., p_low=100000., mu=1.0, height=.02, length=.1,
+                 density=1.0):
+        """Initialize the Poiseuille solution initializer.
+
+        Parameters
+        ----------
+        p_hi: float
+            Pressure at the inlet (default=100100)
+        p_low: float
+            Pressure at the outlet (default=100000)
+        mu: float
+            Fluid viscosity, (default = 1.0)
+        height: float
+            Height of the domain, (default = .02)
+        length: float
+            Length of the domain, (default = .1)
+        density: float
+            Constant density of the fluid, (default=1.0)
+        """
+        self.length = length
+        self.height = height
+        self.dpdx = (p_low - p_hi)/length
+        self.rho = density
+        self.mu = mu
+        self.p_hi = p_hi
+
+    def __call__(self, x_vec, eos, cv=None, **kwargs):
+        r"""Create the Poiseuille solution.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Array of :class:`~meshmode.dof_array.DOFArray` representing the 2D
+            coordinates of the points at which the solution is desired
+        eos: :class:`~mirgecom.eos.GasEOS`
+            A gas equation of state
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Optional fluid state to supply fluid density and velocity if needed.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            The Poiseuille solution state
+        """
+        dim_mismatch = len(x_vec) != 2
+        if cv is not None:
+            dim_mismatch = dim_mismatch or cv.dim != 2
+        if dim_mismatch:
+            raise ValueError("PlanarPoiseuille initializer is 2D only.")
+
+        x = x_vec[0]
+        y = x_vec[1]
+        p_x = self.p_hi + self.dpdx*x
+
+        if cv is not None:
+            mass = cv.mass
+            velocity = cv.velocity
+        else:
+            mass = self.rho*x/x
+            u_x = -self.dpdx*y*(self.height - y)/(2*self.mu)
+            velocity = make_obj_array([u_x, 0*x])
+
+        ke = .5*np.dot(velocity, velocity)*mass
+        rho_e = p_x/(eos.gamma(cv)-1) + ke
+        return make_conserved(2, mass=mass, energy=rho_e,
+                              momentum=mass*velocity)
+
+    def exact_grad(self, x_vec, eos, cv_exact):
+        """Return the exact gradient of the Poiseuille state."""
+        y = x_vec[1]
+        x = x_vec[0]
+        # FIXME: Symbolic infrastructure could perhaps do this better
+        ones = x / x
+        mass = cv_exact.mass
+        velocity = cv_exact.velocity
+        dvxdy = -self.dpdx*(self.height-2*y)/(2*self.mu)
+        dvdy = make_obj_array([dvxdy, 0*x])
+        dedx = self.dpdx/(eos.gamma(cv_exact)-1)*ones
+        dedy = mass*np.dot(velocity, dvdy)
+        dmass = make_obj_array([0*x, 0*x])
+        denergy = make_obj_array([dedx, dedy])
+        dvx = make_obj_array([0*x, dvxdy])
+        dvy = make_obj_array([0*x, 0*x])
+        dv = np.stack((dvx, dvy))
+        dmom = mass*dv
+        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
+        return make_conserved(2, mass=dmass, energy=denergy,
+                              momentum=dmom, species_mass=species_mass)

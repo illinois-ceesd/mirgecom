@@ -1,5 +1,6 @@
 r""":mod:`mirgecom.operators` provides helper functions for composing DG operators.
 
+.. autofunction:: grad_operator
 .. autofunction:: div_operator
 """
 
@@ -28,16 +29,38 @@ THE SOFTWARE.
 """
 
 
-def div_operator(discr, u, flux):
-    r"""Compute a DG divergence for *u* with element boundary flux given in *flux*.
+def grad_operator(discr, u, flux):
+    r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    u: np.ndarray
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+    flux: numpy.ndarray
+        the boundary fluxes across the faces of the element
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg gradient operator applied to *u*
+    """
+    from grudge.op import weak_local_grad
+    return -discr.inverse_mass(weak_local_grad(discr, u, nested=False)
+                               - discr.face_mass(flux))
+
+
+def div_operator(discr, u, flux):
+    r"""Compute a DG divergence of vector-valued function *u* with flux given by *flux*.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    u: numpy.ndarray
         the vector-valued function for which divergence is to be calculated
-    flux: np.ndarray
+    flux: numpy.ndarray
         the boundary fluxes across the faces of the element
     Returns
     -------
