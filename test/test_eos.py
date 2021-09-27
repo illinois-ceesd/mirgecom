@@ -99,25 +99,27 @@ def test_lazy_pyrometheus(ctx_factory):
     initial_temp = temp[0]
 
     use_old_temperature = False
-    num_trial = 1
 
-    for _ in range(num_trial):
-        for i, t, y in zip(range(num_samples), temp, mass_frac):
+    lazy_eager_diff_tol = 1e-4
 
-            t_old = initial_temp
-            if use_old_temperature and i > 0:
-                t_old = temp[i-1]
+    for i, t, y in zip(range(num_samples), temp, mass_frac):
 
-            # rho = ptk.get_density(ct.one_atm, t, y)
-            e_int = eager_pyro.get_mixture_internal_energy_mass(t, y)
-            print(f"{type(e_int)=}")
-            print(f"{type(y)=}")
-            t_eager = eager_pyro.get_temperature(e_int, t_old, y,
-                                                 do_energy=True)
-            t_lazy = lazy_temp(e_int, t_old,
-                               np.asarray(lazy_actx.from_numpy(y)))
-            # w_pyro = ptk.get_net_production_rates(rho, t_pyro, y)
-            print(f"{np.abs(t_eager-t_lazy)}")
+        t_old = initial_temp
+        if use_old_temperature and i > 0:
+            t_old = temp[i-1]
+
+        #  rho = ptk.get_density(cantera.one_atm, t, y)
+        e_int = eager_pyro.get_mixture_internal_energy_mass(t, y)
+        print(f"{type(e_int)=}")
+        print(f"{type(y)=}")
+        t_eager = eager_pyro.get_temperature(e_int, t_old, y,
+                                             do_energy=True)
+        t_lazy = lazy_temp(e_int, t_old,
+                           np.asarray(lazy_actx.from_numpy(y)))
+        err = np.abs(t_eager - t_lazy)/t_eager
+        print(f"{err=}")
+        assert err < lazy_eager_diff_tol
+        # w_pyro = ptk.get_net_production_rates(rho, t_pyro, y)
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
