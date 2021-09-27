@@ -374,7 +374,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         )
         temp_resid = discr.norm(temp_resid, np.inf)
         if temp_resid > 1e-12:
-            health_error = True
+            health_error = False
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
         return health_error
