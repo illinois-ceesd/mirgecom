@@ -28,6 +28,7 @@ import logging
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
+import pyopencl.tools as cl_tools
 import pyopencl.clrandom
 import pyopencl.clmath
 import pytest
@@ -35,7 +36,10 @@ from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (  # noqa
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -54,6 +58,66 @@ from pyopencl.tools import (  # noqa
 from mirgecom.mechanisms import get_mechanism_cti
 
 logger = logging.getLogger(__name__)
+
+
+def test_lazy_pyrometheus(ctx_factory):
+    """Test pyrometheus interface in lazy mode."""
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    eager_actx = PyOpenCLArrayContext(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    lazy_actx = PytatoPyOpenCLArrayContext(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    from mirgecom.mechanisms import get_mechanism_cti
+    mech_cti = get_mechanism_cti("uiuc")
+    cantera_soln1 = cantera.Solution(phase_id="gas", source=mech_cti)
+    cantera_soln2 = cantera.Solution(phase_id="gas", source=mech_cti)
+
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    eager_pyro = make_pyrometheus_mechanism(eager_actx, cantera_soln1)
+    lazy_pyro = make_pyrometheus_mechanism(lazy_actx, cantera_soln2)
+
+    def lazy_temperature(energy, y, tguess):
+        return lazy_pyro.get_temperature(energy, y, tguess, do_energy=True)
+    lazy_temp = lazy_actx.compile(lazy_temperature)
+
+    print(f"{type(lazy_temp)=}")
+    input_file = "pyro_state_data.txt"
+    input_data = np.loadtxt(input_file)
+    num_samples = len(input_data)
+
+    print(f"{num_samples=}")
+
+    # time = input_data[:num_samples, 0]
+    mass_frac = input_data[:num_samples, 1:-1]
+    temp = input_data[:num_samples, -1]
+    initial_temp = temp[0]
+
+    use_old_temperature = False
+    num_trial = 1
+
+    for _ in range(num_trial):
+        for i, t, y in zip(range(num_samples), temp, mass_frac):
+
+            t_old = initial_temp
+            if use_old_temperature and i > 0:
+                t_old = temp[i-1]
+
+            # rho = ptk.get_density(ct.one_atm, t, y)
+            e_int = eager_pyro.get_mixture_internal_energy_mass(t, y)
+            print(f"{type(e_int)=}")
+            print(f"{type(y)=}")
+            t_eager = eager_pyro.get_temperature(e_int, t_old, y,
+                                                 do_energy=True)
+            t_lazy = lazy_temp(e_int, t_old,
+                               np.asarray(lazy_actx.from_numpy(y)))
+            # w_pyro = ptk.get_net_production_rates(rho, t_pyro, y)
+            print(f"{np.abs(t_eager-t_lazy)}")
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
