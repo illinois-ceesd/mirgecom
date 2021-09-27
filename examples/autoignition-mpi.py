@@ -67,7 +67,6 @@ from mirgecom.logging_quantities import (
 )
 
 import cantera
-import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -246,9 +245,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    pyro_mechanism = make_pyrometheus_mechanism(actx, cantera_soln)
+    eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
 
     # }}}
 
@@ -356,7 +355,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(dv):
+    def my_health_check(cv, dv):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
@@ -367,6 +366,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+
+        y = cv.species_mass_fractions
+        e = eos.internal_energy(cv) / cv.mass
+        temp_resid = pyro_mechanism.get_temperature_residual(
+            e, dv.temperature, y, True
+        )
+        temp_resid = discr.norm(temp_resid, np.inf)
+        if temp_resid > 1e-12:
+            health_error = True
+            logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
         return health_error
 
@@ -403,7 +412,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 dv = eos.dependent_vars(state)
                 from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(dv), comm, op=MPI.LOR)
+                health_errors = allsync(my_health_check(state, dv), comm, op=MPI.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
