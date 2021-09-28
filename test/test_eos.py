@@ -82,14 +82,16 @@ def test_lazy_pyrometheus(ctx_factory):
     eager_pyro = make_pyrometheus_mechanism(eager_actx, cantera_soln1)
     lazy_pyro = make_pyrometheus_mechanism(lazy_actx, cantera_soln2)
 
+    from pytools.obj_array import make_obj_array
     def lazy_temperature(energy, y, tguess):
-        return lazy_pyro.get_temperature(energy, y, tguess, do_energy=True)
+        return make_obj_array([lazy_pyro.get_temperature(energy, y, tguess, do_energy=True)])
     lazy_temp = lazy_actx.compile(lazy_temperature)
 
     print(f"{type(lazy_temp)=}")
     input_file = "pyro_state_data.txt"
     input_data = np.loadtxt(input_file)
-    num_samples = len(input_data)
+    #num_samples = len(input_data)
+    num_samples = 1
 
     print(f"{num_samples=}")
 
@@ -114,8 +116,8 @@ def test_lazy_pyrometheus(ctx_factory):
         print(f"{type(y)=}")
         t_eager = eager_pyro.get_temperature(e_int, t_old, y,
                                              do_energy=True)
-        t_lazy = lazy_temp(e_int, t_old,
-                           np.asarray(lazy_actx.from_numpy(y)))
+        t_lazy = lazy_actx.to_numpy(lazy_actx.freeze(lazy_temp(e_int, t_old,
+                           np.asarray(lazy_actx.from_numpy(y)))[0]))
         err = np.abs(t_eager - t_lazy)/t_eager
         print(f"{err=}")
         assert err < lazy_eager_diff_tol

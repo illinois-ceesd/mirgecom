@@ -63,7 +63,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
                 pv_fun = self.get_mixture_specific_heat_cv_mass
                 he_fun = self.get_mixture_internal_energy_mass
 
-            num_iter = 10
+            num_iter = 2
             ones = self._pyro_zeros_like(enthalpy_or_energy) + 1.0
             t_i = t_guess * ones
 
