@@ -184,7 +184,8 @@ def test_inviscid_flux_components(actx_factory, dim):
 
     # The momentum diagonal should be p
     # Off-diagonal should be identically 0
-    assert discr.norm(flux.momentum - p0*np.identity(dim), np.inf) < tolerance
+    assert discr.norm(flux.momentum - p0*np.identity(dim, dtype=object),
+                      np.inf) < tolerance
 
 
 @pytest.mark.parametrize(("dim", "livedim"), [
@@ -241,7 +242,8 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
         assert discr.norm(flux.energy - eflux_exact, np.inf) == 0
 
         logger.info("Testing momentum")
-        xpmomflux = mass*np.outer(vel_exact, vel_exact) + p_exact*np.identity(dim)
+        xpmomflux = (mass*np.outer(vel_exact, vel_exact)
+                     + p_exact*np.identity(dim, dtype=object))
         assert discr.norm(flux.momentum - xpmomflux, np.inf) < tolerance
 
 

@@ -177,19 +177,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.mechanisms import get_mechanism_cti
     mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    pyrometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    pyrometheus_mechanism = pyro.get_thermochem_class(sol, np.dtype(object))(actx.np)
 
     nspecies = pyrometheus_mechanism.num_species
     eos = PyrometheusMixture(pyrometheus_mechanism)
 
-    y0s = np.zeros(shape=(nspecies,))
+    y0s = np.zeros(shape=(nspecies,), dtype=object)
     for i in range(nspecies-1):
         y0s[i] = 1.0 / (10.0 ** (i + 1))
     spec_sum = sum([y0s[i] for i in range(nspecies-1)])
     y0s[nspecies-1] = 1.0 - spec_sum
 
     # Mixture defaults to STP (p, T) = (1atm, 300K)
-    velocity = np.zeros(shape=(dim,)) + 1.0
+    velocity = np.ones(shape=(dim,), dtype=object)
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      massfractions=y0s, velocity=velocity)
 

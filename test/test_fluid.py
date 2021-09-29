@@ -83,7 +83,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
     tol = 1e-11
-    exp_result = vel_fac * np.eye(dim) * ones
+    exp_result = vel_fac * np.eye(dim, dtype=object) * ones
     grad_v_err = [discr.norm(grad_v[i] - exp_result[i], np.inf)
                   for i in range(dim)]
 
@@ -241,6 +241,6 @@ def test_species_mass_gradient(actx_factory, dim):
     for idim in range(dim):
         ispec = 2*idim
         exact_grad = np.array([(ispec*(idim*dim+1))*(iidim+1)
-                                for iidim in range(dim)])
+                                for iidim in range(dim)], dtype=object)
         assert discr.norm(grad_y[ispec] - exact_grad, np.inf) < tol
         assert discr.norm(grad_y[ispec+1] + exact_grad, np.inf) < tol

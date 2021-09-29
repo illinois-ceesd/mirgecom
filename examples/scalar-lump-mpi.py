@@ -173,11 +173,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # soln setup and init
     nspecies = 4
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-    spec_y0s = np.ones(shape=(nspecies,))
-    spec_amplitudes = np.ones(shape=(nspecies,))
+    centers = make_obj_array([np.zeros(shape=(dim,), dtype=object)
+                              for i in range(nspecies)])
+    spec_y0s = np.ones(shape=(nspecies,), dtype=object)
+    spec_amplitudes = np.ones(shape=(nspecies,), dtype=object)
     eos = IdealSingleGas()
-    velocity = np.ones(shape=(dim,))
+    velocity = np.ones(shape=(dim,), dtype=object)
 
     initializer = MulticomponentLump(dim=dim, nspecies=nspecies,
                                      spec_centers=centers, velocity=velocity,

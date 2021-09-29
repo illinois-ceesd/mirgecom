@@ -184,8 +184,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # soln setup and init
     eos = IdealSingleGas()
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
+    vel = np.zeros(shape=(dim,), dtype=object)
+    orig = np.zeros(shape=(dim,), dtype=object)
     vel[:dim] = 1.0
     initializer = Vortex2D(center=orig, velocity=vel)
     boundaries = {

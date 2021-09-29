@@ -68,14 +68,14 @@ def test_slipwall_identity(actx_factory, dim):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
-    orig = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,), dtype=object)
     nhat = thaw(actx, discr.normal(BTAG_ALL))
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
     # for velocity going along each direction
     for vdir in range(dim):
-        vel = np.zeros(shape=(dim,))
+        vel = np.zeros(shape=(dim,), dtype=object)
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity  # Check incoming normal
@@ -142,7 +142,7 @@ def test_slipwall_flux(actx_factory, dim, order):
         # for velocities in each direction
         err_max = 0.0
         for vdir in range(dim):
-            vel = np.zeros(shape=(dim,))
+            vel = np.zeros(shape=(dim,), dtype=object)
 
             # for velocity directions +1, and -1
             for parity in [1.0, -1.0]:

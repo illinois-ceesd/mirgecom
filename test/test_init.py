@@ -75,9 +75,10 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
 
-    velocity = np.ones(shape=(dim,))
+    velocity = np.ones(shape=(dim,), dtype=object)
     from mirgecom.initializers import Uniform
-    mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)])
+    mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)],
+                          dtype=object)
 
     initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
     cv = initializer(nodes)
@@ -131,8 +132,8 @@ def test_lump_init(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
-    center = np.zeros(shape=(dim,))
-    velocity = np.zeros(shape=(dim,))
+    center = np.zeros(shape=(dim,), dtype=object)
+    velocity = np.zeros(shape=(dim,), dtype=object)
     center[0] = 5
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
@@ -350,16 +351,18 @@ def test_multilump(ctx_factory, dim):
     nodes = thaw(actx, discr.nodes())
 
     rho0 = 1.5
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-    spec_y0s = np.ones(shape=(nspecies,))
-    spec_amplitudes = np.ones(shape=(nspecies,))
+    centers = make_obj_array([np.zeros(shape=(dim,), dtype=object)
+                              for i in range(nspecies)])
+    spec_y0s = np.ones(shape=(nspecies,), dtype=object)
+    spec_amplitudes = np.ones(shape=(nspecies,), dtype=object)
 
     for i in range(nspecies):
         centers[i][0] = (.1 * i)
         spec_y0s[i] += (.1 * i)
         spec_amplitudes[i] += (.1 * i)
 
-    velocity = np.zeros(shape=(dim,))
+    velocity = np.zeros(shape=(dim,),
+                        dtype=object)
     velocity[0] = 1
 
     lump = MulticomponentLump(dim=dim, nspecies=nspecies, rho0=rho0,

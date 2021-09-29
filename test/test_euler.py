@@ -277,8 +277,8 @@ def test_lump_rhs(actx_factory, dim, order):
         nodes = thaw(actx, discr.nodes())
 
         # Init soln with Lump and expected RHS = 0
-        center = np.zeros(shape=(dim,))
-        velocity = np.zeros(shape=(dim,))
+        center = np.zeros(shape=(dim,), dtype=object)
+        velocity = np.zeros(shape=(dim,), dtype=object)
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
         boundaries = {
@@ -341,10 +341,10 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         nodes = thaw(actx, discr.nodes())
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-        spec_y0s = np.ones(shape=(nspecies,))
-        spec_amplitudes = np.ones(shape=(nspecies,))
+        spec_y0s = np.ones(shape=(nspecies,), dtype=object)
+        spec_amplitudes = np.ones(shape=(nspecies,), dtype=object)
 
-        velocity = np.zeros(shape=(dim,))
+        velocity = np.zeros(shape=(dim,), dtype=object)
         velocity[0] = v0
         rho0 = 2.0
 
@@ -537,8 +537,8 @@ def test_isentropic_vortex(actx_factory, order):
         exittol = 1.0
         t_final = 0.001
         cfl = 1.0
-        vel = np.zeros(shape=(dim,))
-        orig = np.zeros(shape=(dim,))
+        vel = np.zeros(shape=(dim,), dtype=object)
+        orig = np.zeros(shape=(dim,), dtype=object)
         vel[:dim] = 1.0
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)

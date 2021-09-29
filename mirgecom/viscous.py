@@ -92,7 +92,8 @@ def viscous_stress_tensor(discr, eos, cv, grad_cv):
     grad_v = velocity_gradient(discr, cv, grad_cv)
     div_v = np.trace(grad_v)
 
-    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*div_v*np.eye(dim)
+    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*div_v*np.eye(dim,
+                                                                 dtype=object)
 
 
 def diffusive_flux(discr, eos, cv, grad_cv):
