@@ -132,10 +132,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     constant_cfl = False
 
     # i.o frequencies
-    nstatus = 1
-    nviz = 5
+    nstatus = 1000
+    nviz = 1000
     nhealth = 1
-    nrestart = 5
+    nrestart = 1000
 
     # }}}  Time stepping control
 
@@ -245,8 +245,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    from mirgecom.thermochemistry import (
+        make_pyrometheus_mechanism,
+        UIUCMechanism
+    )
+    # import pyrometheus as pyro
+    # pyro_class = pyro.get_thermochem_class(cantera_soln)
     pyro_mechanism = make_pyrometheus_mechanism(actx, cantera_soln)
+    # pyro_mechanism = UIUCMechanism(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
 
     # }}}
@@ -283,6 +289,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes)
+    import ipdb
+    ipdb.set_trace()
 
     # Inspection at physics debugging time
     if debug:
@@ -369,10 +377,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         y = cv.species_mass_fractions
         e = eos.internal_energy(cv) / cv.mass
-        temp_resid = pyro_mechanism.get_temperature_residual(
-            e, dv.temperature, y, True
-        )
-        temp_resid = discr.norm(temp_resid, np.inf)
+        check_temp = pyro_mechanism.get_temperature(e, dv.temperature, y, True)
+        # temp_resid = pyro_mechanism.get_temperature_residual(
+        #     e, dv.temperature, y, True
+        # )
+        # temp_resid = discr.norm(temp_resid, np.inf)
+        temp_resid = discr.norm(check_temp - dv.temperature, np.inf)
         if temp_resid > 1e-12:
             health_error = False
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
