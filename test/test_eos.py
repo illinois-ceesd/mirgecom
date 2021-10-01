@@ -59,7 +59,10 @@ from mirgecom.mechanisms import get_mechanism_cti
 logger = logging.getLogger(__name__)
 
 
-def test_lazy_pyro(ctx_factory):
+@pytest.mark.parametrize(("mechname", "rate_tol"),
+                         [("uiuc", 1e-12), ])
+@pytest.mark.parametrize("y0", [0, 1])
+def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
@@ -77,15 +80,15 @@ def test_lazy_pyro(ctx_factory):
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    dim = 1
-    nel_1d = 1
+    dim = 2
+    nel_1d = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    order = 1
+    order = 2
 
     logger.info(f"Number of elements {mesh.nelements}")
 
@@ -93,7 +96,6 @@ def test_lazy_pyro(ctx_factory):
     discr_lazy = EagerDGDiscretization(actx_lazy, mesh, order=order)
 
     # Pyrometheus initialization
-    mechname = "uiuc"
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
 
@@ -120,7 +122,6 @@ def test_lazy_pyro(ctx_factory):
 
     press0 = 101500.0
     temp0 = 300.0
-    y0 = 1
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
         y0s[i] = y0 / (10.0 ** (i + 1))
@@ -148,9 +149,6 @@ def test_lazy_pyro(ctx_factory):
         tin_lazy = can_t * ones_lazy
         pin_lazy = can_p * ones_lazy
         yin_lazy = make_obj_array([can_y[i] * ones_lazy for i in range(nspecies)])
-        # tin_lazy = thaw(freeze(tin_lazy, actx_lazy), actx_lazy)
-        # pin_lazy = thaw(freeze(pin_lazy, actx_lazy), actx_lazy)
-        # yin_lazy = thaw(freeze(yin_lazy, actx_lazy), actx_lazy)
 
         ones_eager = discr_eager.zeros(actx_eager) + 1.0
         tin_eager = can_t * ones_eager
@@ -158,19 +156,27 @@ def test_lazy_pyro(ctx_factory):
         yin_eager = make_obj_array([can_y[i] * ones_eager for i in range(nspecies)])
 
         pyro_rho_eager = pyro_eager.get_density(pin_eager, tin_eager, yin_eager)
-        pyro_rho_lazy = lazy_density(pin_lazy, tin_lazy, yin_lazy)
+        pyro_rho_lazy = lazy_density(pin_lazy, tin_lazy, yin_lazy)[0]
 
-        from arraycontext import thaw, freeze
-        thaw(freeze(pyro_rho_lazy, actx_lazy), actx_lazy)
-        print(f"{pyro_rho_lazy=}")
+        # actx_lazy.to_numpy(thaw(freeze(pyro_rho_lazy, actx_lazy), actx_lazy))
+
+        from arraycontext import thaw, freeze, to_numpy
+        rho_lazy = to_numpy(
+            thaw(freeze(pyro_rho_lazy, actx_lazy), actx_eager), actx_eager
+        )
 
         pyro_e_eager = pyro_eager.get_mixture_internal_energy_mass(tin_eager,
                                                                    yin_eager)
         pyro_e_lazy = pyro_lazy.get_mixture_internal_energy_mass(tin_lazy, yin_lazy)
+        e_lazy = to_numpy(
+            thaw(freeze(pyro_e_lazy, actx_lazy), actx_eager), actx_eager
+        )
 
         pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager,
                                                   True)
-        pyro_t_lazy = lazy_temperature(pyro_e_eager, tin_eager, yin_eager)
+        pyro_t_lazy = lazy_temperature(pyro_e_lazy, tin_lazy, yin_lazy)[0]
+        t_lazy = to_numpy(thaw(freeze(pyro_t_lazy, actx_lazy), actx_eager),
+                          actx_eager)
 
         pyro_p_eager = pyro_eager.get_pressure(pyro_rho_eager, tin_eager, yin_eager)
         pyro_c_eager = pyro_eager.get_concentrations(pyro_rho_eager, yin_eager)
@@ -181,6 +187,16 @@ def test_lazy_pyro(ctx_factory):
         pyro_c_lazy = pyro_lazy.get_concentrations(pyro_rho_lazy, yin_lazy)
         pyro_k_lazy = pyro_lazy.get_fwd_rate_coefficients(pyro_t_lazy, pyro_c_lazy)
 
+        c_lazy = to_numpy(
+            thaw(freeze(pyro_c_lazy, actx_lazy), actx_eager), actx_eager
+        )
+        p_lazy = to_numpy(
+            thaw(freeze(pyro_p_lazy, actx_lazy), actx_eager), actx_eager
+        )
+        k_lazy = to_numpy(
+            thaw(freeze(pyro_k_lazy, actx_lazy), actx_eager), actx_eager
+        )
+
         # Pyro chemistry functions
         pyro_r_eager = pyro_eager.get_net_rates_of_progress(pyro_t_eager,
                                                             pyro_c_eager)
@@ -188,31 +204,40 @@ def test_lazy_pyro(ctx_factory):
                                                                pyro_t_eager,
                                                                yin_eager)
 
-        # pyro_r_lazy = pyro_lazy.get_net_rates_of_progress(pyro_t_lazy,
-        #                                                     pyro_c_lazy)
-        # pyro_omega_lazy = pyro_lazy.get_net_production_rates(pyro_rho_lazy,
-        #                                                        pyro_t_lazy,
-        #                                                        yin_lazy)
+        pyro_r_lazy = pyro_lazy.get_net_rates_of_progress(pyro_t_lazy,
+                                                          pyro_c_lazy)
+        pyro_omega_lazy = pyro_lazy.get_net_production_rates(pyro_rho_lazy,
+                                                             pyro_t_lazy,
+                                                             yin_lazy)
+        r_lazy = to_numpy(
+            thaw(freeze(pyro_r_lazy, actx_lazy), actx_eager), actx_eager
+        )
+        omega_lazy = to_numpy(
+            thaw(freeze(pyro_omega_lazy, actx_lazy), actx_eager), actx_eager
+        )
 
         print(f"can(rho, y, p, t, e, k) = ({can_rho}, {can_y}, "
               f"{can_p}, {can_t}, {can_e}, {can_k})")
         print(f"pyro_eager(rho, y, p, t, e, k) = ({pyro_rho_eager}, {y0s}, "
               f"{pyro_p_eager}, {pyro_t_eager}, {pyro_e_eager}, {pyro_k_eager})")
-        print(f"pyro_lazy(rho, y, p, t, e, k) = ({pyro_rho_lazy}, {y0s}, "
-              f"{pyro_p_lazy}, {pyro_t_lazy}, {pyro_e_lazy}, {pyro_k_lazy})")
-
-        #        from arraycontext import thaw, freeze
-        #        t_lazy_thaw = thaw(freeze(lazy_t, actx=actx_eager), actx_eager)
-        #        print(f"{lazy_t[0]=}")
-        #        print(f"{t_lazy_thaw=}")
+        print(f"pyro_lazy(rho, y, p, t, e, k) = ({rho_lazy}, {y0s}, "
+              f"{p_lazy}, {t_lazy}, {e_lazy}, {k_lazy})")
 
         # For pyro chem testing
         print(f"{can_r=}")
         print(f"{pyro_r_eager=}")
-        # print(f"{pyro_r_lazy=}")
+        print(f"{r_lazy=}")
         print(f"{can_omega=}")
         print(f"{pyro_omega_eager=}")
-        # print(f"{pyro_omega_lazy=}")
+        print(f"{omega_lazy=}")
+
+        tol = 1e-10
+        assert discr_eager.norm((pyro_c_eager - c_lazy), np.inf) < tol
+        assert discr_eager.norm((pyro_t_eager - t_lazy), np.inf) < tol
+        assert discr_eager.norm((pyro_rho_eager - rho_lazy), np.inf) < tol
+        assert discr_eager.norm((pyro_p_eager - p_lazy), np.inf) < 1e-9
+        assert discr_eager.norm((pyro_e_eager - e_lazy), np.inf) < 1e-5
+        assert discr_eager.norm((pyro_k_eager - k_lazy), np.inf) < 1e-5
 
         assert discr_eager.norm((pyro_c_eager - can_c) / can_c, np.inf) < 1e-14
         assert discr_eager.norm((pyro_t_eager - can_t) / can_t, np.inf) < 1e-14
@@ -222,111 +247,13 @@ def test_lazy_pyro(ctx_factory):
         assert discr_eager.norm((pyro_k_eager - can_k) / can_k, np.inf) < 1e-10
 
         # Pyro chem test comparisons
-        rate_tol = 1e-8
         for i, rate in enumerate(can_r):
+            assert discr_eager.norm((pyro_r_eager[i] - r_lazy[i]), np.inf) < tol
             assert discr_eager.norm((pyro_r_eager[i] - rate), np.inf) < rate_tol
         for i, rate in enumerate(can_omega):
+            assert discr_eager.norm(
+                (pyro_omega_eager[i] - omega_lazy[i]), np.inf) < tol
             assert discr_eager.norm((pyro_omega_eager[i] - rate), np.inf) < rate_tol
-
-        assert False
-
-
-def disable_test_lazy_pyrometheus(ctx_factory):
-    """Test pyrometheus interface in lazy mode."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-
-    eager_actx = PyOpenCLArrayContext(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
-    lazy_actx = PytatoPyOpenCLArrayContext(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
-    cantera_soln1 = cantera.Solution(phase_id="gas", source=mech_cti)
-    cantera_soln2 = cantera.Solution(phase_id="gas", source=mech_cti)
-
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    eager_pyro = make_pyrometheus_mechanism(eager_actx, cantera_soln1)
-    lazy_pyro = make_pyrometheus_mechanism(lazy_actx, cantera_soln2)
-
-    from pytools.obj_array import make_obj_array
-
-    def lazy_temperature(energy, y, tguess):
-        return make_obj_array(
-            [lazy_pyro.get_temperature_iterate_energy(energy, y, tguess,
-                                                      do_energy=True)]
-        )
-    lazy_temp = lazy_actx.compile(lazy_temperature)
-
-    print(f"{type(lazy_temp)=}")
-    input_file = "pyro_state_data.txt"
-    input_data = np.loadtxt(input_file)
-    # num_samples = len(input_data)
-    num_samples = 1
-
-    print(f"{num_samples=}")
-
-    # time = input_data[:num_samples, 0]
-    mass_frac = input_data[:num_samples, 1:-1]
-    nspecies = len(mass_frac)
-
-    temp = input_data[:num_samples, -1]
-    initial_temp = 1500.0
-
-    from meshmode.dof_array import DOFArray
-    temp_dof_lazy = DOFArray(lazy_actx, data=(lazy_actx.from_numpy(temp),))
-    y_dof_lazy = make_obj_array([DOFArray(lazy_actx,
-                                     data=(lazy_actx.from_numpy(mass_frac[i]),))
-                            for i in range(nspecies)])
-
-    temp_dof_eager = DOFArray(lazy_actx, data=(eager_actx.from_numpy(temp),))
-    y_dof_eager = make_obj_array(
-        [DOFArray(eager_actx, data=(eager_actx.from_numpy(mass_frac[i]),))
-         for i in range(nspecies)])
-
-    use_old_temperature = False
-
-    lazy_eager_diff_tol = 1e-4
-
-    # for i, t, y in zip(range(num_samples), temp, mass_frac):
-
-    t_old_eager = initial_temp + 0*temp_dof_eager
-    if use_old_temperature and i > 0:
-        t_old_eager = temp_dof_eager
-
-    #  rho = ptk.get_density(cantera.one_atm, t, y)
-    #    e_int_eager = eager_pyro.get_mixture_internal_energy_mass(temp_dof_eager,
-    #                                                              y_dof_eager)
-    # e_int_lazy = lazy_pyro.get_mixture_internal_energy_mass(temp_dof_lazy,
-    #                                                     y_dof_lazy)
-    # e_dof = DOFArray(lazy_actx, data=(e_int, ))
-    print(f"{y_dof_eager=}")
-    e_int_eager = eager_pyro.get_mixture_internal_energy_mass(temp_dof_eager,
-                                                              y_dof_eager)
-    # e_dof = DOFArray(lazy_actx, data=(e_int, ))
-
-    # print(f"{type(e_int)=}")
-    # print(f"{type(y)=}")
-
-    t_eager = eager_pyro.get_temperature_iterate(e_int_eager, t_old_eager,
-                                                 y_dof_eager, do_energy=True)
-    t_eager2 = eager_pyro.get_temperature_iterate(e_int_eager, t_eager,
-                                                  y_dof_eager, do_energy=True)
-    t_resid = np.linalg.norm(t_eager - t_eager2, np.inf)
-    print(f"{t_resid=}")
-
-    assert False
-    # t_lazy = lazy_actx.to_numpy(lazy_actx.freeze(lazy_temp(e_int_lazy, initial_temp,
-    #                                                       y_dof_lazy)))
-
-    # err = np.linalg.norm(t_eager - t_lazy, np.inf)/np.linalg.norm(t_eager,np.inf)
-    # print(f"{err=}")
-    # w_pyro = ptk.get_net_production_rates(rho, t_pyro, y)
-    # assert err < lazy_eager_diff_tol
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
