@@ -744,7 +744,7 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
-        from arraycontext import thaw, freeze
+        # from arraycontext import thaw, freeze
 
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
@@ -753,10 +753,11 @@ class PyrometheusMixture(MixtureEOS):
             # t = thaw(freeze(t, cv.array_context), cv.array_context)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            for _ in range(2):
-                # t = thaw(freeze(t, cv.array_context), cv.array_context)
-                t = self._pyrometheus_mech.get_temperature_iterate_energy(e, t, y)
-            return t
+            # for _ in range(1):
+            #     # t = thaw(freeze(t, cv.array_context), cv.array_context)
+            #     t = self._pyrometheus_mech.get_temperature_iterate_energy(e, t, y)
+            # return t
+            return self._pyrometheus_mech.get_temperature_wrapper(e, t, y)
 
         return get_temp()
 
