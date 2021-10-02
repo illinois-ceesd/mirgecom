@@ -63,12 +63,13 @@ logger = logging.getLogger(__name__)
                          [("uiuc", 1e-12), ])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
-    """Test known pyrometheus mechanisms.
+    """Test lazy pyrometheus mechanisms.
 
-    This test reproduces a pyrometheus-native test in the MIRGE context.
+    This test reproduces a pyrometheus-native test in the MIRGE context using both
+    eager and lazy evaluation protocols. The purpose of this test is making sure that
+    lazy evaluation mode is getting the same answers as eager (within a tolerance).
 
-    Tests that the Pyrometheus mechanism code  gets the same thermo properties as the
-    corresponding mechanism in Cantera.
+    Some sanity checks to make sure eager is matching Cantera are also performed.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -102,20 +103,6 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
     from mirgecom.thermochemistry import make_pyrometheus_mechanism
     pyro_eager = make_pyrometheus_mechanism(actx_eager, sol)
     pyro_lazy = make_pyrometheus_mechanism(actx_lazy, sol)
-
-    def get_lazy_temperature(energy, y, tguess):
-        return make_obj_array(
-            [pyro_lazy.get_temperature(energy, y, tguess,
-                                       do_energy=True)]
-        )
-
-    def get_lazy_density(pin, tin, yin):
-        return make_obj_array(
-            [pyro_lazy.get_density(pin, tin, yin)]
-        )
-
-    lazy_temperature = actx_lazy.compile(get_lazy_temperature)
-    lazy_density = actx_lazy.compile(get_lazy_density)
 
     nspecies = pyro_eager.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
@@ -156,9 +143,7 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         yin_eager = make_obj_array([can_y[i] * ones_eager for i in range(nspecies)])
 
         pyro_rho_eager = pyro_eager.get_density(pin_eager, tin_eager, yin_eager)
-        pyro_rho_lazy = lazy_density(pin_lazy, tin_lazy, yin_lazy)[0]
-
-        # actx_lazy.to_numpy(thaw(freeze(pyro_rho_lazy, actx_lazy), actx_lazy))
+        pyro_rho_lazy = pyro_lazy.get_density(pin_lazy, tin_lazy, yin_lazy)
 
         from arraycontext import thaw, freeze, to_numpy
         rho_lazy = to_numpy(
@@ -172,9 +157,12 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
             thaw(freeze(pyro_e_lazy, actx_lazy), actx_eager), actx_eager
         )
 
+        # These both take 5 Newton iterations
         pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager,
                                                   True)
-        pyro_t_lazy = lazy_temperature(pyro_e_lazy, tin_lazy, yin_lazy)[0]
+        pyro_t_lazy = pyro_lazy.get_temperature_wrapper(pyro_e_lazy, tin_lazy,
+                                                         yin_lazy)
+
         t_lazy = to_numpy(thaw(freeze(pyro_t_lazy, actx_lazy), actx_eager),
                           actx_eager)
 

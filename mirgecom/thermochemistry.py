@@ -58,12 +58,12 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
-        def get_temperature_iterate_energy(self, e_in, t_in, y):
+        def get_temperature_update_energy(self, e_in, t_in, y):
             pv_func = self.get_mixture_specific_heat_cv_mass
             he_func = self.get_mixture_internal_energy_mass
             # import ipdb
             # ipdb.set_trace()
-            return t_in + (e_in - he_func(t_in, y)) / pv_func(t_in, y)
+            return (e_in - he_func(t_in, y)) / pv_func(t_in, y)
 
         # This hard-codes the Newton iterations to 10 because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
@@ -81,7 +81,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
             # ipdb.set_trace()
 
             # ones = self._pyro_zeros_like(enthalpy_or_energy) + 1.0
-            t_i = t_guess # * ones
+            t_i = t_guess  # * ones
             # actx = ones.array_context
             # he_func = actx.compile(he_fun)
             # pv_func = actx.compile(pv_fun)
@@ -92,7 +92,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
             # from arraycontext import thaw, freeze
             for _ in range(num_iter):
                 # t_i = thaw(freeze(t_i, actx), actx)
-                t_i = self.get_temperature_iterate_energy(
+                t_i = t_i + self.get_temperature_update_energy(
                     enthalpy_or_energy, t_i, y
                 )
 
@@ -102,18 +102,37 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
-        def get_temperature_residual(self, enthalpy_or_energy, t_input, y,
-                                     do_energy=False):
-            if do_energy is False:
-                pv_fun = self.get_mixture_specific_heat_cp_mass
-                he_fun = self.get_mixture_enthalpy_mass
-            else:
-                pv_fun = self.get_mixture_specific_heat_cv_mass
-                he_fun = self.get_mixture_internal_energy_mass
+        def get_temperature_wrapper(self, e_in, t_in, y_in):
 
+            actx_in = t_in.array_context
+            from pytools.obj_array import make_obj_array
+
+            def _temp_update(e, t, y):
+                return make_obj_array(
+                    [self.get_temperature_update_energy(e, t, y)]
+                )
+
+            self._lazy_temp_update = actx_in.compile(_temp_update)
+
+            t_i = 1*t_in
+            num_iter = 5
+            from arraycontext import thaw, freeze
+            for _ in range(num_iter):
+                t_i = thaw(freeze(t_i, actx_in), actx_in)
+                t_i = t_i + self._lazy_temp_update(
+                    e_in, t_i, y_in
+                )[0]
+            return t_i
+
+        # This hard-codes the Newton iterations to 10 because the convergence
+        # check is not compatible with lazy evaluation. Instead, we plan to check
+        # the temperature residual at simulation health checking time.
+        # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
+        def get_temperature_residual(self, enthalpy_or_energy, t_input, y):
+            pv_fun = self.get_mixture_specific_heat_cv_mass
+            he_fun = self.get_mixture_internal_energy_mass
             f = enthalpy_or_energy - he_fun(t_input, y)
             j = pv_fun(t_input, y)
-
             return f / j
 
     return PyroWrapper
