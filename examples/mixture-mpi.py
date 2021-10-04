@@ -55,7 +55,7 @@ from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
 import cantera
-import pyrometheus as pyro
+# import pyrometheus as pyro
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -177,10 +177,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.mechanisms import get_mechanism_cti
     mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    pyrometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
 
-    nspecies = pyrometheus_mechanism.num_species
-    eos = PyrometheusMixture(pyrometheus_mechanism)
+    # import pyrometheus as pyro
+    # pyro_class = pyro.get_thermochem_class(cantera_soln)
+    pyro_mechanism = make_pyrometheus_mechanism(actx, sol)
+    # pyro_mechanism = UIUCMechanism(actx.np)
+    # eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
+    # pyro_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+
+    nspecies = pyro_mechanism.num_species
+    eos = PyrometheusMixture(pyro_mechanism)
 
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
@@ -259,7 +266,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(dv, component_errors):
+    def my_health_check(cv, dv, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
@@ -273,6 +280,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if rank == 0:
                 logger.info("Solution diverged from exact soln.")
 
+        y = cv.species_mass_fractions
+        e = eos.internal_energy(cv) / cv.mass
+        check_temp = pyro_mechanism.get_temperature(e, dv.temperature, y, True)
+        # temp_resid = pyro_mechanism.get_temperature_residual(
+        #     e, dv.temperature, y, True
+        # )
+        # temp_resid = discr.norm(temp_resid, np.inf)
+        temp_resid = discr.norm(check_temp - dv.temperature, np.inf)
+        if temp_resid > 1e-12:
+            health_error = False
+            logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
         return health_error
 
     def my_pre_step(step, t, dt, state):
@@ -296,8 +314,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(dv, component_errors), comm,
-                                        op=MPI.LOR)
+                health_errors = allsync(my_health_check(state, dv, component_errors),
+                                        comm, op=MPI.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
