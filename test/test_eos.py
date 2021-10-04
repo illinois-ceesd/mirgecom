@@ -114,6 +114,14 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         y0s[i] = y0 / (10.0 ** (i + 1))
     y0s[-1] = 1.0 - np.sum(y0s[:-1])
 
+    def get_temperature_lazy(energy, y, tguess):
+        return make_obj_array(
+            [pyro_lazy.get_temperature(energy, y, tguess,
+                                       do_energy=True)]
+        )
+
+    temp_lazy = actx_lazy.compile(get_temperature_lazy)
+
     for fac in range(1, 11):
         pressin = fac * press0
         tempin = fac * temp0
@@ -165,6 +173,11 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
 
         t_lazy = to_numpy(thaw(freeze(pyro_t_lazy, actx_lazy), actx_eager),
                           actx_eager)
+        t_lazy_fails = temp_lazy(pyro_e_lazy, tin_lazy, yin_lazy)
+
+        t_lazy2 = to_numpy(thaw(freeze(t_lazy_fails, actx_lazy), actx_eager),
+                           actx_eager)
+        assert np.linalg.norm(t_lazy - t_lazy2, np.inf) == 0
 
         pyro_p_eager = pyro_eager.get_pressure(pyro_rho_eager, tin_eager, yin_eager)
         pyro_c_eager = pyro_eager.get_concentrations(pyro_rho_eager, yin_eager)
