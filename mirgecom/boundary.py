@@ -462,8 +462,7 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
         """Get the interior and exterior solution (*cv*) on the boundary."""
         cv_minus = discr.project("vol", btag, cv)
 
-        # t_plus = self._wall_temp + 0*cv_minus.mass
-        t_plus = eos.temperature(cv_minus)
+        t_plus = self._wall_temp + 0*cv_minus.mass
         velocity_plus = -cv_minus.momentum / cv_minus.mass
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
 
@@ -483,7 +482,7 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
 
     def temperature_bc(self, nodes, cv, temperature, eos, **kwargs):
         """Get temperature value to weakly prescribe wall bc."""
-        return 2*self._wall_temp - temperature
+        return 0*temperature + self._wall_temp
 
 
 class PrescribedViscousBoundary(FluidBC):
