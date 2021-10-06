@@ -37,7 +37,8 @@ from pytools.obj_array import make_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext,
+    SingleGridWorkBalancingPytatoArrayContext
 )
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -77,7 +78,7 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    actx_lazy = PytatoPyOpenCLArrayContext(
+    actx_lazy = SingleGridWorkBalancingPytatoArrayContext(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
@@ -168,16 +169,10 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         # These both take 5 Newton iterations
         pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager,
                                                   True)
-        pyro_t_lazy = pyro_lazy.get_temperature_wrapper(pyro_e_lazy, tin_lazy,
-                                                         yin_lazy)
+        pyro_t_lazy = temp_lazy(pyro_e_lazy, tin_lazy, yin_lazy)
 
         t_lazy = to_numpy(thaw(freeze(pyro_t_lazy, actx_lazy), actx_eager),
                           actx_eager)
-        t_lazy_fails = temp_lazy(pyro_e_lazy, tin_lazy, yin_lazy)
-
-        t_lazy2 = to_numpy(thaw(freeze(t_lazy_fails, actx_lazy), actx_eager),
-                           actx_eager)
-        assert np.linalg.norm(t_lazy - t_lazy2, np.inf) == 0
 
         pyro_p_eager = pyro_eager.get_pressure(pyro_rho_eager, tin_eager, yin_eager)
         pyro_c_eager = pyro_eager.get_concentrations(pyro_rho_eager, yin_eager)

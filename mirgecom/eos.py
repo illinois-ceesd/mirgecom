@@ -749,15 +749,10 @@ class PyrometheusMixture(MixtureEOS):
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
-            t = self._tguess + 0*cv.mass
-            # t = thaw(freeze(t, cv.array_context), cv.array_context)
+            tguess = self._tguess + 0*cv.mass
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            # for _ in range(1):
-            #     # t = thaw(freeze(t, cv.array_context), cv.array_context)
-            #     t = self._pyrometheus_mech.get_temperature_iterate_energy(e, t, y)
-            # return t
-            return self._pyrometheus_mech.get_temperature_wrapper(e, t, y)
+            return self._pyrometheus_mech.get_temperature(e, tguess, y)
 
         return get_temp()
 

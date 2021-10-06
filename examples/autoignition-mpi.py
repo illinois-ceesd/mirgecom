@@ -245,10 +245,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import (
-        make_pyrometheus_mechanism,
-        UIUCMechanism
-    )
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
     # import pyrometheus as pyro
     # pyro_class = pyro.get_thermochem_class(cantera_soln)
     pyro_mechanism = make_pyrometheus_mechanism(actx, cantera_soln)
@@ -293,11 +290,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     ipdb.set_trace()
 
     # Inspection at physics debugging time
-    if debug:
-        print("Initial MIRGE-Com state:")
-        print(f"{current_state=}")
-        print(f"Initial DV pressure: {eos.pressure(current_state)}")
-        print(f"Initial DV temperature: {eos.temperature(current_state)}")
+    # if debug:
+    #     print("Initial MIRGE-Com state:")
+    #     print(f"{current_state=}")
+    #     print(f"Initial DV pressure: {eos.pressure(current_state)}")
+    #     print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -365,6 +362,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(cv, dv):
         health_error = False
+        if True:
+            return health_error
+
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
            or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
@@ -390,6 +390,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_get_timestep(t, dt, state):
+        if True:
+            return dt
         #  richer interface to calculate {dt,cfl} returns node-local estimates
         t_remaining = max(0, t_final - t)
         if constant_cfl:
@@ -428,21 +430,21 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+            # ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
 
-            if do_status:
-                my_write_status(dt, cfl)
+            # if do_status:
+            #    my_write_status(dt, cfl)
 
-            if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+            # if do_restart:
+            #     my_write_restart(step=step, t=t, state=state)
 
-            if do_viz:
-                production_rates = eos.get_production_rates(state)
-                if dv is None:
-                    dv = eos.dependent_vars(state)
-                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
-                             production_rates=production_rates,
-                             ts_field=ts_field, cfl=cfl)
+            # if do_viz:
+            #     production_rates = eos.get_production_rates(state)
+            #     if dv is None:
+            #         dv = eos.dependent_vars(state)
+            #     my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+            #                  production_rates=production_rates,
+            #                  ts_field=ts_field, cfl=cfl)
 
         except MyRuntimeError:
             if rank == 0:
