@@ -52,7 +52,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedViscousBoundary,
-    IsothermalNoSlipBoundary
+    AdiabaticNoslipMovingBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -118,9 +118,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # timestepping control
     timestepper = rk4_step
-    t_final = 1e-6
+    t_final = 1e-7
     current_cfl = 0.05
-    current_dt = 1e-8
+    current_dt = 1e-10
     current_t = 0
     constant_cfl = True
     current_step = 0
@@ -153,7 +153,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        npts_axis = (50, 30)
+        n_refine = 5
+        npts_x = 10
+        npts_y = 6 * n_refine
+        npts_axis = (npts_x, npts_y)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
         generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
@@ -162,7 +165,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    order = 2
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -226,8 +229,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     boundaries = {DTAG_BOUNDARY("-1"): PrescribedViscousBoundary(q_func=initializer),
                   DTAG_BOUNDARY("+1"): PrescribedViscousBoundary(q_func=initializer),
-                  DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(),
-                  DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary()}
+                  DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
+                  DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -311,7 +314,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         from mirgecom.simutil import allsync
         if allsync(check_range_local(discr, "vol", dv.pressure, 9.999e4, 1.00101e5),
-                   comm, op=MPI.LOR):
+                  comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             p_min = nodal_min(discr, "vol", dv.pressure)
@@ -330,7 +333,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             t_max = nodal_max(discr, "vol", dv.temperature)
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
-        exittol = 10
+        exittol = .1
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
