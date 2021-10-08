@@ -57,16 +57,13 @@ from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
 )
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from grudge.trace_pair import TracePair
+from grudge.dof_desc import DOFDesc, DD_VOLUME
+from grudge.trace_pair import TracePair, interior_trace_pairs
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, eos, boundaries, cv, time=0.0, quad_tag=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -100,19 +97,35 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
+    if quad_tag is None:
+        dd = DD_VOLUME
+    else:
+        dd = DOFDesc("vol", quad_tag)
+
+    def to_quad(a, from_dd, dtag):
+        return discr.project(from_dd, dd.with_dtag(dtag), a)
+
+    inviscid_flux_vol = inviscid_flux(discr, eos, discr.project("vol", dd, cv))
     inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
+        # Interior trace pairs
         + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
+            discr, eos=eos,
+            cv_tpair=TracePair(
+                part_tpair.dd.with_discr_tag(quad_tag),
+                interior=make_conserved(discr.dim,
+                                        q=to_quad(part_tpair.int, part_tpair.dd, "int_faces")),
+                exterior=make_conserved(discr.dim,
+                                        q=to_quad(part_tpair.ext, part_tpair.dd, "int_faces"))))
+              for part_tpair in interior_trace_pairs(discr, cv.join()))
+        # Boundary conditions
         + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=time)
+                                                      eos=eos, time=time,
+                                                      quad_tag=quad_tag)
               for btag in boundaries)
     )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
+    q = -div_operator(discr, inviscid_flux_vol.join(),
+                      inviscid_flux_bnd.join(),
+                      quad_tag=quad_tag)
     return make_conserved(discr.dim, q=q)
 
 
