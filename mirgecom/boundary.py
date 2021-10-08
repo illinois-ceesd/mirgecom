@@ -51,6 +51,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import inviscid_facial_flux
+from grudge.dof_desc import as_dofdesc
 
 from abc import ABCMeta, abstractmethod
 
@@ -156,31 +157,34 @@ class PrescribedInviscidBoundary(FluidBC):
                 return quantity
         return discr.project(btag, "all_faces", quantity)
 
-    def boundary_pair(self, discr, btag, cv, **kwargs):
+    def boundary_pair(self, discr, dd_bnd, cv, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         if self._bnd_pair_func:
-            return self._bnd_pair_func(discr, cv=cv, btag=btag, **kwargs)
+            return self._bnd_pair_func(discr, cv=cv, btag=dd_bnd, **kwargs)
         if not self._fluid_soln_func:
             raise NotImplementedError()
         actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
+        boundary_discr = discr.discr_from_dd(dd_bnd)
         nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        int_soln = discr.project("vol", btag, cv)
+        nhat = thaw(actx, discr.normal(dd_bnd))
+        int_soln = discr.project("vol", dd_bnd, cv)
         ext_soln = self._fluid_soln_func(nodes, cv=int_soln, normal=nhat, **kwargs)
-        return TracePair(btag, interior=int_soln, exterior=ext_soln)
+        return TracePair(dd_bnd, interior=int_soln, exterior=ext_soln)
 
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid boundary flux for the divergence operator."""
+    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+        """Get the inviscid flux across the boundary faces."""
+        dd_b = as_dofdesc(btag).with_discr_tag(
+            kwargs.get("quad_tag", None))
+
         if self._inviscid_bnd_flux_func:
             actx = cv.array_context
-            boundary_discr = discr.discr_from_dd(btag)
+            boundary_discr = discr.discr_from_dd(dd_b)
             nodes = thaw(actx, boundary_discr.nodes())
-            nhat = thaw(actx, discr.normal(btag))
-            int_soln = discr.project("vol", btag, cv)
+            nhat = thaw(actx, discr.normal(dd_b))
+            int_soln = discr.project("vol", dd_b, cv)
             return self._inviscid_bnd_flux_func(nodes, normal=nhat,
                                                 cv=int_soln, eos=eos, **kwargs)
-        bnd_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
+        bnd_tpair = self.boundary_pair(discr, dd_bnd=dd_b, cv=cv, eos=eos, **kwargs)
         return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
 
     def cv_gradient_flux(self, discr, btag, cv, **kwargs):

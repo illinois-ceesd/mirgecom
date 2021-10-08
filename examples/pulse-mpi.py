@@ -114,11 +114,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
-    current_cfl = 1.0
+    t_final = 1
+    current_cfl = 0.25
     current_dt = .01
     current_t = 0
-    constant_cfl = False
+    constant_cfl = True
 
     # some i/o frequencies
     nstatus = 1
@@ -150,9 +150,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    from meshmode.discretization.poly_element import \
+        QuadratureSimplexGroupFactory, \
+        PolynomialWarpAndBlendGroupFactory
+
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+
+    order = 3
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+                DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order),
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
 
@@ -293,7 +304,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         return euler_operator(discr, cv=state, time=t,
-                              boundaries=boundaries, eos=eos)
+                              boundaries=boundaries, eos=eos,
+                              quad_tag=DISCR_TAG_QUAD)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
