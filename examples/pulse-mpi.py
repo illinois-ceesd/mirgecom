@@ -174,8 +174,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
     eos = IdealSingleGas()
-    vel = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
+    vel = np.zeros(shape=(dim,), dtype=object)
+    orig = np.zeros(shape=(dim,), dtype=object)
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
     wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}

@@ -702,19 +702,22 @@ class Uniform:
             if numvel > dim:
                 dim = numvel
             elif numvel < dim:
-                myvel = np.zeros(shape=(dim,))
+                myvel = np.zeros(shape=(dim,),
+                                 dtype=object)
                 for i in range(numvel):
                     myvel[i] = velocity[i]
             self._velocity = myvel
         else:
-            self._velocity = np.zeros(shape=(dim,))
+            self._velocity = np.zeros(shape=(dim,),
+                                      dtype=object)
 
         if mass_fracs is not None:
             self._nspecies = len(mass_fracs)
             self._mass_fracs = mass_fracs
         else:
             self._nspecies = nspecies
-            self._mass_fracs = np.zeros(shape=(nspecies,))
+            self._mass_fracs = np.zeros(shape=(nspecies,),
+                                        dtype=object)
 
         if self._velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")

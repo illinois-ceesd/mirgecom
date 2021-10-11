@@ -95,11 +95,13 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     lam = tv_model.volume_viscosity(eos, cv)
 
     # Exact answer for tau
-    exp_grad_v = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    exp_grad_v_t = np.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
+    exp_grad_v = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+                          dtype=object)
+    exp_grad_v_t = np.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]],
+                            dtype=object)
     exp_div_v = 15
     exp_tau = (mu*(exp_grad_v + exp_grad_v_t)
-               + lam*exp_div_v*np.eye(3))
+               + lam*exp_div_v*np.eye(3, dtype=object))
 
     from mirgecom.viscous import viscous_stress_tensor
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
@@ -138,7 +140,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     ybottom = 0.
     ytop = .02
     nspecies = 0
-    spec_diffusivity = 0 * np.ones(nspecies)
+    spec_diffusivity = 0 * np.ones(nspecies,
+                                   dtype=object)
     transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
                                       species_diffusivity=spec_diffusivity)
 
@@ -322,7 +325,8 @@ def test_species_diffusive_flux(actx_factory):
     mu = 0.5
     kappa = 5.0
     # assemble d_alpha so that every species has a unique j
-    d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
+    d_alpha = np.array([(ispec+1) for ispec in range(nspecies)],
+                       dtype=object)
 
     tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu,
                                thermal_conductivity=kappa,
@@ -337,7 +341,8 @@ def test_species_diffusive_flux(actx_factory):
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)
-                             for iidim in range(dim)])
+                             for iidim in range(dim)],
+                            dtype=object)
         exact_j = -massval * d_alpha[ispec] * exact_dy
         assert discr.norm(j[ispec] - exact_j, np.inf) < tol
         exact_j = massval * d_alpha[ispec+1] * exact_dy
@@ -392,7 +397,8 @@ def test_diffusive_heat_flux(actx_factory):
     mu = 0.5
     kappa = 5.0
     # assemble d_alpha so that every species has a unique j
-    d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
+    d_alpha = np.array([(ispec+1) for ispec in range(nspecies)],
+                       dtype=object)
 
     tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu,
                                thermal_conductivity=kappa,
@@ -407,7 +413,8 @@ def test_diffusive_heat_flux(actx_factory):
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)
-                             for iidim in range(dim)])
+                             for iidim in range(dim)],
+                            dtype=object)
         exact_j = -massval * d_alpha[ispec] * exact_dy
         assert discr.norm(j[ispec] - exact_j, np.inf) < tol
         exact_j = massval * d_alpha[ispec+1] * exact_dy
@@ -447,10 +454,10 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
 
-    d_alpha_input = np.array([.1, .2, .3])
+    d_alpha_input = np.array([.1, .2, .3], dtype=object)
     if array_valued:
         f = 1 + 0.1*actx.np.sin(nodes[0])
-        d_alpha_input *= f
+        d_alpha_input = d_alpha_input * f
 
     tv_model = SimpleTransport(species_diffusivity=d_alpha_input)
     eos = IdealSingleGas(transport_model=tv_model)

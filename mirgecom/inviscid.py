@@ -66,7 +66,7 @@ def inviscid_flux(discr, eos, cv):
 
     return make_conserved(
         dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
-        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
+        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim, dtype=object)*p,
         species_mass=(  # reshaped: (nspecies, dim)
             (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
 

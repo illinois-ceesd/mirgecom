@@ -207,7 +207,10 @@ def _get_pulse():
 
     from mirgecom.initializers import Uniform, AcousticPulse
     uniform_init = Uniform(dim=2)
-    pulse_init = AcousticPulse(dim=2, center=np.zeros(2), amplitude=1.0, width=.1)
+    pulse_init = AcousticPulse(dim=2,
+                               center=np.zeros(2, dtype=object),
+                               amplitude=1.0,
+                               width=.1)
 
     def init(nodes):
         return pulse_init(x_vec=nodes, cv=uniform_init(nodes), eos=eos)
@@ -227,8 +230,10 @@ def _get_scalar_lump():
 
     from mirgecom.initializers import MulticomponentLump
     init = MulticomponentLump(
-        dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
-        spec_amplitudes=np.ones(3))
+        dim=2, nspecies=3,
+        velocity=np.ones(2, dtype=object),
+        spec_y0s=np.ones(3, dtype=object),
+        spec_amplitudes=np.ones(3, dtype=object))
 
     from meshmode.mesh import BTAG_ALL
     from mirgecom.boundary import PrescribedInviscidBoundary
