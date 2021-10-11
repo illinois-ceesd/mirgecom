@@ -45,7 +45,7 @@ from grudge.dof_desc import DTAG_BOUNDARY
 from mirgecom.boundary import (
     DummyBoundary,
     PrescribedViscousBoundary,
-    IsothermalNoSlipBoundary
+    AdiabaticNoslipMovingBoundary
 )
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -286,8 +286,8 @@ def test_poiseuille_rhs(actx_factory, order):
         boundaries = {
             DTAG_BOUNDARY("-1"): PrescribedViscousBoundary(q_func=initializer),
             DTAG_BOUNDARY("+1"): PrescribedViscousBoundary(q_func=initializer),
-            DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(),
-            DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary()}
+            DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
+            DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
 
         ns_rhs = ns_operator(discr, eos=eos, boundaries=boundaries, cv=cv_input,
                              t=0.0)
