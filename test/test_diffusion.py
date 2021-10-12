@@ -268,7 +268,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             actx, mesh,
             discr_tag_to_group_factory={
                 DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order),
             }
         )
 
