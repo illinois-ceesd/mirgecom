@@ -43,7 +43,7 @@ from grudge.shortcuts import make_visualizer
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-
+from pytools.obj_array import make_obj_array
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -125,7 +125,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Time loop control parameters
     current_step = 0
-    t_final = 1e-8
+    t_final = 1e-7
     current_cfl = 1.0
     current_dt = 1e-9
     current_t = 0
@@ -134,7 +134,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # i.o frequencies
     nstatus = 1000
     nviz = 1000
-    nhealth = 1
+    nhealth = 10
     nrestart = 1000
 
     # }}}  Time stepping control
@@ -177,19 +177,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
+        # logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        #                      extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
+        #     ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+        #     ("max_pressure",    "{value:1.9e})\n"),
+        #     ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+        #     ("max_temperature",    "{value:7g})\n"),
+
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
-            ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
-            ("max_temperature",    "{value:7g})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
@@ -252,6 +253,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # pyro_mechanism = UIUCMechanism(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
 
+    def get_temperature_mass_energy(state, temperature):
+        y = state.species_mass_fractions
+        e = eos.internal_energy(state) / state.mass
+        return make_obj_array(
+            [pyro_mechanism.get_temperature(e, temperature, y, True)]
+        )
+
+    compute_dependent_vars = actx.compile(eos.dependent_vars)
+    compute_temperature = actx.compile(get_temperature_mass_energy)
+
+                                       
     # }}}
 
     # {{{ MIRGE-Com state initialization
@@ -286,8 +298,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes)
-    import ipdb
-    ipdb.set_trace()
+    # import ipdb
+    # ipdb.set_trace()
 
     # Inspection at physics debugging time
     # if debug:
@@ -330,7 +342,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
                      production_rates=None, cfl=None):
         if dv is None:
-            dv = eos.dependent_vars(state)
+            dv = compute_dependent_vars(state)
         if production_rates is None:
             production_rates = eos.get_production_rates(state)
         if ts_field is None:
@@ -361,30 +373,34 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             write_restart_file(actx, rst_data, rst_fname, comm)
 
     def my_health_check(cv, dv):
+        import grudge.op as op
         health_error = False
-        if True:
-            return health_error
+
+        from arraycontext import thaw, freeze
+        temperature = thaw(freeze(dv.temperature, actx), actx)
+        pressure = thaw(freeze(dv.pressure, actx), actx)
 
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure) \
-           or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
+        if check_naninf_local(discr, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+        if check_range_local(discr, "vol", pressure, 1e5, 2.6e5):
+            health_error = True
+            logger.info(f"{rank=}: Pressure range violation.")
 
-        if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
+        if check_naninf_local(discr, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+        if check_range_local(discr, "vol", temperature, 1.498e3, 1.6e3):
+            health_error = True
+            logger.info(f"{rank=}: Temperature range violation.")
 
-        y = cv.species_mass_fractions
-        e = eos.internal_energy(cv) / cv.mass
-        check_temp = pyro_mechanism.get_temperature(e, dv.temperature, y, True)
-        # temp_resid = pyro_mechanism.get_temperature_residual(
-        #     e, dv.temperature, y, True
-        # )
-        # temp_resid = discr.norm(temp_resid, np.inf)
-        temp_resid = discr.norm(check_temp - dv.temperature, np.inf)
+        check_temp, = compute_temperature(cv, temperature)
+        check_temp = thaw(freeze(check_temp, actx), actx)
+        temp_resid = actx.np.abs(check_temp - temperature)
+        temp_resid = op.nodal_max_loc(discr, "vol", temp_resid)
         if temp_resid > 1e-12:
-            health_error = False
+            health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
         return health_error
@@ -422,7 +438,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
-                dv = eos.dependent_vars(state)
+                if dv is None:
+                    # dv = eos.dependent_vars(state)
+                    dv = compute_dependent_vars(state)
                 from mirgecom.simutil import allsync
                 health_errors = allsync(my_health_check(state, dv), comm, op=MPI.LOR)
                 if health_errors:
@@ -442,15 +460,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             #     production_rates = eos.get_production_rates(state)
             #     if dv is None:
             #         dv = eos.dependent_vars(state)
-            #     my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
-            #                  production_rates=production_rates,
-            #                  ts_field=ts_field, cfl=cfl)
+            #        my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+            #                      production_rates=production_rates,
+            #                      ts_field=ts_field, cfl=cfl)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, dt=dt, state=state)
-            my_write_restart(step=step, t=t, state=state)
+            # my_write_viz(step=step, t=t, dt=dt, state=state)
+            # my_write_restart(step=step, t=t, state=state)
             raise
 
         return state, dt
@@ -482,14 +500,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_dv = eos.dependent_vars(current_state)
-    final_dm = eos.get_production_rates(current_state)
-    ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
-                                        state=current_state)
-    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
-                 dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
-    my_write_status(dt=dt, cfl=cfl)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    # final_dv = eos.dependent_vars(current_state)
+    # final_dm = eos.get_production_rates(current_state)
+    # ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
+    #                                     state=current_state)
+    # my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+    #              dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
+    # my_write_status(dt=dt, cfl=cfl)
+    # my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()

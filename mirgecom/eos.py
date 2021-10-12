@@ -43,9 +43,11 @@ from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
+from arraycontext import dataclass_array_container
 
 
-@dataclass
+@dataclass_array_container
+@dataclass(frozen=True)
 class EOSDependentVars:
     """State-dependent quantities for :class:`GasEOS`.
 
