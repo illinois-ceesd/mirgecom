@@ -148,17 +148,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     from meshmode.discretization.poly_element import \
-        QuadratureSimplexGroupFactory, \
-        PolynomialWarpAndBlendGroupFactory
+        QuadratureSimplexGroupFactory
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_QUAD
 
     order = 3
     discr = EagerDGDiscretization(
-        actx, local_mesh,
+        actx, local_mesh, order=order,
         discr_tag_to_group_factory={
-                DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order),
         },
         mpi_communicator=comm
     )
