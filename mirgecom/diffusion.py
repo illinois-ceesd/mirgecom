@@ -257,6 +257,7 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
     dd_allfaces_quad = DOFDesc("all_faces", quad_tag)
 
     grad_u = discr.inverse_mass(
+        dd_quad,
         discr.weak_grad(-u)
         -  # noqa: W504
         discr.face_mass(
@@ -275,6 +276,7 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
     grad_u_quad = discr.project("vol", dd_quad, grad_u)
 
     diff_u = discr.inverse_mass(
+        dd_quad,
         discr.weak_div(dd_quad, -alpha_quad*grad_u_quad)
         -  # noqa: W504
         discr.face_mass(
