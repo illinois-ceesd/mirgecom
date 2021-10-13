@@ -35,20 +35,20 @@ from meshmode.array_context import (
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
 from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
+# from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from pytools.obj_array import make_obj_array
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile
+    write_visfile,
+    allsync
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -57,6 +57,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
+from arraycontext import thaw, freeze
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -132,14 +133,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     constant_cfl = False
 
     # i.o frequencies
-    nstatus = 1000
-    nviz = 1000
-    nhealth = 10
-    nrestart = 1000
+    nstatus = 1
+    nviz = 10
+    nhealth = 1
+    nrestart = 10
 
     # }}}  Time stepping control
 
-    debug = False
+    # debug = False
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -170,7 +171,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     vis_timer = None
 
@@ -263,7 +264,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     compute_dependent_vars = actx.compile(eos.dependent_vars)
     compute_temperature = actx.compile(get_temperature_mass_energy)
 
-                                       
     # }}}
 
     # {{{ MIRGE-Com state initialization
@@ -334,13 +334,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_status(dt, cfl):
+    def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
+        if dv is not None:
+            temp = dv.temperature
+            press = dv.pressure
+            temp = thaw(freeze(temp, actx), actx)
+            press = thaw(freeze(press, actx), actx)
+            from grudge.op import nodal_min_loc, nodal_max_loc
+            tmin = allsync(nodal_min_loc(discr, "vol", temp), comm=comm, op=MPI.MIN)
+            tmax = allsync(nodal_max_loc(discr, "vol", temp), comm=comm, op=MPI.MAX)
+            pmin = allsync(nodal_min_loc(discr, "vol", press), comm=comm, op=MPI.MIN)
+            pmax = allsync(nodal_max_loc(discr, "vol", press), comm=comm, op=MPI.MAX)
+            dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
+            status_msg = status_msg + dv_status_msg
+
         if rank == 0:
             logger.info(status_msg)
 
     def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
                      production_rates=None, cfl=None):
+        if True:
+            return
         if dv is None:
             dv = compute_dependent_vars(state)
         if production_rates is None:
@@ -376,9 +391,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         import grudge.op as op
         health_error = False
 
-        from arraycontext import thaw, freeze
-        temperature = thaw(freeze(dv.temperature, actx), actx)
         pressure = thaw(freeze(dv.pressure, actx), actx)
+        temperature = thaw(freeze(dv.temperature, actx), actx)
 
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", pressure):
@@ -405,23 +419,37 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
+    from mirgecom.inviscid import get_inviscid_timestep
+
+    def lazy_dt(state):
+        return make_obj_array([get_inviscid_timestep(discr, eos=eos, cv=state)])
+
+    get_lazy_dt = actx.compile(lazy_dt)
+
+    from mirgecom.inviscid import get_inviscid_cfl
+
+    def lazy_cfl(state, dt):
+        return make_obj_array([get_inviscid_cfl(discr, eos, dt, cv=state)])
+
+    get_lazy_cfl = actx.compile(lazy_cfl)
+
     def my_get_timestep(t, dt, state):
-        if True:
-            return dt
         #  richer interface to calculate {dt,cfl} returns node-local estimates
         t_remaining = max(0, t_final - t)
+
         if constant_cfl:
-            from mirgecom.inviscid import get_inviscid_timestep
-            ts_field = current_cfl * get_inviscid_timestep(discr, eos=eos, cv=state)
-            from grudge.op import nodal_min
-            dt = nodal_min(discr, "vol", ts_field)
+            ts_field = current_cfl * get_lazy_dt(state)
+            ts_field = thaw(freeze(ts_field, actx), actx)
+            from grudge.op import nodal_min_loc
+            dt = allsync(nodal_min_loc(discr, "vol", ts_field), comm=comm,
+                         op=MPI.MIN)
             cfl = current_cfl
         else:
-            from mirgecom.inviscid import get_inviscid_cfl
-            ts_field = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
-            from grudge.op import nodal_max
-            cfl = nodal_max(discr, "vol", ts_field)
-
+            ts_field = get_lazy_cfl(state, current_dt)
+            ts_field = thaw(freeze(ts_field, actx), actx)
+            from grudge.op import nodal_max_loc
+            cfl = allsync(nodal_max_loc(discr, "vol", ts_field), comm=comm,
+                          op=MPI.MAX)
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
@@ -439,30 +467,30 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 if dv is None:
-                    # dv = eos.dependent_vars(state)
                     dv = compute_dependent_vars(state)
-                from mirgecom.simutil import allsync
                 health_errors = allsync(my_health_check(state, dv), comm, op=MPI.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            # ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
 
-            # if do_status:
-            #    my_write_status(dt, cfl)
+            if do_status:
+                if dv is None:
+                    dv = compute_dependent_vars(state)
+                my_write_status(dt=dt, cfl=cfl, dv=dv)
 
-            # if do_restart:
-            #     my_write_restart(step=step, t=t, state=state)
+            if do_restart:
+                my_write_restart(step=step, t=t, state=state)
 
-            # if do_viz:
-            #     production_rates = eos.get_production_rates(state)
-            #     if dv is None:
-            #         dv = eos.dependent_vars(state)
-            #        my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
-            #                      production_rates=production_rates,
-            #                      ts_field=ts_field, cfl=cfl)
+            if do_viz:
+                production_rates = eos.get_production_rates(state)
+                if dv is None:
+                    dv = compute_dependent_vars(state)
+                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+                             production_rates=production_rates,
+                             ts_field=ts_field, cfl=cfl)
 
         except MyRuntimeError:
             if rank == 0:
@@ -500,14 +528,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    # final_dv = eos.dependent_vars(current_state)
-    # final_dm = eos.get_production_rates(current_state)
-    # ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
-    #                                     state=current_state)
-    # my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
-    #              dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
-    # my_write_status(dt=dt, cfl=cfl)
-    # my_write_restart(step=current_step, t=current_t, state=current_state)
+    final_dv = compute_dependent_vars(current_state)
+    final_dm = eos.get_production_rates(current_state)
+    ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
+                                        state=current_state)
+    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+                 dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
+    my_write_status(dt=dt, cfl=cfl, dv=final_dv)
+    my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()
