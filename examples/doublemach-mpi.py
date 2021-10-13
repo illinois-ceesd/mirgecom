@@ -43,7 +43,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.navierstokes import ns_operator
+from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -54,7 +54,7 @@ from mirgecom.fluid import make_conserved
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    AdiabaticNoslipMovingBoundary,
+    AdiabaticSlipBoundary,
     PrescribedBoundary
 )
 from mirgecom.initializers import DoubleMachReflection
@@ -190,9 +190,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
         local_nelements = local_mesh.nelements
 
+    from meshmode.discretization.poly_element import \
+        QuadratureSimplexGroupFactory
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+
     order = 3
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                                  mpi_communicator=comm)
+    discr = EagerDGDiscretization(
+        actx, local_mesh, order=order,
+        discr_tag_to_group_factory={
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order),
+        },
+        mpi_communicator=comm
+    )
     nodes = thaw(actx, discr.nodes())
 
     dim = 2
@@ -230,8 +240,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
         DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
         DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
-        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
+        DTAG_BOUNDARY("wall"): AdiabaticSlipBoundary(),
+        DTAG_BOUNDARY("out"): AdiabaticSlipBoundary(),
     }
 
     if rst_filename:
@@ -386,12 +396,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return ns_operator(
-            discr, cv=state, t=t, boundaries=boundaries, eos=eos
-        ) + make_conserved(dim, q=av_operator(
-            discr, q=state.join(), boundaries=boundaries,
-            boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
-            s0=s0, kappa=kappa)
+        return euler_operator(
+            discr,
+            eos,
+            boundaries=boundaries,
+            cv=state,
+            time=t,
+            quad_tag=DISCR_TAG_QUAD
+        ) + make_conserved(
+            dim,
+            q=av_operator(
+                discr,
+                boundaries,
+                state.join(),
+                alpha,
+                time=t,
+                eos=eos,
+                s0=s0,
+                kappa=kappa,
+                quad_tag=DISCR_TAG_QUAD
+            )
         )
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
