@@ -187,7 +187,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s\n")
+            ("t_log.max", "log walltime: {value:6g} s")
         ])
 
         if log_dependent:
@@ -195,7 +195,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                       extract_vars_for_logging,
                                                       units_for_logging)
             logmgr.add_watches([
-                ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+                ("min_pressure", "\n------- P (min, max) (Pa) = ({value:1.9e}, "),
                 ("max_pressure",    "{value:1.9e})\n"),
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
                 ("max_temperature",    "{value:7g})\n")])
@@ -340,7 +340,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
-        if dv is not None and not log_dependent:
+        if ((dv is not None) and (not log_dependent)):
             temp = dv.temperature
             press = dv.pressure
             temp = thaw(freeze(temp, actx), actx)
@@ -568,10 +568,12 @@ if __name__ == "__main__":
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
         actx_class = PyOpenCLProfilingArrayContext
-        log_dependent = False
     else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
-            else PyOpenCLArrayContext
+        if args.lazy:
+            log_dependent = False
+            actx_class = PytatoPyOpenCLArrayContext
+        else:
+            actx_class = PyOpenCLArrayContext
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
