@@ -196,7 +196,7 @@ class PrescribedInviscidBoundary(FluidBC):
             int_soln = discr.project("vol", dd_b, cv)
             return self._inviscid_bnd_flux_func(nodes, normal=nhat,
                                                 cv=int_soln, eos=eos, **kwargs)
-        bnd_tpair = self.boundary_pair(discr, dd_bnd=dd_b, cv=cv, **kwargs)
+        bnd_tpair = self.boundary_pair(discr, dd_bnd=dd_b, cv=cv, eos=eos, **kwargs)
         return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
 
     def q_boundary_flux(self, discr, btag, cv, **kwargs):
