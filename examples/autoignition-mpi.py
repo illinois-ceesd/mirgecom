@@ -141,7 +141,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}  Time stepping control
 
-    # debug = False
+    debug = False
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -306,11 +306,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # ipdb.set_trace()
 
     # Inspection at physics debugging time
-    # if debug:
-    #     print("Initial MIRGE-Com state:")
-    #     print(f"{current_state=}")
-    #     print(f"Initial DV pressure: {eos.pressure(current_state)}")
-    #     print(f"Initial DV temperature: {eos.temperature(current_state)}")
+    if debug:
+        print("Initial MIRGE-Com state:")
+        print(f"{current_state=}")
+        print(f"Initial DV pressure: {eos.pressure(current_state)}")
+        print(f"Initial DV temperature: {eos.temperature(current_state)}")
 
     # }}}
 
@@ -358,8 +358,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
                      production_rates=None, cfl=None):
-        if True:
-            return
         if dv is None:
             dv = compute_dependent_vars(state)
         if production_rates is None:
