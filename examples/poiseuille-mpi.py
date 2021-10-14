@@ -418,9 +418,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         return ns_operator(discr, eos=eos,
-                           boundaries=boundaries, cv=state, t=t,
-                           # quad_tag=DISCR_TAG_QUAD)
-                           quad_tag=None)
+                           boundaries=boundaries,
+                           cv=state, t=t,
+                           quad_tag=DISCR_TAG_QUAD)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)

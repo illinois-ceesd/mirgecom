@@ -164,9 +164,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    from meshmode.discretization.poly_element import \
+        QuadratureSimplexGroupFactory
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+
+    quad_tag = DISCR_TAG_QUAD
+
+    order = 2
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh, order=order,
+        discr_tag_to_group_factory={
+            quad_tag: QuadratureSimplexGroupFactory(2*order),
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(actx, discr.nodes())
 
@@ -399,7 +410,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return ns_operator(discr, eos=eos, boundaries=boundaries, cv=state, t=t)
+        return ns_operator(discr, eos=eos,
+                           boundaries=boundaries, cv=state, t=t,
+                           quad_tag=quad_tag)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
