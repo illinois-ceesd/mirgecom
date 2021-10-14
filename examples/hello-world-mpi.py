@@ -18,4 +18,8 @@ def main():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Hello World MPI demo")
+    parser.parse_args()
+
     main()

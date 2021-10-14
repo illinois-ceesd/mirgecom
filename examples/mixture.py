@@ -388,8 +388,9 @@ if __name__ == "__main__":
     casename = "uiuc-mixture"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--mpi", action="store_true", help="run with MPI")
-    parser.add_argument("--lazy", action="store_true",
-        help="switch to a lazy computation mode")
+    # Not working yet
+    # parser.add_argument("--lazy", action="store_true",
+    #     help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
@@ -401,11 +402,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.profiling:
-        if args.lazy:
+        # if args.lazy:
+        if False:
             raise ValueError("Can't use lazy and profiling together.")
         actx_class = PyOpenCLProfilingArrayContext
     else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+        # actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+        actx_class = PytatoPyOpenCLArrayContext if False \
             else PyOpenCLArrayContext
 
     if args.mpi:
