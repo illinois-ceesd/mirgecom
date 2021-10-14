@@ -41,7 +41,7 @@ from grudge.shortcuts import make_visualizer
 
 
 from logpyle import IntervalTimer, set_dt
-# from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from pytools.obj_array import make_obj_array
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
@@ -81,7 +81,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         rst_filename=None, actx_class=PyOpenCLArrayContext,
+         log_dependent=True):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -178,23 +179,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        # logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-        #                      extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
-
-        #     ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-        #     ("max_pressure",    "{value:1.9e})\n"),
-        #     ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
-        #     ("max_temperature",    "{value:7g})\n"),
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s")
+            ("t_log.max", "log walltime: {value:6g} s\n")
         ])
+
+        if log_dependent:
+            logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                                                      extract_vars_for_logging,
+                                                      units_for_logging)
+            logmgr.add_watches([
+                ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
+                ("max_pressure",    "{value:1.9e})\n"),
+                ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+                ("max_temperature",    "{value:7g})\n")])
 
     # {{{  Set up initial state using Cantera
 
@@ -336,7 +340,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
-        if dv is not None:
+        if dv is not None and not log_dependent:
             temp = dv.temperature
             press = dv.pressure
             temp = thaw(freeze(temp, actx), actx)
@@ -561,10 +565,12 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    log_dependent = True
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
         actx_class = PyOpenCLProfilingArrayContext
+        log_dependent = False
     else:
         actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
@@ -577,6 +583,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         log_dependent=log_dependent)
 
 # vim: foldmethod=marker
