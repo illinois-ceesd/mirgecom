@@ -225,7 +225,7 @@ def check_naninf_local(discr, dd, field):
     """Check for any NANs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
-    return np.isnan(s) or (s == np.inf)
+    return not np.isfinite(s)
 
 
 def compare_fluid_solutions(discr, red_state, blue_state):
