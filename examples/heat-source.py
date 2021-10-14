@@ -155,8 +155,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     compiled_rhs = actx.compile(rhs)
 
-    rank = comm.Get_rank()
-
     while t < t_final:
         if logmgr:
             logmgr.tick_before()
