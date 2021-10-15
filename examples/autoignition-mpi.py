@@ -42,7 +42,6 @@ from grudge.shortcuts import make_visualizer
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from pytools.obj_array import make_obj_array
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -93,6 +92,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     nproc = comm.Get_size()
+
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
@@ -338,6 +340,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
+    from pytools.obj_array import make_obj_array
+
+    def get_temperature_mass_energy(state, temperature):
+        y = state.species_mass_fractions
+        e = eos.internal_energy(state) / state.mass
+        return make_obj_array(
+            [pyro_mechanism.get_temperature(e, temperature, y, True)]
+        )
+
+    compute_temperature = actx.compile(get_temperature_mass_energy)
+
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if ((dv is not None) and (not log_dependent)):
@@ -399,6 +412,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if check_naninf_local(discr, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+
         if check_range_local(discr, "vol", pressure, 1e5, 2.6e5):
             health_error = True
             logger.info(f"{rank=}: Pressure range violation.")
@@ -474,7 +488,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 if dv is None:
                     dv = compute_dependent_vars(state)
-                health_errors = allsync(my_health_check(state, dv), comm, op=MPI.LOR)
+                health_errors = global_reduce(my_health_check(state, dv), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
