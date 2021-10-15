@@ -130,7 +130,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Time loop control parameters
     current_step = 0
-    t_final = 1e-7
+    t_final = 1e-8
     current_cfl = 1.0
     current_dt = 1e-9
     current_t = 0
