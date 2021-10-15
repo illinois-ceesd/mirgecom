@@ -47,22 +47,19 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
             for i in range(self.num_species):
-                concs[i] = self.usr_np.where(self.usr_np.less(concs[i], 0),
-                                             zero, concs[i])
+                concs[i] = self.usr_np.maximum(concs[i], zero)
             return concs
 
-        # This hard-codes the Newton iterations to 10 because the convergence
+        # This hard-codes the number of Newton iterations because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
         def get_temperature_update_energy(self, e_in, t_in, y):
             pv_func = self.get_mixture_specific_heat_cv_mass
             he_func = self.get_mixture_internal_energy_mass
-            # import ipdb
-            # ipdb.set_trace()
             return (e_in - he_func(t_in, y)) / pv_func(t_in, y)
 
-        # This hard-codes the Newton iterations to 10 because the convergence
+        # This hard-codes the number of Newton iterations because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
