@@ -31,7 +31,7 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.dof_array import thaw
@@ -88,6 +88,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
@@ -297,11 +300,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
-                from mirgecom.simutil import allsync
-                health_errors = allsync(
-                    my_health_check(dv.pressure, component_errors),
-                    comm, op=MPI.LOR
-                )
+                health_errors = global_reduce(
+                    my_health_check(dv.pressure, component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
