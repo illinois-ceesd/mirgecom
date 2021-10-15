@@ -45,7 +45,6 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 
 import cantera
-import pyrometheus as pyro
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.initializers import (
     Vortex2D, Lump,
@@ -285,9 +284,10 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    pyrometheus_mechanism = make_pyrometheus_mechanism(actx, sol)
 
-    nspecies = prometheus_mechanism.num_species
+    nspecies = pyrometheus_mechanism.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
 
     press0 = 101500.0
@@ -320,17 +320,17 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         pin = can_p * ones
         yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
 
-        prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
-        prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
-        prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
-        prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
-        prom_k = prometheus_mechanism.get_fwd_rate_coefficients(prom_t, prom_c)
+        prom_rho = pyrometheus_mechanism.get_density(pin, tin, yin)
+        prom_e = pyrometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+        prom_t = pyrometheus_mechanism.get_temperature(prom_e, tin, yin, True)
+        prom_p = pyrometheus_mechanism.get_pressure(prom_rho, tin, yin)
+        prom_c = pyrometheus_mechanism.get_concentrations(prom_rho, yin)
+        prom_k = pyrometheus_mechanism.get_fwd_rate_coefficients(prom_t, prom_c)
 
         # Pyro chemistry functions
-        prom_r = prometheus_mechanism.get_net_rates_of_progress(prom_t,
+        prom_r = pyrometheus_mechanism.get_net_rates_of_progress(prom_t,
                                                                 prom_c)
-        prom_omega = prometheus_mechanism.get_net_production_rates(prom_rho,
+        prom_omega = pyrometheus_mechanism.get_net_production_rates(prom_rho,
                                                                    prom_t, yin)
 
         print(f"can(rho, y, p, t, e, k) = ({can_rho}, {can_y}, "
@@ -391,9 +391,11 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    pyrometheus_mechanism = make_pyrometheus_mechanism(actx, sol)
+    # pyrometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
 
-    nspecies = prometheus_mechanism.num_species
+    nspecies = pyrometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
 
@@ -405,7 +407,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     y0s[0] = 1.0 - np.sum(y0s[1:])
     velocity = vel * np.ones(shape=(dim,))
 
-    for fac in range(1, 11):
+    for fac in range(1, 7):
         tempin = fac * temp0
         pressin = fac * press0
 
@@ -415,17 +417,17 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
-        tguess = 300.0
+        tguess = 0 * ones + 300.0
 
-        pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
-        pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin, True)
-        pyro_p = prometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
+        pyro_rho = pyrometheus_mechanism.get_density(pin, tin, yin)
+        pyro_e = pyrometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
+        pyro_t = pyrometheus_mechanism.get_temperature(pyro_e, tguess, yin, True)
+        pyro_p = pyrometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
 
         print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
               f"{pyro_p}, {pyro_t}, {pyro_e})")
 
-        eos = PyrometheusMixture(prometheus_mechanism)
+        eos = PyrometheusMixture(pyrometheus_mechanism)
         initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                          pressure=pyro_p, temperature=pyro_t,
                                          massfractions=y0s, velocity=velocity)
@@ -486,7 +488,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
-    pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    pyro_obj = make_pyrometheus_mechanism(actx, cantera_soln)
 
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
