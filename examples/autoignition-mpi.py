@@ -326,7 +326,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         y = state.species_mass_fractions
         e = eos.internal_energy(state) / state.mass
         return make_obj_array(
-            [pyro_mechanism.get_temperature(e, temperature, y, True)]
+            [pyro_mechanism.get_temperature(e, temperature, y)]
         )
 
     compute_temperature = actx.compile(get_temperature_mass_energy)
