@@ -74,6 +74,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
             species_mass_fractions: numpy.ndarray
                 An object array of :class:`~meshmode.dof_array.DOFArray` with the
                 mass fractions of the mixture species.
+
             Returns
             -------
             :class:`~meshmode.dof_array.DOFArray`
