@@ -361,11 +361,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if dv is None:
             dv = compute_dependent_vars(state)
         if production_rates is None:
-            production_rates = eos.get_production_rates(state)
+            production_rates = compute_production_rates(state)
         if ts_field is None:
             ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
-        viz_fields = [("cv", state),
-                      ("dv", dv),
+        viz_fields = [("cv", state), ("dv", dv),
                       ("production_rates", production_rates),
                       ("dt" if constant_cfl else "cfl", ts_field)]
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
@@ -423,31 +422,36 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.inviscid import get_inviscid_timestep
 
-    def lazy_dt(state):
+    def get_dt(state):
         return make_obj_array([get_inviscid_timestep(discr, eos=eos, cv=state)])
 
-    get_lazy_dt = actx.compile(lazy_dt)
+    compute_dt = actx.compile(get_dt)
 
     from mirgecom.inviscid import get_inviscid_cfl
 
-    def lazy_cfl(state, dt):
+    def get_cfl(state, dt):
         return make_obj_array([get_inviscid_cfl(discr, eos, dt, cv=state)])
 
-    get_lazy_cfl = actx.compile(lazy_cfl)
+    compute_cfl = actx.compile(get_cfl)
+
+    def get_production_rates(state):
+        return make_obj_array([eos.get_production_rates(state)])
+
+    compute_production_rates = actx.compile(get_production_rates)
 
     def my_get_timestep(t, dt, state):
         #  richer interface to calculate {dt,cfl} returns node-local estimates
         t_remaining = max(0, t_final - t)
 
         if constant_cfl:
-            ts_field = current_cfl * get_lazy_dt(state)
+            ts_field = current_cfl * compute_dt(state)
             ts_field = thaw(freeze(ts_field, actx), actx)
             from grudge.op import nodal_min_loc
             dt = allsync(nodal_min_loc(discr, "vol", ts_field), comm=comm,
                          op=MPI.MIN)
             cfl = current_cfl
         else:
-            ts_field = get_lazy_cfl(state, current_dt)
+            ts_field = compute_cfl(state, current_dt)
             ts_field = thaw(freeze(ts_field, actx), actx)
             from grudge.op import nodal_max_loc
             cfl = allsync(nodal_max_loc(discr, "vol", ts_field), comm=comm,
@@ -487,7 +491,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                production_rates = eos.get_production_rates(state)
+                production_rates, = compute_production_rates(state)
                 if dv is None:
                     dv = compute_dependent_vars(state)
                 my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
@@ -531,7 +535,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     final_dv = compute_dependent_vars(current_state)
-    final_dm = eos.get_production_rates(current_state)
+    final_dm = compute_production_rates(current_state)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=current_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
