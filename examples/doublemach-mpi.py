@@ -43,7 +43,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.navierstokes import ns_operator
+from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
@@ -55,7 +55,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticNoslipMovingBoundary,
-    PrescribedBoundary
+    PrescribedInviscidBoundary
 )
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
@@ -227,9 +227,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     initializer = DoubleMachReflection()
 
     boundaries = {
-        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic1"):
+        PrescribedInviscidBoundary(fluid_solution_func=initializer),
+        DTAG_BOUNDARY("ic2"):
+        PrescribedInviscidBoundary(fluid_solution_func=initializer),
+        DTAG_BOUNDARY("ic3"):
+        PrescribedInviscidBoundary(fluid_solution_func=initializer),
         DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
         DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
     }
@@ -386,8 +389,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return ns_operator(
-            discr, cv=state, t=t, boundaries=boundaries, eos=eos
+        return euler_operator(
+            discr, cv=state, time=t, boundaries=boundaries, eos=eos
         ) + make_conserved(dim, q=av_operator(
             discr, q=state.join(), boundaries=boundaries,
             boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
