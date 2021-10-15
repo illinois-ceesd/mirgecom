@@ -383,6 +383,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
 
+        # This check is the temperature convergence check
+        # The current *temperature* is what Pyrometheus gets
+        # after a fixed number of Newton iterations, *n_iter*.
+        # Calling `compute_temperature` here with *temperature*
+        # input as the guess returns the calculated gas temperature after
+        # yet another *n_iter*.
+        # The difference between those two temperatures is the
+        # temperature residual, which can be used as an indicator of
+        # convergence in Pyrometheus `get_temperature`.
+        # Note: The local max jig below works around a very long compile
+        # in lazy mode.
         from grudge.op import nodal_max_loc
         check_temp, = compute_temperature(cv, temperature)
         temp_resid = actx.np.abs(check_temp - temperature)
