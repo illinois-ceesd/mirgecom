@@ -317,6 +317,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
+    from pytools.obj_array import make_obj_array
+
+    def get_temperature_mass_energy(state, temperature):
+        y = state.species_mass_fractions
+        e = eos.internal_energy(state) / state.mass
+        return make_obj_array(
+            [pyro_mechanism.get_temperature(e, temperature, y, True)]
+        )
+
+    compute_temperature = actx.compile(get_temperature_mass_energy)
+
     def my_write_status(dt, cfl):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if rank == 0:
@@ -357,22 +368,23 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(cv, dv):
         health_error = False
+        pressure = dv.pressure
+        temperature = dv.temperature
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure) \
-           or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
+        if check_naninf_local(discr, "vol", pressure) \
+           or check_range_local(discr, "vol", pressure, 1e5, 2.4e5):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
+        if check_range_local(discr, "vol", temperature, 1.498e3, 1.52e3):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
 
-        y = cv.species_mass_fractions
-        e = eos.internal_energy(cv) / cv.mass
-        temp_resid = pyro_mechanism.get_temperature_residual(
-            e, dv.temperature, y, True
-        )
-        temp_resid = discr.norm(temp_resid, np.inf)
+        from grudge.op import nodal_max_loc
+        check_temp, = compute_temperature(cv, temperature)
+        temp_resid = actx.np.abs(check_temp - temperature)
+        temp_resid = nodal_max_loc(discr, "vol", temp_resid)
+
         if temp_resid > 1e-12:
             health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
