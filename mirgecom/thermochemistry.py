@@ -63,7 +63,10 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
-        def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
+        def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=True):
+            if not do_energy:
+                raise ValueError("MIRGE ThermoChem wrapper does not support enthalpy"
+                                 " interface.")
             t_i = t_guess
             num_iter = 5
             for _ in range(num_iter):
