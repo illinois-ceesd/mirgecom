@@ -55,47 +55,25 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
-        def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
-            if do_energy is False:
-                pv_fun = self.get_mixture_specific_heat_cp_mass
-                he_fun = self.get_mixture_enthalpy_mass
-            else:
-                pv_fun = self.get_mixture_specific_heat_cv_mass
-                he_fun = self.get_mixture_internal_energy_mass
-
-            num_iter = 10
-            ones = self._pyro_zeros_like(enthalpy_or_energy) + 1.0
-            t_i = t_guess * ones
-
-            for _ in range(num_iter):
-                f = enthalpy_or_energy - he_fun(t_i, y)
-                j = -pv_fun(t_i, y)
-                dt = -f / j
-                t_i += dt
-                # if self._pyro_norm(dt, np.inf) < tol:
-
-            return t_i
+        def get_temperature_update_energy(self, e_in, t_in, y):
+            pv_func = self.get_mixture_specific_heat_cv_mass
+            he_func = self.get_mixture_internal_energy_mass
+            # import ipdb
+            # ipdb.set_trace()
+            return (e_in - he_func(t_in, y)) / pv_func(t_in, y)
 
         # This hard-codes the Newton iterations to 10 because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
-        def get_temperature_residual(self, enthalpy_or_energy, t_guess, y,
-                                     do_energy=False):
-            if do_energy is False:
-                pv_fun = self.get_mixture_specific_heat_cp_mass
-                he_fun = self.get_mixture_enthalpy_mass
-            else:
-                pv_fun = self.get_mixture_specific_heat_cv_mass
-                he_fun = self.get_mixture_internal_energy_mass
-
-            ones = self._pyro_zeros_like(enthalpy_or_energy) + 1.0
-            t_i = t_guess * ones
-
-            f = enthalpy_or_energy - he_fun(t_i, y)
-            j = -pv_fun(t_i, y)
-
-            return -f / j
+        def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
+            t_i = t_guess
+            num_iter = 5
+            for _ in range(num_iter):
+                t_i = t_i + self.get_temperature_update_energy(
+                    enthalpy_or_energy, t_i, y
+                )
+            return t_i
 
     return PyroWrapper
 
