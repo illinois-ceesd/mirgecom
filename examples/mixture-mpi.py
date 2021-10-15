@@ -317,7 +317,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 health_errors = global_reduce(
-                    my_health_check(dv, component_errors), op="lor")
+                    my_health_check(state, dv, component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
