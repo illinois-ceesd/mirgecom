@@ -55,7 +55,6 @@ from mirgecom.boundary import (  # noqa
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 import cantera
-import pyrometheus as pyro
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
