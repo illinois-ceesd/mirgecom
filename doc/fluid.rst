@@ -77,6 +77,10 @@ source terms in the energy and species conservation equations, respectively.  Se
 :ref:`here<disc-strat>` for details on the discretization strategy for this system of
 conservation equations.
 
+Further documentation for the Navier-Stokes system inviscid fluxes, viscous fluxes,
+and RHS operator can be found in :mod:`mirgecom.inviscid`, :mod:`mirgecom.viscous`,
+and :mod:`mirgecom.navierstokes`, respectively.
+
 .. _euler-eqns:
 
 The Euler equations for inviscid flows are recovered from the Navier-Stokes system
