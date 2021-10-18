@@ -37,7 +37,7 @@ from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
 from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext)
 from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext

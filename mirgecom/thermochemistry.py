@@ -51,29 +51,42 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
                                              zero, concs[i])
             return concs
 
-        # This hard-codes the Newton iterations to 10 because the convergence
+        # This is the temperature update for *get_temperature*
+        def _get_temperature_update_energy(self, e_in, t_in, y):
+            pv_func = self.get_mixture_specific_heat_cv_mass
+            he_func = self.get_mixture_internal_energy_mass
+            return (e_in - he_func(t_in, y)) / pv_func(t_in, y)
+
+        # This hard-codes the number of Newton iterations because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
-        def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
-            if do_energy is False:
-                pv_fun = self.get_mixture_specific_heat_cp_mass
-                he_fun = self.get_mixture_enthalpy_mass
-            else:
-                pv_fun = self.get_mixture_specific_heat_cv_mass
-                he_fun = self.get_mixture_internal_energy_mass
+        # - could adapt dt or num_iter on temperature convergence?
+        # - can pass-in num_iter?
+        def get_temperature(self, energy, temperature_guess, species_mass_fractions):
+            """Compute the temperature of the mixture from thermal energy.
 
-            num_iter = 10
-            ones = self._pyro_zeros_like(enthalpy_or_energy) + 1.0
-            t_i = t_guess * ones
+            Parameters
+            ----------
+            energy: :class:`~meshmode.dof_array.DOFArray`
+                The internal (thermal) energy of the mixture.
+            temperature_guess: :class:`~meshmode.dof_array.DOFArray`
+                An initial starting temperature for the Newton iterations.
+            species_mass_fractions: numpy.ndarray
+                An object array of :class:`~meshmode.dof_array.DOFArray` with the
+                mass fractions of the mixture species.
 
+            Returns
+            -------
+            :class:`~meshmode.dof_array.DOFArray`
+                The mixture temperature after a fixed number of Newton iterations.
+            """
+            num_iter = 5
+            t_i = 1.0*temperature_guess
             for _ in range(num_iter):
-                f = enthalpy_or_energy - he_fun(t_i, y)
-                j = -pv_fun(t_i, y)
-                dt = -f / j
-                t_i += dt
-                # if self._pyro_norm(dt, np.inf) < tol:
-
+                t_i = t_i + self._get_temperature_update_energy(
+                    energy, t_i, species_mass_fractions
+                )
             return t_i
 
     return PyroWrapper

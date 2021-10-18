@@ -154,7 +154,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
         n_refine = 5
-        npts_x = 10
+        npts_x = 10 * n_refine
         npts_y = 6 * n_refine
         npts_axis = (npts_x, npts_y)
         box_ll = (left_boundary_location, ybottom)

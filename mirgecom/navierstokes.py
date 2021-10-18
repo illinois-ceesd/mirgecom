@@ -124,14 +124,14 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                       for part_tpair in xrank_pairs)
                 + sum(compute_boundary_flux(btag) for btag in boundaries))
 
-    def scalar_flux_interior(int_tpair):
+    def grad_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
-    def get_q_flux_bnd(btag):
-        return boundaries[btag].q_boundary_flux(
+    def grad_flux_bnd(btag):
+        return boundaries[btag].cv_gradient_flux(
             discr, btag=btag, cv=cv, eos=eos, time=t
         )
 
@@ -141,7 +141,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                   interior=make_conserved(dim, q=part_tpair.int),
                   exterior=make_conserved(dim, q=part_tpair.ext))
         for part_tpair in cross_rank_trace_pairs(discr, cv.join())]
-    cv_flux_bnd = _elbnd_flux(discr, scalar_flux_interior, get_q_flux_bnd,
+    cv_flux_bnd = _elbnd_flux(discr, grad_flux_interior, grad_flux_bnd,
                               cv_int_tpair, cv_part_pairs, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
@@ -150,8 +150,8 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
-    def get_t_flux_bnd(btag):
-        return boundaries[btag].t_boundary_flux(discr, btag=btag, cv=cv, eos=eos,
+    def t_grad_flux_bnd(btag):
+        return boundaries[btag].t_gradient_flux(discr, btag=btag, cv=cv, eos=eos,
                                                 time=t)
 
     gas_t = eos.temperature(cv)
@@ -163,17 +163,17 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
                   interior=eos.temperature(part_tpair.int),
                   exterior=eos.temperature(part_tpair.ext))
         for part_tpair in cv_part_pairs]
-    t_flux_bnd = _elbnd_flux(discr, scalar_flux_interior, get_t_flux_bnd,
+    t_flux_bnd = _elbnd_flux(discr, grad_flux_interior, t_grad_flux_bnd,
                              t_int_tpair, t_part_pairs, boundaries)
     grad_t = grad_operator(discr, gas_t, t_flux_bnd)
 
     # inviscid parts
-    def finv_interior_face(cv_tpair):
+    def finv_divergence_flux_interior(cv_tpair):
         return inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_tpair)
 
     # inviscid part of bcs applied here
-    def finv_domain_boundary(btag):
-        return boundaries[btag].inviscid_boundary_flux(
+    def finv_divergence_flux_boundary(btag):
+        return boundaries[btag].inviscid_divergence_flux(
             discr, btag=btag, eos=eos, cv=cv, time=t
         )
 
@@ -194,17 +194,17 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
         for bnd_index in range(num_partition_interfaces)]
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
-    def fvisc_interior_face(tpair_tuple):
+    def fvisc_divergence_flux_interior(tpair_tuple):
         cv_pair_int = tpair_tuple[0]
         s_pair_int = tpair_tuple[1]
         dt_pair_int = tpair_tuple[2]
         return viscous_facial_flux(discr, eos, cv_pair_int, s_pair_int, dt_pair_int)
 
     # viscous part of bcs applied here
-    def visc_bnd_flux(btag):
-        return boundaries[btag].viscous_boundary_flux(discr, btag, eos=eos,
-                                                      cv=cv, grad_cv=grad_cv,
-                                                      grad_t=grad_t, time=t)
+    def fvisc_divergence_flux_boundary(btag):
+        return boundaries[btag].viscous_divergence_flux(discr, btag, eos=eos,
+                                                        cv=cv, grad_cv=grad_cv,
+                                                        grad_t=grad_t, time=t)
 
     vol_term = (
         viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
@@ -213,12 +213,11 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
 
     bnd_term = (
         _elbnd_flux(
-            discr, fvisc_interior_face, visc_bnd_flux,
-            (cv_int_tpair, s_int_pair, delt_int_pair),
-            visc_part_inputs, boundaries)
+            discr, fvisc_divergence_flux_interior, fvisc_divergence_flux_boundary,
+            (cv_int_tpair, s_int_pair, delt_int_pair), visc_part_inputs, boundaries)
         - _elbnd_flux(
-            discr, finv_interior_face, finv_domain_boundary, cv_int_tpair,
-            cv_part_pairs, boundaries)
+            discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
+            cv_int_tpair, cv_part_pairs, boundaries)
     ).join()
 
     # NS RHS

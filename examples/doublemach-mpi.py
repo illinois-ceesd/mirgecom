@@ -36,7 +36,7 @@ from meshmode.array_context import (
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.eager import EagerDGDiscretization
@@ -193,7 +193,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
                                   mpi_communicator=comm)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     dim = 2
     if logmgr:
