@@ -260,11 +260,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # pyro_mechanism = UIUCMechanism(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
 
+    from pytools.obj_array import make_obj_array
+
     def get_temperature_mass_energy(state, temperature):
         y = state.species_mass_fractions
         e = eos.internal_energy(state) / state.mass
         return make_obj_array(
-            [pyro_mechanism.get_temperature(e, temperature, y, True)]
+            [pyro_mechanism.get_temperature(e, temperature, y)]
         )
 
     compute_dependent_vars = actx.compile(eos.dependent_vars)
@@ -339,17 +341,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info(f"Expected equilibrium state:"
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
-
-    from pytools.obj_array import make_obj_array
-
-    def get_temperature_mass_energy(state, temperature):
-        y = state.species_mass_fractions
-        e = eos.internal_energy(state) / state.mass
-        return make_obj_array(
-            [pyro_mechanism.get_temperature(e, temperature, y)]
-        )
-
-    compute_temperature = actx.compile(get_temperature_mass_energy)
 
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
