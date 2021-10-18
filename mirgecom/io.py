@@ -48,7 +48,15 @@ def make_init_message(*,
 
 
 def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
-    r"""Make simulation status and health message."""
+    r"""
+    Make simulation status and health message.
+
+    Deprecated. Do not use in new code.
+    """
+    from warnings import warn
+    warn("make_status_message is deprecated and will disappear in Q1 2022. "
+         "Use logging instead.", DeprecationWarning, stacklevel=2)
+
     dv = dependent_vars
     from functools import partial
     _min = partial(discr.nodal_min, "vol")
