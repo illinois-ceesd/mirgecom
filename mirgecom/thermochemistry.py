@@ -47,7 +47,8 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
             for i in range(self.num_species):
-                concs[i] = self.usr_np.maximum(concs[i], zero)
+                concs[i] = self.usr_np.where(self.usr_np.less(concs[i], 0),
+                                             zero, concs[i])
             return concs
 
         # This is the temperature update for *get_temperature*
@@ -81,7 +82,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
                 The mixture temperature after a fixed number of Newton iterations.
             """
             num_iter = 5
-            t_i = temperature_guess
+            t_i = 1.0*temperature_guess
             for _ in range(num_iter):
                 t_i = t_i + self._get_temperature_update_energy(
                     energy, t_i, species_mass_fractions

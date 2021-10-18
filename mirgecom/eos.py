@@ -43,9 +43,11 @@ from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
+from arraycontext import dataclass_array_container
 
 
-@dataclass
+@dataclass_array_container
+@dataclass(frozen=True)
 class EOSDependentVars:
     """State-dependent quantities for :class:`GasEOS`.
 
@@ -744,12 +746,15 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
+        # from arraycontext import thaw, freeze
+
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
+            tguess = self._tguess + 0*cv.mass
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, self._tguess, y)
+            return self._pyrometheus_mech.get_temperature(e, tguess, y)
         return get_temp()
 
     def total_energy(self, cv, pressure):
