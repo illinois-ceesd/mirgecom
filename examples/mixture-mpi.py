@@ -55,7 +55,6 @@ from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
 import cantera
-# import pyrometheus as pyro
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -181,13 +180,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism
-
-    # import pyrometheus as pyro
-    # pyro_class = pyro.get_thermochem_class(cantera_soln)
     pyro_mechanism = make_pyrometheus_mechanism(actx, sol)
-    # pyro_mechanism = UIUCMechanism(actx.np)
-    # eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
-    # pyro_mechanism = pyro.get_thermochem_class(sol)(actx.np)
 
     nspecies = pyro_mechanism.num_species
     eos = PyrometheusMixture(pyro_mechanism)

@@ -342,6 +342,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from pytools.obj_array import make_obj_array
 
+    def get_temperature_mass_energy(state, temperature):
+        y = state.species_mass_fractions
+        e = eos.internal_energy(state) / state.mass
+        return make_obj_array(
+            [pyro_mechanism.get_temperature(e, temperature, y)]
+        )
+
+    compute_temperature = actx.compile(get_temperature_mass_energy)
+
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if ((dv is not None) and (not log_dependent)):
@@ -415,6 +424,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: Temperature range violation.")
 
+        # This check is the temperature convergence check
+        # The current *temperature* is what Pyrometheus gets
+        # after a fixed number of Newton iterations, *n_iter*.
+        # Calling `compute_temperature` here with *temperature*
+        # input as the guess returns the calculated gas temperature after
+        # yet another *n_iter*.
+        # The difference between those two temperatures is the
+        # temperature residual, which can be used as an indicator of
+        # convergence in Pyrometheus `get_temperature`.
+        # Note: The local max jig below works around a very long compile
+        # in lazy mode.
         check_temp, = compute_temperature(cv, temperature)
         check_temp = thaw(freeze(check_temp, actx), actx)
         temp_resid = actx.np.abs(check_temp - temperature)
