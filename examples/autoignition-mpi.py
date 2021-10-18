@@ -541,7 +541,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     final_dv = compute_dependent_vars(current_state)
-    final_dm = compute_production_rates(current_state)
+    final_dm, = compute_production_rates(current_state)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=current_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
