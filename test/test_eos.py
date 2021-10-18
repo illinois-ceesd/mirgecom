@@ -117,8 +117,7 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
 
     def get_temperature_lazy(energy, y, tguess):
         return make_obj_array(
-            [pyro_lazy.get_temperature(energy, y, tguess,
-                                       do_energy=True)]
+            [pyro_lazy.get_temperature(energy, y, tguess)]
         )
 
     temp_lazy = actx_lazy.compile(get_temperature_lazy)
@@ -167,8 +166,7 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         )
 
         # These both take 5 Newton iterations
-        pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager,
-                                                  True)
+        pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager)
         pyro_t_lazy = temp_lazy(pyro_e_lazy, tin_lazy, yin_lazy)
 
         t_lazy = to_numpy(thaw(freeze(pyro_t_lazy, actx_lazy), actx_eager),
