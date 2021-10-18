@@ -58,8 +58,9 @@ def compile_rhs(actx, rhs, state):
 
 
 def _advance_state_stepper_func(rhs, timestepper,
-                                state, t_final, dt=0,
+                                state, t_final,
                                 t=0.0, istep=0,
+                                dt=None,
                                 pre_step_callback=None,
                                 post_step_callback=None,
                                 logmgr=None,
@@ -83,17 +84,17 @@ def _advance_state_stepper_func(rhs, timestepper,
         Simulated time at which to stop
     t: float
         Time at which to start
-    dt: float
-        Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
+    dt: float or None
+        Optional uniform timestep size; not used if *pre_step_callback* is present.
     pre_step_callback
         An optional user-defined function, with signature:
         ``state, dt = pre_step_callback(step, t, dt, state)``,
         to be called before the timestepper is called for that particular step.
     post_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = post_step_callback(step, t, dt, state)``,
+        ``state = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
 
     Returns
@@ -121,7 +122,7 @@ def _advance_state_stepper_func(rhs, timestepper,
             logmgr.tick_before()
 
         if pre_step_callback is not None:
-            state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+            state, dt = pre_step_callback(state=state, step=istep, t=t)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
 
@@ -129,7 +130,7 @@ def _advance_state_stepper_func(rhs, timestepper,
         istep += 1
 
         if post_step_callback is not None:
-            state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
+            state = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
         if logmgr:
             set_dt(logmgr, dt)
@@ -140,9 +141,10 @@ def _advance_state_stepper_func(rhs, timestepper,
 
 
 def _advance_state_leap(rhs, timestepper, state,
-                        t_final, dt=0,
+                        t_final,
                         component_id="state",
                         t=0.0, istep=0,
+                        dt=None,
                         pre_step_callback=None,
                         post_step_callback=None,
                         logmgr=None,
@@ -166,17 +168,17 @@ def _advance_state_leap(rhs, timestepper, state,
         State id (required input for leap method generation)
     t: float
         Time at which to start
-    dt: float
-        Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
+    dt: float or None
+        Optional uniform timestep size; not used if *pre_step_callback* is present.
     pre_step_callback
         An optional user-defined function, with signature:
         ``state, dt = pre_step_callback(step, t, dt, state)``,
         to be called before the timestepper is called for that particular step.
     post_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = post_step_callback(step, t, dt, state)``,
+        ``state = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
 
     Returns
@@ -194,8 +196,9 @@ def _advance_state_leap(rhs, timestepper, state,
         actx = state.array_context
 
     compiled_rhs = compile_rhs(actx, rhs, state)
-    stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
-                                                    compiled_rhs, t, dt, state)
+    dt_start = dt if dt is not None else 0
+    stepper_cls = generate_singlerate_leap_advancer(
+        timestepper, component_id, compiled_rhs, t, dt_start, state)
     while t < t_final:
 
         # This is only needed because Leap testing in test/test_time_integrators.py
@@ -207,7 +210,7 @@ def _advance_state_leap(rhs, timestepper, state,
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
                                           step=istep,
-                                          t=t, dt=dt)
+                                          t=t)
             stepper_cls.dt = dt
 
         # Leap interface here is *a bit* different.
@@ -217,17 +220,16 @@ def _advance_state_leap(rhs, timestepper, state,
                 t += dt
 
                 if post_step_callback is not None:
-                    state, dt = post_step_callback(state=state,
+                    state = post_step_callback(state=state,
                                                    step=istep,
                                                    t=t, dt=dt)
-                    stepper_cls.dt = dt
 
                 istep += 1
 
     return istep, t, state
 
 
-def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
+def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt_start,
                                       state):
     """Generate Leap code to advance all state at the same timestep, without substepping.
 
@@ -244,7 +246,7 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
         a call looking like rhs(t, state).
     t: float
         Time at which to start
-    dt: float
+    dt_start: float
         Initial timestep to be set by leap method
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
@@ -261,16 +263,17 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     stepper_cls = codegen.get_class(code)(function_map={
         "<func>" + component_id: rhs,
         })
-    stepper_cls.set_up(t_start=t, dt_start=dt, context={component_id: state})
+    stepper_cls.set_up(t_start=t, dt_start=dt_start, context={component_id: state})
 
     return stepper_cls
 
 
 def advance_state(rhs, timestepper, state, t_final,
                   component_id="state",
-                  t=0.0, istep=0, dt=0,
+                  t=0.0, istep=0,
                   pre_step_callback=None,
                   post_step_callback=None,
+                  dt=None,
                   logmgr=None, eos=None, dim=None,
                   actx=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
@@ -298,17 +301,17 @@ def advance_state(rhs, timestepper, state, t_final,
         Simulated time at which to stop
     t: float
         Time at which to start
-    dt: float
-        Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
+    dt: float or None
+        Optional uniform timestep size; not used if *pre_step_callback* is present.
     pre_step_callback
         An optional user-defined function, with signature:
         ``state, dt = pre_step_callback(step, t, dt, state)``,
         to be called before the timestepper is called for that particular step.
     post_step_callback
         An optional user-defined function, with signature:
-        ``state, dt = post_step_callback(step, t, dt, state)``,
+        ``state = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
 
     Returns
@@ -330,6 +333,9 @@ def advance_state(rhs, timestepper, state, t_final,
         warn("Passing logmgr, dim, or eos into the stepper is a deprecated stepper "
              "signature. See the examples for the current and preferred usage.",
              DeprecationWarning, stacklevel=2)
+
+    if dt is None and pre_step_callback is None:
+        raise ValueError("Must specify dt or pre_step_callback.")
 
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator

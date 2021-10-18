@@ -73,47 +73,25 @@ def check_step(step, interval):
     return False
 
 
+def get_next_timestep(t, t_final, max_dt):
+    """
+    Return the timestep size at time *t* given a final time *t_final* and the
+    maximum timestep size *max_dt*.
+    """
+    return min(t + max_dt, t_final) - t
+
+
 def get_sim_timestep(discr, state, t, dt, cfl, eos,
                      t_final, constant_cfl=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
-    This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
-    maximum domain-wide stability-limited timestep for a fluid simulation.
-
-    .. important::
-        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
-        which makes it domain-wide regardless of parallel domain decomposition. Thus
-        this routine must be called *collectively* (i.e. by all ranks).
-
-    Two modes are supported:
-        - Constant DT mode: returns the minimum of (t_final-t, dt)
-        - Constant CFL mode: returns (cfl * max_dt)
-
-    Parameters
-    ----------
-    discr
-        Grudge discretization or discretization collection?
-    state: :class:`~mirgecom.fluid.ConservedVars`
-        The fluid state.
-    t: float
-        Current time
-    t_final: float
-        Final time
-    dt: float
-        The current timestep
-    cfl: float
-        The current CFL number
-    eos: :class:`~mirgecom.eos.GasEOS`
-        Gas equation-of-state optionally with a non-empty
-        :class:`~mirgecom.transport.TransportModel` for viscous transport properties.
-    constant_cfl: bool
-        True if running constant CFL mode
-
-    Returns
-    -------
-    float
-        The maximum stable DT based on a viscous fluid.
+    Deprecated. Do not use in new code.
     """
+    from warnings import warn
+    warn("get_sim_timestep is deprecated and will disappear in Q1 2022. "
+         "Use physics-relevant timestep functions instead.", DeprecationWarning,
+         stacklevel=2)
+
     t_remaining = max(0, t_final - t)
     mydt = dt
     if constant_cfl:

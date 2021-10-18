@@ -42,8 +42,8 @@ from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
-    get_sim_timestep,
     generate_and_distribute_mesh,
+    get_next_timestep,
     check_step
 )
 from mirgecom.io import make_init_message
@@ -74,8 +74,8 @@ class SimError(RuntimeError):
 
 
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         use_leap=False, use_profiling=False, constant_cfl=False,
+         casename=None, rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -112,28 +112,37 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
-    # timestepping control
-    current_step = 0
+    dim = 2  # Don't change this
+
+    # Some discretization parameters
+    nel_1d = 16
+    order = 3
+
+    # {{{ Time stepping control
+
+    # Time stepper selection
     if use_leap:
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
+
+    # Time loop control parameters
     t_final = 0.01
-    current_cfl = 1.0
-    current_dt = .001
-    current_t = 0
-    constant_cfl = False
+    if constant_cfl:
+        sim_dt = None
+        sim_cfl = 0.034
+    else:
+        sim_dt = 0.001
+        sim_cfl = None
 
-    # some i/o frequencies
-    nrestart = 10
-    nstatus = 1
-    nviz = 10
+    # i/o frequencies
     nhealth = 10
+    nstatus = 1
+    nrestart = 10
+    nviz = 10
 
-    dim = 2
-    if dim != 2:
-        raise ValueError("This example must be run with dim = 2.")
+    # }}}  Time stepping control
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -148,7 +157,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == nproc
     else:  # generate the grid from scratch
-        nel_1d = 16
         box_ll = -5.0
         box_ur = 5.0
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -158,7 +166,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 3
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -175,14 +182,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     }
 
     if rst_filename:
-        current_t = restart_data["t"]
         current_step = restart_data["step"]
+        current_t = restart_data["t"]
         current_state = restart_data["state"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
+        current_step = 0
+        current_t = 0
         current_state = initializer(nodes)
 
     vis_timer = None
@@ -220,38 +229,49 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             "Initialization": initializer.__class__.__name__,
             "EOS": eos.__class__.__name__,
             "Final time": t_final,
-            "CFL": current_cfl if constant_cfl else None,
-            "Timestep": current_dt if not constant_cfl else None,
+            "Timestep": sim_dt,
+            "CFL": sim_cfl,
         })
     if rank == 0:
         logger.info(init_message)
 
-    def write_status(state, component_errors, cfl=None):
-        if cfl is None:
-            if constant_cfl:
-                cfl = current_cfl
-            else:
-                from grudge.op import nodal_max
-                from mirgecom.inviscid import get_inviscid_cfl
-                cfl = nodal_max(discr, "vol",
-                                get_inviscid_cfl(discr, eos, current_dt, cv=state))
-        if rank == 0:
-            logger.info(
-                f"------ {cfl=}\n"
-                "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+    from mirgecom.inviscid import get_inviscid_timestep
+    get_nodal_timestep = partial(get_inviscid_timestep, discr, eos)
 
-    def write_viz(step, t, state, dv=None, exact=None, resid=None):
+    def get_timestep_and_cfl(t, state):
+        nodal_dt = get_nodal_timestep(state)
+        from grudge.op import nodal_min
+        min_nodal_dt = actx.to_numpy(nodal_min(discr, "vol", nodal_dt))[()]
+        if constant_cfl:
+            dt = sim_cfl*min_nodal_dt
+            cfl = sim_cfl
+        else:
+            dt = sim_dt
+            cfl = sim_dt/min_nodal_dt
+        return get_next_timestep(t, t_final, dt), cfl
+
+    # FIXME: Can this be done with logging?
+    def write_status(t, state, dt, cfl, component_errors=None):
+        if component_errors is None:
+            exact = initializer(x_vec=nodes, eos=eos, time=t)
+            from mirgecom.simutil import compare_fluid_solutions
+            component_errors = compare_fluid_solutions(discr, state, exact)
+        status_msg = (
+            f"------ {dt=}\n" if constant_cfl else f"----- {cfl=}\n"
+            + "------- errors="
+            + ", ".join("%.3g" % en for en in component_errors))
+        if rank == 0:
+            logger.info(status_msg)
+
+    def write_viz(step, t, state, *, dv=None, exact=None):
         if dv is None:
             dv = eos.dependent_vars(state)
         if exact is None:
             exact = initializer(x_vec=nodes, eos=eos, time=t)
-        if resid is None:
-            resid = state - exact
         viz_fields = [("cv", state),
                       ("dv", dv),
                       ("exact", exact),
-                      ("residual", resid)]
+                      ("residual", state - exact)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
@@ -271,11 +291,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def health_check(pressure, component_errors):
+    def health_check(dv, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", pressure) \
-           or check_range_local(discr, "vol", pressure, .2, 1.02):
+        if check_naninf_local(discr, "vol", dv.pressure) \
+           or check_range_local(discr, "vol", dv.pressure, .2, 1.02):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -287,7 +307,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-    def pre_step(step, t, dt, state):
+    def pre_step(step, t, state):
         try:
             dv = None
             exact = None
@@ -296,10 +316,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if logmgr:
                 logmgr.tick_before()
 
-            do_viz = check_step(step=step, interval=nviz)
-            do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
             do_status = check_step(step=step, interval=nstatus)
+            do_restart = check_step(step=step, interval=nrestart)
+            do_viz = check_step(step=step, interval=nviz)
 
             if do_health:
                 dv = eos.dependent_vars(state)
@@ -307,41 +327,32 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 health_errors = global_reduce(
-                    health_check(dv.pressure, component_errors), op="lor")
+                    health_check(dv, component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise SimError("Failed simulation health check.")
 
+            dt, cfl = get_timestep_and_cfl(t, state)
+
+            if do_status:
+                write_status(
+                    t=t, state=state, dt=dt, cfl=cfl,
+                    component_errors=component_errors)
+
             if do_restart:
                 write_restart(step=step, t=t, state=state)
 
-            if do_status:
-                if component_errors is None:
-                    if exact is None:
-                        exact = initializer(x_vec=nodes, eos=eos, time=t)
-                    from mirgecom.simutil import compare_fluid_solutions
-                    component_errors = compare_fluid_solutions(discr, state, exact)
-                write_status(state, component_errors)
-
             if do_viz:
-                if dv is None:
-                    dv = eos.dependent_vars(state)
-                if exact is None:
-                    exact = initializer(x_vec=nodes, eos=eos, time=t)
-                resid = state - exact
-                write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
-                             resid=resid)
+                write_viz(step=step, t=t, state=state, dv=dv, exact=exact)
 
         except SimError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            write_viz(step=step, t=t, state=state)
             write_restart(step=step, t=t, state=state)
+            write_viz(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
-                              constant_cfl)
         return state, dt
 
     def post_step(step, t, dt, state):
@@ -349,31 +360,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             set_dt(logmgr, dt)
             set_sim_state(logmgr, state)
             logmgr.tick_after()
-        return state, dt
+        return state
 
     def rhs(t, state):
         return euler_operator(discr, cv=state, time=t,
                               boundaries=boundaries, eos=eos)
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
-
     current_step, current_t, current_state = \
         advance_state(rhs=rhs, timestepper=timestepper,
                       pre_step_callback=pre_step,
-                      post_step_callback=post_step, dt=current_dt,
+                      post_step_callback=post_step,
                       state=current_state, t=current_t, t_final=t_final)
+
+    current_dt, current_cfl = get_timestep_and_cfl(current_t, current_state)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_dv = eos.dependent_vars(current_state)
-    final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
-    final_resid = current_state - final_exact
-    write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
-                 exact=final_exact, resid=final_resid)
+    write_status(t=current_t, state=current_state, dt=current_dt, cfl=current_cfl)
     write_restart(step=current_step, t=current_t, state=current_state)
+    write_viz(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()
@@ -397,6 +404,8 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--constant-cfl", action="store_true",
+        help="maintain a constant CFL")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
@@ -422,6 +431,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main_func(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+        constant_cfl=args.constant_cfl, casename=casename, rst_filename=rst_filename,
+        actx_class=actx_class)
 
 # vim: foldmethod=marker
