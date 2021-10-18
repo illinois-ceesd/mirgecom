@@ -1,4 +1,4 @@
-"""Demonstrate a planar Poiseuille flow example."""
+"""Demonstrate a fluid between two hot plates in 2d."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -27,7 +27,6 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
-from pytools.obj_array import make_obj_array
 from functools import partial
 
 from meshmode.array_context import (
@@ -52,7 +51,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedViscousBoundary,
-    AdiabaticNoslipMovingBoundary
+    IsothermalNoSlipBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -119,10 +118,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # timestepping control
     timestepper = rk4_step
     t_final = 1e-6
-    current_cfl = 0.05
+    current_cfl = .1
     current_dt = 1e-8
     current_t = 0
-    constant_cfl = True
+    constant_cfl = False
     current_step = 0
 
     # some i/o frequencies
@@ -137,8 +136,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         raise ValueError("This example must be run with dim = 2.")
     left_boundary_location = 0
     right_boundary_location = 0.1
-    ybottom = 0.
-    ytop = .02
+    bottom_boundary_location = 0
+    top_boundary_location = .02
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -153,19 +152,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        n_refine = 5
-        npts_x = 10 * n_refine
-        npts_y = 6 * n_refine
+        n_refine = 2
+        npts_x = 6 * n_refine
+        npts_y = 4 * n_refine
         npts_axis = (npts_x, npts_y)
-        box_ll = (left_boundary_location, ybottom)
-        box_ur = (right_boundary_location, ytop)
+        box_ll = (left_boundary_location, bottom_boundary_location)
+        box_ur = (right_boundary_location, top_boundary_location)
         generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 2
+    order = 1
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
@@ -191,46 +190,38 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    base_pressure = 100000.0
-    pressure_ratio = 1.001
     mu = 1.0
+    kappa = 1.0
 
-    def poiseuille_2d(x_vec, eos, cv=None, **kwargs):
+    top_boundary_temperature = 400
+    bottom_boundary_temperature = 300
+
+    def tramp_2d(x_vec, eos, cv=None, **kwargs):
         y = x_vec[1]
-        x = x_vec[0]
-        x0 = left_boundary_location
-        xmax = right_boundary_location
-        xlen = xmax - x0
-        p_low = base_pressure
-        p_hi = pressure_ratio*base_pressure
-        dp = p_hi - p_low
-        dpdx = dp/xlen
-        h = ytop - ybottom
-        u_x = dpdx*y*(h - y)/(2*mu)
-        p_x = p_hi - dpdx*x
-        rho = 1.0
-        mass = 0*x + rho
-        u_y = 0*x
-        velocity = make_obj_array([u_x, u_y])
-        ke = .5*np.dot(velocity, velocity)*mass
-        gamma = eos.gamma()
-        if cv is not None:
-            mass = cv.mass
-            vel = cv.velocity
-            ke = .5*np.dot(vel, vel)*mass
+        ones = 0*y + 1.0
+        l_y = top_boundary_location - bottom_boundary_location
+        p0 = eos.gas_const() * bottom_boundary_temperature
+        delta_temp = top_boundary_temperature - bottom_boundary_temperature
+        dtdy = delta_temp / l_y
+        temperature_y = bottom_boundary_temperature + dtdy*y
+        mass = p0 / (eos.gas_const() * temperature_y)
+        e0 = p0 / (eos.gamma() - 1.0)
+        velocity = 0 * x_vec
+        energy = e0 * ones
+        momentum = mass * velocity
+        return make_conserved(2, mass=mass, energy=energy, momentum=momentum)
 
-        rho_e = p_x/(gamma-1) + ke
-        return make_conserved(2, mass=mass, energy=rho_e,
-                              momentum=mass*velocity)
-
-    initializer = poiseuille_2d
-    eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=mu))
+    initializer = tramp_2d
+    eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=mu,
+                                                         thermal_conductivity=kappa))
     exact = initializer(x_vec=nodes, eos=eos)
 
     boundaries = {DTAG_BOUNDARY("-1"): PrescribedViscousBoundary(q_func=initializer),
                   DTAG_BOUNDARY("+1"): PrescribedViscousBoundary(q_func=initializer),
-                  DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
-                  DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
+                  DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(
+                      wall_temperature=bottom_boundary_temperature),
+                  DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary(
+                      wall_temperature=top_boundary_temperature)}
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -283,7 +274,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         resid = state - exact
         viz_fields = [("cv", state),
                       ("dv", dv),
-                      ("poiseuille", exact),
+                      ("exact", exact),
                       ("resid", resid)]
 
         from mirgecom.simutil import write_visfile
@@ -313,8 +304,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, 9.999e4, 1.00101e5),
-                   comm, op=MPI.LOR):
+        if allsync(check_range_local(discr, "vol", dv.pressure, 86129, 86131),
+                  comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             p_min = nodal_min(discr, "vol", dv.pressure)
@@ -325,7 +316,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(check_range_local(discr, "vol", dv.temperature, 348, 350),
+        if allsync(check_range_local(discr, "vol", dv.temperature, 299, 401),
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
@@ -444,7 +435,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
 if __name__ == "__main__":
     import argparse
-    casename = "poiseuille"
+    casename = "hotplate"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")

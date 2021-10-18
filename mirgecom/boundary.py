@@ -427,7 +427,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
 
         # Form the external boundary solution with the new momentum
         return make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
-                              momentum=ext_mom)
+                              momentum=ext_mom, species_mass=int_cv.species_mass)
 
     def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
         """Get the exterior solution on the boundary."""
@@ -455,8 +455,7 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
         """Get the interior and exterior solution (*cv*) on the boundary."""
         cv_minus = discr.project("vol", btag, cv)
 
-        # t_plus = self._wall_temp + 0*cv_minus.mass
-        t_plus = eos.temperature(cv_minus)
+        t_plus = self._wall_temp + 0*cv_minus.mass
         velocity_plus = -cv_minus.momentum / cv_minus.mass
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
 
@@ -476,7 +475,7 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
 
     def temperature_bc(self, nodes, cv, temperature, eos, **kwargs):
         """Get temperature value to weakly prescribe wall bc."""
-        return 2*self._wall_temp - temperature
+        return self._wall_temp + 0*temperature
 
 
 class PrescribedViscousBoundary(FluidBC):

@@ -45,7 +45,6 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 
 import cantera
-import pyrometheus as pyro
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.initializers import (
     Vortex2D, Lump,
@@ -414,7 +413,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
-        tguess = 300.0
+        tguess = 0*ones + 300.0
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
@@ -485,7 +484,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
-    pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism
+    pyro_obj = make_pyrometheus_mechanism(actx, cantera_soln)
 
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
