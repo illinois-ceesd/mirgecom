@@ -278,7 +278,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         y = cv.species_mass_fractions
         e = eos.internal_energy(cv) / cv.mass
-        check_temp = pyro_mechanism.get_temperature(e, dv.temperature, y, True)
+        check_temp = pyro_mechanism.get_temperature(e, dv.temperature, y)
         # temp_resid = pyro_mechanism.get_temperature_residual(
         #     e, dv.temperature, y, True
         # )
