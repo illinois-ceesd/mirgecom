@@ -202,15 +202,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     visualizer = make_visualizer(discr)
 
-    initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
-    init_message = make_init_message(dim=dim, order=order,
-                                     nelements=local_nelements,
-                                     global_nelements=global_nelements,
-                                     dt=current_dt, t_final=t_final, nstatus=nstatus,
-                                     nviz=nviz, cfl=current_cfl,
-                                     constant_cfl=constant_cfl, initname=initname,
-                                     eosname=eosname, casename=casename)
+    init_message = make_init_message(
+        casename=casename,
+        dim=dim, order=order,
+        nelements=local_nelements, global_nelements=global_nelements,
+        extra_params_dict={
+            "Initialization": initializer.__class__.__name__,
+            "EOS": eos.__class__.__name__,
+            "Final time": t_final,
+            "CFL": current_cfl if constant_cfl else None,
+            "Timestep": current_dt if not constant_cfl else None,
+        })
     if rank == 0:
         logger.info(init_message)
 

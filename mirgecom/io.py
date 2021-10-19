@@ -29,26 +29,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-
-def make_init_message(*, dim, order, dt, t_final,
-                      nstatus, nviz, cfl, constant_cfl,
-                      initname, eosname, casename,
-                      nelements=0, global_nelements=0):
+def make_init_message(*,
+        casename, dim, order, nelements, global_nelements,
+        extra_params_dict=None):
     """Create a summary of some general simulation parameters and inputs."""
-    return(
+    msg = (
         f"Initialization for Case({casename})\n"
         f"===\n"
         f"Num {dim}d order-{order} elements: {nelements}\n"
-        f"Num global elements: {global_nelements}\n"
-        f"Timestep:        {dt}\n"
-        f"Final time:      {t_final}\n"
-        f"CFL:             {cfl}\n"
-        f"Constant CFL:    {constant_cfl}\n"
-        f"Initialization:  {initname}\n"
-        f"EOS:             {eosname}\n"
-    )
+        f"Num global elements: {global_nelements}\n")
+    if extra_params_dict is not None:
+        for name, value in extra_params_dict.items():
+            if value is not None:
+                msg += (
+                    f"{name}: {value}\n")
+    return msg
 
 
 def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
