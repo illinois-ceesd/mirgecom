@@ -263,8 +263,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         )
 
         assert inf_norm(vflux.mass) == 0
-        e_eoc_rec.add_data_point(h_max, efluxerr)
-        p_eoc_rec.add_data_point(h_max, momfluxerr)
+        e_eoc_rec.add_data_point(actx.to_numpy(h_max), efluxerr)
+        p_eoc_rec.add_data_point(actx.to_numpy(h_max), momfluxerr)
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5

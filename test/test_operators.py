@@ -247,7 +247,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
             grad_err = inf_norm(test_grad - exact_grad)/err_scale
 
         print(f"{test_grad=}")
-        eoc.add_data_point(h_max, grad_err)
+        eoc.add_data_point(actx.to_numpy(h_max), grad_err)
 
     assert (
         eoc.order_estimate() >= order - 0.5
