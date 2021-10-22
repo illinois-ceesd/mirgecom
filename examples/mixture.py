@@ -379,8 +379,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=rhs, timestepper=timestepper,
                       pre_step_callback=pre_step,
                       post_step_callback=post_step,
-                      state=current_state, t=current_t, t_final=t_final, eos=eos,
-                      dim=dim)
+                      step=current_step, t=current_t, state=current_state,
+                      t_final=t_final)
 
     current_dt, current_cfl = get_timestep_and_cfl(current_t, current_state)
 
