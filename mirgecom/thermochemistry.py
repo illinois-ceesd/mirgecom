@@ -31,8 +31,8 @@ THE SOFTWARE.
 def _pyro_thermochem_wrapper_class(cantera_soln):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
-    Dynamically creates a class that inherits from a :mod:`pyrometheus` instance
-    and overrides a couple of the functions for MIRGE-Com compatibility.
+    Dynamically creates a class that inherits from a :class:`pyrometheus.Thermochemistry` class
+    and overrides a couple of the methods to adapt it to :mod:`mirgecom`'s needs.
     """
     import pyrometheus as pyro
     pyro_class = pyro.get_thermochem_class(cantera_soln)
@@ -95,8 +95,7 @@ def make_pyrometheus_mechanism(actx, cantera_soln):
     """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism object.
 
     This routine creates and returns an instance of a :mod:`pyrometheus`
-    thermochemical mechanism for use in a MIRGE-Com fluid EOS. It requires a
-    Cantera Solution and an array context.
+    thermochemical mechanism for use in a MIRGE-Com fluid EOS.
 
     Parameters
     ----------
