@@ -33,11 +33,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from meshmode.dof_array import DOFArray
-from mirgecom.fluid import (
-    ConservedVars,
-    make_conserved
-)
 
 
 def gradient_flux_central(u_tpair, normal):
@@ -74,22 +69,8 @@ def gradient_flux_central(u_tpair, normal):
         object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
         scalar component.
     """
-    tp_avg = u_tpair.avg
-    tp_join = tp_avg
-
-    # FIXME: There's a better way in-the-works through an improved "outer".
-    # Update when https://github.com/inducer/arraycontext/pull/46 lands.
-    if isinstance(tp_avg, DOFArray):
-        return tp_avg*normal
-    elif isinstance(tp_avg, ConservedVars):
-        tp_join = tp_avg.join()
-
-    result = np.outer(tp_join, normal)
-
-    if isinstance(tp_avg, ConservedVars):
-        return make_conserved(tp_avg.dim, q=result)
-    else:
-        return result
+    from arraycontext import outer
+    return outer(u_tpair.avg, normal)
 
 
 def divergence_flux_central(trace_pair, normal):
@@ -228,6 +209,5 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
         object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return make_conserved(
-        dim=len(normal),
-        q=f_tpair.avg.join() - lam*np.outer(cv_tpair.diff.join(), normal)/2)
+    from arraycontext import outer
+    return f_tpair.avg - lam*outer(cv_tpair.diff, normal)/2
