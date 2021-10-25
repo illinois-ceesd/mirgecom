@@ -31,8 +31,15 @@ THE SOFTWARE.
 def _pyro_thermochem_wrapper_class(cantera_soln):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
-    Dynamically creates a class that inherits from a :class:`pyrometheus.Thermochemistry` class
-    and overrides a couple of the methods to adapt it to :mod:`mirgecom`'s needs.
+    Dynamically creates a class that inherits from a
+    :class:`pyrometheus.Thermochemistry` class and overrides a couple of the methods
+    to adapt it to :mod:`mirgecom`'s needs.
+
+        - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
+        of  the same function, pinning any negative concentrations due to slightly
+        negative massfractions (which are OK) back to 0.
+        - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
+        to find a temperature from an input state.
     """
     import pyrometheus as pyro
     pyro_class = pyro.get_thermochem_class(cantera_soln)
