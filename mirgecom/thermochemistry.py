@@ -1,6 +1,6 @@
 r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`..
 
-.. autofunction:: make_pyrometheus_mechanism
+.. autofunction:: make_pyrometheus_mechanism_class
 """
 
 __copyright__ = """
@@ -98,7 +98,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln):
     return PyroWrapper
 
 
-def make_pyrometheus_mechanism(actx, cantera_soln):
+def make_pyrometheus_mechanism_class(cantera_soln):
     """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism object.
 
     This routine creates and returns an instance of a :mod:`pyrometheus`
@@ -116,4 +116,4 @@ def make_pyrometheus_mechanism(actx, cantera_soln):
     -------
     :mod:`pyrometheus` ThermoChem class
     """
-    return _pyro_thermochem_wrapper_class(cantera_soln)(actx.np)
+    return _pyro_thermochem_wrapper_class(cantera_soln)
