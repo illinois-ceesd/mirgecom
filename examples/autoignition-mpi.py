@@ -303,11 +303,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes)
-    # import ipdb
-    # ipdb.set_trace()
 
     # Inspection at physics debugging time
     if debug:
+        # Uncomment to enable debugger
+        # import ipdb
+        # ipdb.set_trace()
         print("Initial MIRGE-Com state:")
         print(f"{current_state=}")
         print(f"Initial DV pressure: {eos.pressure(current_state)}")
@@ -341,6 +342,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
+        # This is the DV status report when running lazily because
+        # logpyle chokes when the DV expression is complicated as it is
+        # when using Pyrometheus EOS.
         if ((dv is not None) and (not log_dependent)):
             temp = dv.temperature
             press = dv.pressure
