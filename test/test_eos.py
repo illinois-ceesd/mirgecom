@@ -90,7 +90,8 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
@@ -127,7 +128,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
 
         prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
         prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
+        prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin)
         prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
         prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
         prom_k = prometheus_mechanism.get_fwd_rate_coefficients(prom_t, prom_c)
@@ -198,7 +199,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
@@ -212,7 +214,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     y0s[0] = 1.0 - np.sum(y0s[1:])
     velocity = vel * np.ones(shape=(dim,))
 
-    for fac in range(1, 11):
+    for fac in range(1, 7):
         tempin = fac * temp0
         pressin = fac * press0
 
@@ -226,7 +228,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin, True)
+        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin)
         pyro_p = prometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
 
         print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
