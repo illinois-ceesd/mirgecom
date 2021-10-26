@@ -55,7 +55,6 @@ from mirgecom.boundary import (  # noqa
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 import cantera
-import pyrometheus as pyro
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -232,7 +231,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyrometheus_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism,
                              temperature_guess=init_temperature,
                              transport_model=transport_model)
