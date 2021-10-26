@@ -179,8 +179,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.mechanisms import get_mechanism_cti
     mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    pyro_mechanism = make_pyrometheus_mechanism(actx, sol)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyro_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = pyro_mechanism.num_species
     eos = PyrometheusMixture(pyro_mechanism)

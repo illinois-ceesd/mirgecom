@@ -282,8 +282,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    prometheus_mechanism = make_pyrometheus_mechanism(actx, sol)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
+
     nspecies = prometheus_mechanism.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
 
@@ -388,8 +389,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    prometheus_mechanism = make_pyrometheus_mechanism(actx, sol)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
