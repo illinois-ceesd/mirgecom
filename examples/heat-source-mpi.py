@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import sys
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
@@ -56,20 +55,20 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 from logpyle import IntervalTimer, set_dt
 
 
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, rst_filename=None,
+         actx_class=PyOpenCLArrayContext):
     """Run the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    if "mpi4py.MPI" in sys.modules:
+    if use_mpi:
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
     else:
         comm = None
-        rank = 0
+
+    rank = comm.Get_rank() if comm is not None else 0
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
@@ -155,8 +154,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     compiled_rhs = actx.compile(rhs)
 
-    rank = comm.Get_rank()
-
     while t < t_final:
         if logmgr:
             logmgr.tick_before()
@@ -218,7 +215,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main_func(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main_func(
+        use_mpi=args.mpi, use_logmgr=args.log, use_leap=args.leap,
+        use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
+        actx_class=actx_class)
 
 # vim: foldmethod=marker

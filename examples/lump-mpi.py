@@ -23,7 +23,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import sys
 import logging
 import numpy as np
 import pyopencl as cl
@@ -74,24 +73,23 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, rst_filename=None,
+         actx_class=PyOpenCLArrayContext):
     """Drive example."""
     cl_ctx = ctx_factory()
 
     if casename is None:
         casename = "mirgecom"
 
-    if "mpi4py.MPI" in sys.modules:
+    if use_mpi:
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        nproc = comm.Get_size()
     else:
         comm = None
-        rank = 0
-        nproc = 1
+
+    rank = comm.Get_rank() if comm is not None else 0
+    nproc = comm.Get_size() if comm is not None else 1
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -401,7 +399,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main_func(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main_func(
+        use_mpi=args.mpi, use_logmgr=args.log, use_leap=args.leap,
+        use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
+        actx_class=actx_class)
 
 # vim: foldmethod=marker

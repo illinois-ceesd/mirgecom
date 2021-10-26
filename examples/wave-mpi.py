@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import sys
 import logging
 
 import numpy as np
@@ -75,21 +74,21 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
-         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
+def main(use_mpi=False, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+         restart_step=None, use_profiling=False, use_logmgr=False,
+         actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    if "mpi4py.MPI" in sys.modules:
+    if use_mpi:
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        nproc = comm.Get_size()
     else:
         comm = None
-        rank = 0
-        nproc = 1
+
+    rank = comm.Get_rank() if comm is not None else 0
+    nproc = comm.Get_size() if comm is not None else 1
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
@@ -255,9 +254,10 @@ if __name__ == "__main__":
     else:
         main_func = main
 
-    main_func(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=PytatoPyOpenCLArrayContext if args.lazy
-         else PyOpenCLArrayContext)
+    main_func(
+        use_mpi=args.mpi, use_profiling=use_profiling, use_logmgr=use_logging,
+        actx_class=PytatoPyOpenCLArrayContext if args.lazy
+        else PyOpenCLArrayContext)
 
 
 # vim: foldmethod=marker
