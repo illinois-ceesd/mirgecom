@@ -101,9 +101,9 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
 
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    pyro_eager = make_pyrometheus_mechanism(actx_eager, sol)
-    pyro_lazy = make_pyrometheus_mechanism(actx_lazy, sol)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyro_eager = make_pyrometheus_mechanism_class(sol)(actx_eager.np)
+    pyro_lazy = make_pyrometheus_mechanism_class(sol)(actx_lazy.np)
 
     nspecies = pyro_eager.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
