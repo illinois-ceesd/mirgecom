@@ -30,13 +30,13 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
+from arraycontext import thaw
 from meshmode.array_context import (
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -178,7 +178,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     # {{{  Set up initial state using Cantera
 
