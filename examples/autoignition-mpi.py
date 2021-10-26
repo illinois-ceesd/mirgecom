@@ -253,11 +253,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    # import pyrometheus as pyro
-    # pyro_class = pyro.get_thermochem_class(cantera_soln)
-    pyro_mechanism = make_pyrometheus_mechanism(actx, cantera_soln)
-    # pyro_mechanism = UIUCMechanism(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
 
     from pytools.obj_array import make_obj_array
@@ -411,6 +408,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if check_naninf_local(discr, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+
         if check_range_local(discr, "vol", temperature, 1.498e3, 1.6e3):
             health_error = True
             logger.info(f"{rank=}: Temperature range violation.")
