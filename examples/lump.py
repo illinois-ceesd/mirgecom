@@ -387,9 +387,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+
     import argparse
-    casename = "mass-lump"
-    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser = argparse.ArgumentParser(description="Lump")
     parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
@@ -401,9 +402,14 @@ if __name__ == "__main__":
         help="use leap timestepper")
     parser.add_argument("--constant-cfl", action="store_true",
         help="maintain a constant CFL")
-    parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--restart_file", help="root name of restart file")
     args = parser.parse_args()
+
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
 
     if args.profiling:
         if args.lazy:
@@ -413,17 +419,15 @@ if __name__ == "__main__":
         actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
-    if args.mpi:
-        main_func = mpi_entry_point(main)
-    else:
-        main_func = main
-
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
-    rst_filename = None
+    else:
+        casename = "mass-lump"
+
     if args.restart_file:
         rst_filename = args.restart_file
+    else:
+        rst_filename = None
 
     main_func(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
         constant_cfl=args.constant_cfl, casename=casename, rst_filename=rst_filename,
