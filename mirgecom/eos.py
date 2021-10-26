@@ -749,8 +749,7 @@ class PyrometheusMixture(MixtureEOS):
         def get_temp():
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, self._tguess,
-                                                          y, True)
+            return self._pyrometheus_mech.get_temperature(e, self._tguess, y)
         return get_temp()
 
     def total_energy(self, cv, pressure):
