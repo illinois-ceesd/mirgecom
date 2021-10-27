@@ -91,7 +91,7 @@ jobs:
         - name: Install
           run: |
             . .ci-support/install.sh
-
+        - uses: mxschmitt/action-tmate@v3
         - name: Test lazy accuracy
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
