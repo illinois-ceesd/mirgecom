@@ -67,7 +67,6 @@ from mirgecom.logging_quantities import (
 )
 
 import cantera
-import pyrometheus as pyro
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +91,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     nproc = comm.Get_size()
+
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
@@ -246,9 +248,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    pyrometheus_mechanism = pyro.get_thermochem_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
+    eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
 
     # }}}
 
@@ -318,6 +320,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
+    from pytools.obj_array import make_obj_array
+
+    def get_temperature_mass_energy(state, temperature):
+        y = state.species_mass_fractions
+        e = eos.internal_energy(state) / state.mass
+        return make_obj_array(
+            [pyro_mechanism.get_temperature(e, temperature, y)]
+        )
+
+    compute_temperature = actx.compile(get_temperature_mass_energy)
+
     def my_write_status(dt, cfl):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if rank == 0:
@@ -356,17 +369,39 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(dv):
+    def my_health_check(cv, dv):
         health_error = False
+        pressure = dv.pressure
+        temperature = dv.temperature
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure) \
-           or check_range_local(discr, "vol", dv.pressure, 1e5, 2.4e5):
+        if check_naninf_local(discr, "vol", pressure) \
+           or check_range_local(discr, "vol", pressure, 1e5, 2.4e5):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_range_local(discr, "vol", dv.temperature, 1.498e3, 1.52e3):
+        if check_range_local(discr, "vol", temperature, 1.498e3, 1.52e3):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+
+        # This check is the temperature convergence check
+        # The current *temperature* is what Pyrometheus gets
+        # after a fixed number of Newton iterations, *n_iter*.
+        # Calling `compute_temperature` here with *temperature*
+        # input as the guess returns the calculated gas temperature after
+        # yet another *n_iter*.
+        # The difference between those two temperatures is the
+        # temperature residual, which can be used as an indicator of
+        # convergence in Pyrometheus `get_temperature`.
+        # Note: The local max jig below works around a very long compile
+        # in lazy mode.
+        from grudge.op import nodal_max_loc
+        check_temp, = compute_temperature(cv, temperature)
+        temp_resid = actx.np.abs(check_temp - temperature)
+        temp_resid = nodal_max_loc(discr, "vol", temp_resid)
+
+        if temp_resid > 1e-12:
+            health_error = True
+            logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
         return health_error
 
@@ -402,8 +437,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 dv = eos.dependent_vars(state)
-                from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(dv), comm, op=MPI.LOR)
+                health_errors = global_reduce(my_health_check(state, dv), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
