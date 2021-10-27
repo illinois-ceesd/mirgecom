@@ -175,6 +175,10 @@ class MixtureEOS(GasEOS):
     def get_species_source_terms(self, cv: ConservedVars):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
 
+    @abstractmethod
+    def get_temperature_guess(self):
+        r"""Get a constant and uniform guess for the gas temperature."""
+
     def set_temperature_seed(self, temperature_seed: DOFArray):
         """Set the seed to use for temperature calculations."""
         self._temperature_seed = temperature_seed
@@ -183,7 +187,7 @@ class MixtureEOS(GasEOS):
         """Get the seed to use for temperature calculations."""
         if self._temperature_seed is not None:
             return self._temperature_seed
-        return self._tguess*(0*cv.mass + 1.0)
+        return self.get_temperature_guess() * (0*cv.mass + 1.0)
 
 
 class IdealSingleGas(GasEOS):
@@ -461,6 +465,7 @@ class PyrometheusMixture(MixtureEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_guess
     """
 
     def __init__(self, pyrometheus_mech, temperature_guess=300.0,
@@ -490,6 +495,10 @@ class PyrometheusMixture(MixtureEOS):
         self._tguess = temperature_guess
         self._transport_model = transport_model
         self._temperature_seed = None
+
+    def get_temperature_guess(self):
+        """Get a constant and uniform guess for the gas temperature."""
+        return self._tguess
 
     def transport_model(self):
         """Get the transport model object for this EOS."""
