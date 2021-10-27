@@ -80,7 +80,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
             python -m pip install pytest-xdist
-            python -m pytest -n auto --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
+            python -m pytest -n auto --dist loadscope --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples
@@ -105,7 +105,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             examples/run_examples.sh ./examples
- 
+
     doc:
         name: Documentation
         runs-on: ubuntu-latest
@@ -155,7 +155,7 @@ jobs:
             cd mirgecom/examples
             python -m mpi4py ./pulse-mpi.py
 
-    y1: 
+    y1:
         name: Production testing
         runs-on: ${{ matrix.os }}
         strategy:
