@@ -41,6 +41,7 @@ from dataclasses import dataclass
 import numpy as np
 from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
 
@@ -150,6 +151,8 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_seed
+    .. automethod:: set_temperature_seed
     """
 
     @abstractmethod
@@ -171,6 +174,16 @@ class MixtureEOS(GasEOS):
     @abstractmethod
     def get_species_source_terms(self, cv: ConservedVars):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
+
+    def set_temperature_seed(self, temperature_seed: DOFArray):
+        """Set the seed to use for temperature calculations."""
+        self._temperature_seed = temperature_seed
+
+    def get_temperature_seed(self, cv: ConservedVars) -> DOFArray:
+        """Get the seed to use for temperature calculations."""
+        if self._temperature_seed is not None:
+            return self._temperature_seed
+        return self._tguess*(0*cv.mass + 1.0)
 
 
 class IdealSingleGas(GasEOS):
@@ -476,6 +489,7 @@ class PyrometheusMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
         self._transport_model = transport_model
+        self._temperature_seed = None
 
     def transport_model(self):
         """Get the transport model object for this EOS."""
@@ -747,10 +761,14 @@ class PyrometheusMixture(MixtureEOS):
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
+            tguess = self.get_temperature_seed(cv)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, self._tguess, y)
-        return get_temp()
+            return self._pyrometheus_mech.get_temperature(e, tguess, y)
+
+        the_temp = get_temp()
+        self._temperature_seed = None  # reset this as soon as it's used
+        return the_temp
 
     def total_energy(self, cv, pressure):
         r"""
