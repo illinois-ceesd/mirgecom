@@ -1,17 +1,5 @@
 #!/bin/bash
 
-if [[ "$(uname)" = "Darwin" ]]; then
-    PLATFORM=MacOSX
-    brew update
-    brew install open-mpi
-    brew install octave
-else
-    PLATFORM=Linux
-    sudo apt-get update
-    sudo apt-get -y install openmpi-bin libopenmpi-dev
-    sudo apt-get -y install octave
-fi
-
 MINIFORGE_INSTALL_DIR=.miniforge3
 MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
 curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/$MINIFORGE_INSTALL_SH"
@@ -22,6 +10,7 @@ PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes --quiet
 PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file conda-env.yml --name testing --quiet
 
 source "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+conda install mpi4py
 conda list
 
 MINIFORGE_INSTALL_DIR=.miniforge3
