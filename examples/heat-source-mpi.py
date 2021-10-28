@@ -182,7 +182,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
-    final_answer = discr.norm(u, np.inf)
+    final_answer = actx.to_numpy(discr.norm(u, np.inf))
     resid = abs(final_answer - 0.00020620711665201585)
     if resid > 1e-15:
         raise ValueError(f"Run did not produce the expected result {resid=}")

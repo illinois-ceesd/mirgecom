@@ -42,6 +42,7 @@ __doc__ = """
 from logpyle import (LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
+from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
@@ -303,10 +304,12 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
+        actx = get_container_context_recursively(quantity)
+
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return self._discr_reduction(quantity)
+        return actx.to_numpy(self._discr_reduction(quantity))[()]
 
 # }}}
 

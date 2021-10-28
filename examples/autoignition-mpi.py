@@ -347,10 +347,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             temp = thaw(freeze(temp, actx), actx)
             press = thaw(freeze(press, actx), actx)
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(nodal_min_loc(discr, "vol", temp), comm=comm, op=MPI.MIN)
-            tmax = allsync(nodal_max_loc(discr, "vol", temp), comm=comm, op=MPI.MAX)
-            pmin = allsync(nodal_min_loc(discr, "vol", press), comm=comm, op=MPI.MIN)
-            pmax = allsync(nodal_max_loc(discr, "vol", press), comm=comm, op=MPI.MAX)
+            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                           comm=comm, op=MPI.MIN)
+            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                           comm=comm, op=MPI.MAX)
+            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                           comm=comm, op=MPI.MIN)
+            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                           comm=comm, op=MPI.MAX)
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
@@ -460,15 +464,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ts_field = current_cfl * compute_dt(state)
             ts_field = thaw(freeze(ts_field, actx), actx)
             from grudge.op import nodal_min_loc
-            dt = allsync(nodal_min_loc(discr, "vol", ts_field), comm=comm,
-                         op=MPI.MIN)
+            dt = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
+                         comm=comm, op=MPI.MIN)
             cfl = current_cfl
         else:
             ts_field = compute_cfl(state, current_dt)
             ts_field = thaw(freeze(ts_field, actx), actx)
             from grudge.op import nodal_max_loc
-            cfl = allsync(nodal_max_loc(discr, "vol", ts_field), comm=comm,
-                          op=MPI.MAX)
+            cfl = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
+                          comm=comm, op=MPI.MAX)
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
