@@ -315,8 +315,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = nodal_min(discr, "vol", dv.pressure)
-            p_max = nodal_max(discr, "vol", dv.pressure)
+            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(discr, "vol", dv.temperature):
@@ -328,8 +328,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = nodal_min(discr, "vol", dv.temperature)
-            t_max = nodal_max(discr, "vol", dv.temperature)
+            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error

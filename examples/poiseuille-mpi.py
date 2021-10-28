@@ -260,16 +260,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_status(step, t, dt, dv, state, component_errors):
         from grudge.op import nodal_min, nodal_max
-        p_min = nodal_min(discr, "vol", dv.pressure)
-        p_max = nodal_max(discr, "vol", dv.pressure)
-        t_min = nodal_min(discr, "vol", dv.temperature)
-        t_max = nodal_max(discr, "vol", dv.temperature)
+        p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
+        p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+        t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
+        t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
         if constant_cfl:
             cfl = current_cfl
         else:
             from mirgecom.viscous import get_viscous_cfl
-            cfl = nodal_max(discr, "vol",
-                            get_viscous_cfl(discr, eos, dt, state))
+            cfl = actx.to_numpy(nodal_max(discr, "vol",
+                                          get_viscous_cfl(discr, eos, dt, state)))
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
@@ -317,8 +317,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                   comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = nodal_min(discr, "vol", dv.pressure)
-            p_max = nodal_max(discr, "vol", dv.pressure)
+            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(discr, "vol", dv.temperature):
@@ -329,8 +329,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = nodal_min(discr, "vol", dv.temperature)
-            t_max = nodal_max(discr, "vol", dv.temperature)
+            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         exittol = .1
