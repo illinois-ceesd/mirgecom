@@ -63,7 +63,7 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 pre_step_callback=None,
                                 post_step_callback=None,
                                 logmgr=None, eos=None, dim=None,
-                                actx=None):
+                                actx=None, reference_state=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -123,7 +123,8 @@ def _advance_state_stepper_func(rhs, timestepper,
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
+        state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs,
+                            reference_state=reference_state)
 
         t += dt
         istep += 1
@@ -272,7 +273,7 @@ def advance_state(rhs, timestepper, state, t_final,
                   pre_step_callback=None,
                   post_step_callback=None,
                   logmgr=None, eos=None, dim=None,
-                  actx=None):
+                  actx=None, reference_state=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -357,7 +358,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                actx=actx
+                actx=actx, reference_state=reference_state
             )
 
     return current_step, current_t, current_state

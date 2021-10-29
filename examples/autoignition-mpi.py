@@ -77,22 +77,6 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-class ConsistentTemperature:
-    """Save a temperature."""
-
-    def __init__(self):
-        """Initialize the temperature saver."""
-        self._temperature = None
-
-    def get_temperature(self):
-        """Return the saved temperature."""
-        return self._temperature
-
-    def set_temperature(self, temperature):
-        """Save a temperature."""
-        self._temperature = 1.0*temperature
-
-
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
@@ -282,7 +266,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
-    domain_temperature = ConsistentTemperature()
 
     if rst_filename:
         current_step = rst_step
@@ -292,8 +275,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
         if order == rst_order:
             current_state = restart_data["state"]
-            domain_temperature.set_temperature(restart_data["temperature"])
-            eos.set_temperature_seed(domain_temperature.get_temperature())
+            restart_temperature = restart_data["temperature"]
         else:
             rst_state = restart_data["state"]
             old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
@@ -302,14 +284,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
             current_state = connection(rst_state)
-            current_temp = connection(restart_data["temperature"])
-            domain_temperature.set_temperature(current_temp)
-            eos.set_temperature_seed(current_temp)
+            restart_temperature = connection(restart_data["temperature"])
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes)
-        current_dv = eos.dependent_vars(current_state)
-        domain_temperature.set_temperature(current_dv.temperature)
+        # current_dv = eos.dependent_vars(current_state)
+
+    reference_state = current_state
+    # Then need to call calculate temperature with the restarted temperature as the
+    # seed to get the temperature memoized onto the restart state like it was at the
+    # time the restart file was created.
+    if debug:
+        print(f"{restart_temperature=}")
 
     # Inspection at physics debugging time
     if debug:
@@ -503,10 +489,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
-        eos.set_temperature_seed(domain_temperature.get_temperature())
-        current_dv = eos.dependent_vars(state)
-        domain_temperature.set_temperature(current_dv.temperature)
+    def my_rhs(t, state, reference_state):
+        current_dv = eos.dependent_vars(state, reference_state)
+        if debug:
+            print(f"{current_dv=}")
+
         return (euler_operator(discr, cv=state, time=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
@@ -518,7 +505,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=current_state, t=current_t, t_final=t_final,
+                      reference_state=reference_state)
 
     # Dump the final data
     if rank == 0:

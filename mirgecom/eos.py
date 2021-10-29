@@ -41,7 +41,6 @@ from dataclasses import dataclass
 import numpy as np
 from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
 
@@ -89,7 +88,7 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas pressure."""
 
     @abstractmethod
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, reference_state=None):
         """Get the gas temperature."""
 
     @abstractmethod
@@ -132,11 +131,12 @@ class GasEOS(metaclass=ABCMeta):
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
 
-    def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
+    def dependent_vars(self, cv: ConservedVars,
+                       reference_state=None) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
             pressure=self.pressure(cv),
-            temperature=self.temperature(cv),
+            temperature=self.temperature(cv, reference_state=reference_state),
         )
 
 
@@ -151,8 +151,6 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
-    .. automethod:: get_temperature_seed
-    .. automethod:: set_temperature_seed
     """
 
     @abstractmethod
@@ -176,18 +174,8 @@ class MixtureEOS(GasEOS):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
 
     @abstractmethod
-    def get_temperature_guess(self):
+    def get_temperature_guess(self, cv: ConservedVars, reference_state=None):
         r"""Get a constant and uniform guess for the gas temperature."""
-
-    def set_temperature_seed(self, temperature_seed: DOFArray):
-        """Set the seed to use for temperature calculations."""
-        self._temperature_seed = temperature_seed
-
-    def get_temperature_seed(self, cv: ConservedVars) -> DOFArray:
-        """Get the seed to use for temperature calculations."""
-        if self._temperature_seed is not None:
-            return self._temperature_seed
-        return self.get_temperature_guess() * (0*cv.mass + 1.0)
 
 
 class IdealSingleGas(GasEOS):
@@ -347,7 +335,7 @@ class IdealSingleGas(GasEOS):
         actx = cv.array_context
         return actx.np.sqrt(self._gamma / cv.mass * self.pressure(cv))
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, reference_state=None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature (T) is calculated from
@@ -494,11 +482,12 @@ class PyrometheusMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
         self._transport_model = transport_model
-        self._temperature_seed = None
 
-    def get_temperature_guess(self):
+    def get_temperature_guess(self, cv, reference_state=None):
         """Get a constant and uniform guess for the gas temperature."""
-        return self._tguess
+        if reference_state is not None:
+            return self.temperature(reference_state)
+        return (self._tguess * (0*cv.mass + 1.0))
 
     def transport_model(self):
         """Get the transport model object for this EOS."""
@@ -744,7 +733,7 @@ class PyrometheusMixture(MixtureEOS):
             return actx.np.sqrt((self.gamma(cv) * self.pressure(cv)) / cv.mass)
         return get_sos()
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, reference_state=None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated from
@@ -770,14 +759,12 @@ class PyrometheusMixture(MixtureEOS):
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
-            tguess = self.get_temperature_seed(cv)
+            tguess = self.get_temperature_guess(cv, reference_state=reference_state)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
             return self._pyrometheus_mech.get_temperature(e, tguess, y)
 
-        the_temp = get_temp()
-        self._temperature_seed = None  # reset this as soon as it's used
-        return the_temp
+        return get_temp()
 
     def total_energy(self, cv, pressure):
         r"""
