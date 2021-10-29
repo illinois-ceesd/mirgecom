@@ -73,7 +73,7 @@ jobs:
         - name: Install
           run: |
             . .ci-support/install.sh
-
+        - uses: mxschmitt/action-tmate@v3
         - name: Run tests
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
