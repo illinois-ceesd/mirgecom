@@ -52,9 +52,11 @@ echo "PRODUCTION_FORK=$PRODUCTION_FORK"
 echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 
 # Install the production branch with emirge
-./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
-source config/activate_env.sh
-cd mirgecom
+# Try something less fragile
+# ./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
+./install.sh --skip-clone --install-prefix=../ --conda-env=../mirgecom/conda-env.yml --pip-pkgs=../mirgecom/requirements.txt
+source ../config/activate_env.sh
+cd ../mirgecom
 
 # This junk is needed to be able to execute git commands properly
 git config user.email "ci-runner@ci.machine.com"
