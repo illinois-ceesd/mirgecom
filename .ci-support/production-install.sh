@@ -51,7 +51,7 @@ echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 # Try something less fragile
 # ./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
 ./install.sh --skip-clone --install-prefix=../ --conda-env=../mirgecom/conda-env.yml --pip-pkgs=../mirgecom/requirements.txt
-source config/activate_env.sh
+source ../config/activate_env.sh
 cd ../mirgecom
 
 # This junk is needed to be able to execute git commands properly
