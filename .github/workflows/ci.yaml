@@ -176,7 +176,7 @@ jobs:
             cd ..
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            . ../mirgecom/.ci-support/production-install.sh $(MIRGEDIR)/..
+            . ../mirgecom/.ci-support/production-install.sh ${MIRGEDIR}/..
         - name: Run production test
           run: |
             MIRGEDIR=$(pwd)
