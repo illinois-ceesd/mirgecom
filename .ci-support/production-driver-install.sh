@@ -15,14 +15,14 @@
 #
 set -x
 
-DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
-PRODUCTION_DRIVERS=""
-if [ -n "$DEVELOPMENT_BRANCH" ]; then
-    PRODUCTION_ENV_FILE="$1"
-    if [ -e "$PRODUCTION_ENV_FILE" ]; then
-        . $PRODUCTION_ENV_FILE
-    fi
-fi
+# DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
+# PRODUCTION_DRIVERS=""
+# if [ -n "$DEVELOPMENT_BRANCH" ]; then
+#     PRODUCTION_ENV_FILE="$1"
+#     if [ -e "$PRODUCTION_ENV_FILE" ]; then
+#         . $PRODUCTION_ENV_FILE
+#     fi
+# fi
 # Set to default if testing main, or user left it empty
 PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@y2-production:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"}
 OIFS="$IFS"
