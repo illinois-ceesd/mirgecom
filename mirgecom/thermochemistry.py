@@ -95,7 +95,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
                 The mixture temperature after a fixed number of Newton iterations.
             """
             num_iter = temperature_niter
-            t_i = 1.0*temperature_guess
+            t_i = temperature_guess
             for _ in range(num_iter):
                 t_i = t_i + self._get_temperature_update_energy(
                     energy, t_i, species_mass_fractions
