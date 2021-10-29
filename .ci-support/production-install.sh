@@ -53,12 +53,13 @@ echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 ./install.sh --skip-clone --install-prefix=../ --conda-env=../mirgecom/conda-env.yml --pip-pkgs=../mirgecom/requirements.txt
 source ../config/activate_env.sh
 cd ../mirgecom
-
+pwd
 # This junk is needed to be able to execute git commands properly
 git config user.email "ci-runner@ci.machine.com"
 git config user.name "CI Runner"
 
 # Merge in the production environment
+git status
 git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
 git fetch production
 git merge production/${PRODUCTION_BRANCH} --no-edit
