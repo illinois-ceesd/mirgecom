@@ -15,7 +15,7 @@ set -x
 # patched by the incoming development. The following vars control the
 # production environment:
 #
-export PRODUCTION_BRANCH="y2-production"   # The base production branch to be installed by emirge
+# export PRODUCTION_BRANCH=""   # The base production branch to be installed by emirge
 # export PRODUCTION_FORK=""  # The fork/home of production changes (if any)
 #
 # Multiple production drivers are supported. The user should provide a ':'-delimited
@@ -27,5 +27,3 @@ export PRODUCTION_BRANCH="y2-production"   # The base production branch to be in
 #
 # Example:
 # PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
-
-PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@y2-production:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"

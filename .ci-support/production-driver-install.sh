@@ -9,9 +9,9 @@
 # PRODUCTION_DRIVERS = ':' delimited list "fork/repo@branch"
 # (See the example default value below)
 #
-# The default values result in an install of the Y1 nozzle driver and
-# Wyatt Hagen's isolator driver that work with current MIRGE-Com 
-# production branch: mirgecom@y1-production.
+# The default values result in an install of the Y1 nozzle driver,
+# a 1dflame driver, and the Y2 isolator driver that work with current
+# MIRGE-Com production branch: mirgecom@y1-production.
 #
 set -x
 
@@ -24,7 +24,7 @@ if [ -n "$DEVELOPMENT_BRANCH" ]; then
     fi
 fi
 # Set to default if testing main, or user left it empty
-PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@master:illinois-ceesd/drivers_flame1d@main"}
+PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@y2-production:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"}
 OIFS="$IFS"
 IFS=':'; for production_driver_string in $PRODUCTION_DRIVERS;
 do
