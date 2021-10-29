@@ -6,25 +6,16 @@
 # what production test is installed, the env setup script should set
 # the following:
 #
+#
 # PRODUCTION_DRIVERS = ':' delimited list "fork/repo@branch"
 # (See the example default value below)
 #
 # The default values result in an install of the Y1 nozzle driver and
 # Wyatt Hagen's isolator driver that work with current MIRGE-Com 
 # production branch: mirgecom@y1-production.
-#
-set -x
-
-# DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
-# PRODUCTION_DRIVERS=""
-# if [ -n "$DEVELOPMENT_BRANCH" ]; then
-#     PRODUCTION_ENV_FILE="$1"
-#     if [ -e "$PRODUCTION_ENV_FILE" ]; then
-#         . $PRODUCTION_ENV_FILE
-#     fi
-# fi
-# Set to default if testing main, or user left it empty
 PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@y2-production:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"}
+# Loop over the production drivers, clone them, and prepare for execution
+set -x
 OIFS="$IFS"
 IFS=':'; for production_driver_string in $PRODUCTION_DRIVERS;
 do
@@ -34,7 +25,7 @@ do
     PRODUCTION_DRIVER_DIR="production_driver_$PRODUCTION_DRIVER_NAME"
     git clone -b "$PRODUCTION_DRIVER_BRANCH" https\://github.com/"$PRODUCTION_DRIVER_REPO" "$PRODUCTION_DRIVER_DIR"
     cd "$PRODUCTION_DRIVER_DIR"/smoke_test
-    ln -s *.py driver.py
+    ln -s *.py driver.py  #  name the driver generically
     cd ../..
 done
 IFS="$OIFS"
