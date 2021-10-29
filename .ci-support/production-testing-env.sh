@@ -28,4 +28,4 @@ export PRODUCTION_BRANCH="y2-production"   # The base production branch to be in
 # Example:
 # PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
 
-PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@nodal-reduction-device-scalar:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"
+PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@y2-production:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"
