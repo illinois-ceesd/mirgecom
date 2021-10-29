@@ -438,13 +438,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.inviscid import get_inviscid_timestep
             ts_field = current_cfl * get_inviscid_timestep(discr, eos=eos, cv=state)
             from grudge.op import nodal_min
-            dt = nodal_min(discr, "vol", ts_field)
+            dt = actx.to_numpy(nodal_min(discr, "vol", ts_field))[()]
             cfl = current_cfl
         else:
             from mirgecom.inviscid import get_inviscid_cfl
             ts_field = get_inviscid_cfl(discr, eos=eos, dt=dt, cv=state)
             from grudge.op import nodal_max
-            cfl = nodal_max(discr, "vol", ts_field)
+            cfl = actx.to_numpy(nodal_max(discr, "vol", ts_field))[()]
 
         return ts_field, cfl, min(t_remaining, dt)
 
