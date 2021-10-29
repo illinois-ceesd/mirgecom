@@ -23,43 +23,30 @@
 set -x
 
 EMIRGE_INSTALL_PATH=${1:-"."}
-#if [ -n "$DEVELOPMENT_BRANCH" ]; then
-#    PRODUCTION_ENV_FILE="$1"
-#    if [ -e "$PRODUCTION_ENV_FILE" ]; then
-#        echo "Reading production configuration for ${DEVELOPMENT_BRANCH}."
-#        . $PRODUCTION_ENV_FILE
-#    else
-#        echo "Using default production configuration for ${DEVELOPMENT_BRANCH}."
-#        echo "To customize, set up .ci-support/production-testing-env.sh."
-#    fi
-#fi
-# DEVELOPMENT_BRANCH="$GITHUB_HEAD_REF"  # this will be empty for main
-# DEVELOPMENT_BRANCH=${DEVELOPMENT_BRANCH:-"main"}
-# DEVELOPMENT_FORK=${DEVELOPMENT_FORK:-"illinois-ceesd"}
 PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"y1-production"}
 PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
 
 echo "EMIRGE_INSTALL_PATH=${EMIRGE_INSTALL_PATH}"
-# echo "DEVELOPMENT_FORK=$DEVELOPMENT_FORK"
-# echo "DEVELOPMENT_BRANCH=$DEVELOPMENT_BRANCH"
 echo "PRODUCTION_FORK=$PRODUCTION_FORK"
 echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 
-# Install the production branch with emirge
-# Try something less fragile
-# ./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
+# Install the version of mirgecom we wish to test from source
 ./install.sh --skip-clone --install-prefix=${EMIRGE_INSTALL_PATH}/ --conda-env=${EMIRGE_INSTALL_PATH}/mirgecom/conda-env.yml --pip-pkgs=${EMIRGE_INSTALL_PATH}/mirgecom/requirements.txt
+
+# Activate the environment (needed?)
 source ${EMIRGE_INSTALL_PATH}/config/activate_env.sh
 cd ${EMIRGE_INSTALL_PATH}/mirgecom
-pwd
+
 # This junk is needed to be able to execute git commands properly
 git config user.email "ci-runner@ci.machine.com"
 git config user.name "CI Runner"
 
-# Merge in the production environment
-git status
+# Making a dedicated production remote adds production forks
 git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
 git fetch production
+
+# Merge the production branch for testing the production drivers
 git merge production/${PRODUCTION_BRANCH} --no-edit
+# Pick up any requirements.txt
 pip install -r requirements.txt
 cd -
