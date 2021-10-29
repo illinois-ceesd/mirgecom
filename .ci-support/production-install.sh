@@ -50,7 +50,7 @@ echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 # Install the production branch with emirge
 # Try something less fragile
 # ./install.sh --fork=${DEVELOPMENT_FORK} --branch=${DEVELOPMENT_BRANCH}
-./install.sh --skip-clone --conda-env=../mirgecom/conda-env.yml --pip-pkgs=../mirgecom/requirements.txt
+./install.sh --skip-clone --install-prefix=../ --conda-env=../mirgecom/conda-env.yml --pip-pkgs=../mirgecom/requirements.txt
 source config/activate_env.sh
 cd ../mirgecom
 
