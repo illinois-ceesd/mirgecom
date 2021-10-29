@@ -10,6 +10,7 @@ set -x
 # forks, the environment config files should set:
 #
 # export DEVELOPMENT_FORK=""   # the fork/home of the development
+# export DEVELOPMENT_BRANCH=""
 #
 # The production capability to test against may be specified outright, or
 # patched by the incoming development. The following vars control the

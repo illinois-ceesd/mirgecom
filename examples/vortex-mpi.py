@@ -227,8 +227,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             else:
                 from grudge.op import nodal_max
                 from mirgecom.inviscid import get_inviscid_cfl
-                cfl = nodal_max(discr, "vol",
-                                get_inviscid_cfl(discr, eos, current_dt, cv=state))
+                cfl = actx.to_numpy(
+                    nodal_max(
+                        discr, "vol",
+                        get_inviscid_cfl(discr, eos, current_dt, cv=state)))[()]
         if rank == 0:
             logger.info(
                 f"------ {cfl=}\n"
