@@ -138,14 +138,14 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        assert actx.to_numpy(discr.norm(rho_resid, np.inf)) < tolerance
+        assert actx.to_numpy(discr.norm(rhoe_resid, np.inf)) < tolerance
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            assert actx.to_numpy(discr.norm(mom_resid[i], np.inf)) < tolerance
         for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+            assert actx.to_numpy(discr.norm(rhoy_resid[i], np.inf)) < tolerance
 
-        err_max = discr.norm(rho_resid, np.inf)
+        err_max = actx.to_numpy(discr.norm(rho_resid, np.inf))
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
@@ -165,15 +165,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        assert actx.to_numpy(discr.norm(rho_resid, np.inf)) < tolerance
+        assert actx.to_numpy(discr.norm(rhoe_resid, np.inf)) < tolerance
 
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            assert actx.to_numpy(discr.norm(mom_resid[i], np.inf)) < tolerance
         for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+            assert actx.to_numpy(discr.norm(rhoy_resid[i], np.inf)) < tolerance
 
-        err_max = discr.norm(rho_resid, np.inf)
+        err_max = actx.to_numpy(discr.norm(rho_resid, np.inf))
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -310,14 +310,15 @@ def test_poiseuille_rhs(actx_factory, order):
         )
 
         tol_fudge = 2e-4
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        # assert discr.norm(rhoe_resid, np.inf) < tolerance
-        mom_err = [discr.norm(mom_resid[i], np.inf) for i in range(dim)]
+        assert actx.to_numpy(discr.norm(rho_resid, np.inf)) < tolerance
+        # assert actx.to_numpy(discr.norm(rhoe_resid, np.inf)) < tolerance
+        mom_err = [actx.to_numpy(discr.norm(mom_resid[i], np.inf))
+                   for i in range(dim)]
         err_max = max(mom_err)
         for i in range(dim):
             assert mom_err[i] < tol_fudge
 
-        # err_max = discr.norm(rho_resid, np.inf)
+        # err_max = actx.to_numpy(discr.norm(rho_resid, np.inf)
         eoc_rec.add_data_point(1.0 / nfac, err_max)
 
     logger.info(
