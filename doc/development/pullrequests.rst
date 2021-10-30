@@ -211,21 +211,25 @@ Production Testing in CI
 
 The CI testing in mirgecom includes a set of "production" tests which help
 detect when a proposed change in a PR breaks the CEESD prediction capability
-toolchain.
+toolchain.  Most developments and PRs do not require special considerations
+for the production tests, but any production test failures will require
+a bit of care to resolve.
 
 When PRs run afoul of the CI production tests, it indicates that if the PR
 change set merges to main, then the "production" capability of mirgecom will
 not function until the production capability and the change set are brought
 into accordance.
 
-The production tests may be prepared and executed from anywhere by
-hand-executing the production test scripts found in ``.ci-support/``. The
-following is an example workflow adjacent to what CI itself does for
-executing the production tests.  In the following example, the PR development
-is assumed to be in a mirgecom branch called ``branch-name`` and possibly in a
-fork called ``fork-name``. 
+To resolve CI production test failures for a development in PR, it is often useful
+to run the production tests manually. The production tests may be prepared and
+executed from anywhere by hand-executing the production test scripts found in
+``.ci-support/``. The following is an example workflow adjacent to what CI itself
+does for executing the production tests.
 
 1. Check out the PR development (and optionally make a production branch)
+
+   The PR development is assumed to be in a mirgecom branch called ``branch-name``
+   and possibly in a fork called ``fork-name``.
 
    .. code:: bash
 
@@ -267,6 +271,13 @@ fork called ``fork-name``.
    condition and then pushed to a repo/branch. Indicate the location of the working
    drivers in the PRODUCTION_DRIVERS env var customization in
    ``.ci-support/production-testing-env.sh``.
+
+4. Update the PR to reflect the change in production environment (if any)
+
+   Push the customized production ``.ci-support/production-testing-env.sh``
+   settings to the PR development branch. Upon push, mirgecom CI will
+   try the production tests again, now with the customized environment.
+
 
 If the PR development requires production environment customization in order to
 pass production tests, then care and coordination will be required to get these
