@@ -220,8 +220,10 @@ into accordance.
 
 The production tests may be prepared and executed from anywhere by
 hand-executing the production test scripts found in ``.ci-support/``. The
-following is an example workflow adjacent to what CI itself does for executing
-the production tests.
+following is an example workflow adjacent to what CI itself does for
+executing the production tests.  In the following example, the PR development
+is assumed to be in a mirgecom branch called ``branch-name`` and possibly in a
+fork called ``fork-name``. 
 
 1. Check out the PR development (and optionally make a production branch)
 
@@ -262,20 +264,22 @@ the production tests.
    Step 3 will clone the production driver repos to the current directory,
    with each driver in its own directory. If any of the drivers fail to
    work with the current development, then they may be modified into working
-   condition and then pushed to a repo. Indicate the location of the working
+   condition and then pushed to a repo/branch. Indicate the location of the working
    drivers in the PRODUCTION_DRIVERS env var customization in
    ``.ci-support/production-testing-env.sh``.
 
-If the PR development required production environment customization in order to
+If the PR development requires production environment customization in order to
 pass production tests, then care and coordination will be required to get these
 changes merged into the main mirgecom development.  PR reviewers will help
-with this process.
+with this process.  If the PR is accepted for merging to main, then mirgecom
+developers will update the production capabilities to be compatible with
+the changes before merging.
 
    .. important::
 
       Any production environment customizations must be backed out before
       merging the PR development to main. Never merge a PR development with
-      production environment customizations in place.
+      production environment customizations in-place.
 
 Merging a pull request
 ----------------------
