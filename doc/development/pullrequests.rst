@@ -247,7 +247,7 @@ does for executing the production tests.
       $ # Load the customizable production environment
       $ . .ci-support/production-testing-env.sh
       $ # Merge the production branch
-      $ . .ci-support/merge-install-production-branch .
+      $ . .ci-support/merge-install-production-branch.sh .
 
    If Step 2 fails, i.e. if there are merge conflicts, then those must
    be resolved. Push the merged result to CEESD or a fork, and indicate
@@ -261,9 +261,9 @@ does for executing the production tests.
       $ # Load env if needed
       $ . .ci-support/production-testing-env.sh
       $ # Get the production tests
-      $ . .ci-support/production-driver-install.sh .
+      $ . .ci-support/production-drivers-install.sh .
       $ # Run the production tests
-      $ . .ci-support/production-test-run.sh .
+      $ . .ci-support/production-drivers-run.sh .
 
    Step 3 will clone the production driver repos to the current directory,
    with each driver in its own directory. If any of the drivers fail to
