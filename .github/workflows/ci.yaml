@@ -177,10 +177,10 @@ jobs:
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
             . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
+            source ${MIRGEDIR}/../config/activate_env.sh
             . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
-            MIRGEDIR=$(pwd)
             . .ci-support/production-testing-env.sh
             source ../config/activate_env.sh
             . .ci-support/production-drivers-install.sh .
