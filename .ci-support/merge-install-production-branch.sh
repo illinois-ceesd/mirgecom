@@ -1,15 +1,10 @@
 #!/bin/bash
 set -x
 #
-# This script is designed to patch the CEESD production capability against
+# This script is designed to patch the CEESD production capability into
 # a proposed change to illinois-ceesd/mirgecom@main. The script reads the
 # environment config file `.ci-support/production-testing-env.sh`, that
-# should set up the expected control variables, which are as follows:
-#
-# The proposed changes to test may be in a fork, or a local branch. For
-# forks, the environment config files should set:
-#
-# DEVELOPMENT_FORK = The development fork (default=illinois-ceesd)
+# should set up the expected control variables.
 #
 # The production capability to test against may be specified outright, or
 # patched by the incoming development. The following vars control the
@@ -17,9 +12,6 @@ set -x
 #
 # PRODUCTION_BRANCH = The production branch (default=y1-production)
 # PRODUCTION_FORK = The production fork (default=illinois-ceesd)
-#
-# If the environment file does not exist, the current development is
-# tested against `mirgecom@y1-production`.
 #
 MIRGE_HOME=${1:-"."}
 PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"y1-production"}
