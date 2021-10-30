@@ -206,6 +206,92 @@ commit, you can use a git hook such as the following one (save this script as
 
 While highly recommended, hooks can sometimes be annoying. After setting up your hooks, you can use ``git --no-verify`` or equivalently ``git -n`` to run ``git`` commands without triggering the hooks.
 
+Production Testing in CI
+------------------------
+
+The CI testing in mirgecom includes a set of "production" tests which help
+detect when a proposed change in a PR breaks the CEESD prediction capability
+toolchain.  Most developments and PRs do not require special considerations
+for the production tests, but any production test failures will require
+a bit of care to resolve.
+
+When PRs run afoul of the CI production tests, it indicates that if the PR
+change set merges to main, then the "production" capability of mirgecom will
+not function until the production capability and the change set are brought
+into accordance.
+
+To resolve CI production test failures for a development in PR, it is often useful
+to run the production tests manually. The production tests may be prepared and
+executed from anywhere by hand-executing the production test scripts found in
+``.ci-support/``. The following is an example workflow adjacent to what CI itself
+does for executing the production tests.
+
+1. Check out the PR development (and optionally make a production branch)
+
+   The PR development is assumed to be in a mirgecom branch called ``branch-name``
+   and possibly in a fork called ``fork-name``.
+
+   .. code:: bash
+
+      $ # For ceesd-local branches:
+      $ git clone -b branch-name git@github.com:/illinois-ceesd/mirgecom
+      $ # Or for developer fork:
+      $ git clone -b branch-name git@github.com:/fork-name/mirgecom
+      $ cd mirgecom           # or loopy, meshmode, ...
+      $ git switch -c branch-name-production  # Optional production branch
+
+2. Set up the production environment and capability
+   
+   .. code:: bash
+
+      $ # Load the customizable production environment
+      $ . .ci-support/production-testing-env.sh
+      $ # Merge the production branch
+      $ . .ci-support/merge-install-production-branch .
+
+   If Step 2 fails, i.e. if there are merge conflicts, then those must
+   be resolved. Push the merged result to CEESD or a fork, and indicate
+   that version in the PRODUCTION_FORK, and PRODUCTION_BRANCH env vars in
+   ``.ci-support/production-testing-env.sh``.
+
+3. Grab and run the production tests
+
+   .. code:: bash
+
+      $ # Load env if needed
+      $ . .ci-support/production-testing-env.sh
+      $ # Get the production tests
+      $ . .ci-support/production-driver-install.sh .
+      $ # Run the production tests
+      $ . .ci-support/production-test-run.sh .
+
+   Step 3 will clone the production driver repos to the current directory,
+   with each driver in its own directory. If any of the drivers fail to
+   work with the current development, then they may be modified into working
+   condition and then pushed to a repo/branch. Indicate the location of the working
+   drivers in the PRODUCTION_DRIVERS env var customization in
+   ``.ci-support/production-testing-env.sh``.
+
+4. Update the PR to reflect the change in production environment (if any)
+
+   Push the customized production ``.ci-support/production-testing-env.sh``
+   settings to the PR development branch. Upon push, mirgecom CI will
+   try the production tests again, now with the customized environment.
+
+
+If the PR development requires production environment customization in order to
+pass production tests, then care and coordination will be required to get these
+changes merged into the main mirgecom development.  PR reviewers will help
+with this process.  If the PR is accepted for merging to main, then mirgecom
+developers will update the production capabilities to be compatible with
+the changes before merging.
+
+   .. important::
+
+      Any production environment customizations must be backed out before
+      merging the PR development to main. Never merge a PR development with
+      production environment customizations in-place.
+
 Merging a pull request
 ----------------------
 
