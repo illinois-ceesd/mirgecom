@@ -28,11 +28,18 @@ THE SOFTWARE.
 """
 
 
-def rk4_step(state, t, dt, rhs):
+def rk4_step(state, t, dt, rhs, reference_state=None):
     """Take one step using the fourth-order Classical Runge-Kutta method."""
-    k1 = rhs(t, state)
-    k2 = rhs(t+dt/2, state + dt/2*k1)
-    k3 = rhs(t+dt/2, state + dt/2*k2)
-    k4 = rhs(t+dt, state + dt*k3)
+    if reference_state is not None:
+        reference_state = state
+        k1 = rhs(t, state, reference_state)
+        k2 = rhs(t+dt/2, state + dt/2*k1, reference_state)
+        k3 = rhs(t+dt/2, state + dt/2*k2, reference_state)
+        k4 = rhs(t+dt, state + dt*k3, reference_state)
+    else:
+        k1 = rhs(t, state)
+        k2 = rhs(t+dt/2, state + dt/2*k1)
+        k3 = rhs(t+dt/2, state + dt/2*k2)
+        k4 = rhs(t+dt, state + dt*k3)
 
     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
