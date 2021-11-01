@@ -259,6 +259,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from pytools.obj_array import make_obj_array
 
+    def get_temperature_update(state, temperature):
+        y = state.species_mass_fractions
+        e = eos.internal_energy(state) / state.mass
+        return make_obj_array(
+            [pyro_mechanism.get_temperature_update_energy(e, temperature, y)]
+        )
+
     def get_temperature_mass_energy(state, temperature):
         y = state.species_mass_fractions
         e = eos.internal_energy(state) / state.mass
@@ -266,6 +273,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             [pyro_mechanism.get_temperature(e, temperature, y)]
         )
 
+    compute_temperature_update = actx.compile(get_temperature_update)
     compute_dependent_vars = actx.compile(eos.dependent_vars)
     compute_temperature = actx.compile(get_temperature_mass_energy)
 
@@ -292,6 +300,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
         if order == rst_order:
             current_state = restart_data["state"]
+            rst_temperature = restart_data["temperature"]
         else:
             rst_state = restart_data["state"]
             old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
@@ -300,9 +309,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
             current_state = connection(rst_state)
+            rst_temperature = connection(restart_data["temperature"])
+        # This bit memoizes the restarted temperature onto the current_state
+        rst_temperature = compute_temperature(current_state, rst_temperature)
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes)
+    reference_state = current_state
+
     # import ipdb
     # ipdb.set_trace()
 
@@ -381,9 +395,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if rank == 0:
                 logger.info("Skipping overwrite of restart file.")
         else:
+            rst_dv = compute_dependent_vars(state)
             rst_data = {
                 "local_mesh": local_mesh,
                 "state": state,
+                "temperature": rst_dv.temperature,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -427,11 +443,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # convergence in Pyrometheus `get_temperature`.
         # Note: The local max jig below works around a very long compile
         # in lazy mode.
-        check_temp, = compute_temperature(cv, temperature)
-        check_temp = thaw(freeze(check_temp, actx), actx)
-        temp_resid = actx.np.abs(check_temp - temperature)
-        temp_resid = op.nodal_max_loc(discr, "vol", temp_resid)
-        if temp_resid > 1e-12:
+        temp_update, = compute_temperature_update(cv, temperature)
+        temp_resid = thaw(freeze(temp_update, actx), actx) / temperature
+        temp_resid = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
+        if temp_resid > 1e-8:
             health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
@@ -527,15 +542,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
-        from mirgecom.simutil import limit_species_mass_fractions
-        state = limit_species_mass_fractions(state)
         if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
+    def my_rhs(t, state, reference_state):
+        current_dv = eos.dependent_vars(state, reference_state)
+        if debug:
+            print(f"{current_dv=}")
         return (euler_operator(discr, cv=state, time=t,
                                boundaries=boundaries, eos=eos)
                 + eos.get_species_source_terms(state))
@@ -547,7 +563,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=current_state, t=current_t, t_final=t_final,
+                      reference_state=reference_state)
 
     # Dump the final data
     if rank == 0:
