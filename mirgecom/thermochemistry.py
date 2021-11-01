@@ -67,7 +67,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
             return concs
 
         # This is the temperature update for *get_temperature*
-        def _get_temperature_update_energy(self, e_in, t_in, y):
+        def get_temperature_update_energy(self, e_in, t_in, y):
             pv_func = self.get_mixture_specific_heat_cv_mass
             he_func = self.get_mixture_internal_energy_mass
             return (e_in - he_func(t_in, y)) / pv_func(t_in, y)
@@ -99,7 +99,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
             num_iter = temperature_niter
             t_i = temperature_guess
             for _ in range(num_iter):
-                t_i = t_i + self._get_temperature_update_energy(
+                t_i = t_i + self.get_temperature_update_energy(
                     energy, t_i, species_mass_fractions
                 )
             return t_i
