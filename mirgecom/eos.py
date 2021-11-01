@@ -90,7 +90,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas pressure."""
 
     @abstractmethod
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars,
+                    reference_state: ConservedVars = None):
         """Get the gas temperature."""
 
     @abstractmethod
@@ -133,11 +134,12 @@ class GasEOS(metaclass=ABCMeta):
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
 
-    def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
+    def dependent_vars(self, cv: ConservedVars,
+                       reference_state: ConservedVars = None) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
             pressure=self.pressure(cv),
-            temperature=self.temperature(cv),
+            temperature=self.temperature(cv, reference_state),
         )
 
 
@@ -152,7 +154,13 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_guess
     """
+
+    @abstractmethod
+    def get_temperature_guess(self, cv: ConservedVars,
+                              reference_state: ConservedVars = None):
+        r"""Get a constant and uniform guess for the gas temperature."""
 
     @abstractmethod
     def get_density(self, pressure, temperature, species_mass_fractions):
@@ -332,7 +340,7 @@ class IdealSingleGas(GasEOS):
         actx = cv.array_context
         return actx.np.sqrt(self._gamma / cv.mass * self.pressure(cv))
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, reference_state: ConservedVars = None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature (T) is calculated from
@@ -348,6 +356,10 @@ class IdealSingleGas(GasEOS):
         cv: :class:`~mirgecom.fluid.ConservedVars`
             :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        reference_state: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` from which to seed temperature
+            calculation.
 
         Returns
         -------
@@ -478,6 +490,28 @@ class PyrometheusMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
         self._transport_model = transport_model
+
+    def get_temperature_guess(self, cv, reference_state=None):
+        """Get a constant and uniform guess for the gas temperature.
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` used to conjure the required shape
+            for the returned temperature guess.
+        reference_state:  :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` optionally seed the temperature
+            calculation with the temperature from this state
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The temperature with which to seed the Newton solver in
+            :module:thermochemistry.
+        """
+        if reference_state is not None:
+            return self.temperature(reference_state)  # return already-memoized temp
+        return (self._tguess * (0*cv.mass + 1.0))
 
     def transport_model(self):
         """Get the transport model object for this EOS."""
@@ -723,7 +757,7 @@ class PyrometheusMixture(MixtureEOS):
             return actx.np.sqrt((self.gamma(cv) * self.pressure(cv)) / cv.mass)
         return get_sos()
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, reference_state=None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated from
@@ -751,10 +785,11 @@ class PyrometheusMixture(MixtureEOS):
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
-            tguess = self._tguess + 0*cv.mass
+            tguess = self.get_temperature_guess(cv, reference_state=reference_state)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
             return self._pyrometheus_mech.get_temperature(e, tguess, y)
+
         return get_temp()
 
     def total_energy(self, cv, pressure):
