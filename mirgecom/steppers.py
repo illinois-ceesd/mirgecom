@@ -64,7 +64,7 @@ def _compile_rhs(actx, rhs):
     return get_rhs()
 
 
-def _evaluate_state(actx, state):
+def _force_evaluation(actx, state):
     if actx is None:
         return state
     return thaw(freeze(state, actx), actx)
@@ -126,7 +126,7 @@ def _advance_state_stepper_func(rhs, timestepper,
     compiled_rhs = _compile_rhs(actx, rhs)
 
     while t < t_final:
-        state = _evaluate_state(actx, state)
+        state = _force_evaluation(actx, state)
 
         if logmgr:
             logmgr.tick_before()
@@ -207,7 +207,7 @@ def _advance_state_leap(rhs, timestepper, state,
                                                     compiled_rhs, t, dt, state)
 
     while t < t_final:
-        state = _evaluate_state(actx, state)
+        state = _force_evaluation(actx, state)
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
