@@ -184,7 +184,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
-        rel_linf_err = (
+        rel_linf_err = actx.to_numpy(
             discr.norm(rhs - expected_rhs, np.inf)
             / discr.norm(expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
@@ -269,8 +269,11 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
                     ("v_expected", expected_fields[1:]),
                     ])
 
-    err = discr.norm(fields-expected_fields, np.inf)
-    max_err = discr.norm(expected_fields, np.inf)
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
+    err = inf_norm(fields-expected_fields)
+    max_err = inf_norm(expected_fields)
 
     assert err < max_err
 

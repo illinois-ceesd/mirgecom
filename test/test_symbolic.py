@@ -164,7 +164,7 @@ def test_symbolic_evaluation(actx_factory):
 
     expected_f = np.exp(-t) * actx.np.cos(nodes[0]) * actx.np.sin(nodes[1])
 
-    assert discr.norm(f - expected_f)/discr.norm(expected_f) < 1e-12
+    assert actx.to_numpy(discr.norm(f - expected_f)/discr.norm(expected_f)) < 1e-12
 
 
 if __name__ == "__main__":
