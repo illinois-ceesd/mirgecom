@@ -1,6 +1,11 @@
 """MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
+
+.. autoclass:: DistributedContext
+.. autoclass:: MPILikeDistributedContext
+.. autoclass:: NoMPIDistributedContext
+.. autoclass:: MPIDistributedContext
 """
 
 __copyright__ = """
@@ -27,6 +32,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABCMeta, abstractmethod
 from functools import wraps
 import os
 import sys
@@ -103,6 +109,109 @@ def _check_gpu_oversubscription():
                       f" Duplicate PCIe IDs: {dup}.")
 
 
+class DistributedContext(metaclass=ABCMeta):
+    """
+    A generic distributed environment.
+
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    """
+
+    @property
+    @abstractmethod
+    def rank(self):
+        """Get the index of the current process."""
+        pass
+
+    @property
+    @abstractmethod
+    def size(self):
+        """Get the number of processes."""
+        pass
+
+
+class MPILikeDistributedContext(DistributedContext):
+    """
+    A distributed environment that might have a communicator.
+
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. autoproperty:: comm
+    """
+
+    @property
+    @abstractmethod
+    def comm(self):
+        """
+        Get the communicator.
+
+        :returns: An MPI communicator or None.
+        """
+        pass
+
+
+class NoMPIDistributedContext(MPILikeDistributedContext):
+    """
+    A non-distributed MPI-like environment.
+
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. autoproperty:: comm
+    """
+
+    @property
+    def rank(self):
+        """Get the index of the current process."""
+        return 0
+
+    @property
+    def size(self):
+        """Get the number of processes."""
+        return 1
+
+    @property
+    def comm(self):
+        """
+        Get the communicator.
+
+        :returns: None.
+        """
+        return None
+
+
+class MPIDistributedContext(MPILikeDistributedContext):
+    """
+    An MPI-based distributed environment.
+
+    .. automethod:: __init__
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. autoproperty:: comm
+    """
+
+    def __init__(self, comm):
+        self._comm = comm
+
+    @property
+    def rank(self):
+        """Get the index of the current process."""
+        return self.comm.Get_rank()
+
+    @property
+    def size(self):
+        """Get the number of processes."""
+        return self.comm.Get_size()
+
+    @property
+    def comm(self):
+        """
+        Get the communicator.
+
+        :returns: An MPI communicator.
+        """
+        return self._comm
+
+
 def mpi_entry_point(func):
     """
     Return a decorator that designates a function as the "main" function for MPI.
@@ -151,6 +260,6 @@ def mpi_entry_point(func):
 
         _check_gpu_oversubscription()
 
-        func(*args, **kwargs)
+        func(*args, dist_ctx=MPIDistributedContext(MPI.COMM_WORLD), **kwargs)
 
     return wrapped_func

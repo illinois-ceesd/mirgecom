@@ -45,7 +45,11 @@ from mirgecom.diffusion import (
 from mirgecom.simutil import (
     generate_and_distribute_mesh
 )
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import (
+    MPILikeDistributedContext,
+    NoMPIDistributedContext,
+    mpi_entry_point
+)
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
@@ -55,23 +59,21 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 from logpyle import IntervalTimer, set_dt
 
 
-def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
+def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, rst_filename=None,
          actx_class=PyOpenCLArrayContext):
     """Run the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    if use_mpi:
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-    else:
-        comm = None
+    if dist_ctx is None:
+        dist_ctx = NoMPIDistributedContext()
+    assert isinstance(dist_ctx, MPILikeDistributedContext)
 
-    rank = comm.Get_rank() if comm is not None else 0
+    rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
+        filename="heat-source.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
 
     if use_profiling:
         queue = cl.CommandQueue(
@@ -101,12 +103,12 @@ def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
             })
 
     local_mesh, global_nelements = generate_and_distribute_mesh(
-        comm, generate_mesh)
+        dist_ctx.comm, generate_mesh)
 
     order = 3
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                    mpi_communicator=comm)
+                    mpi_communicator=dist_ctx.comm)
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
@@ -216,8 +218,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main_func(
-        use_mpi=args.mpi, use_logmgr=args.log, use_leap=args.leap,
-        use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
-        actx_class=actx_class)
+        use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+        casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

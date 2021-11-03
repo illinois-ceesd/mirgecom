@@ -46,7 +46,11 @@ from mirgecom.simutil import (
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import (
+    MPILikeDistributedContext,
+    NoMPIDistributedContext,
+    mpi_entry_point
+)
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -73,7 +77,7 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
+def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, rst_filename=None,
          actx_class=PyOpenCLArrayContext):
     """Drive example."""
@@ -82,20 +86,17 @@ def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
     if casename is None:
         casename = "mirgecom"
 
-    if use_mpi:
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-    else:
-        comm = None
+    if dist_ctx is None:
+        dist_ctx = NoMPIDistributedContext()
+    assert isinstance(dist_ctx, MPILikeDistributedContext)
 
-    rank = comm.Get_rank() if comm is not None else 0
-    nproc = comm.Get_size() if comm is not None else 1
+    rank = dist_ctx.rank
 
     from mirgecom.simutil import global_reduce as _global_reduce
-    global_reduce = partial(_global_reduce, comm=comm)
+    global_reduce = partial(_global_reduce, comm=dist_ctx.comm)
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+        filename=f"{casename}.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
 
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
@@ -140,7 +141,7 @@ def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["num_parts"] == nproc
+        assert restart_data["num_parts"] == dist_ctx.size
     else:  # generate the grid from scratch
         box_ll = -5.0
         box_ur = 5.0
@@ -148,13 +149,13 @@ def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+        local_mesh, global_nelements = generate_and_distribute_mesh(dist_ctx.comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
     order = 3
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh, order=order, mpi_communicator=dist_ctx.comm
     )
     nodes = thaw(actx, discr.nodes())
 
@@ -237,10 +238,10 @@ def main(ctx_factory=cl.create_some_context, use_mpi=False, use_logmgr=True,
                 "step": step,
                 "order": order,
                 "global_nelements": global_nelements,
-                "num_parts": nproc
+                "num_parts": dist_ctx.size
             }
             from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_fname, comm)
+            write_restart_file(actx, rst_data, rst_fname, dist_ctx.comm)
 
     def my_health_check(dv, state, exact):
         health_error = False
@@ -400,8 +401,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main_func(
-        use_mpi=args.mpi, use_logmgr=args.log, use_leap=args.leap,
-        use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
-        actx_class=actx_class)
+        use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+        casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

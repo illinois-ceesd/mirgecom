@@ -4,11 +4,10 @@ from mirgecom.mpi import mpi_entry_point
 
 
 @mpi_entry_point
-def main():
+def main(dist_ctx):
     """Run the demo."""
-    from mpi4py import MPI
 
-    comm = MPI.COMM_WORLD
+    comm = dist_ctx.comm
 
     comm.Barrier()
 
@@ -18,4 +17,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()  # pylint: disable=no-value-for-parameter

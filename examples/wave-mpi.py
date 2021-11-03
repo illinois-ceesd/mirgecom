@@ -39,7 +39,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import (
+    MPILikeDistributedContext,
+    NoMPIDistributedContext,
+    mpi_entry_point
+)
 from mirgecom.integrators import rk4_step
 from mirgecom.simutil import (
     generate_and_distribute_mesh
@@ -74,24 +78,21 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(use_mpi=False, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+def main(dist_ctx=None, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
          restart_step=None, use_profiling=False, use_logmgr=False,
          actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    if use_mpi:
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-    else:
-        comm = None
+    if dist_ctx is None:
+        dist_ctx = NoMPIDistributedContext()
+    assert isinstance(dist_ctx, MPILikeDistributedContext)
 
-    rank = comm.Get_rank() if comm is not None else 0
-    nproc = comm.Get_size() if comm is not None else 1
+    rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
+        filename="wave-mpi.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -114,7 +115,7 @@ def main(use_mpi=False, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                 nelements_per_axis=(nel_1d,)*dim)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(
-            comm, generate_mesh)
+            dist_ctx.comm, generate_mesh)
 
     else:
         from mirgecom.restart import read_restart_data
@@ -123,12 +124,12 @@ def main(use_mpi=False, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         )
         local_mesh = restart_data["local_mesh"]
         nel_1d = restart_data["nel_1d"]
-        assert restart_data["num_parts"] == nproc
+        assert restart_data["num_parts"] == dist_ctx.size
 
     order = 3
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                                  mpi_communicator=comm)
+                                  mpi_communicator=dist_ctx.comm)
 
     current_cfl = 0.485
     wave_speed = 1.0
@@ -157,7 +158,7 @@ def main(use_mpi=False, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         old_order = restart_data["order"]
         if old_order != order:
             old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
-                                              mpi_communicator=comm)
+                                              mpi_communicator=dist_ctx.comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
@@ -206,15 +207,15 @@ def main(use_mpi=False, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                     "t": t,
                     "step": istep,
                     "nel_1d": nel_1d,
-                    "num_parts": nproc},
+                    "num_parts": dist_ctx.size},
                 filename=snapshot_pattern.format(step=istep, rank=rank),
-                comm=comm
+                comm=dist_ctx.comm
             )
 
         if istep % 10 == 0:
             print(istep, t, actx.to_numpy(discr.norm(fields[0])))
             vis.write_parallel_vtk_file(
-                comm,
+                dist_ctx.comm,
                 "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
                 [
                     ("u", fields[0]),
@@ -255,7 +256,7 @@ if __name__ == "__main__":
         main_func = main
 
     main_func(
-        use_mpi=args.mpi, use_profiling=use_profiling, use_logmgr=use_logging,
+        use_profiling=use_profiling, use_logmgr=use_logging,
         actx_class=PytatoPyOpenCLArrayContext if args.lazy
         else PyOpenCLArrayContext)
 
