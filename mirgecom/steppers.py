@@ -32,10 +32,14 @@ import numpy as np
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 from pytools import memoize_in
-from arraycontext import freeze, thaw
+from arraycontext import (
+    freeze,
+    thaw,
+    get_container_context_recursively
+)
 
 
-def compile_timestepper(actx, timestepper, state, rhs):
+def _compile_timestepper(actx, timestepper, rhs):
     """Create lazy evaluation version of the timestepper."""
     @memoize_in(actx, ("mirgecom_compiled_operator",
                        timestepper, rhs))
@@ -47,8 +51,11 @@ def compile_timestepper(actx, timestepper, state, rhs):
     return get_timestepper()
 
 
-def compile_rhs(actx, rhs, state):
+def _compile_rhs(actx, rhs):
     """Create lazy evaluation version of the rhs."""
+    if actx is None:
+        return rhs
+
     @memoize_in(actx, ("mirgecom_compiled_rhs",
                        rhs))
     def get_rhs():
@@ -57,13 +64,19 @@ def compile_rhs(actx, rhs, state):
     return get_rhs()
 
 
+def _force_evaluation(actx, state):
+    if actx is None:
+        return state
+    return thaw(freeze(state, actx), actx)
+
+
 def _advance_state_stepper_func(rhs, timestepper,
                                 state, t_final, dt=0,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
                                 logmgr=None, eos=None, dim=None,
-                                actx=None, reference_state=None):
+                                reference_state=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -109,13 +122,12 @@ def _advance_state_stepper_func(rhs, timestepper,
     if t_final <= t:
         return istep, t, state
 
-    if actx is None:
-        actx = state.array_context
+    actx = get_container_context_recursively(state)
 
-    compiled_rhs = compile_rhs(actx, rhs, state)
+    compiled_rhs = _compile_rhs(actx, rhs)
 
     while t < t_final:
-        state = thaw(freeze(state, actx), actx)
+        state = _force_evaluation(actx, state)
 
         if logmgr:
             logmgr.tick_before()
@@ -149,8 +161,7 @@ def _advance_state_leap(rhs, timestepper, state,
                         t=0.0, istep=0,
                         pre_step_callback=None,
                         post_step_callback=None,
-                        logmgr=None, eos=None, dim=None,
-                        actx=None):
+                        logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -194,19 +205,14 @@ def _advance_state_leap(rhs, timestepper, state,
     if t_final <= t:
         return istep, t, state
 
-    if actx is None:
-        actx = state.array_context
+    actx = get_container_context_recursively(state)
 
-    compiled_rhs = compile_rhs(actx, rhs, state)
+    compiled_rhs = _compile_rhs(actx, rhs)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
                                                     compiled_rhs, t, dt, state)
-    while t < t_final:
 
-        # This is only needed because Leap testing in test/test_time_integrators.py
-        # tests on single scalar values rather than an array-context-ready array
-        # container like a CV.
-        if isinstance(state, np.ndarray):
-            state = thaw(freeze(state, actx), actx)
+    while t < t_final:
+        state = _force_evaluation(actx, state)
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
@@ -276,7 +282,7 @@ def advance_state(rhs, timestepper, state, t_final,
                   pre_step_callback=None,
                   post_step_callback=None,
                   logmgr=None, eos=None, dim=None,
-                  actx=None, reference_state=None):
+                  reference_state=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -351,7 +357,6 @@ def advance_state(rhs, timestepper, state, t_final,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                actx=actx
             )
     else:
         (current_step, current_t, current_state) = \
@@ -361,7 +366,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                actx=actx, reference_state=reference_state
+                reference_state=reference_state
             )
 
     return current_step, current_t, current_state
