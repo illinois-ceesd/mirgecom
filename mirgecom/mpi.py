@@ -247,7 +247,7 @@ def mpi_entry_point(func):
 
         # This code warns the user of potentially slow startups due to file system
         # locking when running with large numbers of ranks. See
-        # https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes
+        # https://mirgecom.readthedocs.io/en/latest/running/large-systems.html
         # for more details
         size = MPI.COMM_WORLD.Get_size()
         rank = MPI.COMM_WORLD.Get_rank()
