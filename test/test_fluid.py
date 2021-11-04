@@ -84,7 +84,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     tol = 1e-11
     exp_result = vel_fac * np.eye(dim) * ones
-    grad_v_err = [discr.norm(grad_v[i] - exp_result[i], np.inf)
+    grad_v_err = [actx.to_numpy(discr.norm(grad_v[i] - exp_result[i], np.inf))
                   for i in range(dim)]
 
     assert max(grad_v_err) < tol
@@ -133,7 +133,8 @@ def test_velocity_gradient_eoc(actx_factory, dim):
             return exact_grad_row
 
         comp_err = make_obj_array([
-            discr.norm(grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf)
+            actx.to_numpy(
+                discr.norm(grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf))
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
@@ -188,9 +189,13 @@ def test_velocity_gradient_structure(actx_factory):
     assert grad_v.shape == (dim, dim)
     from meshmode.dof_array import DOFArray
     assert type(grad_v[0, 0]) == DOFArray
-    assert discr.norm(grad_v - exp_result, np.inf) < tol
-    assert discr.norm(grad_v.T - exp_trans, np.inf) < tol
-    assert discr.norm(np.trace(grad_v) - exp_trace, np.inf) < tol
+
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
+    assert inf_norm(grad_v - exp_result) < tol
+    assert inf_norm(grad_v.T - exp_trans) < tol
+    assert inf_norm(np.trace(grad_v) - exp_trace) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -237,10 +242,13 @@ def test_species_mass_gradient(actx_factory, dim):
     from meshmode.dof_array import DOFArray
     assert type(grad_y[0, 0]) == DOFArray
 
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
     tol = 1e-11
     for idim in range(dim):
         ispec = 2*idim
         exact_grad = np.array([(ispec*(idim*dim+1))*(iidim+1)
                                 for iidim in range(dim)])
-        assert discr.norm(grad_y[ispec] - exact_grad, np.inf) < tol
-        assert discr.norm(grad_y[ispec+1] + exact_grad, np.inf) < tol
+        assert inf_norm(grad_y[ispec] - exact_grad) < tol
+        assert inf_norm(grad_y[ispec+1] + exact_grad) < tol
