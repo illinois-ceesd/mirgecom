@@ -75,8 +75,7 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
-                                logmgr=None, eos=None, dim=None,
-                                reference_state=None):
+                                logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -133,21 +132,15 @@ def _advance_state_stepper_func(rhs, timestepper,
             logmgr.tick_before()
 
         if pre_step_callback is not None:
-            state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt,
-                                          reference_state=reference_state)
+            state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if reference_state is not None:
-            reference_state = state
-
-        state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs,
-                            reference_state=reference_state)
+        state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
 
         t += dt
         istep += 1
 
         if post_step_callback is not None:
-            state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt,
-                                           reference_state=reference_state)
+            state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
         if logmgr:
             set_dt(logmgr, dt)
@@ -283,8 +276,7 @@ def advance_state(rhs, timestepper, state, t_final,
                   t=0.0, istep=0, dt=0,
                   pre_step_callback=None,
                   post_step_callback=None,
-                  logmgr=None, eos=None, dim=None,
-                  reference_state=None):
+                  logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -367,8 +359,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                reference_state=reference_state
+                istep=istep, logmgr=logmgr, eos=eos, dim=dim
             )
 
     return current_step, current_t, current_state
