@@ -105,10 +105,8 @@ if found:
         (SSPRK22MethodBuilder("y"), 2),
         (SSPRK33MethodBuilder("y"), 3),
         ])
-    def test_leapgen_integration_order(actx_factory, method, method_order):
+    def test_leapgen_integration_order(method, method_order):
         """Test that time integrators have correct order."""
-        actx = actx_factory()
-
         def exact_soln(t):
             return np.exp(-t)
 
@@ -130,7 +128,7 @@ if found:
             (step, t, state) = \
                 advance_state(rhs=rhs, timestepper=method, dt=dt,
                               state=state, t=t, t_final=t_final,
-                              component_id="y", actx=actx)
+                              component_id="y")
 
             error = np.abs(state - exact_soln(t)) / exact_soln(t)
             integrator_eoc.add_data_point(dt, error)
