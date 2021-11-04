@@ -138,8 +138,8 @@ class GasEOS(metaclass=ABCMeta):
                        reference_state: ConservedVars = None) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
-            pressure=self.pressure(cv),
             temperature=self.temperature(cv, reference_state),
+            pressure=self.pressure(cv),
         )
 
 

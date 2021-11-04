@@ -550,10 +550,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state, reference_state):
         current_dv = eos.dependent_vars(state, reference_state)
-        if debug:
-            print(f"{current_dv=}")
         return (euler_operator(discr, cv=state, time=t,
-                               boundaries=boundaries, eos=eos)
+                               boundaries=boundaries, eos=eos,
+                               dv=current_dv)
                 + eos.get_species_source_terms(state))
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,

@@ -45,7 +45,7 @@ from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(discr, eos, cv):
+def inviscid_flux(discr, pressure, cv):
     r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
@@ -59,16 +59,16 @@ def inviscid_flux(discr, eos, cv):
         :class:`mirgecom.fluid.ConservedVars` for more information about
         how the fluxes are represented.
     """
-    dim = cv.dim
-    p = eos.pressure(cv)
-
-    mom = cv.momentum
-
-    return make_conserved(
-        dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
-        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-        species_mass=(  # reshaped: (nspecies, dim)
-            (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+    mass_flux = cv.momentum
+    energy_flux = cv.velocity * (cv.energy + pressure)
+    mom_flux = (
+        cv.mass * np.outer(cv.velocity, cv.velocity) + np.eye(cv.dim)*pressure
+    )
+    species_mass_flux = (  # reshaped: (nspeceis, dim)
+        cv.velocity * cv.species_mass.reshape(-1, 1)
+    )
+    return make_conserved(cv.dim, mass=mass_flux, energy=energy_flux,
+                          momentum=mom_flux, species_mass=species_mass_flux)
 
 
 def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
@@ -104,10 +104,11 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         "all_faces"; remaining instead on the boundary restriction.
     """
     actx = cv_tpair.int.array_context
-
+    p_int = eos.pressure(cv_tpair.int)
+    p_ext = eos.pressure(cv_tpair.ext)
     flux_tpair = TracePair(cv_tpair.dd,
-                           interior=inviscid_flux(discr, eos, cv_tpair.int),
-                           exterior=inviscid_flux(discr, eos, cv_tpair.ext))
+                           interior=inviscid_flux(discr, p_int, cv_tpair.int),
+                           exterior=inviscid_flux(discr, p_ext, cv_tpair.ext))
 
     # This calculates the local maximum eigenvalue of the flux Jacobian
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
