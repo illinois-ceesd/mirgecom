@@ -270,7 +270,7 @@ def allsync(local_values, comm=None, op=None):
 def check_range_local(discr, dd, field, min_value, max_value):
     """Check for any negative values."""
     actx = field.array_context
-    return (
+    return bool(  # Convert to bool because np.bool_ is not a Number
         actx.to_numpy(op.nodal_min_loc(discr, dd, field)) < min_value
         or actx.to_numpy(op.nodal_max_loc(discr, dd, field)) > max_value
     )
@@ -280,7 +280,8 @@ def check_naninf_local(discr, dd, field):
     """Check for any NANs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
-    return not np.isfinite(s)
+    return bool(  # Convert to bool because np.bool_ is not a Number
+        not np.isfinite(s))
 
 
 def compare_fluid_solutions(discr, red_state, blue_state):
