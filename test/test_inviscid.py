@@ -120,7 +120,8 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    flux = inviscid_flux(discr, eos, cv)
+    pressure = eos.pressure(cv)
+    flux = inviscid_flux(discr, pressure, cv)
     flux_resid = flux - expected_flux
 
     for i in range(numeq, dim):
@@ -174,7 +175,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
-    flux = inviscid_flux(discr, eos, cv)
+    flux = inviscid_flux(discr, p, cv)
 
     def inf_norm(x):
         return actx.to_numpy(discr.norm(x, np.inf))
@@ -239,7 +240,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             return actx.to_numpy(discr.norm(x, np.inf))
 
         assert inf_norm(p - p_exact) < tolerance
-        flux = inviscid_flux(discr, eos, cv)
+        flux = inviscid_flux(discr, p, cv)
         logger.info(f"{dim}d flux = {flux}")
         vel_exact = mom / mass
 
