@@ -133,7 +133,8 @@ def _advance_state_stepper_func(rhs, timestepper,
             logmgr.tick_before()
 
         if pre_step_callback is not None:
-            state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+            state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt,
+                                          reference_state=reference_state)
 
         if reference_state is not None:
             reference_state = state
@@ -145,7 +146,8 @@ def _advance_state_stepper_func(rhs, timestepper,
         istep += 1
 
         if post_step_callback is not None:
-            state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
+            state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt,
+                                           reference_state=reference_state)
 
         if logmgr:
             set_dt(logmgr, dt)
