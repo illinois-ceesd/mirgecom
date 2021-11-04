@@ -325,8 +325,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # and instead of writing the *current* running temperature to the restart file,
     # we could write the *temperature_seed*.  That could fix up the non-deterministic
     # restart issue.
-    temperature_seed = eos.temperature(current_state,
-                                       temperature_seed=temperature_seed)
+    current_dv = compute_dependent_vars(current_state,
+                                        temperature_seed=temperature_seed)
+    temperature_seed = current_dv.temperature
 
     # import ipdb
     # ipdb.set_trace()
@@ -501,7 +502,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                           comm=comm, op=MPI.MAX)
         return ts_field, cfl, min(t_remaining, dt)
 
-    def my_pre_step(step, t, dt, state, reference_state):
+    def my_pre_step(step, t, dt, state):
+        cv = state[0]
         try:
             dv = None
 
@@ -516,28 +518,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 if dv is None:
-                    dv = compute_dependent_vars(state)
-                health_errors = global_reduce(my_health_check(state, dv), op="lor")
+                    dv = compute_dependent_vars(cv)
+                health_errors = global_reduce(my_health_check(cv, dv), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=cv)
 
             if do_status:
                 if dv is None:
-                    dv = compute_dependent_vars(state)
+                    dv = compute_dependent_vars(cv)
                 my_write_status(dt=dt, cfl=cfl, dv=dv)
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+                my_write_restart(step=step, t=t, state=cv)
 
             if do_viz:
-                production_rates, = compute_production_rates(state)
+                production_rates, = compute_production_rates(cv)
                 if dv is None:
-                    dv = compute_dependent_vars(state)
-                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+                    dv = compute_dependent_vars(cv)
+                my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field, cfl=cfl)
 
@@ -550,27 +552,29 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
-    def my_post_step(step, t, dt, state, reference_state):
-        ref_dv = compute_dependent_vars(reference_state)
-        new_dv = compute_dependent_vars(state,  # noqa
-                                        temperature_seed=ref_dv.temperature)
+    def my_post_step(step, t, dt, state):
+        cv = state[0]
+        new_dv = compute_dependent_vars(cv,  # noqa
+                                       temperature_seed=state[1])
+
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, dim, cv, eos)
             logmgr.tick_after()
-        return state, dt
+        return make_obj_array([cv, new_dv.temperature]), dt
 
-    def my_rhs(t, state, reference_state):
-        ref_dv = eos.dependent_vars(reference_state)
-        current_dv = eos.dependent_vars(state,
-                                        temperature_seed=ref_dv.temperature)
+    def my_rhs(t, state):
+        cv = state[0]
+        current_dv = eos.dependent_vars(cv,
+                                        temperature_seed=state[1])
 
-        return (euler_operator(discr, cv=state, time=t,
+        return make_obj_array([euler_operator(discr, cv=cv, time=t,
                                boundaries=boundaries, eos=eos,
                                dv=current_dv)
-                + eos.get_species_source_terms(state))
+                               + eos.get_species_source_terms(cv),
+                               0*state[1]])
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
@@ -579,21 +583,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final,
-                      reference_state=current_state)
+                      state=make_obj_array([current_state, temperature_seed]),
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_dv = compute_dependent_vars(current_state)
-    final_dm, = compute_production_rates(current_state)
+    final_cv = current_state[0]
+    final_dv = compute_dependent_vars(final_cv)
+    final_dm, = compute_production_rates(final_cv)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
-                                        state=current_state)
-    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+                                        state=final_cv)
+    my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
                  dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
     my_write_status(dt=dt, cfl=cfl, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_restart(step=current_step, t=current_t, state=final_cv)
 
     if logmgr:
         logmgr.close()
