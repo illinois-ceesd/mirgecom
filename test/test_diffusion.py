@@ -301,7 +301,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         expected_u = sym_eval(p.sym_u, t)
 
-        rel_linf_err = (
+        rel_linf_err = actx.to_numpy(
             discr.norm(u - expected_u, np.inf)
             / discr.norm(expected_u, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
@@ -385,7 +385,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
                 ("rhs", rhs),
                 ])
 
-    linf_err = discr.norm(rhs, np.inf)
+    linf_err = actx.to_numpy(discr.norm(rhs, np.inf))
     assert(linf_err < 1e-11)
 
     # Now check stability
@@ -415,7 +415,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
                 ("u_steady", u_steady),
                 ])
 
-    linf_diff = discr.norm(u - u_steady, np.inf)
+    linf_diff = actx.to_numpy(discr.norm(u - u_steady, np.inf))
     assert linf_diff < 0.1
 
 
@@ -536,7 +536,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     assert isinstance(diffusion_u1, DOFArray)
 
     expected_diffusion_u1 = sym_eval(sym_diffusion_u1)
-    rel_linf_err = (
+    rel_linf_err = actx.to_numpy(
         discr.norm(diffusion_u1 - expected_diffusion_u1, np.inf)
         / discr.norm(expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
@@ -556,7 +556,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         sym_eval(sym_diffusion_u1),
         sym_eval(sym_diffusion_u2)
     ])
-    rel_linf_err = (
+    rel_linf_err = actx.to_numpy(
         discr.norm(diffusion_u_vector - expected_diffusion_u_vector, np.inf)
         / discr.norm(expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5

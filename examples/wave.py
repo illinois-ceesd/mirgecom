@@ -106,9 +106,9 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
-    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+    nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
     from grudge.op import nodal_min
-    dt = nodal_min(discr, "vol", dt)
+    dt = actx.to_numpy(current_cfl * nodal_min(discr, "vol", nodal_dt))[()]
 
     print("%d elements" % mesh.nelements)
 
@@ -152,7 +152,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, discr.norm(fields[0], np.inf))
+            print(istep, t, actx.to_numpy(discr.norm(fields[0], np.inf)))
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),

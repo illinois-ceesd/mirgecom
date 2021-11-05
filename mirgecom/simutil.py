@@ -119,10 +119,10 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     if constant_cfl:
         from mirgecom.viscous import get_viscous_timestep
         from grudge.op import nodal_min
-        mydt = cfl * nodal_min(
-            discr, "vol",
-            get_viscous_timestep(discr=discr, eos=eos, cv=state)
-        )
+        mydt = state.array_context.to_numpy(
+            cfl * nodal_min(
+                discr, "vol",
+                get_viscous_timestep(discr=discr, eos=eos, cv=state)))[()]
     return min(t_remaining, mydt)
 
 
@@ -269,9 +269,10 @@ def allsync(local_values, comm=None, op=None):
 
 def check_range_local(discr, dd, field, min_value, max_value):
     """Check for any negative values."""
+    actx = field.array_context
     return (
-        op.nodal_min_loc(discr, dd, field) < min_value
-        or op.nodal_max_loc(discr, dd, field) > max_value
+        actx.to_numpy(op.nodal_min_loc(discr, dd, field)) < min_value
+        or actx.to_numpy(op.nodal_max_loc(discr, dd, field)) > max_value
     )
 
 
@@ -288,8 +289,9 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    actx = red_state.array_context
     resid = red_state - blue_state
-    return [discr.norm(v, np.inf) for v in resid.join()]
+    return [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
