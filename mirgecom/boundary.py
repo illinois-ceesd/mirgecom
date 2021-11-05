@@ -56,7 +56,7 @@ class FluidBoundary(metaclass=ABCMeta):
 
     @abstractmethod
     def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
+        """Get the inviscid boundary flux for the divergence operator."""
 
 
 class FluidBC(FluidBoundary):
@@ -68,7 +68,7 @@ class FluidBC(FluidBoundary):
 
     @abstractmethod
     def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid part of the physical flux across the boundary *btag*."""
+        """Get the inviscid boundary flux for the divergence operator."""
 
     @abstractmethod
     def boundary_pair(self, discr, btag, cv, eos, **kwargs):
@@ -110,7 +110,7 @@ class PrescribedInviscidBoundary(FluidBC):
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
     def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
+        """Get the inviscid boundary flux for the divergence operator."""
         if self._inviscid_bnd_flux_func:
             actx = cv.array_context
             boundary_discr = discr.discr_from_dd(btag)
