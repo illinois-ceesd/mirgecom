@@ -92,7 +92,7 @@ class GasEOS(metaclass=ABCMeta):
 
     @abstractmethod
     def temperature(self, cv: ConservedVars,
-                    reference_state: ConservedVars = None):
+                    temperature_seed: DOFArray = None):
         """Get the gas temperature."""
 
     @abstractmethod
