@@ -39,8 +39,15 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import (
+    MPILikeDistributedContext,
+    NoMPIDistributedContext,
+    mpi_entry_point
+)
 from mirgecom.integrators import rk4_step
+from mirgecom.simutil import (
+    generate_and_distribute_mesh
+)
 from mirgecom.wave import wave_operator
 
 import pyopencl.tools as cl_tools
@@ -71,20 +78,21 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-@mpi_entry_point
-def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
-         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
+def main(dist_ctx=None, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+         restart_step=None, use_profiling=False, use_logmgr=False,
+         actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    num_parts = comm.Get_size()
+    if dist_ctx is None:
+        dist_ctx = NoMPIDistributedContext()
+    assert isinstance(dist_ctx, MPILikeDistributedContext)
+
+    rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
+        filename="wave-mpi.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -97,29 +105,17 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
-
-        from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-        mesh_dist = MPIMeshDistributor(comm)
-
         dim = 2
         nel_1d = 16
 
-        if mesh_dist.is_mananger_rank():
+        def generate_mesh():
             from meshmode.mesh.generation import generate_regular_rect_mesh
-            mesh = generate_regular_rect_mesh(
+            return generate_regular_rect_mesh(
                 a=(-0.5,)*dim, b=(0.5,)*dim,
                 nelements_per_axis=(nel_1d,)*dim)
 
-            print("%d elements" % mesh.nelements)
-            part_per_element = get_partition_by_pymetis(mesh, num_parts)
-            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-
-            del mesh
-
-        else:
-            local_mesh = mesh_dist.receive_mesh_part()
-
-        fields = None
+        local_mesh, global_nelements = generate_and_distribute_mesh(
+            dist_ctx.comm, generate_mesh)
 
     else:
         from mirgecom.restart import read_restart_data
@@ -128,12 +124,12 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         )
         local_mesh = restart_data["local_mesh"]
         nel_1d = restart_data["nel_1d"]
-        assert comm.Get_size() == restart_data["num_parts"]
+        assert restart_data["num_parts"] == dist_ctx.size
 
     order = 3
 
     discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                                  mpi_communicator=comm)
+                                  mpi_communicator=dist_ctx.comm)
 
     current_cfl = 0.485
     wave_speed = 1.0
@@ -162,7 +158,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         old_order = restart_data["order"]
         if old_order != order:
             old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
-                                              mpi_communicator=comm)
+                                              mpi_communicator=dist_ctx.comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
@@ -211,15 +207,15 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
                     "t": t,
                     "step": istep,
                     "nel_1d": nel_1d,
-                    "num_parts": num_parts},
+                    "num_parts": dist_ctx.size},
                 filename=snapshot_pattern.format(step=istep, rank=rank),
-                comm=comm
+                comm=dist_ctx.comm
             )
 
         if istep % 10 == 0:
             print(istep, t, actx.to_numpy(discr.norm(fields[0])))
             vis.write_parallel_vtk_file(
-                comm,
+                dist_ctx.comm,
                 "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
                 [
                     ("u", fields[0]),
@@ -249,13 +245,20 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser(description="Wave (MPI version)")
+    parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     args = parser.parse_args()
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=PytatoPyOpenCLArrayContext if args.lazy
-         else PyOpenCLArrayContext)
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
+
+    main_func(
+        use_profiling=use_profiling, use_logmgr=use_logging,
+        actx_class=PytatoPyOpenCLArrayContext if args.lazy
+        else PyOpenCLArrayContext)
 
 
 # vim: foldmethod=marker

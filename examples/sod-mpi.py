@@ -46,7 +46,11 @@ from mirgecom.simutil import (
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import (
+    MPILikeDistributedContext,
+    NoMPIDistributedContext,
+    mpi_entry_point
+)
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -73,26 +77,26 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-@mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, rst_filename=None,
+         actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
     if casename is None:
         casename = "mirgecom"
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    num_parts = comm.Get_size()
+    if dist_ctx is None:
+        dist_ctx = NoMPIDistributedContext()
+    assert isinstance(dist_ctx, MPILikeDistributedContext)
+
+    rank = dist_ctx.rank
 
     from mirgecom.simutil import global_reduce as _global_reduce
-    global_reduce = partial(_global_reduce, comm=comm)
+    global_reduce = partial(_global_reduce, comm=dist_ctx.comm)
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+        filename=f"{casename}.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
 
     if use_profiling:
         queue = cl.CommandQueue(
@@ -135,7 +139,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["num_parts"] == num_parts
+        assert restart_data["num_parts"] == dist_ctx.size
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
         nel_1d = 24
@@ -143,13 +147,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         box_ur = 5.0
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+        local_mesh, global_nelements = generate_and_distribute_mesh(dist_ctx.comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
     order = 1
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh, order=order, mpi_communicator=dist_ctx.comm
     )
     nodes = thaw(actx, discr.nodes())
 
@@ -235,10 +239,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 "step": step,
                 "order": order,
                 "global_nelements": global_nelements,
-                "num_parts": num_parts
+                "num_parts": dist_ctx.size
             }
             from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_fname, comm)
+            write_restart_file(actx, rst_data, rst_fname, dist_ctx.comm)
 
     def my_health_check(pressure, component_errors):
         health_error = False
@@ -361,6 +365,7 @@ if __name__ == "__main__":
     import argparse
     casename = "sod-shock"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -372,6 +377,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -380,6 +386,11 @@ if __name__ == "__main__":
         actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
@@ -387,7 +398,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main_func(
+        use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+        casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

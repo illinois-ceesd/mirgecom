@@ -302,7 +302,8 @@ def generate_and_distribute_mesh(comm, generate_mesh):
 
     Generate the mesh with the user-supplied mesh generation function
     *generate_mesh*, partition the mesh, and distribute it to every
-    rank in the provided MPI communicator *comm*.
+    rank in the provided MPI communicator *comm*. If *comm* is *None*,
+    generates the full mesh locally.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
@@ -322,26 +323,32 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     global_nelements : :class:`int`
         The number of elements in the serial mesh
     """
-    from meshmode.distributed import (
-        MPIMeshDistributor,
-        get_partition_by_pymetis,
-    )
-    num_parts = comm.Get_size()
-    mesh_dist = MPIMeshDistributor(comm)
-    global_nelements = 0
+    if comm is not None:
+        from meshmode.distributed import (
+            MPIMeshDistributor,
+            get_partition_by_pymetis,
+        )
+        num_parts = comm.Get_size()
+        mesh_dist = MPIMeshDistributor(comm)
+        global_nelements = 0
 
-    if mesh_dist.is_mananger_rank():
+        if mesh_dist.is_mananger_rank():
 
-        mesh = generate_mesh()
+            mesh = generate_mesh()
 
-        global_nelements = mesh.nelements
+            global_nelements = mesh.nelements
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-        del mesh
+            part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+            del mesh
+
+        else:
+            # FIXME: global_nelements doesn't get set here
+            local_mesh = mesh_dist.receive_mesh_part()
 
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        local_mesh = generate_mesh()
+        global_nelements = local_mesh.nelements
 
     return local_mesh, global_nelements
 
