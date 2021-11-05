@@ -101,7 +101,7 @@ class FluidBC(FluidBoundary):
         raise NotImplementedError()
 
     def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid part of the physical flux across the boundary *btag*."""
+        """Get the inviscid boundary flux for the divergence operator."""
         raise NotImplementedError()
 
     def viscous_divergence_flux(self, discr, btag, cv, grad_cv, grad_t, eos,
@@ -171,7 +171,7 @@ class PrescribedInviscidBoundary(FluidBC):
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
     def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid flux across the boundary faces."""
+        """Get the inviscid boundary flux for the divergence operator."""
         if self._inviscid_bnd_flux_func:
             actx = cv.array_context
             boundary_discr = discr.discr_from_dd(btag)
