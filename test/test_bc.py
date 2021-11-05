@@ -85,8 +85,9 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
-            from functools import partial
-            bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+
+            def bnd_norm(vec):
+                return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
             bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
                                           eos=eos, cv=uniform_state)
@@ -137,8 +138,8 @@ def test_slipwall_flux(actx_factory, dim, order):
         nhat = thaw(actx, discr.normal(BTAG_ALL))
         h = 1.0 / nel_1d
 
-        from functools import partial
-        bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+        def bnd_norm(vec):
+            return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
