@@ -359,7 +359,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
+                istep=istep, logmgr=logmgr, eos=eos, dim=dim
             )
 
     return current_step, current_t, current_state

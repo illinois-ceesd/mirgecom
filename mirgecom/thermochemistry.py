@@ -1,6 +1,7 @@
 r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`..
 
 .. autofunction:: make_pyrometheus_mechanism_class
+.. autofunction:: make_pyrometheus_mechanism
 """
 
 __copyright__ = """
@@ -66,7 +67,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
             return concs
 
         # This is the temperature update for *get_temperature*
-        def _get_temperature_update_energy(self, e_in, t_in, y):
+        def get_temperature_update_energy(self, e_in, t_in, y):
             pv_func = self.get_mixture_specific_heat_cv_mass
             he_func = self.get_mixture_internal_energy_mass
             return (e_in - he_func(t_in, y)) / pv_func(t_in, y)
@@ -96,9 +97,9 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
                 The mixture temperature after a fixed number of Newton iterations.
             """
             num_iter = temperature_niter
-            t_i = 1.0*temperature_guess
+            t_i = temperature_guess
             for _ in range(num_iter):
-                t_i = t_i + self._get_temperature_update_energy(
+                t_i = t_i + self.get_temperature_update_energy(
                     energy, t_i, species_mass_fractions
                 )
             return t_i
@@ -106,7 +107,7 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
     return PyroWrapper
 
 
-def make_pyrometheus_mechanism_class(cantera_soln):
+def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5):
     """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism class.
 
     This routine creates and returns an instance of a :mod:`pyrometheus`
@@ -124,4 +125,27 @@ def make_pyrometheus_mechanism_class(cantera_soln):
     -------
     :mod:`pyrometheus` ThermoChem class
     """
-    return _pyro_thermochem_wrapper_class(cantera_soln)
+    return _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter)
+
+
+def make_pyrometheus_mechanism(actx, cantera_soln):
+    """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism.
+
+    This routine creates and returns an instance of a :mod:`pyrometheus`
+    thermochemical mechanism for use in a MIRGE-Com fluid EOS.
+
+    Parameters
+    ----------
+    actx: :class:`arraycontext.ArrayContext`
+        Array context from which to get the numpy-like namespace for
+        :mod:`pyrometheus`
+    cantera_soln:
+        Cantera Solution for the thermochemical mechanism to be used
+
+    Returns
+    -------
+    :mod:`pyrometheus` ThermoChem class
+    """
+    from warnings import warn
+    warn("make_pyrometheus_mechanism is deprecated and will disappear in Q1/2022")
+    return _pyro_thermochem_wrapper_class(cantera_soln)(actx.np)

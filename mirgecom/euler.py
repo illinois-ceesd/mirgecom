@@ -66,7 +66,8 @@ from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, eos, boundaries, cv, time=0.0,
+                   dv=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -100,7 +101,10 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
+    if dv is None:
+        dv = eos.dependent_vars(cv)
+
+    inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv)
     inviscid_flux_bnd = (
         inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
         + sum(inviscid_facial_flux(
@@ -108,8 +112,8 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
                 part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
                 exterior=make_conserved(discr.dim, q=part_tpair.ext)))
               for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=time)
+        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
+                                                        eos=eos, time=time)
               for btag in boundaries)
     )
     q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
