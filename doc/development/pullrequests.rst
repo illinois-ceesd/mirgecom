@@ -286,11 +286,11 @@ with this process.  If the PR is accepted for merging to main, then mirgecom
 developers will update the production capabilities to be compatible with
 the changes before merging.
 
-   .. important::
+ .. important::
 
-      Any production environment customizations must be backed out before
-      merging the PR development to main. Never merge a PR development with
-      production environment customizations in-place.
+    Any production environment customizations must be backed out before
+    merging the PR development to main. Never merge a PR development with
+    production environment customizations in-place.
 
 Merging a pull request
 ----------------------
