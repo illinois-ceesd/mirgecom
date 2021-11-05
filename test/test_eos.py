@@ -491,8 +491,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism
-    pyro_obj = make_pyrometheus_mechanism(actx, cantera_soln)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
