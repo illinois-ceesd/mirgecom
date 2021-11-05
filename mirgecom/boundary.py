@@ -51,23 +51,23 @@ from abc import ABCMeta, abstractmethod
 class FluidBoundary(metaclass=ABCMeta):
     r"""Abstract interface to fluid boundary treatment.
 
-    .. automethod:: inviscid_boundary_flux
+    .. automethod:: inviscid_divergence_flux
     """
 
     @abstractmethod
-    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid flux across the boundary faces."""
 
 
 class FluidBC(FluidBoundary):
     r"""Abstract interface to boundary conditions.
 
-    .. automethod:: inviscid_boundary_flux
+    .. automethod:: inviscid_divergence_flux
     .. automethod:: boundary_pair
     """
 
     @abstractmethod
-    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid part of the physical flux across the boundary *btag*."""
 
     @abstractmethod
@@ -80,15 +80,15 @@ class PrescribedInviscidBoundary(FluidBC):
 
     .. automethod:: __init__
     .. automethod:: boundary_pair
-    .. automethod:: inviscid_boundary_flux
+    .. automethod:: inviscid_divergence_flux
     """
 
-    def __init__(self, inviscid_boundary_flux_func=None, boundary_pair_func=None,
+    def __init__(self, inviscid_divergence_flux_func=None, boundary_pair_func=None,
                  inviscid_facial_flux_func=None, fluid_solution_func=None,
                  fluid_solution_flux_func=None):
         """Initialize the PrescribedInviscidBoundary and methods."""
         self._bnd_pair_func = boundary_pair_func
-        self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
+        self._inviscid_bnd_flux_func = inviscid_divergence_flux_func
         self._inviscid_facial_flux_func = inviscid_facial_flux_func
         if not self._inviscid_facial_flux_func:
             self._inviscid_facial_flux_func = inviscid_facial_flux
@@ -109,7 +109,7 @@ class PrescribedInviscidBoundary(FluidBC):
         ext_soln = self._fluid_soln_func(nodes, cv=int_soln, normal=nhat, **kwargs)
         return TracePair(btag, interior=int_soln, exterior=ext_soln)
 
-    def inviscid_boundary_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the inviscid flux across the boundary faces."""
         if self._inviscid_bnd_flux_func:
             actx = cv.array_context
