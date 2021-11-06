@@ -38,13 +38,13 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import (
-    PrescribedInviscidBoundary,
+    PrescribedFluidBoundary,
     DummyBoundary
 )
 from mirgecom.eos import IdealSingleGas
@@ -221,13 +221,20 @@ def test_vortex_rhs(actx_factory, order):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
+
+        def _vortex_boundary(discr, btag, eos, cv_minus, dv_minus, time=0, **kwargs):
+            actx = cv_minus.mass.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return vortex(x_vec=nodes, eos=eos, time=time, **kwargs)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=vortex)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_vortex_boundary)
         }
 
         inviscid_rhs = euler_operator(
@@ -277,16 +284,24 @@ def test_lump_rhs(actx_factory, dim, order):
         logger.info(f"Number of elements: {mesh.nelements}")
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
+
+        def _lump_boundary(discr, btag, eos, cv_minus, dv_minus, time=0):
+            actx = cv_minus.mass.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return lump(x_vec=nodes, eos=eos, cv=cv_minus, time=time)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_lump_boundary)
         }
+
         inviscid_rhs = euler_operator(
             discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
             time=0.0
@@ -342,7 +357,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         logger.info(f"Number of elements: {mesh.nelements}")
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -357,8 +372,15 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(nodes)
+
+        def _my_boundary(discr, btag, eos, cv_minus, dv_minus, time=0, **kwargs):
+            actx = cv_minus.mass.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return lump(x_vec=nodes, eos=eos, time=time, **kwargs)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_my_boundary)
         }
 
         inviscid_rhs = euler_operator(
@@ -416,7 +438,7 @@ def _euler_flow_stepper(actx, parameters):
     istep = 0
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     cv = initializer(nodes)
     sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
@@ -549,9 +571,17 @@ def test_isentropic_vortex(actx_factory, order):
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
+
+        def _vortex_boundary(discr, btag, eos, cv_minus, dv_minus, time=0, **kwargs):
+            actx = cv_minus.mass.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return initializer(x_vec=nodes, eos=eos, time=time, **kwargs)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_vortex_boundary)
         }
+
         eos = IdealSingleGas()
         t = 0
         flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,
