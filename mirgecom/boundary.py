@@ -4,12 +4,11 @@ Boundary Treatment Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass FluidBoundary
-.. autoclass FluidBC
 
 Inviscid Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: PrescribedInviscidBoundary
+.. autoclass:: PrescribedFluidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
 """
@@ -43,7 +42,7 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-from mirgecom.inviscid import inviscid_facial_flux
+from mirgecom.inviscid import inviscid_facial_divergence_flux
 
 from abc import ABCMeta, abstractmethod
 
@@ -55,119 +54,83 @@ class FluidBoundary(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, eos, cv_minus, dv_minus,
+                                 **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
 
 
-class FluidBC(FluidBoundary):
-    r"""Abstract interface to boundary conditions.
-
-    .. automethod:: inviscid_divergence_flux
-    .. automethod:: boundary_pair
-    """
-
-    @abstractmethod
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid boundary flux for the divergence operator."""
-
-    @abstractmethod
-    def boundary_pair(self, discr, btag, cv, eos, **kwargs):
-        """Get the interior and exterior solution (*u*) on the boundary."""
-
-
-class PrescribedInviscidBoundary(FluidBC):
+class PrescribedFluidBoundary(FluidBoundary):
     r"""Abstract interface to a prescribed fluid boundary treatment.
 
     .. automethod:: __init__
-    .. automethod:: boundary_pair
     .. automethod:: inviscid_divergence_flux
     """
 
-    def __init__(self, inviscid_divergence_flux_func=None, boundary_pair_func=None,
-                 inviscid_facial_flux_func=None, fluid_solution_func=None,
-                 fluid_solution_flux_func=None):
-        """Initialize the PrescribedInviscidBoundary and methods."""
-        self._bnd_pair_func = boundary_pair_func
-        self._inviscid_bnd_flux_func = inviscid_divergence_flux_func
-        self._inviscid_facial_flux_func = inviscid_facial_flux_func
-        if not self._inviscid_facial_flux_func:
-            self._inviscid_facial_flux_func = inviscid_facial_flux
-        self._fluid_soln_func = fluid_solution_func
-        self._fluid_soln_flux_func = fluid_solution_flux_func
+    def __init__(self,
+                 # returns the flux to be used in div op (prescribed flux)
+                 inviscid_boundary_flux_func=None,
+                 # returns CV+, to be used in num flux func (prescribe soln)
+                 boundary_cv_func=None,
+                 # returns the DV+, to be used with CV+
+                 boundary_dv_func=None,
+                 # Numerical flux func given CV(+/-)
+                 inviscid_facial_flux_func=None):
+        """Initialize the PrescribedFluidBoundary and methods."""
+        self._bnd_cv_func = boundary_cv_func
+        self._bnd_dv_func = boundary_dv_func
+        self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
+        self._inviscid_div_flux_func = inviscid_facial_flux_func
 
-    def boundary_pair(self, discr, btag, cv, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
-        if self._bnd_pair_func:
-            return self._bnd_pair_func(discr, cv=cv, btag=btag, **kwargs)
-        if not self._fluid_soln_func:
-            raise NotImplementedError()
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        int_soln = discr.project("vol", btag, cv)
-        ext_soln = self._fluid_soln_func(nodes, cv=int_soln, normal=nhat, **kwargs)
-        return TracePair(btag, interior=int_soln, exterior=ext_soln)
+        if not self._inviscid_bnd_flux_func and not self._bnd_cv_func:
+            from warnings import warn
+            warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
+        if not self._inviscid_div_flux_func:
+            self._inviscid_div_flux_func = inviscid_facial_divergence_flux
+        if not self._bnd_cv_func:
+            self._bnd_cv_func = self._cv_func
+        if not self._bnd_dv_func:
+            self._bnd_dv_func = self._dv_func
+
+    def _cv_func(self, discr, btag, eos, cv_minus, dv_minus):
+        return cv_minus
+
+    def _dv_func(self, discr, btag, eos, cv_pair, dv_minus):
+        return eos.dependent_vars(cv_pair.ext, dv_minus.temperature)
+
+    def inviscid_divergence_flux(self, discr, btag, eos, cv_minus, dv_minus,
+                                 **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
+        # This one is when the user specified a function that directly
+        # prescribes the flux components at the boundary
         if self._inviscid_bnd_flux_func:
-            actx = cv.array_context
-            boundary_discr = discr.discr_from_dd(btag)
-            nodes = thaw(actx, boundary_discr.nodes())
-            nhat = thaw(actx, discr.normal(btag))
-            int_soln = discr.project("vol", btag, cv)
-            return self._inviscid_bnd_flux_func(nodes, normal=nhat,
-                                                cv=int_soln, eos=eos, **kwargs)
-        bnd_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
-        return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
+            return self._inviscid_bnd_flux_func(discr, btag, eos, cv_minus,
+                                                dv_minus, **kwargs)
+
+        # Otherwise, fall through to here, where the user specified instead
+        # a function that provides CV+ and DV+.
+        cv_pair = TracePair(
+            btag, interior=cv_minus,
+            exterior=self._bnd_cv_func(discr, btag, eos, cv_minus, dv_minus)
+        )
+        dv_pair = TracePair(
+            btag, interior=dv_minus,
+            exterior=self._bnd_dv_func(discr, btag, eos, cv_pair, dv_minus)
+        )
+
+        return self._inviscid_div_flux_func(discr, cv_tpair=cv_pair,
+                                            dv_tpair=dv_pair)
 
 
-class PrescribedBoundary(PrescribedInviscidBoundary):
-    """Boundary condition prescribes boundary soln with user-specified function.
-
-    .. automethod:: __init__
-    """
-
-    def __init__(self, userfunc):
-        """Set the boundary function.
-
-        Parameters
-        ----------
-        userfunc
-            User function that prescribes the solution values on the exterior
-            of the boundary. The given user function (*userfunc*) must take at
-            least one parameter that specifies the coordinates at which to prescribe
-            the solution.
-        """
-        from warnings import warn
-        warn("Do not use PrescribedBoundary; use PrescribedInvscidBoundary. This"
-             "boundary type will vanish by August 2021.", DeprecationWarning,
-             stacklevel=2)
-        PrescribedInviscidBoundary.__init__(self, fluid_solution_func=userfunc)
-
-
-class DummyBoundary(PrescribedInviscidBoundary):
-    """Boundary condition that assigns boundary-adjacent soln as the boundary solution.
-
-    .. automethod:: dummy_pair
-    """
+class DummyBoundary(PrescribedFluidBoundary):
+    """Boundary type that assigns boundary-adjacent soln as the boundary solution."""
 
     def __init__(self):
         """Initialize the DummyBoundary boundary type."""
-        PrescribedInviscidBoundary.__init__(self, boundary_pair_func=self.dummy_pair)
-
-    def dummy_pair(self, discr, cv, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
-        dir_soln = self.exterior_q(discr, cv, btag, **kwargs)
-        return TracePair(btag, interior=dir_soln, exterior=dir_soln)
-
-    def exterior_q(self, discr, cv, btag, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return discr.project("vol", btag, cv)
+        PrescribedFluidBoundary.__init__(self)
 
 
-class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
+class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
@@ -182,17 +145,17 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
     boundary conditions described in detail in [Poinsot_1992]_.
 
-    .. automethod:: adiabatic_slip_pair
+    .. automethod:: adiabatic_slip_cv
     """
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
-        PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_slip_pair
+        PrescribedFluidBoundary.__init__(
+            self, boundary_cv_func=self.adiabatic_slip_cv
         )
 
-    def adiabatic_slip_pair(self, discr, cv, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary.
+    def adiabatic_slip_cv(self, discr, btag, eos, cv_minus, dv_minus, **kwargs):
+        """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
         flux through the boundary, preserving mass, momentum (magnitude) and
@@ -204,23 +167,19 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
         """
         # Grab some boundary-relevant data
         dim = discr.dim
-        actx = cv.mass.array_context
+        actx = cv_minus.mass.array_context
 
         # Grab a unit normal to the boundary
         nhat = thaw(actx, discr.normal(btag))
-
-        # Get the interior/exterior solns
-        int_cv = discr.project("vol", btag, cv)
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to
         # induce an equal but opposite wall-normal (reflected) wave
         # preserving the tangential component
-        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
+        mom_normcomp = np.dot(cv_minus.momentum, nhat)  # wall-normal component
         wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
-        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
+        ext_mom = cv_minus.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
 
         # Form the external boundary solution with the new momentum
-        ext_cv = make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
-                                momentum=ext_mom, species_mass=int_cv.species_mass)
-        return TracePair(btag, interior=int_cv, exterior=ext_cv)
+        return make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
+                              momentum=ext_mom, species_mass=cv_minus.species_mass)
