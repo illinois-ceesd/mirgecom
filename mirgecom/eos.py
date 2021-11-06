@@ -61,6 +61,7 @@ class EOSDependentVars:
 
     temperature: np.ndarray
     pressure: np.ndarray
+    speed_of_sound: np.ndarray
 
 
 class GasEOS(metaclass=ABCMeta):
@@ -141,6 +142,7 @@ class GasEOS(metaclass=ABCMeta):
         return EOSDependentVars(
             temperature=self.temperature(cv, temperature_seed),
             pressure=self.pressure(cv),
+            speed_of_sound=self.sound_speed(cv)
         )
 
 
