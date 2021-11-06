@@ -4,7 +4,7 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_facial_flux
+.. autofunction:: inviscid_facial_divergence_flux
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -39,7 +39,6 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import thaw
-from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
 from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
@@ -71,7 +70,7 @@ def inviscid_flux(discr, pressure, cv):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
+def inviscid_facial_divergence_flux(discr, cv_tpair, dv_tpair, local=False):
     r"""Return the flux across a face given the solution on both sides *q_tpair*.
 
     This flux is currently hard-coded to use a Rusanov-type  local Lax-Friedrichs
@@ -90,12 +89,13 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
 
     Parameters
     ----------
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
+        Trace pair of :class:`mirgecom.fluid.ConservedVars` for the face upon
+        which the flux calculation is to be performed
 
-    q_tpair: :class:`grudge.trace_pair.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
+    dv_tpair: :class:`grudge.trace_pair.TracePair`
+        Trace pair of :class:`mirgecom.eos.EOSDependentVars` for the face upon
+        which the flux calculation is to be performed
 
     local: bool
         Indicates whether to skip projection of fluxes to "all_faces" or not. If
@@ -104,18 +104,16 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         "all_faces"; remaining instead on the boundary restriction.
     """
     actx = cv_tpair.int.array_context
-    p_int = eos.pressure(cv_tpair.int)
-    p_ext = eos.pressure(cv_tpair.ext)
     flux_tpair = TracePair(cv_tpair.dd,
-                           interior=inviscid_flux(discr, p_int, cv_tpair.int),
-                           exterior=inviscid_flux(discr, p_ext, cv_tpair.ext))
+                           interior=inviscid_flux(discr, dv_tpair.int.pressure,
+                                                  cv_tpair.int),
+                           exterior=inviscid_flux(discr, dv_tpair.ext.pressure,
+                                                  cv_tpair.ext))
 
     # This calculates the local maximum eigenvalue of the flux Jacobian
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
-    lam = actx.np.maximum(
-        compute_wavespeed(eos=eos, cv=cv_tpair.int),
-        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
-    )
+    lam = actx.np.maximum(dv_tpair.int.speed_of_sound + cv_tpair.int.speed,
+                          dv_tpair.ext.speed_of_sound + cv_tpair.ext.speed)
 
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
