@@ -244,6 +244,11 @@ class ConservedVars:
         return self.momentum / self.mass
 
     @property
+    def speed(self):
+        """Return the fluid velocity = momentum / mass."""
+        return self.mass.array_context.np.sqrt(np.dot(self.velocity, self.velocity))
+
+    @property
     def nspecies(self):
         """Return the number of mixture species."""
         return len(self.species_mass)
@@ -431,7 +436,7 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    y = cv.species_mass / cv.mass
+    y = cv.species_mass_fractions
     return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
 
 
@@ -446,6 +451,4 @@ def compute_wavespeed(eos, cv: ConservedVars):
 
     where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
     """
-    actx = cv.array_context
-    v = cv.velocity
-    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
+    return cv.speed + eos.sound_speed(cv)
