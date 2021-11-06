@@ -12,7 +12,7 @@
 # The default values result in an install of the Y1 nozzle driver and
 # Wyatt Hagen's isolator driver that work with current MIRGE-Com 
 # production branch: mirgecom@y1-production.
-PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@main:illinois-ceesd/drivers_flame1d@nodal-reduction-device-scalar"}
+PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y1-nozzle@parallel-lazy:illinois-ceesd/drivers_y2-isolator@main:illinois-ceesd/drivers_flame1d@main"}
 # Loop over the production drivers, clone them, and prepare for execution
 set -x
 OIFS="$IFS"
