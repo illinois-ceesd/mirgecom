@@ -34,7 +34,7 @@ from meshmode.array_context import (
     SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -50,7 +50,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedInviscidBoundary
+from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
@@ -151,7 +151,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     vis_timer = None
 
@@ -175,9 +175,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     initializer = SodShock1D(dim=dim)
     eos = IdealSingleGas()
+
+    def _shock_boundary(discr, btag, eos, cv_minus, dv_minus, time=0, **kwargs):
+        actx = cv_minus.mass.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return initializer(x_vec=nodes, eos=eos, **kwargs)
+
     boundaries = {
-        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_shock_boundary)
     }
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
