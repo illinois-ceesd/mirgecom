@@ -55,7 +55,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_divergence_flux
 )
 from grudge.eager import (
     interior_trace_pair,
@@ -64,6 +64,29 @@ from grudge.eager import (
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
+
+
+def _inviscid_facial_divergence_flux(discr, eos, cv_pairs, temperature_pairs):
+    return sum(
+        inviscid_facial_divergence_flux(
+            discr, cv_tpair=cv_pair,
+            dv_tpair=TracePair(
+                cv_pair.dd,
+                interior=eos.dependent_vars(cv_pair.int, temp_pair.int),
+                exterior=eos.dependent_vars(cv_pair.ext, temp_pair.ext)))
+        for cv_pair, temp_pair in zip(cv_pairs, temperature_pairs))
+
+
+def _get_dv_pair(discr, eos, cv_pair, temperature_pair=None):
+    if temperature_pair is not None:
+        return TracePair(
+            cv_pair.dd,
+            interior=eos.dependent_vars(cv_pair.int, temperature_pair.int),
+            exterior=eos.dependent_vars(cv_pair.ext, temperature_pair.ext)
+        )
+    return TracePair(cv_pair.dd,
+                     interior=eos.dependent_vars(cv_pair.int),
+                     exterior=eos.depdndent_vars(cv_pair.ext))
 
 
 def euler_operator(discr, eos, boundaries, cv, time=0.0,
@@ -101,31 +124,65 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0,
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
+    dim = discr.dim
     if dv is None:
         dv = eos.dependent_vars(cv)
 
     inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv)
-    inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
-                                                        eos=eos, time=time)
-              for btag in boundaries)
-    )
+
+    cv_comm_pairs = cross_rank_trace_pairs(discr, cv.join())
+    cv_part_pairs = [
+        TracePair(q_pair.dd,
+                  interior=make_conserved(dim, q=q_pair.int),
+                  exterior=make_conserved(dim, q=q_pair.ext))
+        for q_pair in cv_comm_pairs]
+    cv_int_pair = interior_trace_pair(discr, cv)
+
+    flux_pb = 0
+    flux_ib = 0
+    flux_db = 0
+    if cv.nspecies > 0:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        temp_part_pairs = cross_rank_trace_pairs(discr, dv.temperature)
+        flux_pb = _inviscid_facial_divergence_flux(discr, eos, cv_part_pairs,
+                                                   temp_part_pairs)
+
+        temp_int_pair = interior_trace_pair(discr, dv.temperature)
+        dv_int_pair = _get_dv_pair(discr, eos, cv_int_pair, temp_int_pair)
+        flux_ib = inviscid_facial_divergence_flux(discr, cv_int_pair, dv_int_pair)
+        # Domain boundaries
+        for btag in boundaries:
+            bnd = boundaries[btag]
+            cv_minus = discr.project("vol", btag, cv)
+            temp_seed = discr.project("vol", btag, dv.temperature)
+            dv_minus = eos.dependent_vars(cv_minus, temp_seed)
+            flux_db = (
+                flux_db + bnd.inviscid_divergence_flux(
+                    discr, btag, eos, cv_minus, dv_minus, time=time)
+            )
+    else:
+        for cv_pair in cv_part_pairs:
+            dv_pair = _get_dv_pair(discr, eos, cv_pair)
+            flux_pb = (flux_pb
+                       + inviscid_facial_divergence_flux(discr, cv_tpair=cv_pair,
+                                                         dv_tpair=dv_pair))
+
+        dv_pair = _get_dv_pair(discr, eos, cv_int_pair)
+        flux_ib = inviscid_facial_divergence_flux(discr, cv_tpair=cv_int_pair,
+                                                  dv_tpair=dv_pair)
+        flux_db = sum(
+            boundaries[btag].inviscid_divergence_flux(
+                discr, btag, eos, cv_minus=discr.project("vol", btag, cv),
+                dv_minus=discr.project("vol", btag, dv), time=time)
+            for btag in boundaries
+        )
+
+    inviscid_flux_bnd = flux_ib + flux_db + flux_pb
     q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
     return make_conserved(discr.dim, q=q)
-
-
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
 
 
 # By default, run unitless
