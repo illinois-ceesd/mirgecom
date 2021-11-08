@@ -89,23 +89,19 @@ class EvaluationMapper(ev.EvaluationMapper):
         else:
             raise ValueError("Unrecognized function '%s'" % expr.function)
 
-    def _sin(self, val):
+    @staticmethod
+    def _np_like_for(val):
         actx = get_container_context_recursively(val)
-        if actx is not None:
-            return actx.np.sin(val)
+        if actx is None:
+            return np
         else:
-            return np.sin(val)
+            return actx.np
+
+    def _sin(self, val):
+        return self._np_like_for(val).sin(val)
 
     def _cos(self, val):
-        actx = get_container_context_recursively(val)
-        if actx is not None:
-            return actx.np.cos(val)
-        else:
-            return np.cos(val)
+        return self._np_like_for(val).cos(val)
 
     def _exp(self, val):
-        actx = get_container_context_recursively(val)
-        if actx is not None:
-            return actx.np.exp(val)
-        else:
-            return np.exp(val)
+        return self._np_like_for(val).exp(val)
