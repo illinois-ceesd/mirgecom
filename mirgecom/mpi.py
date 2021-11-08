@@ -3,6 +3,7 @@
 .. autofunction:: mpi_entry_point
 .. autofunction:: make_mpi_context
 
+.. autoclass:: Op
 .. autoclass:: DistributedContext
 .. autoclass:: MPILikeDistributedContext
 .. autoclass:: NoMPIDistributedContext
@@ -37,6 +38,7 @@ from abc import ABCMeta, abstractmethod
 from functools import wraps
 import os
 import sys
+from enum import Enum, unique, auto
 import numpy as np
 
 from contextlib import contextmanager
@@ -111,6 +113,18 @@ def _check_gpu_oversubscription():
                       f" Duplicate PCIe IDs: {dup}.")
 
 
+@unique
+class Op(Enum):
+    """Distributed reduction operation identifier."""
+
+    MIN = auto()
+    MAX = auto()
+    SUM = auto()
+    PROD = auto()
+    LOR = auto()
+    LAND = auto()
+
+
 class DistributedContext(metaclass=ABCMeta):
     """
     A generic distributed environment.
@@ -165,9 +179,8 @@ class DistributedContext(metaclass=ABCMeta):
             The value or array of values on which the reduction operation is to be
             performed.
 
-        op: str
-            Reduction operation to be performed. Must be one of "min", "max", "sum",
-            "prod", "lor", or "land".
+        op: Op
+            Reduction operation to be performed.
 
         Returns
         -------
@@ -241,12 +254,12 @@ class NoMPIDistributedContext(MPILikeDistributedContext):
             return local_values
         else:
             op_to_numpy_func = {
-                "min": np.minimum,
-                "max": np.maximum,
-                "sum": np.add,
-                "prod": np.multiply,
-                "lor": np.logical_or,
-                "land": np.logical_and,
+                Op.MIN: np.minimum,
+                Op.MAX: np.maximum,
+                Op.SUM: np.add,
+                Op.PROD: np.multiply,
+                Op.LOR: np.logical_or,
+                Op.LAND: np.logical_and,
             }
             from functools import reduce
             return reduce(op_to_numpy_func[op], local_values)
@@ -294,12 +307,12 @@ class MPIDistributedContext(MPILikeDistributedContext):
     def allreduce(self, local_values, op):  # noqa: D102
         from mpi4py import MPI
         op_to_mpi_op = {
-            "min": MPI.MIN,
-            "max": MPI.MAX,
-            "sum": MPI.SUM,
-            "prod": MPI.PROD,
-            "lor": MPI.LOR,
-            "land": MPI.LAND,
+            Op.MIN: MPI.MIN,
+            Op.MAX: MPI.MAX,
+            Op.SUM: MPI.SUM,
+            Op.PROD: MPI.PROD,
+            Op.LOR: MPI.LOR,
+            Op.LAND: MPI.LAND,
         }
         return self.comm.allreduce(local_values, op=op_to_mpi_op[op])
 

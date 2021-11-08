@@ -207,7 +207,17 @@ def global_reduce(local_values, op, *, comm=None):
     from mirgecom.mpi import make_mpi_context
     dist_ctx = make_mpi_context(comm)
 
-    return dist_ctx.allreduce(local_values, op)
+    from mirgecom.mpi import Op
+    op_string_to_enum = {
+        "min": Op.MIN,
+        "max": Op.MAX,
+        "sum": Op.SUM,
+        "prod": Op.PROD,
+        "lor": Op.LOR,
+        "land": Op.LAND,
+    }
+
+    return dist_ctx.allreduce(local_values, op_string_to_enum[op])
 
 
 def allsync(local_values, comm=None, op=None):
@@ -229,22 +239,23 @@ def allsync(local_values, comm=None, op=None):
     if op is None:
         op = MPI.MAX
 
+    from mirgecom.mpi import Op
     if op == MPI.MIN:
-        op_string = "min"
+        op_enum = Op.MIN
     elif op == MPI.MAX:
-        op_string = "max"
+        op_enum = Op.MAX
     elif op == MPI.SUM:
-        op_string = "sum"
+        op_enum = Op.SUM
     elif op == MPI.PROD:
-        op_string = "prod"
+        op_enum = Op.PROD
     elif op == MPI.LOR:
-        op_string = "lor"
+        op_enum = Op.LOR
     elif op == MPI.LAND:
-        op_string = "land"
+        op_enum = Op.LAND
     else:
         raise ValueError(f"Unrecognized MPI reduce op {op}.")
 
-    return dist_ctx.allreduce(local_values, op_string)
+    return dist_ctx.allreduce(local_values, op_enum)
 
 
 def check_range_local(discr, dd, field, min_value, max_value):

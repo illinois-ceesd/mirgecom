@@ -47,6 +47,7 @@ from mirgecom.simutil import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import (
+    Op,
     MPILikeDistributedContext,
     NoMPIDistributedContext,
     mpi_entry_point
@@ -278,7 +279,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 health_errors = dist_ctx.allreduce(
-                    my_health_check(dv.pressure, component_errors), op="lor")
+                    my_health_check(dv.pressure, component_errors), op=Op.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")

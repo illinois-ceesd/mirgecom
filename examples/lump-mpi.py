@@ -47,6 +47,7 @@ from mirgecom.simutil import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import (
+    Op,
     MPILikeDistributedContext,
     NoMPIDistributedContext,
     mpi_entry_point
@@ -276,7 +277,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
                 dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
                 health_errors = dist_ctx.allreduce(
-                    my_health_check(dv=dv, state=state, exact=exact), op="lor")
+                    my_health_check(dv=dv, state=state, exact=exact), op=Op.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
