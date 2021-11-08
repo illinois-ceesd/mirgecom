@@ -182,8 +182,8 @@ def global_reduce(local_values, op, *, comm=None):
 
     Parameters
     ----------
-    local_values: numbers.Number or numpy.ndarray
-        The (MPI-compatible) value or array of values on which the
+    local_values:
+        The (:mod:`mpi4py`-compatible) value or array of values on which the
         reduction operation is to be performed.
 
     op: str
