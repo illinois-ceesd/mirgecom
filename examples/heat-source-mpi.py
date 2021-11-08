@@ -73,7 +73,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
     rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="heat-source.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
+        filename="heat-source.sqlite", mode="wu", dist_ctx=dist_ctx)
 
     if use_profiling:
         queue = cl.CommandQueue(
@@ -103,7 +103,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
             })
 
     local_mesh, global_nelements = generate_and_distribute_mesh(
-        dist_ctx.comm, generate_mesh)
+        dist_ctx, generate_mesh)
 
     order = 3
 

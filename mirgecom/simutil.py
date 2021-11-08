@@ -144,21 +144,22 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     from mirgecom.io import make_rank_fname, make_par_fname
 
     comm = discr.mpi_communicator
-    rank = 0
 
-    if comm:
-        rank = comm.Get_rank()
+    from mirgecom.mpi import NoMPIDistributedContext, MPIDistributedContext
+    if comm is not None:
+        dist_ctx = MPIDistributedContext(comm)
+    else:
+        dist_ctx = NoMPIDistributedContext()
 
-    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+    rank_fn = make_rank_fname(basename=vizname, rank=dist_ctx.rank, step=step, t=t)
 
-    if rank == 0:
+    if dist_ctx.rank == 0:
         import os
         viz_dir = os.path.dirname(rank_fn)
         if viz_dir and not os.path.exists(viz_dir):
             os.makedirs(viz_dir)
 
-    if comm:
-        comm.barrier()
+    dist_ctx.barrier()
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
@@ -167,7 +168,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     with ctm:
         visualizer.write_parallel_vtk_file(
-            comm, rank_fn, io_fields,
+            dist_ctx.comm, rank_fn, io_fields,
             overwrite=overwrite,
             par_manifest_filename=make_par_fname(
                 basename=vizname, step=step, t=t
@@ -284,39 +285,59 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     return [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
 
 
-def generate_and_distribute_mesh(comm, generate_mesh):
-    """Generate a mesh and distribute it among all ranks in *comm*.
+def generate_and_distribute_mesh(dist_ctx, generate_mesh, *, comm=None):
+    """Generate a mesh and distribute it among all ranks in *dist_ctx*.
 
     Generate the mesh with the user-supplied mesh generation function
     *generate_mesh*, partition the mesh, and distribute it to every
-    rank in the provided MPI communicator *comm*. If *comm* is *None*,
-    generates the full mesh locally.
+    rank in the provided :class:`mirgecom.mpi.DistributedContext`.
 
     .. note::
-        This is a collective routine and must be called by all MPI ranks.
+        This is a collective routine and must be called by all ranks.
 
     Parameters
     ----------
-    comm:
-        MPI communicator over which to partition the mesh
+    dist_ctx: mirgecom.mpi.DistributedContext
+        Distributed context over which to partition the mesh.
     generate_mesh:
         Callable of zero arguments returning a :class:`meshmode.mesh.Mesh`.
         Will only be called on one (undetermined) rank.
 
     Returns
     -------
-    local_mesh : :class:`meshmode.mesh.Mesh`
+    local_mesh: :class:`meshmode.mesh.Mesh`
         The local partition of the the mesh returned by *generate_mesh*.
-    global_nelements : :class:`int`
+    global_nelements: :class:`int`
         The number of elements in the serial mesh
     """
+    from mirgecom.mpi import (
+        DistributedContext,
+        MPILikeDistributedContext,
+        MPIDistributedContext)
+    if dist_ctx is not None:
+        if not isinstance(dist_ctx, DistributedContext):
+            # May have passed an MPI comm positionally
+            dist_ctx = MPIDistributedContext(dist_ctx)
+            from warnings import warn
+            warn("comm argument is deprecated and will disappear in Q2 2022. "
+                 "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+
     if comm is not None:
+        dist_ctx = MPIDistributedContext(comm)
+        from warnings import warn
+        warn("comm argument is deprecated and will disappear in Q2 2022. "
+             "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+
+    if dist_ctx.size > 1:
+        if not isinstance(dist_ctx, MPILikeDistributedContext):
+            raise TypeError("Distributed context must be MPI-like.")
+
         from meshmode.distributed import (
             MPIMeshDistributor,
             get_partition_by_pymetis,
         )
-        num_parts = comm.Get_size()
-        mesh_dist = MPIMeshDistributor(comm)
+        num_parts = dist_ctx.size
+        mesh_dist = MPIMeshDistributor(dist_ctx.comm)
         global_nelements = 0
 
         if mesh_dist.is_mananger_rank():
@@ -330,20 +351,12 @@ def generate_and_distribute_mesh(comm, generate_mesh):
             del mesh
 
         else:
-            # FIXME: global_nelements doesn't get set here
             local_mesh = mesh_dist.receive_mesh_part()
+
+        dist_ctx.bcast(global_nelements)
 
     else:
         local_mesh = generate_mesh()
         global_nelements = local_mesh.nelements
 
     return local_mesh, global_nelements
-
-
-def create_parallel_grid(comm, generate_grid):
-    """Generate and distribute mesh compatibility interface."""
-    from warnings import warn
-    warn("Do not call create_parallel_grid; use generate_and_distribute_mesh "
-         "instead. This function will disappear August 1, 2021",
-         DeprecationWarning, stacklevel=2)
-    return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)

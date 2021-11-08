@@ -51,12 +51,23 @@ from typing import Optional, Callable
 import numpy as np
 
 
-def initialize_logmgr(enable_logmgr: bool,
-                      filename: str = None, mode: str = "wu",
-                      mpi_comm=None) -> LogManager:
+def initialize_logmgr(
+        enable_logmgr: bool, *, filename: str = None, mode: str = "wu",
+        dist_ctx=None, mpi_comm=None) -> LogManager:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
+
+    if dist_ctx is not None:
+        from mirgecom.mpi import MPILikeDistributedContext
+        if not isinstance(dist_ctx, MPILikeDistributedContext):
+            raise TypeError("Distributed context must be MPI-like.")
+        mpi_comm = dist_ctx.comm
+    else:
+        if mpi_comm is not None:
+            from warnings import warn
+            warn("mpi_comm argument is deprecated and will disappear in Q2 2022. "
+                 "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 

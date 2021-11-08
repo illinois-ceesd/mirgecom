@@ -92,7 +92,7 @@ def main(dist_ctx=None, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-mpi.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
+        filename="wave-mpi.sqlite", mode="wu", dist_ctx=dist_ctx)
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -115,7 +115,7 @@ def main(dist_ctx=None, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                 nelements_per_axis=(nel_1d,)*dim)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(
-            dist_ctx.comm, generate_mesh)
+            dist_ctx, generate_mesh)
 
     else:
         from mirgecom.restart import read_restart_data
@@ -209,7 +209,7 @@ def main(dist_ctx=None, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                     "nel_1d": nel_1d,
                     "num_parts": dist_ctx.size},
                 filename=snapshot_pattern.format(step=istep, rank=rank),
-                comm=dist_ctx.comm
+                dist_ctx=dist_ctx
             )
 
         if istep % 10 == 0:

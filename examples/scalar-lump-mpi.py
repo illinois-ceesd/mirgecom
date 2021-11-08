@@ -94,7 +94,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
     rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename=f"{casename}.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
+        filename=f"{casename}.sqlite", mode="wu", dist_ctx=dist_ctx)
 
     if use_profiling:
         queue = cl.CommandQueue(
@@ -145,7 +145,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
-        local_mesh, global_nelements = generate_and_distribute_mesh(dist_ctx.comm,
+        local_mesh, global_nelements = generate_and_distribute_mesh(dist_ctx,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
@@ -249,7 +249,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
                 "num_parts": dist_ctx.size
             }
             from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_fname, dist_ctx.comm)
+            write_restart_file(actx, rst_data, rst_fname, dist_ctx=dist_ctx)
 
     def my_health_check(pressure, component_errors):
         health_error = False

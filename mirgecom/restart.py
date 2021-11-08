@@ -39,18 +39,25 @@ def read_restart_data(actx, filename):
             return pickle.load(f)
 
 
-def write_restart_file(actx, restart_data, filename, comm=None):
+def write_restart_file(actx, restart_data, filename, *, dist_ctx=None, comm=None):
     """Pickle the simulation data into a file for use in restarting."""
-    rank = 0
-    if comm:
-        rank = comm.Get_rank()
-    if rank == 0:
+    if dist_ctx is None:
+        if comm is not None:
+            from mirgecom.mpi import MPIDistributedContext
+            dist_ctx = MPIDistributedContext(comm)
+            from warnings import warn
+            warn("comm argument is deprecated and will disappear in Q2 2022. "
+                 "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+        else:
+            from mirgecom.mpi import NoMPIDistributedContext
+            dist_ctx = NoMPIDistributedContext()
+
+    if dist_ctx.rank == 0:
         import os
         rst_dir = os.path.dirname(filename)
         if rst_dir:
             os.makedirs(rst_dir, exist_ok=True)
-    if comm:
-        comm.barrier()
+    dist_ctx.barrier()
     with array_context_for_pickling(actx):
         with open(filename, "wb") as f:
             pickle.dump(restart_data, f)
