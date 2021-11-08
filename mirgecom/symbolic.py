@@ -34,6 +34,7 @@ import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import pymbolic.mapper.evaluator as ev
+from arraycontext import get_container_context_recursively
 
 
 def diff(var):
@@ -88,23 +89,19 @@ class EvaluationMapper(ev.EvaluationMapper):
         else:
             raise ValueError("Unrecognized function '%s'" % expr.function)
 
-    def _sin(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.sin(val)
+    @staticmethod
+    def _np_like_for(val):
+        actx = get_container_context_recursively(val)
+        if actx is None:
+            return np
         else:
-            return val.array_context.np.sin(val)
+            return actx.np
+
+    def _sin(self, val):
+        return self._np_like_for(val).sin(val)
 
     def _cos(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.cos(val)
-        else:
-            return val.array_context.np.cos(val)
+        return self._np_like_for(val).cos(val)
 
     def _exp(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.exp(val)
-        else:
-            return val.array_context.np.exp(val)
+        return self._np_like_for(val).exp(val)
