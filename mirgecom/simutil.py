@@ -143,13 +143,8 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    comm = discr.mpi_communicator
-
-    from mirgecom.mpi import NoMPIDistributedContext, MPIDistributedContext
-    if comm is not None:
-        dist_ctx = MPIDistributedContext(comm)
-    else:
-        dist_ctx = NoMPIDistributedContext()
+    from mirgecom.mpi import make_mpi_context
+    dist_ctx = make_mpi_context(discr.mpi_communicator)
 
     rank_fn = make_rank_fname(basename=vizname, rank=dist_ctx.rank, step=step, t=t)
 
@@ -209,11 +204,8 @@ def global_reduce(local_values, op, *, comm=None):
          "2022. Use DistributedContext.allreduce() instead.", DeprecationWarning,
          stacklevel=2)
 
-    from mirgecom.mpi import NoMPIDistributedContext, MPIDistributedContext
-    if comm is not None:
-        dist_ctx = MPIDistributedContext(comm)
-    else:
-        dist_ctx = NoMPIDistributedContext()
+    from mirgecom.mpi import make_mpi_context
+    dist_ctx = make_mpi_context(comm)
 
     return dist_ctx.allreduce(local_values, op)
 
@@ -229,11 +221,8 @@ def allsync(local_values, comm=None, op=None):
          "Use DistributedContext.allreduce() instead.", DeprecationWarning,
          stacklevel=2)
 
-    from mirgecom.mpi import NoMPIDistributedContext, MPIDistributedContext
-    if comm is not None:
-        dist_ctx = MPIDistributedContext(comm)
-    else:
-        dist_ctx = NoMPIDistributedContext()
+    from mirgecom.mpi import make_mpi_context
+    dist_ctx = make_mpi_context(comm)
 
     from mpi4py import MPI
 
@@ -321,12 +310,13 @@ def generate_and_distribute_mesh(dist_ctx, generate_mesh, *, comm=None):
             from warnings import warn
             warn("comm argument is deprecated and will disappear in Q2 2022. "
                  "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
-
-    if comm is not None:
-        dist_ctx = MPIDistributedContext(comm)
-        from warnings import warn
-        warn("comm argument is deprecated and will disappear in Q2 2022. "
-             "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+    else:
+        if comm is not None:
+            from warnings import warn
+            warn("comm argument is deprecated and will disappear in Q2 2022. "
+                 "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+        from mirgecom.mpi import make_mpi_context
+        dist_ctx = make_mpi_context(comm)
 
     if dist_ctx.size > 1:
         if not isinstance(dist_ctx, MPILikeDistributedContext):

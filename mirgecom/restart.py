@@ -43,14 +43,11 @@ def write_restart_file(actx, restart_data, filename, *, dist_ctx=None, comm=None
     """Pickle the simulation data into a file for use in restarting."""
     if dist_ctx is None:
         if comm is not None:
-            from mirgecom.mpi import MPIDistributedContext
-            dist_ctx = MPIDistributedContext(comm)
             from warnings import warn
             warn("comm argument is deprecated and will disappear in Q2 2022. "
                  "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
-        else:
-            from mirgecom.mpi import NoMPIDistributedContext
-            dist_ctx = NoMPIDistributedContext()
+        from mirgecom.mpi import make_mpi_context
+        dist_ctx = make_mpi_context(comm)
 
     if dist_ctx.rank == 0:
         import os

@@ -1,6 +1,7 @@
 """MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
+.. autofunction:: make_mpi_context
 
 .. autoclass:: DistributedContext
 .. autoclass:: MPILikeDistributedContext
@@ -354,3 +355,19 @@ def mpi_entry_point(func):
         func(*args, dist_ctx=MPIDistributedContext(MPI.COMM_WORLD), **kwargs)
 
     return wrapped_func
+
+
+def make_mpi_context(comm=None):
+    """
+    Construct a :class:`DistributedContext` from an (optional) MPI communicator.
+
+    Returns
+    -------
+    DistributedContext
+        A :class:`MPIDistributedContext` instance if *comm* is not `None`, otherwise
+        a :class:`NoMPIDistributedContext` instance.
+    """
+    if comm is not None:
+        return MPIDistributedContext(comm)
+    else:
+        return NoMPIDistributedContext()
