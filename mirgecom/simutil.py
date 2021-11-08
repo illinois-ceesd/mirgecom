@@ -47,7 +47,6 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import grudge.op as op
-from numbers import Number
 
 logger = logging.getLogger(__name__)
 
@@ -204,31 +203,18 @@ def global_reduce(local_values, op, *, comm=None):
     Any ( like *local_values* )
         Returns the result of the reduction operation on *local_values*
     """
+    from warnings import warn
+    warn("global_reduce is deprecated and will disappear in Q2 "
+         "2022. Use DistributedContext.allreduce() instead.", DeprecationWarning,
+         stacklevel=2)
+
+    from mirgecom.mpi import NoMPIDistributedContext, MPIDistributedContext
     if comm is not None:
-        from mpi4py import MPI
-        op_to_mpi_op = {
-            "min": MPI.MIN,
-            "max": MPI.MAX,
-            "sum": MPI.SUM,
-            "prod": MPI.PROD,
-            "lor": MPI.LOR,
-            "land": MPI.LAND,
-        }
-        return comm.allreduce(local_values, op=op_to_mpi_op[op])
+        dist_ctx = MPIDistributedContext(comm)
     else:
-        if isinstance(local_values, Number):
-            return local_values
-        else:
-            op_to_numpy_func = {
-                "min": np.minimum,
-                "max": np.maximum,
-                "sum": np.add,
-                "prod": np.multiply,
-                "lor": np.logical_or,
-                "land": np.logical_and,
-            }
-            from functools import reduce
-            return reduce(op_to_numpy_func[op], local_values)
+        dist_ctx = NoMPIDistributedContext()
+
+    return dist_ctx.allreduce(local_values, op)
 
 
 def allsync(local_values, comm=None, op=None):
@@ -239,10 +225,14 @@ def allsync(local_values, comm=None, op=None):
     """
     from warnings import warn
     warn("allsync is deprecated and will disappear in Q1 2022. "
-         "Use global_reduce instead.", DeprecationWarning, stacklevel=2)
+         "Use DistributedContext.allreduce() instead.", DeprecationWarning,
+         stacklevel=2)
 
-    if comm is None:
-        return local_values
+    from mirgecom.mpi import NoMPIDistributedContext, MPIDistributedContext
+    if comm is not None:
+        dist_ctx = MPIDistributedContext(comm)
+    else:
+        dist_ctx = NoMPIDistributedContext()
 
     from mpi4py import MPI
 
@@ -264,7 +254,7 @@ def allsync(local_values, comm=None, op=None):
     else:
         raise ValueError(f"Unrecognized MPI reduce op {op}.")
 
-    return global_reduce(local_values, op_string, comm=comm)
+    return dist_ctx.allreduce(local_values, op_string)
 
 
 def check_range_local(discr, dd, field, min_value, max_value):

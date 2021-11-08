@@ -92,9 +92,6 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
 
     rank = dist_ctx.rank
 
-    from mirgecom.simutil import global_reduce as _global_reduce
-    global_reduce = partial(_global_reduce, comm=dist_ctx.comm)
-
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=dist_ctx.comm)
 
@@ -278,7 +275,7 @@ def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
             if do_health:
                 dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
-                health_errors = global_reduce(
+                health_errors = dist_ctx.allreduce(
                     my_health_check(dv=dv, state=state, exact=exact), op="lor")
                 if health_errors:
                     if rank == 0:

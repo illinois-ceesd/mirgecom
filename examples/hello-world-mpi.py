@@ -7,13 +7,11 @@ from mirgecom.mpi import mpi_entry_point
 def main(dist_ctx):
     """Run the demo."""
 
-    comm = dist_ctx.comm
-
-    comm.Barrier()
+    dist_ctx.barrier()
 
     # This is here to document in the CI examples log how the MPI examples
     # are being run.
-    print(f"Hello MPI World! My rank is {comm.Get_rank()} / {comm.Get_size()}")
+    print(f"Hello MPI World! My rank is {dist_ctx.rank} / {dist_ctx.size}")
 
 
 if __name__ == "__main__":

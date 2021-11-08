@@ -36,6 +36,7 @@ from abc import ABCMeta, abstractmethod
 from functools import wraps
 import os
 import sys
+import numpy as np
 
 from contextlib import contextmanager
 
@@ -115,6 +116,9 @@ class DistributedContext(metaclass=ABCMeta):
 
     .. autoproperty:: rank
     .. autoproperty:: size
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
     """
 
     @property
@@ -129,6 +133,48 @@ class DistributedContext(metaclass=ABCMeta):
         """Get the number of processes."""
         pass
 
+    @abstractmethod
+    def barrier(self):
+        """Perform a global barrier."""
+        pass
+
+    @abstractmethod
+    def bcast(self, local_values, root=0) -> None:
+        """
+        Perform a global broadcast.
+
+        Parameters
+        ----------
+        local_values:
+            The value or array of values on which the broadcast is to be performed.
+
+        root:
+            The process from which the data will be broadcast.
+        """
+        pass
+
+    @abstractmethod
+    def allreduce(self, local_values, op):
+        """
+        Perform a global reduction.
+
+        Parameters
+        ----------
+        local_values:
+            The value or array of values on which the reduction operation is to be
+            performed.
+
+        op: str
+            Reduction operation to be performed. Must be one of "min", "max", "sum",
+            "prod", "lor", or "land".
+
+        Returns
+        -------
+        Any ( like *local_values* )
+            Returns the result of the reduction operation on *local_values*
+        """
+        pass
+
 
 class MPILikeDistributedContext(DistributedContext):
     """
@@ -137,6 +183,9 @@ class MPILikeDistributedContext(DistributedContext):
     .. autoproperty:: rank
     .. autoproperty:: size
     .. autoproperty:: comm
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
     """
 
     @property
@@ -157,17 +206,21 @@ class NoMPIDistributedContext(MPILikeDistributedContext):
     .. autoproperty:: rank
     .. autoproperty:: size
     .. autoproperty:: comm
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
     """
 
     @property
-    def rank(self):
-        """Get the index of the current process."""
+    def rank(self):  # noqa: D102
         return 0
 
     @property
-    def size(self):
-        """Get the number of processes."""
+    def size(self):  # noqa: D102
         return 1
+
+    def barrier(self):  # noqa: D102
+        pass
 
     @property
     def comm(self):
@@ -178,6 +231,25 @@ class NoMPIDistributedContext(MPILikeDistributedContext):
         """
         return None
 
+    def bcast(self, local_values, root=0) -> None:  # noqa: D102
+        if root != 0:
+            raise ValueError("Invalid root.")
+
+    def allreduce(self, local_values, op):  # noqa: D102
+        if np.ndim(local_values) == 0:
+            return local_values
+        else:
+            op_to_numpy_func = {
+                "min": np.minimum,
+                "max": np.maximum,
+                "sum": np.add,
+                "prod": np.multiply,
+                "lor": np.logical_or,
+                "land": np.logical_and,
+            }
+            from functools import reduce
+            return reduce(op_to_numpy_func[op], local_values)
+
 
 class MPIDistributedContext(MPILikeDistributedContext):
     """
@@ -187,19 +259,20 @@ class MPIDistributedContext(MPILikeDistributedContext):
     .. autoproperty:: rank
     .. autoproperty:: size
     .. autoproperty:: comm
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
     """
 
     def __init__(self, comm):
         self._comm = comm
 
     @property
-    def rank(self):
-        """Get the index of the current process."""
+    def rank(self):  # noqa: D102
         return self.comm.Get_rank()
 
     @property
-    def size(self):
-        """Get the number of processes."""
+    def size(self):  # noqa: D102
         return self.comm.Get_size()
 
     @property
@@ -210,6 +283,24 @@ class MPIDistributedContext(MPILikeDistributedContext):
         :returns: An MPI communicator.
         """
         return self._comm
+
+    def barrier(self):  # noqa: D102
+        self.comm.barrier()
+
+    def bcast(self, local_values, root=0) -> None:  # noqa: D102
+        self.comm.bcast(local_values, root=root)
+
+    def allreduce(self, local_values, op):  # noqa: D102
+        from mpi4py import MPI
+        op_to_mpi_op = {
+            "min": MPI.MIN,
+            "max": MPI.MAX,
+            "sum": MPI.SUM,
+            "prod": MPI.PROD,
+            "lor": MPI.LOR,
+            "land": MPI.LAND,
+        }
+        return self.comm.allreduce(local_values, op=op_to_mpi_op[op])
 
 
 def mpi_entry_point(func):
