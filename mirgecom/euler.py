@@ -57,6 +57,7 @@ from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
 )
+from mirgecom.fluid import ConservedVars
 from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
@@ -107,21 +108,26 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
             discr, eos=eos, cv_tpair=TracePair(
                 part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
                 exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
+              for part_tpair in cross_rank_trace_pairs(discr, cv))
         + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
                                                       eos=eos, time=time)
               for btag in boundaries)
     )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
+
+    return -div_operator(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     """Interface :function:`euler_operator` with backwards-compatible API."""
     from warnings import warn
+
     warn("Do not call inviscid_operator; it is now called euler_operator. This"
          "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
+
+    if not isinstance(q, ConservedVars):
+        q = make_conserved(discr.dim, q=q)
+
+    return euler_operator(discr, eos, boundaries, q, t)
 
 
 # By default, run unitless

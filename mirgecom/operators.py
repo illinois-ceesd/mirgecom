@@ -46,9 +46,9 @@ def grad_operator(discr, u, flux):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
-    from grudge.op import weak_local_grad
-    return -discr.inverse_mass(weak_local_grad(discr, u, nested=False)
-                               - discr.face_mass(flux))
+    from grudge.op import weak_local_grad, face_mass, inverse_mass
+
+    return -inverse_mass(discr, weak_local_grad(discr, u) - face_mass(discr, flux))
 
 
 def div_operator(discr, u, flux):
@@ -67,6 +67,6 @@ def div_operator(discr, u, flux):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg divergence operator applied to vector-valued function *u*.
     """
-    from grudge.op import weak_local_div
-    return -discr.inverse_mass(weak_local_div(discr, u)
-                               - discr.face_mass(flux))
+    from grudge.op import weak_local_div, face_mass, inverse_mass
+
+    return -inverse_mass(discr, weak_local_div(discr, u) - face_mass(discr, flux))
