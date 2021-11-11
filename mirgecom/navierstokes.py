@@ -79,7 +79,8 @@ from mirgecom.operators import (
 from meshmode.dof_array import thaw
 
 
-def ns_operator(discr, eos, boundaries, cv, t=0.0):
+def ns_operator(discr, eos, boundaries, cv, t=0.0,
+                dv=None):
     r"""Compute RHS of the Navier-Stokes equations.
 
     Returns
@@ -116,6 +117,8 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
     """
     dim = discr.dim
     actx = cv.array_context
+    if dv is None:
+        dv = eos.dependent_vars(cv)
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                     int_tpair, xrank_pairs, boundaries):
@@ -154,7 +157,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
         return boundaries[btag].t_gradient_flux(discr, btag=btag, cv=cv, eos=eos,
                                                 time=t)
 
-    gas_t = eos.temperature(cv)
+    gas_t = dv.temperature
     t_int_tpair = TracePair("int_faces",
                             interior=eos.temperature(cv_int_tpair.int),
                             exterior=eos.temperature(cv_int_tpair.ext))
@@ -208,7 +211,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0):
 
     vol_term = (
         viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
-        - inviscid_flux(discr, eos=eos, cv=cv)
+        - inviscid_flux(discr, pressure=dv.pressure, cv=cv)
     ).join()
 
     bnd_term = (

@@ -216,7 +216,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Initial temperature, pressure, and mixutre mole fractions are needed to
     # set up the initial state in Cantera.
-    init_temperature = 1500.0  # Initial temperature hot enough to burn
+    temperature_seed = 1500.0  # Initial temperature hot enough to burn
     # Parameters for calculating the amounts of fuel, oxidizer, and inert species
     equiv_ratio = 1.0
     ox_di_ratio = 0.21
@@ -235,9 +235,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # one_atm = 101325.0
 
     # Let the user know about how Cantera is being initilized
-    print(f"Input state (T,P,X) = ({init_temperature}, {one_atm}, {x}")
+    print(f"Input state (T,P,X) = ({temperature_seed}, {one_atm}, {x}")
     # Set Cantera internal gas temperature, pressure, and mole fractios
-    cantera_soln.TPX = init_temperature, one_atm, x
+    cantera_soln.TPX = temperature_seed, one_atm, x
     # Pull temperature, total density, mass fractions, and pressure from Cantera
     # We need total density, and mass fractions to initialize the fluid/gas state.
     can_t, can_rho, can_y = cantera_soln.TDY
@@ -255,7 +255,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # states for this particular mechanism.
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyro_mechanism, temperature_guess=init_temperature)
+    eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
     from pytools.obj_array import make_obj_array
 
@@ -266,16 +266,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             [pyro_mechanism.get_temperature_update_energy(e, temperature, y)]
         )
 
-    def get_temperature_mass_energy(state, temperature):
-        y = state.species_mass_fractions
-        e = eos.internal_energy(state) / state.mass
-        return make_obj_array(
-            [pyro_mechanism.get_temperature(e, temperature, y)]
-        )
-
     compute_temperature_update = actx.compile(get_temperature_update)
     compute_dependent_vars = actx.compile(eos.dependent_vars)
-    compute_temperature = actx.compile(get_temperature_mass_energy)
 
     # }}}
 
@@ -300,7 +292,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
         if order == rst_order:
             current_state = restart_data["state"]
-            rst_temperature = restart_data["temperature"]
+            temperature_seed = restart_data["temperature"]
         else:
             rst_state = restart_data["state"]
             old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
@@ -309,13 +301,33 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
             current_state = connection(rst_state)
-            rst_temperature = connection(restart_data["temperature"])
-        # This bit memoizes the restarted temperature onto the current_state
-        rst_temperature = compute_temperature(current_state, rst_temperature)
+            temperature_seed = connection(restart_data["temperature"])
     else:
         # Set the current state from time 0
         current_state = initializer(eos=eos, x_vec=nodes)
-    reference_state = current_state
+
+    # This bit memoizes the initial state's temperature onto the initial state
+    # (assuming `initializer` just above didn't call eos.dv funcs.)
+    #
+    # The temperature_seed going into this function is:
+    # - At time 0: the initial temperature input data (maybe from Cantera)
+    # - On restart: the restarted temperature read from restart file
+    #
+    # Note that this means we *seed* the temperature calculation with the actual
+    # temperature from the run. The resulting temperature may be different from the
+    # seed (error commensurate with convergence of running temperature), potentially
+    # meaning non-deterministic temperature restarts (i.e. one where the code gets a
+    # slightly different answer for temperature than it would have without the
+    # restart). In the absense of restart, the running temperature is that which was
+    # computed with a temperature_seed that equals the running temperature from the
+    # last step.
+    # Potentially, we could move the restart writing to trigger at post_step_callback
+    # and instead of writing the *current* running temperature to the restart file,
+    # we could write the *temperature_seed*.  That could fix up the non-deterministic
+    # restart issue.
+    current_dv = compute_dependent_vars(current_state,
+                                        temperature_seed=temperature_seed)
+    temperature_seed = current_dv.temperature
 
     # import ipdb
     # ipdb.set_trace()
@@ -491,6 +503,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
+        cv = state[0]
         try:
             dv = None
 
@@ -505,28 +518,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 if dv is None:
-                    dv = compute_dependent_vars(state)
-                health_errors = global_reduce(my_health_check(state, dv), op="lor")
+                    dv = compute_dependent_vars(cv)
+                health_errors = global_reduce(my_health_check(cv, dv), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=cv)
 
             if do_status:
                 if dv is None:
-                    dv = compute_dependent_vars(state)
+                    dv = compute_dependent_vars(cv)
                 my_write_status(dt=dt, cfl=cfl, dv=dv)
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+                my_write_restart(step=step, t=t, state=cv)
 
             if do_viz:
-                production_rates, = compute_production_rates(state)
+                production_rates, = compute_production_rates(cv)
                 if dv is None:
-                    dv = compute_dependent_vars(state)
-                my_write_viz(step=step, t=t, dt=dt, state=state, dv=dv,
+                    dv = compute_dependent_vars(cv)
+                my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field, cfl=cfl)
 
@@ -540,21 +553,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_post_step(step, t, dt, state):
+        cv = state[0]
+        new_dv = compute_dependent_vars(cv,  # noqa
+                                       temperature_seed=state[1])
+
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, dim, cv, eos)
             logmgr.tick_after()
-        return state, dt
+        return make_obj_array([cv, new_dv.temperature]), dt
 
-    def my_rhs(t, state, reference_state):
-        current_dv = eos.dependent_vars(state, reference_state)
-        if debug:
-            print(f"{current_dv=}")
-        return (euler_operator(discr, cv=state, time=t,
-                               boundaries=boundaries, eos=eos)
-                + eos.get_species_source_terms(state))
+    def my_rhs(t, state):
+        cv = state[0]
+        current_dv = eos.dependent_vars(cv,
+                                        temperature_seed=state[1])
+
+        return make_obj_array([euler_operator(discr, cv=cv, time=t,
+                               boundaries=boundaries, eos=eos,
+                               dv=current_dv)
+                               + eos.get_species_source_terms(cv),
+                               0*state[1]])
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
@@ -563,21 +583,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final,
-                      reference_state=reference_state)
+                      state=make_obj_array([current_state, temperature_seed]),
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_dv = compute_dependent_vars(current_state)
-    final_dm, = compute_production_rates(current_state)
+    final_cv = current_state[0]
+    final_dv = compute_dependent_vars(final_cv)
+    final_dm, = compute_production_rates(final_cv)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
-                                        state=current_state)
-    my_write_viz(step=current_step, t=current_t, dt=dt, state=current_state,
+                                        state=final_cv)
+    my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
                  dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
     my_write_status(dt=dt, cfl=cfl, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_restart(step=current_step, t=current_t, state=final_cv)
 
     if logmgr:
         logmgr.close()
