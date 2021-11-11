@@ -131,7 +131,7 @@ class GasEOS(metaclass=ABCMeta):
         """Get the transport model if it exists."""
 
     @abstractmethod
-    def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
+    def get_internal_energy(self, temperature, *, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
 
     def dependent_vars(self, cv: ConservedVars,
@@ -408,25 +408,23 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
-    def get_internal_energy(self, temperature, mass, species_mass_fractions=None):
+    def get_internal_energy(self, temperature, species_mass_fractions=None):
         r"""Get the gas thermal energy from temperature, and fluid density.
 
         The gas internal energy $e$ is calculated from:
 
         .. math::
 
-            e = R_s T \frac{\rho}{\left(\gamma - 1\right)}
+            e = \frac{R_s T}{\left(\gamma - 1\right)}
 
         Parameters
         ----------
         temperature: :class:`~meshmode.dof_array.DOFArray`
             The fluid temperature
-        mass: float or :class:`~meshmode.dof_array.DOFArray`
-            The fluid mass density
         species_mass_fractions:
             Unused
         """
-        return self._gas_const * mass * temperature / (self._gamma - 1)
+        return self._gas_const * temperature / (self._gamma - 1)
 
 
 class PyrometheusMixture(MixtureEOS):
@@ -650,8 +648,7 @@ class PyrometheusMixture(MixtureEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_mass_fractions)
 
-    def get_internal_energy(self, temperature, species_mass_fractions,
-                            mass=None):
+    def get_internal_energy(self, temperature, species_mass_fractions):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
@@ -666,8 +663,6 @@ class PyrometheusMixture(MixtureEOS):
             The fluid temperature
         species_mass_fractions: numpy.ndarray
             Object array of species mass fractions
-        mass:
-            Unused
         """
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
             temperature, species_mass_fractions)

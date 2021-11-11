@@ -460,11 +460,10 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
         mass_frac_plus = cv_minus.species_mass / cv_minus.mass
 
         internal_energy_plus = eos.get_internal_energy(
-            temperature=t_plus, species_mass_fractions=mass_frac_plus,
-            mass=cv_minus.mass
+            temperature=t_plus, species_mass_fractions=mass_frac_plus
         )
-        total_energy_plus = (internal_energy_plus
-                             + .5*cv_minus.mass*np.dot(velocity_plus, velocity_plus))
+        total_energy_plus = cv_minus.mass*(internal_energy_plus
+                             + .5**np.dot(velocity_plus, velocity_plus))
 
         cv_plus = make_conserved(
             discr.dim, mass=cv_minus.mass, energy=total_energy_plus,
