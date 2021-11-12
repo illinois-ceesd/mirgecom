@@ -203,7 +203,7 @@ class PrescribedInviscidBoundary(FluidBC):
     def soln_gradient_flux(self, discr, btag, soln, **kwargs):
         """Get the flux for solution gradient with AV API."""
         cv = make_conserved(discr.dim, q=soln)
-        return self.cv_gradient_flux(discr, btag, cv, **kwargs).join()
+        return self.cv_gradient_flux(discr, btag, cv, **kwargs)
 
     def s_boundary_flux(self, discr, btag, grad_cv, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
@@ -229,7 +229,7 @@ class PrescribedInviscidBoundary(FluidBC):
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
         diff_cv = make_conserved(discr.dim, q=diffusion)
-        return self.s_boundary_flux(discr, btag, grad_cv=diff_cv, **kwargs).join()
+        return self.s_boundary_flux(discr, btag, grad_cv=diff_cv, **kwargs)
 
     def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
         """Get the "temperature flux" through boundary *btag*."""

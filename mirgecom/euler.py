@@ -61,7 +61,6 @@ from grudge.eager import (
     interior_trace_pair,
     cross_rank_trace_pairs
 )
-from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
@@ -107,17 +106,14 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0,
     inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv)
     inviscid_flux_bnd = (
         inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
+        + sum(inviscid_facial_flux(discr, eos=eos, cv_tpair=part_tpair)
+              for part_tpair in cross_rank_trace_pairs(discr, cv))
         + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
                                                         eos=eos, time=time)
               for btag in boundaries)
     )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
+
+    return -div_operator(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):

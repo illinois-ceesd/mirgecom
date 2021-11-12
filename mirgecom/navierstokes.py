@@ -72,7 +72,6 @@ from mirgecom.viscous import (
 from mirgecom.flux import (
     gradient_flux_central
 )
-from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
     div_operator, grad_operator
 )
@@ -141,15 +140,14 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
     cv_int_tpair = interior_trace_pair(discr, cv)
     cv_part_pairs = [
         TracePair(part_tpair.dd,
-                  interior=make_conserved(dim, q=part_tpair.int),
-                  exterior=make_conserved(dim, q=part_tpair.ext))
-        for part_tpair in cross_rank_trace_pairs(discr, cv.join())]
+                  interior=part_tpair.int,
+                  exterior=part_tpair.ext)
+        for part_tpair in cross_rank_trace_pairs(discr, cv)]
     cv_flux_bnd = _elbnd_flux(discr, grad_flux_interior, grad_flux_bnd,
                               cv_int_tpair, cv_part_pairs, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
-                                                  cv_flux_bnd.join()))
+    grad_cv = grad_operator(discr, cv, cv_flux_bnd)
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # - now computed, *not* communicated
@@ -183,9 +181,9 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
     # viscous parts
     s_int_pair = interior_trace_pair(discr, grad_cv)
     s_part_pairs = [TracePair(xrank_tpair.dd,
-                             interior=make_conserved(dim, q=xrank_tpair.int),
-                             exterior=make_conserved(dim, q=xrank_tpair.ext))
-                    for xrank_tpair in cross_rank_trace_pairs(discr, grad_cv.join())]
+                             interior=xrank_tpair.int,
+                             exterior=xrank_tpair.ext)
+                    for xrank_tpair in cross_rank_trace_pairs(discr, grad_cv)]
     delt_int_pair = interior_trace_pair(discr, grad_t)
     delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
     num_partition_interfaces = len(cv_part_pairs)
@@ -212,7 +210,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
     vol_term = (
         viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
         - inviscid_flux(discr, pressure=dv.pressure, cv=cv)
-    ).join()
+    )
 
     bnd_term = (
         _elbnd_flux(
@@ -221,7 +219,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
         - _elbnd_flux(
             discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
             cv_int_tpair, cv_part_pairs, boundaries)
-    ).join()
+    )
 
     # NS RHS
-    return make_conserved(dim, q=div_operator(discr, vol_term, bnd_term))
+    return div_operator(discr, vol_term, bnd_term)
