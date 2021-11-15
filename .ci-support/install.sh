@@ -21,7 +21,7 @@ PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file conda-env.yml --
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 conda list
 
-if [[ "$(uname)" = "Linux" ]]
+if [[ "$(uname)" = "Linux" ]]; then
     # Make sure we can build mpi4py
     conda install gcc_linux-64
 fi
