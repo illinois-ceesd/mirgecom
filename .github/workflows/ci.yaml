@@ -105,7 +105,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             examples/run_examples.sh ./examples
- 
+
     doc:
         name: Documentation
         runs-on: ubuntu-latest
@@ -155,7 +155,7 @@ jobs:
             cd mirgecom/examples
             python -m mpi4py ./pulse-mpi.py
 
-    y1: 
+    y1:
         name: Production testing
         runs-on: ${{ matrix.os }}
         strategy:
@@ -172,13 +172,17 @@ jobs:
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             MIRGEDIR=$(pwd)
             cat .ci-support/production-testing-env.sh
-            . .ci-support/production-testing-env.sh
+            source .ci-support/production-testing-env.sh
             cd ..
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
+            source ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
             source ${MIRGEDIR}/../config/activate_env.sh
-            . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
+            if [[ "$(uname)" = "Linux" ]]; then
+                # Make sure we can build mpi4py
+                conda install gcc_linux-64
+            fi
+            source ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
             . .ci-support/production-testing-env.sh
