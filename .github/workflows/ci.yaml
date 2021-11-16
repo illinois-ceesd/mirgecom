@@ -168,6 +168,7 @@ jobs:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
+            set -x
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             MIRGEDIR=$(pwd)
@@ -178,10 +179,10 @@ jobs:
             cd emirge.y1
             source ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
             source ${MIRGEDIR}/../config/activate_env.sh
-            if [[ "$(uname)" = "Linux" ]]; then
-                # Make sure we can build mpi4py
-                conda install gcc_linux-64
-            fi
+
+            # Make sure we can build mpi4py
+            [[ $(uname) == Linux ]] && conda install gcc_linux-64
+
             source ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
