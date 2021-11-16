@@ -343,12 +343,9 @@ def flux_hll(cv_tpair, f_tpair, normal, eos):
     #print(f"q_int {q_int}")
     s_int = umag_int - c_int*q_int
     s_ext = umag_ext + c_ext*q_ext
-    s_star = ((p_ext - p_int + rho_int*umag_int*(s_int - umag_int) - rho_ext*umag_ext*(s_ext - umag_ext))/
-             (rho_int*(s_int - umag_int) - rho_ext*(s_ext - umag_ext)))
 
-    #print(f"s_int {s_int}")
-    #print(f"s_ext {s_ext}")
-    #print(f"s_star {s_star}")
+    print(f"s_int {s_int}")
+    print(f"s_ext {s_ext}")
 
     # HLL fluxes
     flux_int = f_tpair.int
