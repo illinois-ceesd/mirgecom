@@ -201,7 +201,7 @@ class SodShock1D:
 
     def __init__(
             self, *, dim=2, xdir=0, x0=0.5, rhol=1.0,
-            rhor=0.125, pleft=1.0, pright=0.1,
+            rhor=0.125, pleft=1.0, pright=0.1, ul=0.0, ur=0.0
     ):
         """Initialize shock parameters.
 
@@ -223,8 +223,10 @@ class SodShock1D:
         self._x0 = x0
         self._rhol = rhol
         self._rhor = rhor
-        self._energyl = pleft
-        self._energyr = pright
+        self._ul = ul
+        self._ur = ur
+        self._pl = pleft
+        self._pr = pright
         self._dim = dim
         self._xdir = xdir
         if self._xdir >= self._dim:
@@ -252,18 +254,19 @@ class SodShock1D:
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
+        ur = zeros + self._ur
+        ul = zeros + self._ul
         x0 = zeros + self._x0
-        energyl = zeros + gmn1 * self._energyl
-        energyr = zeros + gmn1 * self._energyr
+        energyl = zeros + gmn1 * self._pl
+        energyr = zeros + gmn1 * self._pr
         yesno = actx.np.greater(x_rel, x0)
         mass = actx.np.where(yesno, rhor, rhol)
+        velocity = actx.np.where(yesno, ur, ul)
         energy = actx.np.where(yesno, energyr, energyl)
-        mom = make_obj_array(
-            [
-                0*x_rel
-                for i in range(self._dim)
-            ]
-        )
+
+        vel = make_obj_array([velocity])
+        mom = mass * vel
+        energy = energy + .5*mass*np.dot(vel, vel)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)

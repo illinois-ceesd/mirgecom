@@ -211,3 +211,396 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
     """
     from arraycontext import outer
     return f_tpair.avg - lam*outer(cv_tpair.diff, normal)/2
+
+
+def divergence_flux_hll(cv_tpair, f_tpair, normal, eos):
+    r"""Compute Harten, Lax, van Leer Contact (HLLC) flux
+        after [Hesthaven_2008]_, Section 6.6.
+
+
+    Parameters
+    ----------
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
+
+    normal: numpy.ndarray
+
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLLC flux.
+    """
+    print(f"{normal=}")
+    return flux_hll(cv_tpair, f_tpair, normal, eos)@normal
+
+
+def flux_hll(cv_tpair, f_tpair, normal, eos):
+    r"""Compute Harten, Lax, van Leer Contact (HLLC) flux
+        after [Hesthaven_2008]_, Section 6.6.
+
+    The Lax-Friedrichs/Rusanov flux is calculated as:
+    Update this math brother!
+
+    .. math::
+
+        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-) + \mathbf{F}(q^+))
+        + \frac{\lambda}{2}(q^{-} - q^{+})\hat{\mathbf{n}},
+
+    where $q^-, q^+$ are the scalar solution components on the interior and the
+    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
+    the vector flux function, $\hat{\mathbf{n}}$ is the face normal, and $\lambda$
+    is the user-supplied jump term coefficient.
+
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux jacobian:
+
+    .. math::
+        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
+
+    Here, $\lambda$ is a function parameter, leaving the responsibility for the
+    calculation of the eigenvalues of the system-dependent flux Jacobian to the
+    caller.
+
+    Parameters
+    ----------
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
+
+    normal: numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLLC flux.
+    """
+    from arraycontext import outer
+    actx = cv_tpair.int.array_context
+    dim = cv_tpair.int.dim
+
+    # first rotate the 2D/3D problem in a 1D problem in the normal direction with 
+    # respect to the interface
+
+    # note for me, treat the interior state as left and the exterior state as right
+    # pressure estimate
+    p_int = eos.pressure(cv_tpair.int)
+    p_ext = eos.pressure(cv_tpair.ext)
+    u_int = (cv_tpair.int).velocity
+    u_ext = (cv_tpair.ext).velocity
+    rho_int = (cv_tpair.int).mass
+    rho_ext = (cv_tpair.ext).mass
+    #print(f"{p_int=}")
+    #print(f"{rho_int=}")
+    c_int = eos.sound_speed(cv_tpair.int)
+    c_ext = eos.sound_speed(cv_tpair.ext)
+
+    ones = (1.0 + p_ext) - p_ext
+    zeros = 0.*p_ext
+
+    umag_int = actx.np.sqrt(np.dot(u_int, u_int))/rho_int
+    umag_ext = actx.np.sqrt(np.dot(u_ext, u_ext))/rho_ext
+
+    p_star = (0.5*(p_int + p_ext) + 8*(umag_int - umag_ext)*
+             (rho_int + rho_ext)*(c_int + c_ext))
+    #p_star = 0.5*(p_int + p_ext)
+    #print(f"p_star {p_star}")
+
+    # left and right wave speeds
+    q_int = 1 + (eos.gamma()+1)/(2*eos.gamma())*(p_star/p_int - 1)
+    q_ext = 1 + (eos.gamma()+1)/(2*eos.gamma())*(p_star/p_ext - 1)
+
+    pres_check_int = actx.np.greater(p_star, p_int)
+    pres_check_ext = actx.np.greater(p_star, p_ext)
+
+    q_int = actx.np.where(pres_check_int, q_int, ones)
+    q_ext = actx.np.where(pres_check_ext, q_ext, ones)
+
+    q_int = actx.np.sqrt(q_int)
+    q_ext = actx.np.sqrt(q_ext)
+
+    # left, right, and intermediate wave speed estimates
+    # can alternatively use the roe estimated states to find the wave speeds
+    #print(f"c_int {c_int}")
+    #print(f"q_int {q_int}")
+    s_int = umag_int - c_int*q_int
+    s_ext = umag_ext + c_ext*q_ext
+    s_star = ((p_ext - p_int + rho_int*umag_int*(s_int - umag_int) - rho_ext*umag_ext*(s_ext - umag_ext))/
+             (rho_int*(s_int - umag_int) - rho_ext*(s_ext - umag_ext)))
+
+    #print(f"s_int {s_int}")
+    #print(f"s_ext {s_ext}")
+    #print(f"s_star {s_star}")
+
+    # HLL fluxes
+    flux_int = f_tpair.int
+    flux_ext = f_tpair.ext
+    flux_star = (s_ext*flux_int-s_int*flux_ext+s_ext*s_int*(cv_tpair.ext-cv_tpair.int))/(s_ext-s_int)
+
+    # choose the correct flux contribution based on the wave speeds
+    flux_check_int = actx.np.greater_equal(s_int, zeros)*(0*flux_int + 1.0)
+    flux_check_ext = actx.np.less_equal(s_ext, zeros)*(0*flux_int + 1.0)
+
+    #print(f"flux_check_int.mass {flux_check_int.mass}")
+    #print(f"flux_check_ext.mass {flux_check_ext.mass}")
+
+    flux = flux_star
+    flux = actx.np.where(flux_check_int, flux_int, flux)
+    flux = actx.np.where(flux_check_ext, flux_ext, flux)
+
+    #print(f"flux_int.mass {flux_int.mass}")
+    #print(f"flux_int.momentum {flux_int.momentum}")
+    #print(f"flux_int.energy {flux_int.energy}")
+
+    #print(f"flux_ext.mass {flux_ext.mass}")
+    #print(f"flux_ext.momentum {flux_ext.momentum}")
+    #print(f"flux_ext.energy {flux_ext.energy}")
+
+    #print(f"flux.mass {flux.mass}")
+    #print(f"flux.momentum {flux.momentum}")
+    #print(f"flux.energy {flux.energy}")
+
+    return flux
+
+def divergence_flux_hllc(cv_tpair, f_tpair, normal, eos):
+    r"""Compute Harten, Lax, van Leer Contact (HLLC) flux
+        after [Hesthaven_2008]_, Section 6.6.
+
+
+    Parameters
+    ----------
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
+
+    normal: numpy.ndarray
+
+        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLLC flux.
+    """
+    return flux_hllc(cv_tpair, f_tpair, normal, eos)@normal
+
+
+def flux_hllc(cv_tpair, f_tpair, normal, eos):
+    r"""Compute Harten, Lax, van Leer Contact (HLLC) flux
+        after [Hesthaven_2008]_, Section 6.6.
+
+    The Lax-Friedrichs/Rusanov flux is calculated as:
+    Update this math brother!
+
+    .. math::
+
+        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-) + \mathbf{F}(q^+))
+        + \frac{\lambda}{2}(q^{-} - q^{+})\hat{\mathbf{n}},
+
+    where $q^-, q^+$ are the scalar solution components on the interior and the
+    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
+    the vector flux function, $\hat{\mathbf{n}}$ is the face normal, and $\lambda$
+    is the user-supplied jump term coefficient.
+
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux jacobian:
+
+    .. math::
+        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
+
+    Here, $\lambda$ is a function parameter, leaving the responsibility for the
+    calculation of the eigenvalues of the system-dependent flux Jacobian to the
+    caller.
+
+    Parameters
+    ----------
+    cv_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
+
+    normal: numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
+        normals
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLLC flux.
+    """
+    from arraycontext import outer
+    actx = cv_tpair.int.array_context
+    dim = cv_tpair.int.dim
+
+    # first rotate the 2D/3D problem in a 1D problem in the normal direction with 
+    # respect to the interface
+
+    # note for me, treat the interior state as left and the exterior state as right
+    # pressure estimate
+    p_int = eos.pressure(cv_tpair.int)
+    p_ext = eos.pressure(cv_tpair.ext)
+    u_int = (cv_tpair.int).velocity
+    u_ext = (cv_tpair.ext).velocity
+    rho_int = (cv_tpair.int).mass
+    rho_ext = (cv_tpair.ext).mass
+    print(f"{p_int=}")
+    print(f"{rho_int=}")
+    c_int = eos.sound_speed(cv_tpair.int)
+    c_ext = eos.sound_speed(cv_tpair.ext)
+
+    ones = (1.0 + p_ext) - p_ext
+    zeros = 0.*p_ext
+
+    umag_int = actx.np.sqrt(np.dot(u_int, u_int))/rho_int
+    umag_ext = actx.np.sqrt(np.dot(u_ext, u_ext))/rho_ext
+
+    p_star = (0.5*(p_int + p_ext) + 8*(umag_int - umag_ext)*
+             (rho_int + rho_ext)*(c_int + c_ext))
+    #p_star = 0.5*(p_int + p_ext)
+    #print(f"p_star {p_star}")
+
+    # left and right wave speeds
+    q_int = 1 + (eos.gamma()+1)/(2*eos.gamma())*(p_star/p_int - 1)
+    q_ext = 1 + (eos.gamma()+1)/(2*eos.gamma())*(p_star/p_ext - 1)
+
+    pres_check_int = actx.np.greater(p_star, p_int)
+    pres_check_ext = actx.np.greater(p_star, p_ext)
+
+    q_int = actx.np.where(pres_check_int, q_int, ones)
+    q_ext = actx.np.where(pres_check_ext, q_ext, ones)
+
+    q_int = actx.np.sqrt(q_int)
+    q_ext = actx.np.sqrt(q_ext)
+
+    # left, right, and intermediate wave speed estimates
+    # can alternatively use the roe estimated states to find the wave speeds
+    print(f"c_int {c_int}")
+    print(f"q_int {q_int}")
+    s_int = umag_int - c_int*q_int
+    s_ext = umag_ext + c_ext*q_ext
+    s_star = ((p_ext - p_int + rho_int*umag_int*(s_int - umag_int) - rho_ext*umag_ext*(s_ext - umag_ext))/
+             (rho_int*(s_int - umag_int) - rho_ext*(s_ext - umag_ext)))
+
+    print(f"s_int {s_int}")
+    print(f"s_ext {s_ext}")
+    print(f"s_star {s_star}")
+
+    # HLLC fluxes
+    flux_int = f_tpair.int
+    flux_ext = f_tpair.ext
+
+    # for now, just 1D to see if it works
+    #flux_star_int = f_tpair.int - s_int*cv_tpair.int
+    flux_star_int_mass = s_int*rho_int*(s_int - u_int)/(s_int - s_star)
+    flux_star_int_velocity = s_int*rho_int*(s_int - u_int)/(s_int - s_star)*s_star
+    flux_star_int_energy = (s_int*rho_int*(s_int - u_int)/(s_int - s_star)*
+              (cv_tpair.int.energy/rho_int + (s_star - u_int)*(s_star + p_int/(rho_int*(s_int - u_int)))))
+    flux_star_int_species = s_int*(s_int - u_int)/(s_int - s_star)*cv_tpair.int.species_mass.reshape(-1,1)
+
+    from mirgecom.fluid import make_conserved
+    flux_star_int = make_conserved(dim, mass=flux_star_int_mass, momentum=flux_star_int_velocity,
+                                   energy=flux_star_int_energy, species_mass=flux_star_int_species)
+    flux_star_int += f_tpair.int - s_int*cv_tpair.int
+
+    #flux_star_ext = f_tpair.ext - s_ext*cv_tpair.ext
+    flux_star_ext_mass = s_ext*rho_ext*(s_ext - u_ext)/(s_ext - s_star)
+    flux_star_ext_velocity = s_ext*rho_ext*(s_ext - u_ext)/(s_ext - s_star)*s_star
+    flux_star_ext_energy = (s_ext*rho_ext*(s_ext - u_ext)/(s_ext - s_star)*
+              (cv_tpair.ext.energy/rho_ext + (s_star - u_ext)*(s_star + p_ext/(rho_ext*(s_ext - u_ext)))))
+    flux_star_ext_species = s_ext*(s_ext - u_ext)/(s_ext - s_star)*cv_tpair.ext.species_mass.reshape(-1,1)
+
+    flux_star_ext = make_conserved(dim, mass=flux_star_ext_mass, momentum=flux_star_ext_velocity,
+                                   energy=flux_star_ext_energy, species_mass=flux_star_ext_species)
+    flux_star_ext += f_tpair.ext - s_ext*cv_tpair.ext
+
+    # choose the correct flux contribution based on the wave speeds
+
+    flux_check_int = actx.np.greater_equal(s_int, zeros)*(0*flux_int + 1.0)
+    flux_check_ext = actx.np.less_equal(s_ext, zeros)*(0*flux_int + 1.0)
+    flux_check_star_int = actx.np.less_equal(s_int, zeros)*actx.np.greater(s_star, zeros)*(0*flux_int + 1.0)
+    flux_check_star_ext = actx.np.less_equal(s_star, zeros)*actx.np.greater_equal(s_ext, zeros)*(0*flux_int + 1.0)
+
+
+    print(f"flux_check_int.mass {flux_check_int.mass}")
+    print(f"flux_check_ext.mass {flux_check_ext.mass}")
+    print(f"flux_check_star_int.mass {flux_check_star_int.mass}")
+    print(f"flux_check_star_ext.mass {flux_check_star_ext.mass}")
+
+    flux = f_tpair.ext*0
+    flux = actx.np.where(flux_check_int, flux_int, flux)
+    flux = actx.np.where(flux_check_ext, flux_ext, flux)
+    flux = actx.np.where(flux_check_star_int, flux_star_int, flux)
+    flux = actx.np.where(flux_check_star_ext, flux_star_ext, flux)
+
+    #
+    # test code, try multiplying the bools together
+    #
+    #flux_check_int = actx.np.greater_equal(s_int, zeros)
+    #flux_check_ext = actx.np.less_equal(s_ext, zeros)
+    #flux_check_star_int = actx.np.less_equal(s_int, zeros)*actx.np.greater_equal(s_star, zeros)
+    #flux_check_star_ext = actx.np.less_equal(s_star, zeros)*actx.np.greater_equal(s_ext, zeros)
+
+    #print(f"flux_check_int {flux_check_int}")
+    #print(f"flux_check_ext {flux_check_ext}")
+    #print(f"flux_check_star_int {flux_check_star_int}")
+    #print(f"flux_check_star_ext {flux_check_star_ext}")
+
+    #flux = ((flux_int*flux_check_int
+           #+ flux_ext*flux_check_ext
+           #+ flux_star_int*flux_check_star_int
+           #+ flux_star_ext*flux_check_star_ext)/
+           #(flux_check_int + flux_check_ext +
+            #flux_check_star_int + flux_check_star_ext))
+
+    #print(f"flux_int.mass {flux_int.mass}")
+    #print(f"flux_int.momentum {flux_int.momentum}")
+    #print(f"flux_int.energy {flux_int.energy}")
+
+    #print(f"flux_ext.mass {flux_ext.mass}")
+    #print(f"flux_ext.momentum {flux_ext.momentum}")
+    #print(f"flux_ext.energy {flux_ext.energy}")
+
+    #print(f"flux_star_int.mass {flux_star_int.mass}")
+    #print(f"flux_star_int.momentum {flux_star_int.momentum}")
+    #print(f"flux_star_int.energy {flux_star_int.energy}")
+
+    #print(f"flux_star_ext.mass {flux_star_ext.mass}")
+    #print(f"flux_star_ext.momentum {flux_star_ext.momentum}")
+    #print(f"flux_star_ext.energy {flux_star_ext.energy}")
+
+    #print(f"flux.mass {flux.mass}")
+    #print(f"flux.momentum {flux.momentum}")
+    #print(f"flux.energy {flux.energy}")
+
+    return flux
