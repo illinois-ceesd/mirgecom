@@ -29,8 +29,8 @@ import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
 
-from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
+from grudge.array_context import (PyOpenCLArrayContext,
+    MPIPytatoPyOpenCLArrayContext)
 from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
@@ -93,8 +93,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             logmgr=logmgr)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue)
 
     if restart_step is None:
 
@@ -254,7 +253,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=PytatoPyOpenCLArrayContext if args.lazy
+         actx_class=MPIPytatoPyOpenCLArrayContext if args.lazy
          else PyOpenCLArrayContext)
 
 
