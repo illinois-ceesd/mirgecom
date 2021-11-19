@@ -177,11 +177,11 @@ def get_decaying_trig_truncated_domain(dim, alpha):
 
 
 # 1D: alpha(x) = 1+0.2*cos(3*x)
-#     u(x,t)   = cos(x)
+#     u(x,t)   = cos(x) (manufactured)
 # 2D: alpha(x,y) = 1+0.2*cos(3*x)*cos(3*y)
-#     u(x,y,t)   = sin(x)*cos(y)
+#     u(x,y,t)   = sin(x)*cos(y) (manufactured)
 # 3D: alpha(x,y,z) = 1+0.2*cos(3*x)*cos(3*y)*cos(3*z)
-#     u(x,y,z,t)   = sin(x)*sin(y)*cos(z)
+#     u(x,y,z,t)   = sin(x)*sin(y)*cos(z) (manufactured)
 # on [-pi/2, pi/2]^{#dims}
 def get_static_trig_var_diff(dim):
     def get_mesh(n):
