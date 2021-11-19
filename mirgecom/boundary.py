@@ -51,7 +51,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import inviscid_facial_flux
-from grudge.dof_desc import as_dofdesc
+from grudge.dof_desc import as_dofdesc, DOFDesc
 
 from abc import ABCMeta, abstractmethod
 
@@ -150,12 +150,13 @@ class PrescribedInviscidBoundary(FluidBC):
             self._fluid_soln_grad_flux_func = divergence_flux_central
         self._fluid_temperature_func = fluid_temperature_func
 
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
+    def _boundary_quantity(self, discr, dd_bnd, quantity, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
         if "local" in kwargs:
             if kwargs["local"]:
                 return quantity
-        return discr.project(btag, "all_faces", quantity)
+        dd_allfaces = DOFDesc("all_faces", dd_bnd.quadrature_tag)
+        return discr.project(dd_bnd, dd_allfaces, quantity)
 
     def boundary_pair(self, discr, dd_bnd, cv, **kwargs):
         """Get the interior and exterior solution on the boundary."""
@@ -189,19 +190,22 @@ class PrescribedInviscidBoundary(FluidBC):
 
     def cv_gradient_flux(self, discr, btag, cv, **kwargs):
         """Get the flux through boundary *btag* for each scalar in *q*."""
+        dd_b = as_dofdesc(btag).with_discr_tag(
+            kwargs.get("quad_tag", None))
+
         actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
+        boundary_discr = discr.discr_from_dd(dd_b)
         nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
+        nhat = thaw(actx, discr.normal(dd_b))
         if self._fluid_soln_flux_func:
-            cv_minus = discr.project("vol", btag, cv)
+            cv_minus = discr.project("vol", dd_b, cv)
             flux_weak = self._fluid_soln_flux_func(nodes, cv=cv_minus, nhat=nhat,
                                                    **kwargs)
         else:
-            bnd_pair = self.boundary_pair(discr, btag=btag, cv=cv, **kwargs)
+            bnd_pair = self.boundary_pair(discr, dd_bnd=dd_b, cv=cv, **kwargs)
             flux_weak = self._scalar_num_flux_func(bnd_pair, normal=nhat)
 
-        return self._boundary_quantity(discr, btag=btag, quantity=flux_weak,
+        return self._boundary_quantity(discr, dd_b, quantity=flux_weak,
                                        **kwargs)
 
     def soln_gradient_flux(self, discr, btag, soln, **kwargs):
@@ -211,22 +215,25 @@ class PrescribedInviscidBoundary(FluidBC):
 
     def s_boundary_flux(self, discr, btag, grad_cv, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
+        dd_bnd = as_dofdesc(btag).with_discr_tag(
+            kwargs.get("quad_tag", None))
+
         actx = grad_cv.mass[0].array_context
-        boundary_discr = discr.discr_from_dd(btag)
+        boundary_discr = discr.discr_from_dd(dd_bnd)
         nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        grad_cv_minus = discr.project("vol", btag, grad_cv)
+        nhat = thaw(actx, discr.normal(dd_bnd))
+        grad_cv_minus = discr.project("vol", dd_bnd, grad_cv)
         if self._fluid_soln_grad_func:
             grad_cv_plus = \
                 self._fluid_soln_grad_func(nodes, nhat=nhat,
                                            grad_cv=grad_cv_minus, **kwargs)
         else:
             grad_cv_plus = grad_cv_minus
-        bnd_grad_pair = TracePair(btag, interior=grad_cv_minus,
+        bnd_grad_pair = TracePair(dd_bnd, interior=grad_cv_minus,
                                   exterior=grad_cv_plus)
 
         return self._boundary_quantity(
-            discr, btag, self._fluid_soln_grad_flux_func(bnd_grad_pair, nhat),
+            discr, dd_bnd, self._fluid_soln_grad_flux_func(bnd_grad_pair, nhat),
             **kwargs
         )
 

@@ -31,7 +31,6 @@ THE SOFTWARE.
 
 def grad_operator(discr, u, flux, quad_tag=None):
     r"""Compute a DG gradient for the input *u* with flux given by *flux*.
-
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
@@ -57,8 +56,7 @@ def grad_operator(discr, u, flux, quad_tag=None):
 
     return -discr.inverse_mass(
         weak_local_grad(discr, dd, u, nested=False)
-        - discr.face_mass(dd_allfaces, flux),
-        # dd_quad=dd
+        - discr.face_mass(dd_allfaces, flux)
     )
 
 

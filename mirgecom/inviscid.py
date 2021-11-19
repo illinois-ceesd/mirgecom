@@ -45,7 +45,7 @@ from mirgecom.flux import divergence_flux_lfr, divergence_flux_hllc, divergence_
 from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(discr, pressure, cv):
+def inviscid_flux(pressure, cv):
     r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
@@ -107,8 +107,8 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     p_int = eos.pressure(cv_tpair.int)
     p_ext = eos.pressure(cv_tpair.ext)
     flux_tpair = TracePair(cv_tpair.dd,
-                           interior=inviscid_flux(discr, p_int, cv_tpair.int),
-                           exterior=inviscid_flux(discr, p_ext, cv_tpair.ext))
+                           interior=inviscid_flux(p_int, cv_tpair.int),
+                           exterior=inviscid_flux(p_ext, cv_tpair.ext))
 
     # This calculates the local maximum eigenvalue of the flux Jacobian
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
@@ -119,19 +119,47 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
 
     normal = thaw(actx, discr.normal(cv_tpair.dd))
 
+    from arraycontext import outer
+    dim = cv_tpair.int.dim
+    #cv_hll_int = make_conserved(dim=dim, mass=cv_tpair.int.mass,
+                                #momentum=np.dot(cv_tpair.int.momentum, normal),
+                                #energy=cv_tpair.int.energy,
+                                #species_mass=cv_tpair.int.species_mass
+                                #)
+    #cv_hll_ext = make_conserved(dim=dim, mass=cv_tpair.ext.mass,
+                                #momentum=np.dot(cv_tpair.ext.momentum, normal),
+                                #energy=cv_tpair.ext.energy,
+                                #species_mass=cv_tpair.ext.species_mass
+                                #)
+
+
+    #cv_tpair_hll = TracePair(cv_tpair.dd,
+                           #interior=cv_hll_int,
+                           #exterior=cv_hll_ext)
+    #flux_tpair_hll = TracePair(cv_tpair.dd,
+                           #interior=inviscid_flux(p_int, cv_tpair_hll.int),
+                           #exterior=inviscid_flux(p_ext, cv_tpair_hll.ext))
+
+    #print(f"{cv_tpair.int.momentum=}")
+    #print(f"{cv_tpair_hll.int.momentum=}")
+
     # todo: user-supplied flux routine
     flux_weak_lfr = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
-    # flux_weak_hll = divergence_flux_hll(cv_tpair, flux_tpair, normal=normal, eos=eos)
+    # flux_weak_hll = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
+    #flux_weak_hllc = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
     #flux_weak = divergence_flux_hllc(cv_tpair, flux_tpair, normal=normal, eos=eos)
 
     # print(f"flux_hll.mass {flux_weak_hll.mass}")
     # print(f"flux_hll.momentum {flux_weak_hll.momentum}")
     # print(f"flux_hll.energy {flux_weak_hll.energy}")
 
+    # print(f"mass_int {cv_tpair.int.mass}")
+    # print(f"p_int {p_int}")
     # print(f"flux_lfr.mass {flux_weak_lfr.mass}")
     # print(f"flux_lfr.momentum {flux_weak_lfr.momentum}")
     # print(f"flux_lfr.energy {flux_weak_lfr.energy}")
 
+    #flux_weak = flux_weak_hllc
     # flux_weak = flux_weak_hll
     flux_weak = flux_weak_lfr
 

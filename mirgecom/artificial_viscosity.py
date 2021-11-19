@@ -98,11 +98,12 @@ import numpy as np
 
 from pytools import memoize_in, keyed_memoize_in
 from pytools.obj_array import obj_array_vectorize
+
 from meshmode.dof_array import thaw, DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
-from grudge.symbolic.primitives import TracePair
-from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
+
+from grudge.trace_pair import TracePair, interior_trace_pairs
+from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME, DOFDesc
 
 
 # FIXME: Remove when get_array_container_context is added to meshmode
@@ -129,27 +130,29 @@ def _outer(a, b):
 def _facial_flux_q(discr, q_tpair):
     """Compute facial flux for each scalar component of Q."""
     actx = _get_actx(q_tpair)
+    dd = q_tpair.dd
 
-    normal = thaw(actx, discr.normal(q_tpair.dd))
+    normal = thaw(actx, discr.normal(dd))
 
     # This uses a central scalar flux along nhat:
     # flux = 1/2 * (Q- + Q+) * nhat
     flux_out = _outer(q_tpair.avg, normal)
 
-    return discr.project(q_tpair.dd, "all_faces", flux_out)
+    return discr.project(dd, dd.with_dtag("all_faces"), flux_out)
 
 
 def _facial_flux_r(discr, r_tpair):
     """Compute facial flux for vector component of grad(Q)."""
     actx = _get_actx(r_tpair)
+    dd = r_tpair.dd
 
-    normal = thaw(actx, discr.normal(r_tpair.dd))
+    normal = thaw(actx, discr.normal(dd))
 
     # This uses a central vector flux along nhat:
     # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
     flux_out = r_tpair.avg @ normal
 
-    return discr.project(r_tpair.dd, "all_faces", flux_out)
+    return discr.project(dd, dd.with_dtag("all_faces"), flux_out)
 
 
 def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
@@ -182,10 +185,6 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
 
         The maximum artificial viscosity coefficient to be applied
 
-    boundary_kwargs: :class:`dict`
-
-        dictionary of extra arguments to pass through to the boundary conditions
-
     Returns
     -------
     numpy.ndarray
@@ -195,42 +194,78 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     if boundary_kwargs is None:
         boundary_kwargs = dict()
 
-    # Get smoothness indicator based on first component
-    indicator_field = q[0] if isinstance(q, np.ndarray) else q
-    indicator = smoothness_indicator(discr, indicator_field, **kwargs)
-
-    # R=Grad(Q) volume part
-    if isinstance(q, np.ndarray):
-        grad_q_vol = np.stack(obj_array_vectorize(discr.weak_grad, q), axis=0)
+    quad_tag = kwargs.get("quad_tag", None)
+    if quad_tag is None:
+        dd = DD_VOLUME
     else:
-        grad_q_vol = discr.weak_grad(q)
+        dd = DOFDesc("vol", quad_tag)
+
+    dd_allfaces = dd.with_dtag("all_faces")
+
+    kappa = kwargs.get("kappa", 1.0)
+    s0 = kwargs.get("s0", -6.0)
+    indicator = smoothness_indicator(
+        discr,
+        # Only applying the smoothness indicator to the "mass" field
+        q[0] if isinstance(q, np.ndarray) else q,
+        kappa=kappa,
+        s0=s0
+    )
+
+    def to_quad(a, from_dd, dtag):
+        return discr.project(from_dd, dd.with_dtag(dtag), a)
 
     # Total flux of fluid soln Q across element boundaries
-    q_bnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
-                  + sum(_facial_flux_q(discr, q_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, q)))
-    q_bnd_flux2 = sum(bnd.soln_gradient_flux(discr, btag, soln=q, **boundary_kwargs)
-                      for btag, bnd in boundaries.items())
-    # if isinstance(q, np.ndarray):
-    #     q_bnd_flux2 = np.stack(q_bnd_flux2)
-    q_bnd_flux = q_bnd_flux + q_bnd_flux2
+    q_bnd_flux = (
+        sum(
+            _facial_flux_q(
+                discr,
+                q_tpair=TracePair(
+                    pb_tpair.dd.with_discr_tag(quad_tag),
+                    interior=to_quad(pb_tpair.int, pb_tpair.dd, "int_faces"),
+                    exterior=to_quad(pb_tpair.ext, pb_tpair.dd, "int_faces")
+                )
+            ) for pb_tpair in interior_trace_pairs(discr, q)
+        )
+        # Boundary conditions
+        + sum(
+            boundaries[btag].soln_gradient_flux(discr, btag, soln=q, **boundary_kwargs)
+            for btag in boundaries
+        )
+    )
 
     # Compute R
     r = discr.inverse_mass(
-        -alpha * indicator * (grad_q_vol - discr.face_mass(q_bnd_flux))
+        -alpha * indicator * (
+            discr.weak_grad(dd, discr.project("vol", dd, q))
+            - discr.face_mass(dd_allfaces, q_bnd_flux)
+        )
     )
 
-    # RHS_av = div(R) volume part
-    div_r_vol = discr.weak_div(r)
     # Total flux of grad(Q) across element boundaries
-    r_bnd_flux = (_facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
-                  + sum(_facial_flux_r(discr, r_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, r))
-                  + sum(bnd.av_flux(discr, btag, diffusion=r, **boundary_kwargs)
-                        for btag, bnd in boundaries.items()))
+    r_bnd_flux = (
+        sum(
+            _facial_flux_r(
+                discr,
+                r_tpair=TracePair(
+                    pb_tpair.dd.with_discr_tag(quad_tag),
+                    interior=to_quad(pb_tpair.int, pb_tpair.dd, "int_faces"),
+                    exterior=to_quad(pb_tpair.ext, pb_tpair.dd, "int_faces")
+                )
+            ) for pb_tpair in interior_trace_pairs(discr, r)
+        )
+        # Boundary conditions
+        + sum(
+            boundaries[btag].av_flux(discr, btag, r, **boundary_kwargs)
+            for btag in boundaries
+        )
+    )
 
     # Return the AV RHS term
-    return discr.inverse_mass(-div_r_vol + discr.face_mass(r_bnd_flux))
+    return discr.inverse_mass(
+        (-discr.weak_div(dd, discr.project("vol", dd, r))
+         + discr.face_mass(dd_allfaces, r_bnd_flux))
+    )
 
 
 def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
@@ -238,8 +273,9 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
     from warnings import warn
     warn("Do not call artificial_viscosity; it is now called av_operator. This"
          "function will disappear in 2021", DeprecationWarning, stacklevel=2)
-    return av_operator(discr=discr, boundaries=boundaries,
-        boundary_kwargs={"t": t, "eos": eos}, q=q, alpha=alpha, **kwargs)
+    kwargs["t"] = t
+    kwargs["eos"] = eos
+    return av_operator(discr, boundaries, q, alpha, **kwargs)
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):

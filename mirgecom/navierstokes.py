@@ -211,7 +211,7 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
 
     vol_term = (
         viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
-        - inviscid_flux(discr, pressure=dv.pressure, cv=cv)
+        - inviscid_flux(pressure=dv.pressure, cv=cv)
     ).join()
 
     bnd_term = (
