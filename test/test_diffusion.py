@@ -248,6 +248,40 @@ def get_static_trig_var_diff(dim):
     return HeatProblem(dim, get_mesh, get_alpha, get_u, get_boundaries)
 
 
+# alpha(u) = 1 + u**3
+# 1D: u(x,t) = cos(x) (manufactured)
+# 2D: u(x,y,t) = sin(x)*cos(y) (manufactured)
+# 3D: u(x,y,z,t) = sin(x)*sin(y)*cos(z) (manufactured)
+# on [-pi/2, pi/2]^{#dims}
+def get_static_trig_nonlinear_diff(dim):
+    def get_mesh(n):
+        return get_box_mesh(dim, -0.5*np.pi, 0.5*np.pi, n)
+
+    def get_alpha(x, t, u):
+        return 1 + u**3
+
+    def get_u(x, t):
+        u = 1
+        for i in range(dim-1):
+            u *= _sin(x[i])
+        u *= _cos(x[dim-1])
+        return u
+
+    def get_boundaries(discr, actx, t):
+        boundaries = {}
+
+        for i in range(dim-1):
+            boundaries[DTAG_BOUNDARY("-"+str(i))] = NeumannDiffusionBoundary(0.)
+            boundaries[DTAG_BOUNDARY("+"+str(i))] = NeumannDiffusionBoundary(0.)
+
+        boundaries[DTAG_BOUNDARY("-"+str(dim-1))] = DirichletDiffusionBoundary(0.)
+        boundaries[DTAG_BOUNDARY("+"+str(dim-1))] = DirichletDiffusionBoundary(0.)
+
+        return boundaries
+
+    return HeatProblem(dim, get_mesh, get_alpha, get_u, get_boundaries)
+
+
 def sym_diffusion(dim, sym_alpha, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
@@ -268,6 +302,9 @@ def sym_diffusion(dim, sym_alpha, sym_u):
         (get_static_trig_var_diff(1), 50, 5.e-5, [8, 16, 24]),
         (get_static_trig_var_diff(2), 50, 5.e-5, [12, 14, 16]),
         (get_static_trig_var_diff(3), 50, 5.e-5, [8, 10, 12]),
+        (get_static_trig_nonlinear_diff(1), 50, 5.e-5, [8, 16, 24]),
+        (get_static_trig_nonlinear_diff(2), 50, 5.e-5, [12, 14, 16]),
+        (get_static_trig_nonlinear_diff(3), 50, 5.e-5, [8, 10, 12]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             visualize=False):
