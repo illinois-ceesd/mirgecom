@@ -1056,7 +1056,7 @@ class PlanarDiscontinuity:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, x_vec, eos, *, time=0.0):
+    def __call__(self, x_vec, eos, *, time=0.0, **kwargs):
         """Create the mixture state at locations *x_vec*.
 
         Parameters

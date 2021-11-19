@@ -104,12 +104,12 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0,
     if dv is None:
         dv = eos.dependent_vars(cv)
 
-    inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv)
+    inviscid_flux_vol = inviscid_flux(dv.pressure, cv)
     inviscid_flux_bnd = (
         inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
         + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
+            discr, eos=eos, cv_tpair=TracePair(part_tpair.dd,
+                interior=make_conserved(discr.dim, q=part_tpair.int),
                 exterior=make_conserved(discr.dim, q=part_tpair.ext)))
               for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
         + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
