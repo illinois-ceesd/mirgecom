@@ -159,9 +159,9 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     #print(f"flux_lfr.momentum {flux_weak_lfr.momentum}")
     #print(f"flux_lfr.energy {flux_weak_lfr.energy}")
 
-    flux_weak = flux_weak_hllc
+    #flux_weak = flux_weak_hllc
     #flux_weak = flux_weak_hll
-    #flux_weak = flux_weak_lfr
+    flux_weak = flux_weak_lfr
 
     if local is False:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
