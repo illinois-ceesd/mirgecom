@@ -56,9 +56,9 @@ def grad_operator(discr, u, flux, quad_tag=None):
     dd_allfaces = dd.with_dtag("all_faces")
 
     return -discr.inverse_mass(
-        dd,
         weak_local_grad(discr, dd, u, nested=False)
-        - discr.face_mass(dd_allfaces, flux)
+        - discr.face_mass(dd_allfaces, flux),
+        # dd_quad=dd
     )
 
 
@@ -89,7 +89,6 @@ def div_operator(discr, u, flux, quad_tag=None):
     dd_allfaces = dd.with_dtag("all_faces")
 
     return -discr.inverse_mass(
-        dd,
         weak_local_div(discr, dd, u)
         - discr.face_mass(dd_allfaces, flux)
     )

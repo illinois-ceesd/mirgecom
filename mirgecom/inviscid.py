@@ -121,19 +121,19 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
 
     # todo: user-supplied flux routine
     flux_weak_lfr = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
-    flux_weak_hll = divergence_flux_hll(cv_tpair, flux_tpair, normal=normal, eos=eos)
+    # flux_weak_hll = divergence_flux_hll(cv_tpair, flux_tpair, normal=normal, eos=eos)
     #flux_weak = divergence_flux_hllc(cv_tpair, flux_tpair, normal=normal, eos=eos)
 
-    print(f"flux_hll.mass {flux_weak_hll.mass}")
-    print(f"flux_hll.momentum {flux_weak_hll.momentum}")
-    print(f"flux_hll.energy {flux_weak_hll.energy}")
+    # print(f"flux_hll.mass {flux_weak_hll.mass}")
+    # print(f"flux_hll.momentum {flux_weak_hll.momentum}")
+    # print(f"flux_hll.energy {flux_weak_hll.energy}")
 
-    print(f"flux_lfr.mass {flux_weak_lfr.mass}")
-    print(f"flux_lfr.momentum {flux_weak_lfr.momentum}")
-    print(f"flux_lfr.energy {flux_weak_lfr.energy}")
+    # print(f"flux_lfr.mass {flux_weak_lfr.mass}")
+    # print(f"flux_lfr.momentum {flux_weak_lfr.momentum}")
+    # print(f"flux_lfr.energy {flux_weak_lfr.energy}")
 
-    flux_weak = flux_weak_hll
-    #flux_weak = flux_weak_lfr
+    # flux_weak = flux_weak_hll
+    flux_weak = flux_weak_lfr
 
     if local is False:
         from grudge.dof_desc import DOFDesc

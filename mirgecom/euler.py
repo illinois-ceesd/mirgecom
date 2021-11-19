@@ -108,7 +108,8 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0, quad_tag=None, dv=None)
     def to_quad(a, from_dd, dtag):
         return discr.project(from_dd, dd.with_dtag(dtag), a)
 
-    inviscid_flux_vol = inviscid_flux(discr, eos, discr.project("vol", dd, cv))
+    inviscid_flux_vol = inviscid_flux(discr, discr.project("vol", dd, dv.pressure),
+                                      discr.project("vol", dd, cv))
     inviscid_flux_bnd = (
         # Interior trace pairs
         + sum(inviscid_facial_flux(
