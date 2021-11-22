@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABCMeta, abstractmethod
 import numpy as np
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
@@ -40,8 +41,6 @@ from meshmode.array_context import (  # noqa
 
 import pytest
 
-from dataclasses import dataclass
-from typing import Callable
 from numbers import Number
 
 import logging
@@ -82,38 +81,47 @@ def _sym_eval(expr, **kwargs):
     return sym.EvaluationMapper(kwargs)(expr)
 
 
-@dataclass
-class HeatProblem:
-    """Description of a heat equation problem.
+class HeatProblem(metaclass=ABCMeta):
+    """
+    Description of a heat equation problem.
 
-    .. attribute:: dim
-
-        The problem dimension.
-
-    .. attribute:: get_mesh
-
-        A function that creates a mesh when given some characteristic size as input.
-
-    .. attribute:: get_alpha
-
-        A function that returns alpha given an array of coordinates, a time, and a
-        solution value
-
-    .. attribute:: get_u
-
-        A function that returns u given an array of coordinates and a time
-
-    .. attribute:: get_boundaries
-
-        A function that creates a btag-to-boundary dict given a discretization, an
-        array context, and a time
+    .. autoproperty:: dim
+    .. automethod:: get_mesh
+    .. automethod:: get_alpha
+    .. automethod:: get_solution
+    .. automethod:: get_boundaries
     """
 
-    dim: int
-    get_mesh: Callable
-    get_alpha: Callable
-    get_u: Callable
-    get_boundaries: Callable
+    def __init__(self, dim):
+        self._dim = dim
+
+    @property
+    def dim(self):
+        """The problem dimension."""
+        return self._dim
+
+    @abstractmethod
+    def get_mesh(self, n):
+        """Generate and return a mesh of some given characteristic size *n*."""
+        pass
+
+    @abstractmethod
+    def get_solution(self, x, t):
+        """Return the solution for coordinates *x* and time *t*."""
+        pass
+
+    @abstractmethod
+    def get_alpha(self, x, t, u):
+        """Return the diffusivity for coordinates *x*, time *t*, and solution *u*."""
+        pass
+
+    @abstractmethod
+    def get_boundaries(self, discr, actx, t):
+        """
+        Return a :class:`dict` that maps boundary tags to boundary conditions at
+        time *t*.
+        """
+        pass
 
 
 def get_box_mesh(dim, a, b, n):
@@ -131,64 +139,74 @@ def get_box_mesh(dim, a, b, n):
 # 2D: u(x,y,t) = exp(-2*alpha*t)*sin(x)*cos(y)
 # 3D: u(x,y,z,t) = exp(-3*alpha*t)*sin(x)*sin(y)*cos(z)
 # on [-pi/2, pi/2]^{#dims}
-def get_decaying_trig(dim, alpha):
-    def get_mesh(n):
-        return get_box_mesh(dim, -0.5*np.pi, 0.5*np.pi, n)
+class DecayingTrig(HeatProblem):
+    def __init__(self, dim, alpha):
+        super().__init__(dim)
+        self._alpha = alpha
 
-    def get_alpha(x, t, u):
-        return alpha
+    def get_mesh(self, n):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
-    def get_u(x, t):
-        u = _exp(-dim*alpha*t)
-        for i in range(dim-1):
+    def get_solution(self, x, t):
+        u = _exp(-self.dim*self._alpha*t)
+        for i in range(self.dim-1):
             u *= _sin(x[i])
-        u *= _cos(x[dim-1])
+        u *= _cos(x[self.dim-1])
         return u
 
-    def get_boundaries(discr, actx, t):
+    def get_alpha(self, x, t, u):
+        return self._alpha
+
+    def get_boundaries(self, discr, actx, t):
         boundaries = {}
 
-        for i in range(dim-1):
-            boundaries[DTAG_BOUNDARY("-"+str(i))] = NeumannDiffusionBoundary(0.)
-            boundaries[DTAG_BOUNDARY("+"+str(i))] = NeumannDiffusionBoundary(0.)
-
-        boundaries[DTAG_BOUNDARY("-"+str(dim-1))] = DirichletDiffusionBoundary(0.)
-        boundaries[DTAG_BOUNDARY("+"+str(dim-1))] = DirichletDiffusionBoundary(0.)
+        for i in range(self.dim-1):
+            lower_btag = DTAG_BOUNDARY("-"+str(i))
+            upper_btag = DTAG_BOUNDARY("+"+str(i))
+            boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
+            boundaries[upper_btag] = NeumannDiffusionBoundary(0.)
+        lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
+        upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
+        boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
+        boundaries[upper_btag] = DirichletDiffusionBoundary(0.)
 
         return boundaries
-
-    return HeatProblem(dim, get_mesh, get_alpha, get_u, get_boundaries)
 
 
 # 1D: u(x,t) = exp(-alpha*t)*cos(x)
 # 2D: u(x,y,t) = exp(-2*alpha*t)*sin(x)*cos(y)
 # 3D: u(x,y,z,t) = exp(-3*alpha*t)*sin(x)*sin(y)*cos(z)
 # on [-pi/2, pi/4]^{#dims}
-def get_decaying_trig_truncated_domain(dim, alpha):
-    def get_mesh(n):
-        return get_box_mesh(dim, -0.5*np.pi, 0.25*np.pi, n)
+class DecayingTrigTruncatedDomain(HeatProblem):
+    def __init__(self, dim, alpha):
+        super().__init__(dim)
+        self._alpha = alpha
 
-    def get_alpha(x, t, u):
-        return alpha
+    def get_mesh(self, n):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.25*np.pi, n)
 
-    def get_u(x, t):
-        u = _exp(-dim*alpha*t)
-        for i in range(dim-1):
+    def get_solution(self, x, t):
+        u = _exp(-self.dim*self._alpha*t)
+        for i in range(self.dim-1):
             u *= _sin(x[i])
-        u *= _cos(x[dim-1])
+        u *= _cos(x[self.dim-1])
         return u
 
-    def get_boundaries(discr, actx, t):
+    def get_alpha(self, x, t, u):
+        return self._alpha
+
+    def get_boundaries(self, discr, actx, t):
         nodes = thaw(actx, discr.nodes())
 
-        sym_exact_u = get_u(pmbl.make_sym_vector("x", dim), pmbl.var("t"))
+        sym_exact_u = self.get_solution(
+            pmbl.make_sym_vector("x", self.dim), pmbl.var("t"))
 
         exact_u = _sym_eval(sym_exact_u, x=nodes, t=t)
-        exact_grad_u = _sym_eval(sym.grad(dim, sym_exact_u), x=nodes, t=t)
+        exact_grad_u = _sym_eval(sym.grad(self.dim, sym_exact_u), x=nodes, t=t)
 
         boundaries = {}
 
-        for i in range(dim-1):
+        for i in range(self.dim-1):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
             upper_grad_u = discr.project("vol", upper_btag, exact_grad_u)
@@ -196,16 +214,13 @@ def get_decaying_trig_truncated_domain(dim, alpha):
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
-
-        lower_btag = DTAG_BOUNDARY("-"+str(dim-1))
-        upper_btag = DTAG_BOUNDARY("+"+str(dim-1))
+        lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
+        upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
         upper_u = discr.project("vol", upper_btag, exact_u)
         boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_btag] = DirichletDiffusionBoundary(upper_u)
 
         return boundaries
-
-    return HeatProblem(dim, get_mesh, get_alpha, get_u, get_boundaries)
 
 
 # 1D: alpha(x) = 1+0.2*cos(3*x)
@@ -215,37 +230,41 @@ def get_decaying_trig_truncated_domain(dim, alpha):
 # 3D: alpha(x,y,z) = 1+0.2*cos(3*x)*cos(3*y)*cos(3*z)
 #     u(x,y,z,t)   = sin(x)*sin(y)*cos(z) (manufactured)
 # on [-pi/2, pi/2]^{#dims}
-def get_static_trig_var_diff(dim):
-    def get_mesh(n):
-        return get_box_mesh(dim, -0.5*np.pi, 0.5*np.pi, n)
+class StaticTrigVarDiff(HeatProblem):
+    def __init__(self, dim):
+        super().__init__(dim)
 
-    def get_alpha(x, t, u):
+    def get_mesh(self, n):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
+
+    def get_solution(self, x, t):
+        u = 1
+        for i in range(self.dim-1):
+            u *= _sin(x[i])
+        u *= _cos(x[self.dim-1])
+        return u
+
+    def get_alpha(self, x, t, u):
         alpha = 1
-        for i in range(dim):
+        for i in range(self.dim):
             alpha *= _cos(3.*x[i])
         alpha = 1 + 0.2*alpha
         return alpha
 
-    def get_u(x, t):
-        u = 1
-        for i in range(dim-1):
-            u *= _sin(x[i])
-        u *= _cos(x[dim-1])
-        return u
-
-    def get_boundaries(discr, actx, t):
+    def get_boundaries(self, discr, actx, t):
         boundaries = {}
 
-        for i in range(dim-1):
-            boundaries[DTAG_BOUNDARY("-"+str(i))] = NeumannDiffusionBoundary(0.)
-            boundaries[DTAG_BOUNDARY("+"+str(i))] = NeumannDiffusionBoundary(0.)
-
-        boundaries[DTAG_BOUNDARY("-"+str(dim-1))] = DirichletDiffusionBoundary(0.)
-        boundaries[DTAG_BOUNDARY("+"+str(dim-1))] = DirichletDiffusionBoundary(0.)
+        for i in range(self.dim-1):
+            lower_btag = DTAG_BOUNDARY("-"+str(i))
+            upper_btag = DTAG_BOUNDARY("+"+str(i))
+            boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
+            boundaries[upper_btag] = NeumannDiffusionBoundary(0.)
+        lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
+        upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
+        boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
+        boundaries[upper_btag] = DirichletDiffusionBoundary(0.)
 
         return boundaries
-
-    return HeatProblem(dim, get_mesh, get_alpha, get_u, get_boundaries)
 
 
 # alpha(u) = 1 + u**3
@@ -253,33 +272,37 @@ def get_static_trig_var_diff(dim):
 # 2D: u(x,y,t) = sin(x)*cos(y) (manufactured)
 # 3D: u(x,y,z,t) = sin(x)*sin(y)*cos(z) (manufactured)
 # on [-pi/2, pi/2]^{#dims}
-def get_static_trig_nonlinear_diff(dim):
-    def get_mesh(n):
-        return get_box_mesh(dim, -0.5*np.pi, 0.5*np.pi, n)
+class StaticTrigNonlinearDiff(HeatProblem):
+    def __init__(self, dim):
+        super().__init__(dim)
 
-    def get_alpha(x, t, u):
-        return 1 + u**3
+    def get_mesh(self, n):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
-    def get_u(x, t):
+    def get_solution(self, x, t):
         u = 1
-        for i in range(dim-1):
+        for i in range(self.dim-1):
             u *= _sin(x[i])
-        u *= _cos(x[dim-1])
+        u *= _cos(x[self.dim-1])
         return u
 
-    def get_boundaries(discr, actx, t):
+    def get_alpha(self, x, t, u):
+        return 1 + u**3
+
+    def get_boundaries(self, discr, actx, t):
         boundaries = {}
 
-        for i in range(dim-1):
-            boundaries[DTAG_BOUNDARY("-"+str(i))] = NeumannDiffusionBoundary(0.)
-            boundaries[DTAG_BOUNDARY("+"+str(i))] = NeumannDiffusionBoundary(0.)
-
-        boundaries[DTAG_BOUNDARY("-"+str(dim-1))] = DirichletDiffusionBoundary(0.)
-        boundaries[DTAG_BOUNDARY("+"+str(dim-1))] = DirichletDiffusionBoundary(0.)
+        for i in range(self.dim-1):
+            lower_btag = DTAG_BOUNDARY("-"+str(i))
+            upper_btag = DTAG_BOUNDARY("+"+str(i))
+            boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
+            boundaries[upper_btag] = NeumannDiffusionBoundary(0.)
+        lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
+        upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
+        boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
+        boundaries[upper_btag] = DirichletDiffusionBoundary(0.)
 
         return boundaries
-
-    return HeatProblem(dim, get_mesh, get_alpha, get_u, get_boundaries)
 
 
 def sym_diffusion(dim, sym_alpha, sym_u):
@@ -296,13 +319,13 @@ def sym_diffusion(dim, sym_alpha, sym_u):
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
     [
-        (get_decaying_trig_truncated_domain(1, 2.), 50, 5.e-5, [8, 16, 24]),
-        (get_decaying_trig_truncated_domain(2, 2.), 50, 5.e-5, [8, 12, 16]),
-        (get_decaying_trig_truncated_domain(3, 2.), 50, 5.e-5, [8, 10, 12]),
-        (get_static_trig_var_diff(1), 50, 5.e-5, [8, 16, 24]),
-        (get_static_trig_var_diff(2), 50, 5.e-5, [12, 14, 16]),
-        (get_static_trig_nonlinear_diff(1), 50, 5.e-5, [8, 16, 24]),
-        (get_static_trig_nonlinear_diff(2), 50, 5.e-5, [12, 14, 16]),
+        (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24]),
+        (DecayingTrigTruncatedDomain(2, 2.), 50, 5.e-5, [8, 12, 16]),
+        (DecayingTrigTruncatedDomain(3, 2.), 50, 5.e-5, [8, 10, 12]),
+        (StaticTrigVarDiff(1), 50, 5.e-5, [8, 16, 24]),
+        (StaticTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
+        (StaticTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
+        (StaticTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             visualize=False):
@@ -316,7 +339,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
     sym_x = pmbl.make_sym_vector("x", p.dim)
     sym_t = pmbl.var("t")
-    sym_u = p.get_u(sym_x, sym_t)
+    sym_u = p.get_solution(sym_x, sym_t)
     sym_alpha = p.get_alpha(sym_x, sym_t, sym_u)
 
     sym_diffusion_u = sym_diffusion(p.dim, sym_alpha, sym_u)
@@ -357,7 +380,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         t = 0.
 
-        u = p.get_u(nodes, t)
+        u = p.get_solution(nodes, t)
 
         from mirgecom.integrators import rk4_step
 
@@ -365,7 +388,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             u = rk4_step(u, t, dt, get_rhs)
             t += dt
 
-        expected_u = p.get_u(nodes, t)
+        expected_u = p.get_solution(nodes, t)
 
         rel_linf_err = actx.to_numpy(
             discr.norm(u - expected_u, np.inf)
@@ -488,7 +511,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("problem",
     [
-        get_decaying_trig(1, 1.)
+        DecayingTrig(1, 1.)
     ])
 @pytest.mark.octave
 def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
@@ -504,7 +527,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
     sym_x = pmbl.make_sym_vector("x", p.dim)
     sym_t = pmbl.var("t")
-    sym_u = p.get_u(sym_x, sym_t)
+    sym_u = p.get_solution(sym_x, sym_t)
     sym_alpha = p.get_alpha(sym_x, sym_t, sym_u)
 
     assert sym_alpha == 1
@@ -527,7 +550,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             discr_mirgecom = EagerDGDiscretization(actx, mesh, order=order)
             nodes_mirgecom = thaw(actx, discr_mirgecom.nodes())
 
-            u_mirgecom = p.get_u(nodes_mirgecom, t)
+            u_mirgecom = p.get_solution(nodes_mirgecom, t)
 
             diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
                 quad_tag=DISCR_TAG_BASE, alpha=discr_mirgecom.zeros(actx)+1.,
@@ -536,7 +559,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(actx, discr_ndg.nodes())
 
-            u_ndg = p.get_u(nodes_ndg, t)
+            u_ndg = p.get_solution(nodes_ndg, t)
 
             ndgctx.push_dof_array("u", u_ndg)
             ndgctx.octave.push("t", t)
@@ -565,16 +588,16 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     """
     actx = actx_factory()
 
-    p = get_decaying_trig(1, 2.)
+    p = DecayingTrig(1, 2.)
 
     sym_x = pmbl.make_sym_vector("x", p.dim)
     sym_t = pmbl.var("t")
 
     def get_u1(x, t):
-        return p.get_u(x, t)
+        return p.get_solution(x, t)
 
     def get_u2(x, t):
-        return 2*p.get_u(x, t)
+        return 2*p.get_solution(x, t)
 
     sym_u1 = get_u1(sym_x, sym_t)
     sym_u2 = get_u2(sym_x, sym_t)
