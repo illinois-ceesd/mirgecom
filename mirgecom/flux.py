@@ -770,19 +770,19 @@ def flux_hllc(cv_tpair, normal, eos):
     s_ext = u_ext + c_ext*q_ext
 
     # can alternatively use the roe estimated states to find the wave speeds
-    h_int = (cv_int.energy+p_int)/rho_int
-    h_ext = (cv_ext.energy+p_ext)/rho_ext
-    u_roe = ((actx.np.sqrt(rho_int)*u_int + actx.np.sqrt(rho_ext)*u_ext)/
-             (actx.np.sqrt(rho_int) + actx.np.sqrt(rho_ext)))
-    h_roe = ((actx.np.sqrt(rho_int)*h_int + actx.np.sqrt(rho_ext)*h_ext)/
-             (actx.np.sqrt(rho_int) + actx.np.sqrt(rho_ext)))
-    c_roe = actx.np.sqrt((eos.gamma()-1)*(h_rho - 0.5*np.dot(u_int, u_int)))
-
-    s_int_roe = u_roe - c_roe
-    s_ext_roe = u_roe + c_roe
-                
-    s_int = s_int_roe
-    s_ext = s_ext_roe
+    #h_int = (cv_int.energy+p_int)/rho_int
+    #h_ext = (cv_ext.energy+p_ext)/rho_ext
+    #u_roe = ((actx.np.sqrt(rho_int)*u_int + actx.np.sqrt(rho_ext)*u_ext)/
+             #(actx.np.sqrt(rho_int) + actx.np.sqrt(rho_ext)))
+    #h_roe = ((actx.np.sqrt(rho_int)*h_int + actx.np.sqrt(rho_ext)*h_ext)/
+             #(actx.np.sqrt(rho_int) + actx.np.sqrt(rho_ext)))
+    #c_roe = actx.np.sqrt((eos.gamma()-1)*(h_rho - 0.5*np.dot(u_int, u_int)))
+#
+    #s_int_roe = u_roe - c_roe
+    #s_ext_roe = u_roe + c_roe
+                #
+    #s_int = s_int_roe
+    #s_ext = s_ext_roe
 
     # HLL fluxes
     from mirgecom.inviscid import inviscid_flux

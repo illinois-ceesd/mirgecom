@@ -145,8 +145,8 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
 
     # todo: user-supplied flux routine
     flux_weak_lfr = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
-    flux_weak_hll = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
-    flux_weak_hllc = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
+    #flux_weak_hll = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
+    #flux_weak_hllc = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
     #flux_weak = divergence_flux_hllc(cv_tpair, flux_tpair, normal=normal, eos=eos)
 
     #print(f"flux_hll.mass {flux_weak_hll.mass}")
