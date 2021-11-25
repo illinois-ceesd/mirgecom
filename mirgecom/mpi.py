@@ -121,6 +121,20 @@ def mpi_entry_point(func):
             raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
                         "point. Check for prior imports.")
 
+        actx_class = kwargs.pop("actx_class", None)
+        if actx_class:
+            from arraycontext import PyOpenCLArrayContext as NewEagerActx
+            from meshmode.array_context import PyOpenCLArrayContext as OldEagerActx
+            if actx_class == OldEagerActx:
+                print(
+                    f"*** Eager mode with deprecated '{actx_class}. ***")
+            elif actx_class == NewEagerActx:
+                print(
+                    f"*** Eager mode with '{actx_class}. ***")
+            else:
+                print(
+                    f"*** Lazy mode with '{actx_class}. ***")
+
         # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
         # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
         # for details.
