@@ -120,7 +120,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    flux = inviscid_flux(discr, eos, cv)
+    flux = inviscid_flux(eos, cv)
     flux_resid = flux - expected_flux
 
     for i in range(numeq, dim):
@@ -174,7 +174,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
-    flux = inviscid_flux(discr, eos, cv)
+    flux = inviscid_flux(eos, cv)
 
     def inf_norm(x):
         return actx.to_numpy(discr.norm(x, np.inf))
@@ -239,7 +239,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
             return actx.to_numpy(discr.norm(x, np.inf))
 
         assert inf_norm(p - p_exact) < tolerance
-        flux = inviscid_flux(discr, eos, cv)
+        flux = inviscid_flux(eos, cv)
         logger.info(f"{dim}d flux = {flux}")
         vel_exact = mom / mass
 
@@ -302,11 +302,13 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        from mirgecom.inviscid import inviscid_facial_flux
-
         # Check the boundary facial fluxes as called on an interior boundary
-        interior_face_flux = inviscid_facial_flux(
-            discr, eos=IdealSingleGas(), cv_tpair=interior_trace_pair(discr, cv))
+        eos = IdealSingleGas()
+        cv_tpair = interior_trace_pair(discr, cv)
+
+        from mirgecom.inviscid import inviscid_facial_divergence_flux
+        interior_face_flux = \
+            inviscid_facial_divergence_flux(discr, eos=eos, cv_tpair=cv_tpair)
 
         def inf_norm(data):
             if len(data) > 0:
@@ -347,9 +349,9 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
                                 momentum=dir_mom, species_mass=dir_mf)
         dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                   momentum=dir_mom, species_mass=dir_mf)
-        boundary_flux = inviscid_facial_flux(
-            discr, eos=IdealSingleGas(),
-            cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
+        cv_tpair = TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
+        boundary_flux = inviscid_facial_divergence_flux(
+            discr, eos=eos, cv_tpair=cv_tpair
         )
 
         assert inf_norm(boundary_flux.mass) < tolerance

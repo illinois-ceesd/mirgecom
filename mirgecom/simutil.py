@@ -283,15 +283,17 @@ def check_naninf_local(discr, dd, field):
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state):
+def compare_fluid_solutions(discr, red_state, blue_state, comm=None):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
     actx = red_state.array_context
-    resid = red_state - blue_state
-    return [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
+    resid = actx.np.abs(red_state - blue_state)
+    max_local_error = [actx.to_numpy(op.nodal_max_loc(discr, "vol", v))
+                       for v in resid.join()]
+    return allsync(max_local_error, comm=comm)
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

@@ -4,7 +4,7 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_facial_flux
+.. autofunction:: inviscid_facial_divergence_flux
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -39,13 +39,12 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import thaw
-from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
 from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(discr, eos, cv):
+def inviscid_flux(fluid_state):
     r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
@@ -59,19 +58,22 @@ def inviscid_flux(discr, eos, cv):
         :class:`mirgecom.fluid.ConservedVars` for more information about
         how the fluxes are represented.
     """
-    dim = cv.dim
-    p = eos.pressure(cv)
+    cv = fluid_state.cv
+    dv = fluid_state.dv
+    mass_flux = cv.momentum
+    energy_flux = cv.velocity * (cv.energy + dv.pressure)
+    mom_flux = (
+        cv.mass * np.outer(cv.velocity, cv.velocity)
+        + np.eye(cv.dim)*dv.pressure
+    )
+    species_mass_flux = (  # reshaped: (nspeceis, dim)
+        cv.velocity * cv.species_mass.reshape(-1, 1)
+    )
+    return make_conserved(cv.dim, mass=mass_flux, energy=energy_flux,
+                          momentum=mom_flux, species_mass=species_mass_flux)
 
-    mom = cv.momentum
 
-    return make_conserved(
-        dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
-        momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-        species_mass=(  # reshaped: (nspecies, dim)
-            (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
-
-
-def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
+def inviscid_facial_divergence_flux(discr, state_tpair, local=False):
     r"""Return the flux across a face given the solution on both sides *q_tpair*.
 
     This flux is currently hard-coded to use a Rusanov-type  local Lax-Friedrichs
@@ -90,12 +92,9 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
 
     Parameters
     ----------
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-
-    q_tpair: :class:`grudge.trace_pair.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
+    cv_tpair: :class:`grudge.trace_pair.TracePair`
+        Trace pair of :class:`mirgecom.fluid.ConservedVars` for the face upon
+        which the flux calculation is to be performed
 
     local: bool
         Indicates whether to skip projection of fluxes to "all_faces" or not. If
@@ -103,20 +102,21 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
     """
-    actx = cv_tpair.int.array_context
-
-    flux_tpair = TracePair(cv_tpair.dd,
-                           interior=inviscid_flux(discr, eos, cv_tpair.int),
-                           exterior=inviscid_flux(discr, eos, cv_tpair.ext))
+    actx = state_tpair.int.array_context
+    flux_tpair = TracePair(state_tpair.dd,
+                           interior=inviscid_flux(state_tpair.int),
+                           exterior=inviscid_flux(state_tpair.ext))
 
     # This calculates the local maximum eigenvalue of the flux Jacobian
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
-    lam = actx.np.maximum(
-        compute_wavespeed(eos=eos, cv=cv_tpair.int),
-        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
-    )
+    w_int = state_tpair.int.dv.speed_of_sound + state_tpair.int.cv.speed
+    w_ext = state_tpair.ext.dv.speed_of_sound + state_tpair.ext.cv.speed
+    lam = actx.np.maximum(w_int, w_ext)
 
-    normal = thaw(actx, discr.normal(cv_tpair.dd))
+    normal = thaw(actx, discr.normal(state_tpair.dd))
+    cv_tpair = TracePair(state_tpair.dd,
+                         interior=state_tpair.int.cv,
+                         exterior=state_tpair.ext.cv)
 
     # todo: user-supplied flux routine
     flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
@@ -147,10 +147,10 @@ def get_inviscid_timestep(discr, eos, cv):
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
-    from mirgecom.fluid import compute_wavespeed
+    from mirgecom.fluid import wavespeed
     return (
         characteristic_lengthscales(cv.array_context, discr)
-        / compute_wavespeed(eos, cv)
+        / wavespeed(eos, cv)
     )
 
 

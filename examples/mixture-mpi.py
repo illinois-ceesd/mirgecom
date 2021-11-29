@@ -31,10 +31,10 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -50,7 +50,6 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
@@ -153,7 +152,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     vis_timer = None
 
@@ -180,10 +179,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     mech_cti = get_mechanism_cti("uiuc")
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
+    pyro_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
-    nspecies = pyrometheus_mechanism.num_species
-    eos = PyrometheusMixture(pyrometheus_mechanism)
+    nspecies = pyro_mechanism.num_species
+    eos = PyrometheusMixture(pyro_mechanism)
 
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
@@ -196,10 +195,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                      massfractions=y0s, velocity=velocity)
 
+    def _mixture_boundary(discr, btag, eos, cv_minus, dv_minus, time=0,
+                          **kwargs):
+        actx = cv_minus.mass.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return initializer(x_vec=nodes, eos=eos, **kwargs)
+
+    from mirgecom.boundary import PrescribedFluidBoundary
     boundaries = {
-        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_mixture_boundary)
     }
-    nodes = thaw(actx, discr.nodes())
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -262,7 +269,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(dv, component_errors):
+    def my_health_check(cv, dv, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", dv.pressure) \
@@ -276,6 +283,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if rank == 0:
                 logger.info("Solution diverged from exact soln.")
 
+        y = cv.species_mass_fractions
+        e = eos.internal_energy(cv) / cv.mass
+        check_temp = pyro_mechanism.get_temperature(e, dv.temperature, y)
+        temp_resid = discr.norm(check_temp - dv.temperature, np.inf)
+        if temp_resid > 1e-12:
+            health_error = False
+            logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
         return health_error
 
     def my_pre_step(step, t, dt, state):
@@ -298,8 +312,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
-                health_errors = global_reduce(
-                    my_health_check(dv, component_errors), op="lor")
+                health_errors = \
+                    global_reduce(my_health_check(state, dv,
+                                                  component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")

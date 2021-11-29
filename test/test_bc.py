@@ -39,6 +39,7 @@ from grudge.eager import (
     interior_trace_pair
 )
 from mirgecom.fluid import make_conserved
+from grudge.trace_pair import TracePair
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -85,12 +86,16 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
+            cv_minus = discr.project("vol", BTAG_ALL, uniform_state)
+            dv_minus = eos.dependent_vars(cv_minus)
+
+            cv_plus = wall._bnd_cv_func(discr, btag=BTAG_ALL, eos=eos,
+                                        cv_minus=cv_minus, dv_minus=dv_minus)
 
             def bnd_norm(vec):
                 return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
-            bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
-                                          eos=eos, cv=uniform_state)
+            bnd_pair = TracePair(BTAG_ALL, interior=cv_minus, exterior=cv_plus)
 
             # check that mass and energy are preserved
             mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
@@ -152,9 +157,12 @@ def test_slipwall_flux(actx_factory, dim, order):
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
-                uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
-                                              eos=eos, cv=uniform_state)
+                cv_minus = discr.project("vol", BTAG_ALL, initializer(nodes))
+                dv_minus = eos.dependent_vars(cv_minus)
+                cv_plus = wall._bnd_cv_func(discr, btag=BTAG_ALL, eos=eos,
+                                            cv_minus=cv_minus,
+                                            dv_minus=dv_minus)
+                bnd_pair = TracePair(BTAG_ALL, interior=cv_minus, exterior=cv_plus)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
@@ -162,9 +170,10 @@ def test_slipwall_flux(actx_factory, dim, order):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, eos, cv_tpair=bnd_pair,
-                                                local=True)
+                from mirgecom.inviscid import inviscid_facial_divergence_flux
+                bnd_flux = \
+                    inviscid_facial_divergence_flux(discr, eos, cv_tpair=bnd_pair,
+                                                    local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 

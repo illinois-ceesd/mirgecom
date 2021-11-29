@@ -41,11 +41,14 @@ from dataclasses import dataclass
 import numpy as np
 from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
+from arraycontext import dataclass_array_container
 
 
-@dataclass
+@dataclass_array_container
+@dataclass(frozen=True)
 class EOSDependentVars:
     """State-dependent quantities for :class:`GasEOS`.
 
@@ -58,6 +61,7 @@ class EOSDependentVars:
 
     temperature: np.ndarray
     pressure: np.ndarray
+    speed_of_sound: np.ndarray
 
 
 class GasEOS(metaclass=ABCMeta):
@@ -88,7 +92,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas pressure."""
 
     @abstractmethod
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars,
+                    reference_state: ConservedVars = None):
         """Get the gas temperature."""
 
     @abstractmethod
@@ -131,11 +136,13 @@ class GasEOS(metaclass=ABCMeta):
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
 
-    def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
+    def dependent_vars(self, cv: ConservedVars,
+                       temperature_seed: DOFArray = None) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
         return EOSDependentVars(
+            temperature=self.temperature(cv, temperature_seed),
             pressure=self.pressure(cv),
-            temperature=self.temperature(cv),
+            speed_of_sound=self.sound_speed(cv)
         )
 
 
@@ -150,7 +157,13 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_seed
     """
+
+    @abstractmethod
+    def get_temperature_seed(self, cv: ConservedVars,
+                              temperature_seed: DOFArray = None):
+        r"""Get a constant and uniform guess for the gas temperature."""
 
     @abstractmethod
     def get_density(self, pressure, temperature, species_mass_fractions):
@@ -330,7 +343,7 @@ class IdealSingleGas(GasEOS):
         actx = cv.array_context
         return actx.np.sqrt(self._gamma / cv.mass * self.pressure(cv))
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, temperature_seed: DOFArray = None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature (T) is calculated from
@@ -346,6 +359,9 @@ class IdealSingleGas(GasEOS):
         cv: :class:`~mirgecom.fluid.ConservedVars`
             :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Ignored for this EOS.
 
         Returns
         -------
@@ -448,6 +464,7 @@ class PyrometheusMixture(MixtureEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_seed
     """
 
     def __init__(self, pyrometheus_mech, temperature_guess=300.0,
@@ -476,6 +493,28 @@ class PyrometheusMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
         self._transport_model = transport_model
+
+    def get_temperature_seed(self, cv, temperature_seed=None):
+        """Get a *cv*-shape-consistent array with which to seed temperature calcuation.
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` used to conjure the required shape
+            for the returned temperature guess.
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Optional data from which to seed temperature calculation.
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The temperature with which to seed the Newton solver in
+            :module:thermochemistry.
+        """
+        tseed = self._tguess
+        if temperature_seed is not None:
+            tseed = temperature_seed
+        return tseed if isinstance(tseed, DOFArray) else tseed * (0*cv.mass + 1.0)
 
     def transport_model(self):
         """Get the transport model object for this EOS."""
@@ -721,7 +760,7 @@ class PyrometheusMixture(MixtureEOS):
             return actx.np.sqrt((self.gamma(cv) * self.pressure(cv)) / cv.mass)
         return get_sos()
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, temperature_seed=None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated from
@@ -738,18 +777,24 @@ class PyrometheusMixture(MixtureEOS):
             :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Optional data from which to seed temperature calculation.
 
         Returns
         -------
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
+        # from arraycontext import thaw, freeze
+
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
+            tseed = self.get_temperature_seed(cv, temperature_seed)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, self._tguess, y)
+            return self._pyrometheus_mech.get_temperature(e, tseed, y)
+
         return get_temp()
 
     def total_energy(self, cv, pressure):

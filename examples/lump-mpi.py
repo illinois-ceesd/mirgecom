@@ -31,10 +31,10 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -50,7 +50,6 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedInviscidBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
@@ -153,7 +152,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     vis_timer = None
 
@@ -181,8 +180,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     orig = np.zeros(shape=(dim,))
     vel[:dim] = 1.0
     initializer = Lump(dim=dim, center=orig, velocity=vel)
+
+    def _lump_boundary(discr, btag, eos, cv_minus, dv_minus, time=0):
+        actx = cv_minus.mass.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return initializer(x_vec=nodes, eos=eos, cv=cv_minus, time=time)
+
+    from mirgecom.boundary import PrescribedFluidBoundary
     boundaries = {
-        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+        BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_lump_boundary)
     }
 
     if rst_filename:
