@@ -254,8 +254,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln,
-                                                      temperature_niter=20)(actx.np)
+    pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
     from pytools.obj_array import make_obj_array
