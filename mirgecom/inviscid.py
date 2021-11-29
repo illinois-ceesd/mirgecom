@@ -44,7 +44,7 @@ from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
-def inviscid_flux(fluid_state):
+def inviscid_flux(state):
     r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
@@ -58,8 +58,8 @@ def inviscid_flux(fluid_state):
         :class:`mirgecom.fluid.ConservedVars` for more information about
         how the fluxes are represented.
     """
-    cv = fluid_state.cv
-    dv = fluid_state.dv
+    cv = state.cv
+    dv = state.dv
     mass_flux = cv.momentum
     energy_flux = cv.velocity * (cv.energy + dv.pressure)
     mom_flux = (
