@@ -81,8 +81,9 @@ def euler_operator(discr, state, eos, boundaries, time=0.0):
 
     Parameters
     ----------
-    cv: :class:`mirgecom.fluid.ConservedVars`
-        Fluid conserved state object with the conserved variables.
+    state: :class:`mirgecom.gas_model.FluidState`
+        Fluid state object with the conserved state, and dependent
+        quantities.
 
     boundaries
         Dictionary of boundary functions, one for each valid btag
@@ -119,8 +120,6 @@ def euler_operator(discr, state, eos, boundaries, time=0.0):
         for q_pair in q_comm_pairs]
     cv_interior_pairs.extend(cv_part_pairs)
 
-    #    cv_boundaries = _make_persistent_boundary_cv(boundaries, cv)
-    # boundary_states = _make_persistent_boundary_states(boundaries, cv)
     tseed_interior_pairs = None
     if cv.nspecies > 0:
         # If this is a mixture, we need to exchange the temperature field because
@@ -144,6 +143,7 @@ def euler_operator(discr, state, eos, boundaries, time=0.0):
         + sum(inviscid_facial_divergence_flux(discr, state_pair)
               for state_pair in interior_states)
     )
+
     q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
     return make_conserved(discr.dim, q=q)
 
