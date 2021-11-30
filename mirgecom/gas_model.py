@@ -178,6 +178,7 @@ class FluidState:
         """Return the fluid viscosity."""
         return self._get_transport_property("viscosity")
 
+
 def make_fluid_state(cv, gas_model, temperature_seed=None):
     """Create a fluid state from the conserved vars and equation of state."""
     dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
