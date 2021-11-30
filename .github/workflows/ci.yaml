@@ -143,7 +143,7 @@ jobs:
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
-            git clone https://github.com/illinois-ceesd/emirge
+            git clone --branch gcc_linux https://github.com/illinois-ceesd/emirge
             cd emirge
             cp -a ../mirgecom .
             ./install.sh --skip-clone
