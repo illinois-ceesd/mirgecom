@@ -66,7 +66,7 @@ from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, state, eos, boundaries, time=0.0):
+def euler_operator(discr, state, gas_model, boundaries, time=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -102,12 +102,11 @@ def euler_operator(discr, state, eos, boundaries, time=0.0):
         flow equations.
     """
     cv = state.cv
-    dv = state.dv
     dim = state.dim
 
-    from mirgecom.gas_model import make_fluid_state_on_boundary
+    from mirgecom.gas_model import project_fluid_state
     boundary_states = {btag:
-                       make_fluid_state_on_boundary(discr, btag, state, eos)
+                       project_fluid_state(discr, btag, state, gas_model)
                        for btag in boundaries}
 
     cv_int_pair = interior_trace_pair(discr, cv)
@@ -126,19 +125,19 @@ def euler_operator(discr, state, eos, boundaries, time=0.0):
         # mixture pressure (used in the inviscid flux calculations) depends on
         # temperature and we need to seed the temperature calculation for the
         # (+) part of the partition boundary with the remote temperature data.
-        tseed_int_pair = interior_trace_pair(discr, dv.temperature)
-        tseed_part_pairs = cross_rank_trace_pairs(discr, dv.temperature)
+        tseed_int_pair = interior_trace_pair(discr, state.temperature)
+        tseed_part_pairs = cross_rank_trace_pairs(discr, state.temperature)
         tseed_interior_pairs = [tseed_int_pair]
         tseed_interior_pairs.extend(tseed_part_pairs)
 
     from mirgecom.gas_model import make_fluid_state_trace_pairs
-    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs, eos,
+    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
                                                    tseed_interior_pairs)
 
     inviscid_flux_vol = inviscid_flux(state)
     inviscid_flux_bnd = (
         sum(boundaries[btag].inviscid_divergence_flux(
-            discr, btag, eos, state_minus=boundary_states[btag], time=time)
+            discr, btag, gas_model, state_minus=boundary_states[btag], time=time)
             for btag in boundaries)
         + sum(inviscid_facial_divergence_flux(discr, state_pair)
               for state_pair in interior_states)
