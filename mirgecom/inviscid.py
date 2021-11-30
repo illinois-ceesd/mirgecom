@@ -58,18 +58,16 @@ def inviscid_flux(state):
         :class:`mirgecom.fluid.ConservedVars` for more information about
         how the fluxes are represented.
     """
-    cv = state.cv
-    dv = state.dv
-    mass_flux = cv.momentum
-    energy_flux = cv.velocity * (cv.energy + dv.pressure)
+    mass_flux = state.momentum_density
+    energy_flux = state.velocity * (state.energy_density + state.pressure)
     mom_flux = (
-        cv.mass * np.outer(cv.velocity, cv.velocity)
-        + np.eye(cv.dim)*dv.pressure
+        state.mass_density * np.outer(state.velocity, state.velocity)
+        + np.eye(state.dim)*state.pressure
     )
-    species_mass_flux = (  # reshaped: (nspeceis, dim)
-        cv.velocity * cv.species_mass.reshape(-1, 1)
+    species_mass_flux = (  # reshaped: (nspecies, dim)
+        state.velocity * state.species_mass_density.reshape(-1, 1)
     )
-    return make_conserved(cv.dim, mass=mass_flux, energy=energy_flux,
+    return make_conserved(state.dim, mass=mass_flux, energy=energy_flux,
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
@@ -109,8 +107,8 @@ def inviscid_facial_divergence_flux(discr, state_tpair, local=False):
 
     # This calculates the local maximum eigenvalue of the flux Jacobian
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
-    w_int = state_tpair.int.dv.speed_of_sound + state_tpair.int.cv.speed
-    w_ext = state_tpair.ext.dv.speed_of_sound + state_tpair.ext.cv.speed
+    w_int = state_tpair.int.speed_of_sound + state_tpair.int.speed
+    w_ext = state_tpair.ext.speed_of_sound + state_tpair.ext.speed
     lam = actx.np.maximum(w_int, w_ext)
 
     normal = thaw(actx, discr.normal(state_tpair.dd))
