@@ -30,10 +30,9 @@ import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
+from grudge.array_context import (PyOpenCLArrayContext,
+    MPIPytatoPyOpenCLArrayContext)
+
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -101,9 +100,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if actx_class == MPIPytatoPyOpenCLArrayContext:
+        actx = actx_class(comm, queue)
+    else:
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # timestepping control
     current_step = 0
@@ -388,7 +389,7 @@ if __name__ == "__main__":
             raise ValueError("Can't use lazy and profiling together.")
         actx_class = PyOpenCLProfilingArrayContext
     else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+        actx_class = MPIPytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
