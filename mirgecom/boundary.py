@@ -141,15 +141,17 @@ class PrescribedFluidBoundary(FluidBoundary):
                 return quantity
         return discr.project(btag, "all_faces", quantity)
 
-    def inviscid_divergence_flux(self, discr, btag, eos, state_minus, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, gas_model, state_minus,
+                                 **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
         # This one is when the user specified a function that directly
         # prescribes the flux components at the boundary
         if self._inviscid_bnd_flux_func:
-            return self._inviscid_bnd_flux_func(discr, btag, eos, state_minus,
+            return self._inviscid_bnd_flux_func(discr, btag, gas_model, state_minus,
                                                 **kwargs)
 
-        state_plus = self._bnd_state_func(discr=discr, btag=btag, eos=eos,
+        state_plus = self._bnd_state_func(discr=discr, btag=btag,
+                                          gas_model=gas_model,
                                           state_minus=state_minus, **kwargs)
         boundary_state_pair = TracePair(btag, interior=state_minus,
                                         exterior=state_plus)
@@ -260,7 +262,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             self, boundary_state_func=self.adiabatic_slip_state
         )
 
-    def adiabatic_slip_state(self, discr, btag, eos, state_minus, **kwargs):
+    def adiabatic_slip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
@@ -288,10 +290,11 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         # Form the external boundary solution with the new momentum
         ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
                                 momentum=ext_mom, species_mass=cv_minus.species_mass)
-        t_seed = None if ext_cv.nspecies == 0 else state_minus.dv.temperature
+        t_seed = None if ext_cv.nspecies == 0 else state_minus.temperature
 
         from mirgecom.gas_model import make_fluid_state
-        return make_fluid_state(cv=ext_cv, eos=eos, temperature_seed=t_seed)
+        return make_fluid_state(cv=ext_cv, gas_model=gas_model,
+                                temperature_seed=t_seed)
 
 
 class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
