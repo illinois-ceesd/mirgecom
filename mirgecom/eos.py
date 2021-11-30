@@ -6,6 +6,7 @@ Equations of State
 This module is designed provide Equation of State objects used to compute and
 manage the relationships between and among state and thermodynamic variables.
 
+.. autoexception:: TemperatureSeedRequired
 .. autoclass:: EOSDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: MixtureEOS
@@ -45,6 +46,10 @@ from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
 from arraycontext import dataclass_array_container
+
+
+class TemperatureSeedRequired(Exception):
+    pass
 
 
 @dataclass_array_container
@@ -138,7 +143,12 @@ class GasEOS(metaclass=ABCMeta):
 
     def dependent_vars(self, cv: ConservedVars,
                        temperature_seed: DOFArray = None) -> EOSDependentVars:
-        """Get an agglomerated array of the dependent variables."""
+        """Get an agglomerated array of the dependent variables.
+
+        Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
+        may raise :exc:`TemperatureSeedRequired` if *temperature_seed* is not
+        given.
+        """
         return EOSDependentVars(
             temperature=self.temperature(cv, temperature_seed),
             pressure=self.pressure(cv),

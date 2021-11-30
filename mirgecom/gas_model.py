@@ -55,6 +55,8 @@ class FluidState:
         quantities corresponding to the chosen equation of state.
     """
 
+    # FIXME: autoattribute for array_context, dim, nspecies
+
     #    .. attribute:: tv
     #
     #        :class:`~mirgecom.transport.TransportDependentVars` for the fluid
@@ -81,14 +83,17 @@ class FluidState:
 
 
 def make_fluid_state(cv, eos, temperature_seed=None):
-    """Create a fluid state from the conserved vars and equation of state."""
+    """Create a fluid state from the conserved vars and equation of state.
+    """
     return FluidState(
         cv=cv, dv=eos.dependent_vars(cv, temperature_seed=temperature_seed)
     )
 
 
-def make_fluid_state_on_boundary(discr, btag, fluid_state, eos):
-    """Create a fluid state from the conserved vars and equation of state."""
+def project_fluid_state(discr, btag, fluid_state, eos):
+    """Create a fluid state from volume :class:`FluidState` *fluid_state*
+    by projection onto the boundary and ensuring thermal consistency.
+    """
     cv_sd = discr.project("vol", btag, fluid_state.cv)
     temperature_seed = None
     if fluid_state.cv.nspecies > 0:
@@ -96,22 +101,26 @@ def make_fluid_state_on_boundary(discr, btag, fluid_state, eos):
     return make_fluid_state(cv=cv_sd, eos=eos, temperature_seed=temperature_seed)
 
 
-def make_fluid_state_trace_pairs(cv_pairs, eos, temperature_pairs=None):
+def _getattr_ish(obj, name):
+    if obj is None:
+        return None
+    else:
+        return getattr(obj, name)
+
+
+def make_fluid_state_trace_pairs(cv_pairs, eos, temperature_seed_pairs=None):
     """Create a fluid state from the conserved vars and equation of state."""
     from grudge.trace_pair import TracePair
-    if temperature_pairs is not None:
-        return [TracePair(
-            cv_pair.dd,
-            interior=make_fluid_state(cv_pair.int, eos,
-                                      temperature_seed=tseed_pair.int),
-            exterior=make_fluid_state(cv_pair.ext, eos,
-                                      temperature_seed=tseed_pair.ext))
-                for cv_pair, tseed_pair in zip(cv_pairs, temperature_pairs)]
-    else:
-        return [TracePair(cv_pair.dd,
-                          interior=make_fluid_state(cv_pair.int, eos),
-                          exterior=make_fluid_state(cv_pair.ext, eos))
-                for cv_pair in cv_pairs]
+    if temperature_seed_pairs is None:
+        temperature_seed_pairs = [None] * len(cv_pairs)
+
+    return [TracePair(
+        dd=cv_pair.dd,
+        interior=make_fluid_state(cv_pair.int, eos,
+                                  temperature_seed=_getattr_ish(tseed_pair, "int")),
+        exterior=make_fluid_state(cv_pair.ext, eos,
+                                  temperature_seed=_getattr_ish(tseed_pair, "ext")))
+        for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
 
 
 def make_fluid_state_interior_trace_pair(discr, state, eos):
@@ -119,6 +128,7 @@ def make_fluid_state_interior_trace_pair(discr, state, eos):
     from grudge.eager import interior_trace_pair
     from grudge.trace_pair import TracePair
     cv_tpair = interior_trace_pair(discr, state.cv)
+    # FIXME As above?
     if state.nspecies > 0:
         tseed_pair = interior_trace_pair(discr, state.dv.temperature)
         return TracePair(
