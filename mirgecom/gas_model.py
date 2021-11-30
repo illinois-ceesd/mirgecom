@@ -7,6 +7,7 @@ Fluid State Handling
 .. autofunction: make_fluid_state
 .. autofunction: make_fluid_state_on_boundary
 .. autofunction: make_fluid_state_trace_pairs
+
 """
 
 __copyright__ = """
@@ -37,7 +38,27 @@ from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import EOSDependentVars
+from mirgecom.eos import (
+    GasEOS,
+    EOSDependentVars
+)
+from mirgecom.transport import (
+    TransportModel,
+    TransportModelRequired,
+    TransportDependentVars
+)
+
+
+@dataclass(frozen=True)
+class GasModel:
+    r"""Physical gas model for calculating fluid state-dependent quantities.
+
+    .. attribute:: eos
+    .. attribute:: transport_model
+    """
+
+    eos: GasEOS
+    transport: TransportModel = None
 
 
 @dataclass_array_container
@@ -45,6 +66,8 @@ from mirgecom.eos import EOSDependentVars
 class FluidState:
     r"""Gas model-consistent fluid state.
 
+    Data attributes
+    ^^^^^^^^^^^^^^^
     .. attribute:: cv
 
         :class:`~mirgecom.fluid.ConservedVars` for the fluid conserved state
@@ -53,16 +76,31 @@ class FluidState:
 
         :class:`~mirgecom.eos.EOSDependentVars` for the fluid state-dependent
         quantities corresponding to the chosen equation of state.
-    """
 
-    #    .. attribute:: tv
-    #
-    #        :class:`~mirgecom.transport.TransportDependentVars` for the fluid
-    #        state-dependent transport properties.
+    .. attribute:: tv
+        :class:`~mirgecom.transport.TransportDependentVars` for the fluid
+        state-dependent transport properties.
+
+    Properties
+    ^^^^^^^^^^
+    .. autoattribute:: array_context
+    .. autoattribute:: dim
+    .. autoattribute:: nspecies
+    .. autoattribute:: pressure
+    .. autoattribute:: temperature
+    .. autoattribute:: velocity
+    .. autoattribute:: speed
+    .. autoattribute:: speed_of_sound
+    .. autoattribute:: mass_density
+    .. autoattribute:: momentum_density
+    .. autoattribute:: energy_density
+    .. autoattribute:: species_mass_density
+    .. autoattribute:: species_mass_fractions
+    """
 
     cv: ConservedVars
     dv: EOSDependentVars
-    # tv: TransportDependentVars
+    tv: TransportDependentVars = None
 
     @property
     def array_context(self):
@@ -79,52 +117,119 @@ class FluidState:
         """Return the number of physical dimensions."""
         return self.cv.nspecies
 
+    @property
+    def pressure(self):
+        """Return the gas pressure."""
+        return self.dv.pressure
 
-def make_fluid_state(cv, eos, temperature_seed=None):
+    @property
+    def temperature(self):
+        """Return the gas temperature."""
+        return self.dv.temperature
+
+    @property
+    def mass_density(self):
+        """Return the gas density."""
+        return self.cv.mass
+
+    @property
+    def momentum_density(self):
+        """Return the gas momentum density."""
+        return self.cv.momentum
+
+    @property
+    def energy_density(self):
+        """Return the gas total energy density."""
+        return self.cv.energy
+
+    @property
+    def species_mass_density(self):
+        """Return the gas species densities."""
+        return self.cv.species_mass
+
+    @property
+    def velocity(self):
+        """Return the gas velocity."""
+        return self.cv.velocity
+
+    @property
+    def speed(self):
+        """Return the gas speed."""
+        return self.cv.speed
+
+    @property
+    def species_mass_fractions(self):
+        """Return the species mass fractions y = species_mass / mass."""
+        return self.cv.species_mass_fractions
+
+    @property
+    def speed_of_sound(self):
+        """Return the speed of sound in the gas."""
+        return self.dv.speed_of_sound
+
+    def _get_transport_property(self, name):
+        """Grab a transport property if transport model is present."""
+        if self.tv is None:
+            raise TransportModelRequired("Viscous transport model not provided.")
+        return getattr(self.tv, name)
+
+    @property
+    def viscosity(self):
+        """Return the fluid viscosity."""
+        return self._get_transport_property("viscosity")
+
+
+def make_fluid_state(cv, gas_model, temperature_seed=None):
     """Create a fluid state from the conserved vars and equation of state."""
-    return FluidState(
-        cv=cv, dv=eos.dependent_vars(cv, temperature_seed=temperature_seed)
-    )
+    dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
+    tv = None
+    if gas_model.transport is not None:
+        tv = gas_model.transport.dependent_vars(eos=gas_model.eos, cv=cv)
+    return FluidState(cv=cv, dv=dv, tv=tv)
 
 
-def make_fluid_state_on_boundary(discr, btag, fluid_state, eos):
+def project_fluid_state(discr, btag, fluid_state, gas_model):
     """Create a fluid state from the conserved vars and equation of state."""
     cv_sd = discr.project("vol", btag, fluid_state.cv)
     temperature_seed = None
     if fluid_state.cv.nspecies > 0:
         temperature_seed = discr.project("vol", btag, fluid_state.dv.temperature)
-    return make_fluid_state(cv=cv_sd, eos=eos, temperature_seed=temperature_seed)
+    return make_fluid_state(cv=cv_sd, gas_model=gas_model,
+                            temperature_seed=temperature_seed)
 
 
-def make_fluid_state_trace_pairs(cv_pairs, eos, temperature_pairs=None):
+def _getattr_ish(obj, name):
+    if obj is None:
+        return None
+    else:
+        return getattr(obj, name)
+
+
+def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=None):
     """Create a fluid state from the conserved vars and equation of state."""
     from grudge.trace_pair import TracePair
-    if temperature_pairs is not None:
-        return [TracePair(
-            cv_pair.dd,
-            interior=make_fluid_state(cv_pair.int, eos,
-                                      temperature_seed=tseed_pair.int),
-            exterior=make_fluid_state(cv_pair.ext, eos,
-                                      temperature_seed=tseed_pair.ext))
-                for cv_pair, tseed_pair in zip(cv_pairs, temperature_pairs)]
-    else:
-        return [TracePair(cv_pair.dd,
-                          interior=make_fluid_state(cv_pair.int, eos),
-                          exterior=make_fluid_state(cv_pair.ext, eos))
-                for cv_pair in cv_pairs]
+    if temperature_seed_pairs is None:
+        temperature_seed_pairs = [None] * len(cv_pairs)
+    return [TracePair(
+        cv_pair.dd,
+        interior=make_fluid_state(cv_pair.int, gas_model,
+                                  temperature_seed=_getattr_ish(tseed_pair, "int")),
+        exterior=make_fluid_state(cv_pair.ext, gas_model,
+                                  temperature_seed=_getattr_ish(tseed_pair, "ext")))
+        for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
 
 
-def make_fluid_state_interior_trace_pair(discr, state, eos):
+def make_fluid_state_interior_trace_pair(discr, state, gas_model):
     """Create a fluid state from the conserved vars and equation of state."""
     from grudge.eager import interior_trace_pair
     from grudge.trace_pair import TracePair
     cv_tpair = interior_trace_pair(discr, state.cv)
+    tseed_pair = None
     if state.nspecies > 0:
         tseed_pair = interior_trace_pair(discr, state.dv.temperature)
-        return TracePair(
-            cv_tpair.dd,
-            interior=make_fluid_state(cv_tpair.int, eos, tseed_pair.int),
-            exterior=make_fluid_state(cv_tpair.ext, eos, tseed_pair.ext))
-    return TracePair(cv_tpair.dd,
-                     interior=make_fluid_state(cv_tpair.int, eos),
-                     exterior=make_fluid_state(cv_tpair.ext, eos))
+    return TracePair(
+        cv_tpair.dd,
+        interior=make_fluid_state(cv_tpair.int, gas_model,
+                                  _getattr_ish(tseed_pair, "int")),
+        exterior=make_fluid_state(cv_tpair.ext, gas_model,
+                                  _getattr_ish(tseed_pair, "ext")))
