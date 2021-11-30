@@ -801,13 +801,13 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
-        if temperature_seed is None:
-            raise TemperatureSeedRequired("MixtureEOS.get_temperature requires"
-                                          " a *temperature_seed*.")
 
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
+            if temperature_seed is None:
+                raise TemperatureSeedRequired("MixtureEOS.get_temperature requires"
+                                              " a *temperature_seed*.")
             tseed = self.get_temperature_seed(cv, temperature_seed)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
