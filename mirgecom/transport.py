@@ -13,6 +13,8 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
+
+.. autoexception:: TransportModelRequired
 """
 
 __copyright__ = """
@@ -46,6 +48,12 @@ from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS
 
 
+class TransportModelRequired(Exception):
+    """Indicate that transport model is required for model evaluation."""
+
+    pass
+
+
 @dataclass
 class TransportDependentVars:
     """State-dependent quantities for :class:`TransportModel`.
@@ -77,6 +85,7 @@ class TransportModel:
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
     .. automethod:: volume_viscosity
+    .. automethod:: dependent_vars
     """
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -98,6 +107,15 @@ class TransportModel:
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
+
+    def dependent_vars(self, eos: GasEOS, cv: ConservedVars):
+        r"""Compute the transport properties from the conserved state."""
+        return TransportDependentVars(
+            bulk_viscosity=self.bulk_viscosity(eos, cv),
+            viscosity=self.viscosity(eos, cv),
+            thermal_conductivity=self.thermal_conductivity(eos, cv),
+            species_diffusivity=self.species_diffusivity(eos, cv)
+        )
 
 
 class SimpleTransport(TransportModel):

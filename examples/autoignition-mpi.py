@@ -56,6 +56,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
+from mirgecom.gas_model import GasModel
 from arraycontext import thaw, freeze
 
 from mirgecom.logging_quantities import (
@@ -256,7 +257,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
-
+    gas_model = GasModel(eos=eos)
     from pytools.obj_array import make_obj_array
 
     def get_temperature_update(state, temperature):
@@ -567,10 +568,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         from mirgecom.gas_model import make_fluid_state
-        fluid_state = make_fluid_state(cv=state[0], eos=eos,
+        fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model,
                                        temperature_seed=state[1])
         return make_obj_array([euler_operator(discr, state=fluid_state, time=t,
-                               boundaries=boundaries, eos=eos)
+                                              boundaries=boundaries,
+                                              gas_model=gas_model)
                                + eos.get_species_source_terms(state[0]),
                                0*state[1]])
 

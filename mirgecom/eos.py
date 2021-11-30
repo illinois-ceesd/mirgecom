@@ -12,6 +12,10 @@ manage the relationships between and among state and thermodynamic variables.
 .. autoclass:: MixtureEOS
 .. autoclass:: IdealSingleGas
 .. autoclass:: PyrometheusMixture
+
+Exceptions
+^^^^^^^^^^
+.. autoexception:: TemperatureSeedRequired
 """
 
 __copyright__ = """
@@ -49,6 +53,8 @@ from arraycontext import dataclass_array_container
 
 
 class TemperatureSeedRequired(Exception):
+    """Indicate that EOS is inappropriately called without seeding temperature."""
+
     pass
 
 
@@ -795,7 +801,9 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
-        # from arraycontext import thaw, freeze
+        if temperature_seed is None:
+            raise TemperatureSeedRequired("MixtureEOS.get_temperature requires"
+                                          " a *temperature_seed*.")
 
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
