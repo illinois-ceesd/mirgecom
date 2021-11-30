@@ -504,9 +504,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
-        cv = state[0]
+        cv, tseed = state
+        dv = compute_dependent_vars(cv, tseed)
+
         try:
-            dv = None
 
             if logmgr:
                 logmgr.tick_before()
@@ -519,7 +520,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 if dv is None:
-                    dv = compute_dependent_vars(cv)
+                    dv = compute_dependent_vars(cv, tseed)
                 health_errors = global_reduce(my_health_check(cv, dv), op="lor")
                 if health_errors:
                     if rank == 0:
@@ -530,7 +531,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_status:
                 if dv is None:
-                    dv = compute_dependent_vars(cv)
+                    dv = compute_dependent_vars(cv, tseed)
                 my_write_status(dt=dt, cfl=cfl, dv=dv)
 
             if do_restart:
@@ -539,7 +540,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 production_rates, = compute_production_rates(cv)
                 if dv is None:
-                    dv = compute_dependent_vars(cv)
+                    dv = compute_dependent_vars(cv, tseed)
                 my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field, cfl=cfl)
@@ -554,9 +555,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        cv = state[0]
-        new_dv = compute_dependent_vars(cv,  # noqa
-                                       temperature_seed=state[1])
+        cv, tseed = state
+        new_dv = compute_dependent_vars(cv, tseed)
 
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -567,14 +567,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array([cv, new_dv.temperature]), dt
 
     def my_rhs(t, state):
+        cv, tseed = state
         from mirgecom.gas_model import make_fluid_state
-        fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model,
-                                       temperature_seed=state[1])
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
+                                       temperature_seed=tseed)
         return make_obj_array([euler_operator(discr, state=fluid_state, time=t,
                                               boundaries=boundaries,
                                               gas_model=gas_model)
-                               + eos.get_species_source_terms(state[0]),
-                               0*state[1]])
+                               + eos.get_species_source_terms(cv),
+                               0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
