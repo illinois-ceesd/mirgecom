@@ -32,8 +32,7 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 
 from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    PyOpenCLArrayContext
 )
 
 from grudge.array_context import MPIPytatoPyOpenCLArrayContext
@@ -109,7 +108,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if actx_class == MPIPytatoPyOpenCLArrayContext:
         actx = actx_class(comm, queue)
     else:
-        actx = actx_class(queue, allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # timestepping control
     current_step = 0

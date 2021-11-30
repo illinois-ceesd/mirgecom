@@ -96,7 +96,8 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         if actx_class == MPIPytatoPyOpenCLArrayContext:
             actx = actx_class(comm, queue)
         else:
-            actx = actx_class(queue, allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+            actx = actx_class(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     if restart_step is None:
 
