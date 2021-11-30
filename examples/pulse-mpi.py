@@ -56,6 +56,7 @@ from mirgecom.initializers import (
     AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import GasModel
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -177,6 +178,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
     eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
@@ -293,9 +295,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         from mirgecom.gas_model import make_fluid_state
-        inviscid_state = make_fluid_state(cv=state, eos=eos)
+        inviscid_state = make_fluid_state(cv=state, gas_model=gas_model)
         return euler_operator(discr, state=inviscid_state, time=t,
-                              boundaries=boundaries, eos=eos)
+                              boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, eos, t_final, constant_cfl)
