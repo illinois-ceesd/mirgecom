@@ -11,6 +11,10 @@ manage the relationships between and among state and thermodynamic variables.
 .. autoclass:: MixtureEOS
 .. autoclass:: IdealSingleGas
 .. autoclass:: PyrometheusMixture
+
+Exceptions
+^^^^^^^^^^
+.. autoexception:: TemperatureSeedRequired
 """
 
 __copyright__ = """
@@ -45,6 +49,12 @@ from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
 from arraycontext import dataclass_array_container
+
+
+class TemperatureSeedRequired(Exception):
+    """Indicate that EOS is inappropriately called without seeding temperature."""
+
+    pass
 
 
 @dataclass_array_container
@@ -138,7 +148,13 @@ class GasEOS(metaclass=ABCMeta):
 
     def dependent_vars(self, cv: ConservedVars,
                        temperature_seed: DOFArray = None) -> EOSDependentVars:
-        """Get an agglomerated array of the dependent variables."""
+        """Get an agglomerated array of the dependent variables.
+
+        Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
+        may raise :exc:`TemperatureSeedRequired` if *temperature_seed* is not
+        given.
+
+        """
         return EOSDependentVars(
             temperature=self.temperature(cv, temperature_seed),
             pressure=self.pressure(cv),
@@ -785,7 +801,9 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
-        # from arraycontext import thaw, freeze
+        if temperature_seed is None:
+            raise TemperatureSeedRequired("MixtureEOS.get_temperature requires"
+                                          " a *temperature_seed*.")
 
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
