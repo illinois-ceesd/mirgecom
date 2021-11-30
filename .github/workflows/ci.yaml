@@ -175,7 +175,7 @@ jobs:
             cat .ci-support/production-testing-env.sh
             source .ci-support/production-testing-env.sh
             cd ..
-            git clone https://github.com/illinois-ceesd/emirge emirge.y1
+            git clone --branch gcc_linux https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
             source ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
             source ${MIRGEDIR}/../config/activate_env.sh
