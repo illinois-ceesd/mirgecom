@@ -42,6 +42,7 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
+from arraycontext import dataclass_array_container
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import ConservedVars
@@ -54,7 +55,8 @@ class TransportModelRequired(Exception):
     pass
 
 
-@dataclass
+@dataclass_array_container
+@dataclass(frozen=True)
 class TransportDependentVars:
     """State-dependent quantities for :class:`TransportModel`.
 
