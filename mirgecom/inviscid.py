@@ -125,7 +125,7 @@ def inviscid_facial_divergence_flux(discr, state_tpair, local=False):
     return flux_weak
 
 
-def get_inviscid_timestep(discr, eos, cv):
+def get_inviscid_timestep(discr, state):
     """Return node-local stable timestep estimate for an inviscid fluid.
 
     The maximum stable timestep is computed from the acoustic wavespeed.
@@ -145,14 +145,13 @@ def get_inviscid_timestep(discr, eos, cv):
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
-    from mirgecom.fluid import wavespeed
     return (
-        characteristic_lengthscales(cv.array_context, discr)
-        / wavespeed(eos, cv)
+        characteristic_lengthscales(state.array_context, discr)
+        / state.wavespeed
     )
 
 
-def get_inviscid_cfl(discr, eos, dt, cv):
+def get_inviscid_cfl(discr, state, dt):
     """Return node-local CFL based on current state and timestep.
 
     Parameters
@@ -172,4 +171,4 @@ def get_inviscid_cfl(discr, eos, dt, cv):
     :class:`meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
-    return dt / get_inviscid_timestep(discr, eos=eos, cv=cv)
+    return dt / get_inviscid_timestep(discr, state=state)
