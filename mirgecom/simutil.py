@@ -73,8 +73,7 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, eos,
-                     t_final, constant_cfl=False):
+def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
@@ -122,7 +121,7 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
         mydt = state.array_context.to_numpy(
             cfl * nodal_min(
                 discr, "vol",
-                get_viscous_timestep(discr=discr, eos=eos, cv=state)))[()]
+                get_viscous_timestep(discr=discr, state=state)))[()]
     return min(t_remaining, mydt)
 
 
