@@ -11,7 +11,6 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
-.. autofunction:: compute_wavespeed
 .. autofunction:: velocity_gradient
 .. autofunction:: species_mass_fraction_gradient
 """
@@ -434,31 +433,3 @@ def species_mass_fraction_gradient(cv, grad_cv):
     """
     y = cv.species_mass_fractions
     return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
-
-
-def wavespeed(eos, cv: ConservedVars):
-    r"""Return the wavespeed in the flow.
-
-    The wavespeed is calculated as:
-
-    .. math::
-
-        s_w = \|\mathbf{v}\| + c,
-
-    where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
-    """
-    return compute_wavespeed(cv, eos.sound_speed(cv))
-
-
-def compute_wavespeed(cv: ConservedVars, c):
-    r"""Return the wavespeed in the flow.
-
-    The wavespeed is calculated as:
-
-    .. math::
-
-        s_w = \|\mathbf{v}\| + c,
-
-    where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
-    """
-    return cv.speed + c
