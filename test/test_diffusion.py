@@ -150,8 +150,8 @@ class DecayingTrig(HeatProblem):
     def get_solution(self, x, t):
         u = _exp(-self.dim*self._alpha*t)
         for i in range(self.dim-1):
-            u *= _sin(x[i])
-        u *= _cos(x[self.dim-1])
+            u = u * _sin(x[i])
+        u = u * _cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -188,8 +188,8 @@ class DecayingTrigTruncatedDomain(HeatProblem):
     def get_solution(self, x, t):
         u = _exp(-self.dim*self._alpha*t)
         for i in range(self.dim-1):
-            u *= _sin(x[i])
-        u *= _cos(x[self.dim-1])
+            u = u * _sin(x[i])
+        u = u * _cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -240,14 +240,14 @@ class OscillatingTrigVarDiff(HeatProblem):
     def get_solution(self, x, t):
         u = _cos(t)
         for i in range(self.dim-1):
-            u *= _sin(x[i])
-        u *= _cos(x[self.dim-1])
+            u = u * _sin(x[i])
+        u = u * _cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
         alpha = 1
         for i in range(self.dim):
-            alpha *= _cos(3.*x[i])
+            alpha = alpha * _cos(3.*x[i])
         alpha = 1 + 0.2*alpha
         return alpha
 
@@ -282,8 +282,8 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
     def get_solution(self, x, t):
         u = _cos(t)
         for i in range(self.dim-1):
-            u *= _sin(x[i])
-        u *= _cos(x[self.dim-1])
+            u = u * _sin(x[i])
+        u = u * _cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
