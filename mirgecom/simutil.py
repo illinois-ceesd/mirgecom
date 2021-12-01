@@ -47,7 +47,6 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import grudge.op as op
-from numbers import Number
 
 logger = logging.getLogger(__name__)
 
@@ -186,8 +185,8 @@ def global_reduce(local_values, op, *, comm=None):
 
     Parameters
     ----------
-    local_values: numbers.Number or numpy.ndarray
-        The (MPI-compatible) value or array of values on which the
+    local_values:
+        The (:mod:`mpi4py`-compatible) value or array of values on which the
         reduction operation is to be performed.
 
     op: str
@@ -215,7 +214,7 @@ def global_reduce(local_values, op, *, comm=None):
         }
         return comm.allreduce(local_values, op=op_to_mpi_op[op])
     else:
-        if isinstance(local_values, Number):
+        if np.ndim(local_values) == 0:
             return local_values
         else:
             op_to_numpy_func = {
