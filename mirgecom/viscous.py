@@ -55,7 +55,11 @@ from mirgecom.fluid import (
 from mirgecom.eos import MixtureEOS
 
 
-def viscous_stress_tensor(discr, eos, cv, grad_cv):
+def _compute_viscous_stress_tensor(dim, mu, mu_b, grad_v):
+    return  mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*np.trace(grad_v)*np.eye(dim)
+
+
+def viscous_stress_tensor(state, grad_cv):
     r"""Compute the viscous stress tensor.
 
     The viscous stress tensor $\tau$ is defined by:
@@ -70,11 +74,8 @@ def viscous_stress_tensor(discr, eos, cv, grad_cv):
     ----------
     discr: :class:`grudge.eager.EagerDGDiscretization`
         The discretization to use
-    eos: :class:`~mirgecom.eos.GasEOS`
-        A gas equation of state with a non-empty
-        :class:`~mirgecom.transport.TransportModel`.
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid state
+    state: :class:`~mirgecom.gas_model.FluidState`
+        Full conserved and thermal state of fluid
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
         Gradient of the fluid state
 
@@ -83,54 +84,12 @@ def viscous_stress_tensor(discr, eos, cv, grad_cv):
     numpy.ndarray
         The viscous stress tensor
     """
-    dim = cv.dim
-    transport = eos.transport_model()
-
-    mu_b = transport.bulk_viscosity(eos, cv)
-    mu = transport.viscosity(eos, cv)
-
-    grad_v = velocity_gradient(cv, grad_cv)
-    div_v = np.trace(grad_v)
-
-    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*div_v*np.eye(dim)
+    return _compute_viscous_stress_tensor(
+        dim=state.dim, mu=state.viscosity, mu_b=state.bulk_viscosity,
+        grad_v=velocity_gradient(state.cv, grad_cv))
 
 
-def compute_viscous_stress_tensor(discr, cv, grad_cv, mu, mu_b=0):
-    r"""Compute the viscous stress tensor.
-
-    The viscous stress tensor $\tau$ is defined by:
-
-    .. math::
-
-        \mathbf{\tau} = \mu\left(\nabla{\mathbf{v}}
-        +\left(\nabla{\mathbf{v}}\right)^T\right) + (\mu_B - \frac{2\mu}{3})
-        \left(\nabla\cdot\mathbf{v}\right)
-
-    Parameters
-    ----------
-    discr: :class:`grudge.eager.EagerDGDiscretization`
-        The discretization to use
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid state
-    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
-        Gradient of the fluid state
-    mu: float or :class:`~meshmode.dof_array.DOFArray`
-        The fluid viscosity
-    mu_b: float or :class:`~meshmod.dof_array.DOFArray`
-        The fluid bulk viscosity
-
-    Returns
-    -------
-    numpy.ndarray
-        The viscous stress tensor
-    """
-    grad_v = velocity_gradient(cv, grad_cv)
-    div_v = np.trace(grad_v)
-
-    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*div_v*np.eye(cv.dim)
-
-
-def diffusive_flux(discr, eos, cv, grad_cv):
+def diffusive_flux(state, grad_cv):
     r"""Compute the species diffusive flux vector, ($\mathbf{J}_{\alpha}$).
 
     The species diffusive flux is defined by:
@@ -158,103 +117,50 @@ def diffusive_flux(discr, eos, cv, grad_cv):
     numpy.ndarray
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
-    transport = eos.transport_model()
-
-    grad_y = species_mass_fraction_gradient(cv, grad_cv)
-    d = transport.species_diffusivity(eos, cv)
-    return -cv.mass*d.reshape(-1, 1)*grad_y
+    return (-state.cv.mass*state.species_diffusivity.reshape(-1, 1)
+             * species_mass_fraction_gradient(state.cv, grad_cv))
 
 
-def compute_diffusive_flux(cv, grad_cv, d):
-    r"""Compute the species diffusive flux vector, ($\mathbf{J}_{\alpha}$).
-
-    The species diffusive flux is defined by:
-
-    .. math::
-
-        \mathbf{J}_{\alpha} = -\rho{d}_{(\alpha)}\nabla{Y_{\alpha}}~~
-        (\mathtt{no~implied~sum}),
-
-    with species diffusivities ${d}_{\alpha}$, and species mass
-    fractions ${Y}_{\alpha}$.
-
-    Parameters
-    ----------
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid state
-    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
-        Gradient of the fluid state
-    d: numpy.ndarray
-        Species diffusivities
-
-    Returns
-    -------
-    numpy.ndarray
-        The species diffusive flux vector, $\mathbf{J}_{\alpha}$
-    """
-    grad_y = species_mass_fraction_gradient(cv, grad_cv)
-    return -cv.mass*d.reshape(-1, 1)*grad_y
-
-
-def conductive_heat_flux(discr, eos, cv, grad_t):
-    r"""Compute the conductive heat flux, ($\mathbf{q}_{c}$).
-
-    The conductive heat flux is defined by:
-
-    .. math::
-
-        \mathbf{q}_{c} = -\kappa\nabla{T},
-
-    with thermal conductivity $\kappa$, and gas temperature $T$.
-
-    Parameters
-    ----------
-    discr: :class:`grudge.eager.EagerDGDiscretization`
-        The discretization to use
-    eos: :class:`~mirgecom.eos.GasEOS`
-        A gas equation of state with a non-empty
-        :class:`~mirgecom.transport.TransportModel`
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid state
-    grad_t: numpy.ndarray
-        Gradient of the fluid temperature
-
-    Returns
-    -------
-    numpy.ndarray
-        The conductive heat flux vector
-    """
-    transport = eos.transport_model()
-    return -transport.thermal_conductivity(eos, cv)*grad_t
-
-
-def compute_conductive_heat_flux(grad_t, kappa):
-    r"""Compute the conductive heat flux, ($\mathbf{q}_{c}$).
-
-    The conductive heat flux is defined by:
-
-    .. math::
-
-        \mathbf{q}_{c} = -\kappa\nabla{T},
-
-    with thermal conductivity $\kappa$, and gas temperature $T$.
-
-    Parameters
-    ----------
-    kappa: float or :class:`~meshmode.dof_array.DOFArray`
-        Thermal conductivity
-    grad_t: numpy.ndarray
-        Gradient of the fluid temperature
-
-    Returns
-    -------
-    numpy.ndarray
-        The conductive heat flux vector
-    """
+def _compute_conductive_heat_flux(grad_t, kappa):
     return -kappa*grad_t
 
 
-def diffusive_heat_flux(discr, eos, cv, j):
+def conductive_heat_flux(state, grad_t):
+    r"""Compute the conductive heat flux, ($\mathbf{q}_{c}$).
+
+    The conductive heat flux is defined by:
+
+    .. math::
+
+        \mathbf{q}_{c} = -\kappa\nabla{T},
+
+    with thermal conductivity $\kappa$, and gas temperature $T$.
+
+    Parameters
+    ----------
+    discr: :class:`grudge.eager.EagerDGDiscretization`
+        The discretization to use
+    eos: :class:`~mirgecom.eos.GasEOS`
+        A gas equation of state with a non-empty
+        :class:`~mirgecom.transport.TransportModel`
+    cv: :class:`~mirgecom.fluid.ConservedVars`
+        Fluid state
+    grad_t: numpy.ndarray
+        Gradient of the fluid temperature
+
+    Returns
+    -------
+    numpy.ndarray
+        The conductive heat flux vector
+    """
+    return _compute_conductive_heat_flux(grad_t, state.thermal_conductivity)
+
+
+def _compute_diffusive_heat_flux(j, h_alpha):
+    return sum(h_alpha.reshape(-1, 1) * j)
+
+
+def diffusive_heat_flux(state, j):
     r"""Compute the diffusive heat flux, ($\mathbf{q}_{d}$).
 
     The diffusive heat flux is defined by:
@@ -290,48 +196,10 @@ def diffusive_heat_flux(discr, eos, cv, j):
     numpy.ndarray
         The total diffusive heat flux vector
     """
-    if isinstance(eos, MixtureEOS):
-        return compute_diffusive_heat_flux(cv, j, eos.species_enthalpies(cv))
-    return 0
+    return _compute_diffusive_heat_flux(j, state.species_enthalpies)
 
 
-def compute_diffusive_heat_flux(cv, j, h_alpha):
-    r"""Compute the diffusive heat flux, ($\mathbf{q}_{d}$).
-
-    The diffusive heat flux is defined by:
-
-    .. math::
-
-        \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{h}_{\alpha}
-        \mathbf{J}_{\alpha},
-
-    with species specific enthalpy ${h}_{\alpha}$ and diffusive flux
-    ($\mathbf{J}_{\alpha}$) defined as:
-
-    .. math::
-
-        \mathbf{J}_{\alpha} = -\rho{d}_{\alpha}\nabla{Y}_{\alpha},
-
-    where ${Y}_{\alpha}$ is the vector of species mass fractions.
-
-    Parameters
-    ----------
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid state
-    j: numpy.ndarray
-        The species diffusive flux vector
-    h_alpha: numpy.ndarray
-        The species specific enthalpies
-
-    Returns
-    -------
-    numpy.ndarray
-        The total diffusive heat flux vector
-    """
-    return sum(h_alpha.reshape(-1, 1) * j)
-
-
-def viscous_flux(discr, eos, cv, grad_cv, grad_t):
+def viscous_flux(state, grad_cv, grad_t):
     r"""Compute the viscous flux vectors.
 
     The viscous fluxes are:
@@ -371,32 +239,19 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
         The viscous transport flux vector if viscous transport properties
         are provided, scalar zero otherwise.
     """
-    transport = eos.transport_model()
-    if transport is None:
+    if not state.has_transport:
         return 0
 
-    dim = cv.dim
-    viscous_mass_flux = 0 * cv.momentum
-    d = transport.species_diffusivity(eos, cv)
-    j = compute_diffusive_flux(cv, grad_cv, d)
-
-    heat_flux_diffusive = 0
-    if eos isinstance(MixtureEOS):
-        h_alpha = eos.species_enthalpies(cv)
-        heat_flux_diffusive = compute_diffusive_heat_flux(cv, j, h_alpha)
-
-    mu_b = transport.bulk_viscosity(eos, cv)
-    mu = transport.viscosity(eos, cv)
-    tau = compute_viscous_stress_tensor(cv, grad_cv, mu, mu_b)
-
-    kappa = transport.thermal_conductivity(eos, cv)
-    heat_flux_conductive = compute_conductive_heat_flux(grad_t, kappa)
+    viscous_mass_flux = 0 * state.momentum
+    tau = viscous_stress_tensor(state, grad_cv)
+    j = diffusive_flux(state, grad_cv)
 
     viscous_energy_flux = (
-        np.dot(tau, cv.velocity) - heat_flux_conductive - heat_flux_diffusive
+        np.dot(tau, state.velocity) - diffusive_heat_flux(state, j)
+        - conductive_heat_flux(state, grad_t)
     )
 
-    return make_conserved(dim,
+    return make_conserved(state.dim,
             mass=viscous_mass_flux,
             energy=viscous_energy_flux,
             momentum=tau, species_mass=-j)
@@ -450,17 +305,15 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
     return flux_weak
 
 
-def get_viscous_timestep(discr, eos, cv):
+def get_viscous_timestep(discr, state):
     """Routine returns the the node-local maximum stable viscous timestep.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    eos: :class:`~mirgecom.eos.GasEOS`
-        A gas equation of state
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid solution
+    state: :class:`~mirgecom.gas_model.FluidState`
+        Full fluid conserved and thermal state
 
     Returns
     -------
@@ -468,28 +321,26 @@ def get_viscous_timestep(discr, eos, cv):
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
-    from mirgecom.fluid import wavespeed
 
-    length_scales = characteristic_lengthscales(cv.array_context, discr)
+    length_scales = characteristic_lengthscales(state.array_context, discr)
 
     mu = 0
     d_alpha_max = 0
-    transport = eos.transport_model()
-    if transport:
-        mu = transport.viscosity(eos, cv)
+    if state.has_transport:
+        mu = state.viscosity
         d_alpha_max = \
             get_local_max_species_diffusivity(
-                cv.array_context, discr,
-                transport.species_diffusivity(eos, cv)
+                state.array_context, discr,
+                state.species_diffusivity
             )
 
     return(
-        length_scales / (wavespeed(eos, cv)
+        length_scales / (state.wavespeed
         + ((mu + d_alpha_max) / length_scales))
     )
 
 
-def get_viscous_cfl(discr, eos, dt, cv):
+def get_viscous_cfl(discr, dt, state):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
@@ -508,7 +359,7 @@ def get_viscous_cfl(discr, eos, dt, cv):
     :class:`~meshmode.dof_array.DOFArray`
         The CFL at each node.
     """
-    return dt / get_viscous_timestep(discr, eos=eos, cv=cv)
+    return dt / get_viscous_timestep(discr, state=state)
 
 
 def get_local_max_species_diffusivity(actx, discr, d_alpha):
