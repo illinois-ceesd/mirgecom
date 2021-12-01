@@ -90,6 +90,7 @@ class FluidState:
     .. autoattribute:: temperature
     .. autoattribute:: velocity
     .. autoattribute:: speed
+    .. autoattribute:: wavespeed
     .. autoattribute:: speed_of_sound
     .. autoattribute:: mass_density
     .. autoattribute:: momentum_density
@@ -167,9 +168,19 @@ class FluidState:
         """Return the speed of sound in the gas."""
         return self.dv.speed_of_sound
 
+    @property
+    def wavespeed(self):
+        """Return the characteristic wavespeed."""
+        return self.cv.speed + self.dv.speed_of_sound
+
+    @property
+    def has_transport(self):
+        """Indicate if this is a viscous state."""
+        return self.tv is not None
+
     def _get_transport_property(self, name):
         """Grab a transport property if transport model is present."""
-        if self.tv is None:
+        if not self.has_transport:
             raise TransportModelRequired("Viscous transport model not provided.")
         return getattr(self.tv, name)
 
