@@ -224,13 +224,13 @@ class DecayingTrigTruncatedDomain(HeatProblem):
 
 
 # 1D: alpha(x) = 1+0.2*cos(3*x)
-#     u(x,t)   = cos(x) (manufactured)
+#     u(x,t)   = cos(t)*cos(x) (manufactured)
 # 2D: alpha(x,y) = 1+0.2*cos(3*x)*cos(3*y)
-#     u(x,y,t)   = sin(x)*cos(y) (manufactured)
+#     u(x,y,t)   = cos(t)*sin(x)*cos(y) (manufactured)
 # 3D: alpha(x,y,z) = 1+0.2*cos(3*x)*cos(3*y)*cos(3*z)
-#     u(x,y,z,t)   = sin(x)*sin(y)*cos(z) (manufactured)
+#     u(x,y,z,t)   = cos(t)*sin(x)*sin(y)*cos(z) (manufactured)
 # on [-pi/2, pi/2]^{#dims}
-class StaticTrigVarDiff(HeatProblem):
+class OscillatingTrigVarDiff(HeatProblem):
     def __init__(self, dim):
         super().__init__(dim)
 
@@ -238,7 +238,7 @@ class StaticTrigVarDiff(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = 1
+        u = _cos(t)
         for i in range(self.dim-1):
             u *= _sin(x[i])
         u *= _cos(x[self.dim-1])
@@ -268,11 +268,11 @@ class StaticTrigVarDiff(HeatProblem):
 
 
 # alpha(u) = 1 + u**3
-# 1D: u(x,t) = cos(x) (manufactured)
-# 2D: u(x,y,t) = sin(x)*cos(y) (manufactured)
-# 3D: u(x,y,z,t) = sin(x)*sin(y)*cos(z) (manufactured)
+# 1D: u(x,t) = cos(t)*cos(x) (manufactured)
+# 2D: u(x,y,t) = cos(t)*sin(x)*cos(y) (manufactured)
+# 3D: u(x,y,z,t) = cos(t)*sin(x)*sin(y)*cos(z) (manufactured)
 # on [-pi/2, pi/2]^{#dims}
-class StaticTrigNonlinearDiff(HeatProblem):
+class OscillatingTrigNonlinearDiff(HeatProblem):
     def __init__(self, dim):
         super().__init__(dim)
 
@@ -280,7 +280,7 @@ class StaticTrigNonlinearDiff(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = 1
+        u = _cos(t)
         for i in range(self.dim-1):
             u *= _sin(x[i])
         u *= _cos(x[self.dim-1])
@@ -322,10 +322,10 @@ def sym_diffusion(dim, sym_alpha, sym_u):
         (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24]),
         (DecayingTrigTruncatedDomain(2, 2.), 50, 5.e-5, [8, 12, 16]),
         (DecayingTrigTruncatedDomain(3, 2.), 50, 5.e-5, [8, 10, 12]),
-        (StaticTrigVarDiff(1), 50, 5.e-5, [8, 16, 24]),
-        (StaticTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
-        (StaticTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
-        (StaticTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
+        (OscillatingTrigVarDiff(1), 50, 5.e-5, [8, 16, 24]),
+        (OscillatingTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
+        (OscillatingTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
+        (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             visualize=False):
