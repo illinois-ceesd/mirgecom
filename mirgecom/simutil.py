@@ -91,8 +91,8 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
     ----------
     discr
         Grudge discretization or discretization collection?
-    state: :class:`~mirgecom.fluid.ConservedVars`
-        The fluid state.
+    state: :class:`~mirgecom.gas_model.FluidState`
+        The full fluid conserved and thermal state
     t: float
         Current time
     t_final: float
@@ -101,9 +101,6 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
         The current timestep
     cfl: float
         The current CFL number
-    eos: :class:`~mirgecom.eos.GasEOS`
-        Gas equation-of-state optionally with a non-empty
-        :class:`~mirgecom.transport.TransportModel` for viscous transport properties.
     constant_cfl: bool
         True if running constant CFL mode
 
