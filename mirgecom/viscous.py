@@ -72,13 +72,17 @@ def viscous_stress_tensor(state, grad_cv):
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
+
         Full conserved and thermal state of fluid
+
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+
         Gradient of the fluid state
 
     Returns
     -------
     numpy.ndarray
+
         The viscous stress tensor
     """
     return _compute_viscous_stress_tensor(
@@ -105,14 +109,18 @@ def diffusive_flux(state, grad_cv):
 
     Parameters
     ----------
-    state: :class:`~mirgecom.fluid.ConservedVars`
+    state: :class:`~mirgecom.gas_model.FluidState`
+
         Full fluid conserved and thermal state
+
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+
         Gradient of the fluid state
 
     Returns
     -------
     numpy.ndarray
+
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
     return _compute_diffusive_flux(state.mass_density, state.species_diffusivity,
@@ -137,13 +145,17 @@ def conductive_heat_flux(state, grad_t):
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
+
         Full fluid conserved and thermal state
+
     grad_t: numpy.ndarray
+
         Gradient of the fluid temperature
 
     Returns
     -------
     numpy.ndarray
+
         The conductive heat flux vector
     """
     return _compute_conductive_heat_flux(grad_t, state.thermal_conductivity)
@@ -175,13 +187,17 @@ def diffusive_heat_flux(state, j):
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
+
         Full fluid conserved and thermal state
+
     j: numpy.ndarray
+
         The species diffusive flux vector
 
     Returns
     -------
     numpy.ndarray
+
         The total diffusive heat flux vector
     """
     if state.is_mixture:
@@ -213,15 +229,21 @@ def viscous_flux(state, grad_cv, grad_t):
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
+
         Full fluid conserved and thermal state
+
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+
         Gradient of the fluid state
+
     grad_t: numpy.ndarray
+
         Gradient of the fluid temperature
 
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars` or float
+
         The viscous transport flux vector if viscous transport properties
         are provided, scalar zero otherwise.
     """
@@ -249,17 +271,26 @@ def viscous_facial_flux(discr, state_tpair, grad_cv_tpair, grad_t_tpair,
 
     Parameters
     ----------
-    discr: :class:`grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
         The discretization to use
-    state_tpair: :class:`grudge.trace_pair.TracePair`
+
+    state_tpair: :class:`~grudge.trace_pair.TracePair`
+
         Trace pair of :class:`~mirgecom.gas_model.FluidState` with the full fluid
         conserved and thermal state on the faces
-    grad_cv_tpair: :class:`grudge.trace_pair.TracePair`
+
+    grad_cv_tpair: :class:`~grudge.trace_pair.TracePair`
+
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
         fluid solution on the faces
-    grad_t_tpair: :class:`grudge.trace_pair.TracePair`
+
+    grad_t_tpair: :class:`~grudge.trace_pair.TracePair`
+
         Trace pair of temperature gradient on the faces.
+
     local: bool
+
         Indicates whether to skip projection of fluxes to "all_faces" or not. If
         set to *False* (the default), the returned fluxes are projected to
         "all_faces".  If set to *True*, the returned fluxes are not projected to
@@ -268,6 +299,7 @@ def viscous_facial_flux(discr, state_tpair, grad_cv_tpair, grad_t_tpair,
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
+
         The viscous transport flux in the face-normal direction on "all_faces" or
         local to the sub-discretization depending on *local* input parameter
     """
@@ -295,13 +327,17 @@ def get_viscous_timestep(discr, state):
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
+
         the discretization to use
+
     state: :class:`~mirgecom.gas_model.FluidState`
+
         Full fluid conserved and thermal state
 
     Returns
     -------
     :class:`~meshmode.dof_array.DOFArray`
+
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
@@ -329,16 +365,22 @@ def get_viscous_cfl(discr, dt, state):
 
     Parameters
     ----------
-    discr: :class:`grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
         the discretization to use
+
     dt: float or :class:`~meshmode.dof_array.DOFArray`
+
         A constant scalar dt or node-local dt
+
     state: :class:`~mirgecom.gas_model.FluidState`
+
         The full fluid conserved and thermal state
 
     Returns
     -------
     :class:`~meshmode.dof_array.DOFArray`
+
         The CFL at each node.
     """
     return dt / get_viscous_timestep(discr, state=state)
@@ -349,10 +391,19 @@ def get_local_max_species_diffusivity(actx, d_alpha):
 
     Parameters
     ----------
-    actx: :class:`arraycontext.ArrayContext`
+    actx: :class:`~arraycontext.ArrayContext`
+
         Array context to use
+
     d_alpha: numpy.ndarray
+
         Species diffusivities
+
+    Returns
+    -------
+    :class:`~meshmode.dof_array.DOFArray`
+
+        The maximum species diffusivity
     """
     if len(d_alpha) == 0:
         return 0
