@@ -49,6 +49,10 @@ from mirgecom.transport import (
     PowerLawTransport
 )
 from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +94,10 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     else:
         tv_model = PowerLawTransport()
 
-    eos = IdealSingleGas(transport_model=tv_model)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=tv_model)
+    fluid_state = make_fluid_state(cv, gas_model)
+
     mu = tv_model.viscosity(eos, cv)
     lam = tv_model.volume_viscosity(eos, cv)
 
@@ -102,7 +109,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
                + lam*exp_div_v*np.eye(3))
 
     from mirgecom.viscous import viscous_stress_tensor
-    tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
+    tau = viscous_stress_tensor(fluid_state, grad_cv)
 
     # The errors come from grad_v
     assert actx.to_numpy(discr.norm(tau - exp_tau, np.inf)) < 1e-12
@@ -148,7 +155,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     dpdx = (p_low - p_hi) / xlen
     rho = 1.0
 
-    eos = IdealSingleGas(transport_model=transport_model)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=transport_model)
 
     from mirgecom.initializers import PlanarPoiseuille
     initializer = PlanarPoiseuille(density=rho, mu=mu)
@@ -237,21 +245,22 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         assert inf_norm(grad_p - xp_grad_p)*dpscal < 5e-9
         assert inf_norm(grad_t - xp_grad_t)*tscal < 5e-9
 
+        fluid_state = make_fluid_state(cv, gas_model)
         # verify heat flux
         from mirgecom.viscous import conductive_heat_flux
-        heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
+        heat_flux = conductive_heat_flux(fluid_state, grad_t)
         xp_heat_flux = -kappa*xp_grad_t
         assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
 
         # verify diffusive mass flux is zilch (no scalar components)
         from mirgecom.viscous import diffusive_flux
-        j = diffusive_flux(discr, eos, cv, grad_cv)
+        j = diffusive_flux(fluid_state, grad_cv)
         assert len(j) == 0
 
         xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
         xp_mom_flux = xp_tau
         from mirgecom.viscous import viscous_flux
-        vflux = viscous_flux(discr, eos, cv, grad_cv, grad_t)
+        vflux = viscous_flux(fluid_state, grad_cv, grad_t)
 
         efluxerr = (
             inf_norm(vflux.energy - xp_e_flux)
@@ -331,10 +340,12 @@ def test_species_diffusive_flux(actx_factory):
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
 
-    eos = IdealSingleGas(transport_model=tv_model)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=tv_model)
+    fluid_state = make_fluid_state(cv, gas_model)
 
     from mirgecom.viscous import diffusive_flux
-    j = diffusive_flux(discr, eos, cv, grad_cv)
+    j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
         return actx.to_numpy(discr.norm(x, np.inf))
@@ -404,10 +415,12 @@ def test_diffusive_heat_flux(actx_factory):
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
 
-    eos = IdealSingleGas(transport_model=tv_model)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=tv_model)
+    fluid_state = make_fluid_state(cv, gas_model)
 
     from mirgecom.viscous import diffusive_flux
-    j = diffusive_flux(discr, eos, cv, grad_cv)
+    j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
         return actx.to_numpy(discr.norm(x, np.inf))
@@ -462,7 +475,8 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
         d_alpha_input *= f
 
     tv_model = SimpleTransport(species_diffusivity=d_alpha_input)
-    eos = IdealSingleGas(transport_model=tv_model)
+    eos = IdealSingleGas()
+
     d_alpha = tv_model.species_diffusivity(eos, cv)
 
     from mirgecom.viscous import get_local_max_species_diffusivity
@@ -519,12 +533,14 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
     else:
         tv_model = SimpleTransport(viscosity=mu)
 
-    eos = IdealSingleGas(transport_model=tv_model)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=tv_model)
+    fluid_state = make_fluid_state(cv, gas_model)
 
     from mirgecom.viscous import get_viscous_timestep
-    dt_field = get_viscous_timestep(discr, eos, cv)
+    dt_field = get_viscous_timestep(discr, fluid_state)
 
-    speed_total = actx.np.sqrt(np.dot(velocity, velocity)) + eos.sound_speed(cv)
+    speed_total = fluid_state.wavespeed
     dt_expected = chlen / (speed_total + (mu / chlen))
 
     error = (dt_expected - dt_field) / dt_expected

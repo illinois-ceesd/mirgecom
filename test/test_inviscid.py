@@ -38,7 +38,6 @@ from pytools.obj_array import (
 
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair
 from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
@@ -120,7 +119,11 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    flux = inviscid_flux(discr, eos, cv)
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    gas_model = GasModel(eos=eos)
+    state = make_fluid_state(cv, gas_model)
+
+    flux = inviscid_flux(state)
     flux_resid = flux - expected_flux
 
     for i in range(numeq, dim):
@@ -174,7 +177,11 @@ def test_inviscid_flux_components(actx_factory, dim):
     energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
-    flux = inviscid_flux(discr, eos, cv)
+
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    state = make_fluid_state(cv, GasModel(eos=eos))
+
+    flux = inviscid_flux(state)
 
     def inf_norm(x):
         return actx.to_numpy(discr.norm(x, np.inf))
@@ -234,12 +241,14 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
         )
         cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(cv)
+        from mirgecom.gas_model import GasModel, make_fluid_state
+        state = make_fluid_state(cv, GasModel(eos=eos))
 
         def inf_norm(x):
             return actx.to_numpy(discr.norm(x, np.inf))
 
         assert inf_norm(p - p_exact) < tolerance
-        flux = inviscid_flux(discr, eos, cv)
+        flux = inviscid_flux(state)
         logger.info(f"{dim}d flux = {flux}")
         vel_exact = mom / mass
 
@@ -302,11 +311,21 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        from mirgecom.inviscid import inviscid_facial_flux
-
         # Check the boundary facial fluxes as called on an interior boundary
-        interior_face_flux = inviscid_facial_flux(
-            discr, eos=IdealSingleGas(), cv_tpair=interior_trace_pair(discr, cv))
+        # eos = IdealSingleGas()
+        from mirgecom.gas_model import (
+            GasModel,
+            make_fluid_state,
+            make_fluid_state_interior_trace_pair
+        )
+        gas_model = GasModel(eos=IdealSingleGas())
+        state_tpair = make_fluid_state_interior_trace_pair(
+            discr, make_fluid_state(cv, gas_model), gas_model
+        )
+
+        from mirgecom.inviscid import inviscid_facial_divergence_flux
+        interior_face_flux = \
+            inviscid_facial_divergence_flux(discr, state_tpair=state_tpair)
 
         def inf_norm(data):
             if len(data) > 0:
@@ -347,9 +366,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
                                 momentum=dir_mom, species_mass=dir_mf)
         dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                   momentum=dir_mom, species_mass=dir_mf)
-        boundary_flux = inviscid_facial_flux(
-            discr, eos=IdealSingleGas(),
-            cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
+        state_tpair = TracePair(BTAG_ALL,
+                                interior=make_fluid_state(dir_bval, gas_model),
+                                exterior=make_fluid_state(dir_bc, gas_model))
+        boundary_flux = inviscid_facial_divergence_flux(
+            discr, state_tpair=state_tpair
         )
 
         assert inf_norm(boundary_flux.mass) < tolerance

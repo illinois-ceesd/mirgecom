@@ -34,6 +34,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state,
+    project_fluid_state
+)
 from grudge.eager import (
     EagerDGDiscretization,
 )
@@ -70,6 +75,7 @@ def test_slipwall_identity(actx_factory, dim):
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
     nhat = thaw(actx, discr.normal(BTAG_ALL))
+    gas_model = GasModel(eos=eos)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -83,12 +89,22 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
+            fluid_state = make_fluid_state(uniform_state, gas_model)
 
             def bnd_norm(vec):
                 return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
-            bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
-                                          eos=eos, cv=uniform_state)
+            interior_soln = \
+                project_fluid_state(discr, btag=BTAG_ALL, gas_model=gas_model,
+                                    state=fluid_state)
+
+            bnd_soln = \
+                wall.adiabatic_slip_state(discr, btag=BTAG_ALL, gas_model=gas_model,
+                                          state_minus=interior_soln)
+
+            from grudge.trace_pair import TracePair
+            bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
+                                 exterior=bnd_soln.cv)
 
             # check that mass and energy are preserved
             mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
@@ -120,6 +136,7 @@ def test_slipwall_flux(actx_factory, dim, order):
 
     wall = AdiabaticSlipBoundary()
     eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
 
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
@@ -151,8 +168,21 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
-                                              eos=eos, cv=uniform_state)
+                fluid_state = make_fluid_state(uniform_state, gas_model)
+
+                interior_soln = project_fluid_state(discr, btag=BTAG_ALL,
+                                                    state=fluid_state,
+                                                    gas_model=gas_model)
+
+                bnd_soln = wall.adiabatic_slip_state(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=interior_soln)
+
+                from grudge.trace_pair import TracePair
+                bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
+                                     exterior=bnd_soln.cv)
+                state_pair = TracePair(BTAG_ALL, interior=interior_soln,
+                                       exterior=bnd_soln)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
@@ -160,9 +190,9 @@ def test_slipwall_flux(actx_factory, dim, order):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, eos, cv_tpair=bnd_pair,
-                                                local=True)
+                from mirgecom.inviscid import inviscid_facial_divergence_flux
+                bnd_flux = inviscid_facial_divergence_flux(discr, state_pair,
+                                                           local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 
