@@ -483,7 +483,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     expected = .3*ones
     if array_valued:
         expected *= f
-    calculated = get_local_max_species_diffusivity(actx, discr, d_alpha)
+    calculated = get_local_max_species_diffusivity(actx, d_alpha)
 
     assert actx.to_numpy(discr.norm(calculated-expected, np.inf)) == 0
 
