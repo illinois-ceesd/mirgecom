@@ -33,10 +33,10 @@ import pyopencl.tools as cl_tools
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -56,7 +56,10 @@ from mirgecom.initializers import (
     AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
-
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -154,7 +157,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     vis_timer = None
 
@@ -177,6 +180,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
     eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
@@ -188,13 +192,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        current_state = restart_data["state"]
+        current_cv = restart_data["cv"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
+        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
+
+    current_state = make_fluid_state(current_cv, gas_model)
 
     visualizer = make_visualizer(discr)
 
@@ -224,7 +230,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "state": state,
+                "cv": state,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -244,8 +250,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        fluid_state = make_fluid_state(state, gas_model)
+        dv = fluid_state.dv
+
         try:
-            dv = None
 
             if logmgr:
                 logmgr.tick_before()
@@ -256,7 +264,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_health = check_step(step=step, interval=nhealth)
 
             if do_health:
-                dv = eos.dependent_vars(state)
                 health_errors = global_reduce(my_health_check(dv.pressure), op="lor")
                 if health_errors:
                     if rank == 0:
@@ -267,8 +274,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                if dv is None:
-                    dv = eos.dependent_vars(state)
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
         except MyRuntimeError:
@@ -278,7 +283,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
+        dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl, t_final,
                               constant_cfl)
         return state, dt
 
@@ -292,22 +297,25 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return euler_operator(discr, cv=state, time=t,
-                              boundaries=boundaries, eos=eos)
+        inviscid_state = make_fluid_state(cv=state, gas_model=gas_model)
+        return euler_operator(discr, state=inviscid_state, time=t,
+                              boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
+                                  current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=current_cv, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_dv = eos.dependent_vars(current_state)
+    final_state = make_fluid_state(current_state, gas_model)
+    final_dv = final_state.dv
+
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
 
