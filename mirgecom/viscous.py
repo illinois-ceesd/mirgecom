@@ -86,6 +86,10 @@ def viscous_stress_tensor(state, grad_cv):
         grad_v=velocity_gradient(state.cv, grad_cv))
 
 
+def _compute_diffusive_flux(density, d_alpha, grad_y):
+    return -density*d_alpha.reshape(-1, 1)*grad_y
+
+
 def diffusive_flux(state, grad_cv):
     r"""Compute the species diffusive flux vector, ($\mathbf{J}_{\alpha}$).
 
@@ -111,8 +115,8 @@ def diffusive_flux(state, grad_cv):
     numpy.ndarray
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
-    return (-state.cv.mass*state.species_diffusivity.reshape(-1, 1)
-             * species_mass_fraction_gradient(state.cv, grad_cv))
+    return _compute_diffusive_flux(state.mass_density, state.species_diffusivity,
+                                   species_mass_fraction_gradient(state.cv, grad_cv))
 
 
 def _compute_conductive_heat_flux(grad_t, kappa):
@@ -239,7 +243,7 @@ def viscous_flux(state, grad_cv, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
+def viscous_facial_flux(discr, state_tpair, grad_cv_tpair, grad_t_tpair,
                         local=False):
     """Return the viscous flux across a face given the solution on both sides.
 
@@ -247,11 +251,9 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
     ----------
     discr: :class:`grudge.eager.EagerDGDiscretization`
         The discretization to use
-    eos: :class:`~mirgecom.eos.GasEOS`
-        A gas equation of state
-    cv_tpair: :class:`grudge.trace_pair.TracePair`
-        Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the fluid solution
-        on the faces
+    state_tpair: :class:`grudge.trace_pair.TracePair`
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` with the full fluid
+        conserved and thermal state on the faces
     grad_cv_tpair: :class:`grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
         fluid solution on the faces
@@ -269,21 +271,21 @@ def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,
         The viscous transport flux in the face-normal direction on "all_faces" or
         local to the sub-discretization depending on *local* input parameter
     """
-    actx = cv_tpair.int.array_context
-    normal = thaw(actx, discr.normal(cv_tpair.dd))
+    actx = state_tpair.int.array_context
+    normal = thaw(actx, discr.normal(state_tpair.dd))
 
-    f_int = viscous_flux(discr, eos, cv_tpair.int, grad_cv_tpair.int,
+    f_int = viscous_flux(state_tpair.int, grad_cv_tpair.int,
                          grad_t_tpair.int)
-    f_ext = viscous_flux(discr, eos, cv_tpair.ext, grad_cv_tpair.ext,
+    f_ext = viscous_flux(state_tpair.ext, grad_cv_tpair.ext,
                          grad_t_tpair.ext)
-    f_tpair = TracePair(cv_tpair.dd, interior=f_int, exterior=f_ext)
+    f_tpair = TracePair(state_tpair.dd, interior=f_int, exterior=f_ext)
 
     # todo: user-supplied flux routine
     # note: Hard-code central flux here for BR1
     flux_weak = divergence_flux_central(f_tpair, normal)
 
     if not local:
-        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+        return discr.project(state_tpair.dd, "all_faces", flux_weak)
     return flux_weak
 
 
