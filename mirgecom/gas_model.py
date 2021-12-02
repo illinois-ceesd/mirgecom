@@ -9,10 +9,10 @@ Fluid State Handling
 ^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: FluidState
-.. autofunction: make_fluid_state
-.. autofunction: project_fluid_state
-.. autofunction: make_fluid_state_trace_pairs
-.. autofunction: make_fluid_state_interior_trace_pair
+.. autofunction:: make_fluid_state
+.. autofunction:: project_fluid_state
+.. autofunction:: make_fluid_state_trace_pairs
+.. autofunction:: make_fluid_state_interior_trace_pair
 """
 
 __copyright__ = """
@@ -61,12 +61,13 @@ class GasModel:
     r"""Physical gas model for calculating fluid state-dependent quantities.
 
     .. attribute:: eos
-        A gas equation of state :class:`~mirgecom.eos.GasEOS` to provide thermal
-        properties.
+
+        A gas equation of state to provide thermal properties.
 
     .. attribute:: transport_model
-        A gas transport model :class:`~mirgecom.transport_model.TransportModel` to
-        provide transport properties.  None for inviscid models.
+
+        A gas transport model to provide transport properties.  None for inviscid
+        models.
     """
 
     eos: GasEOS
@@ -80,16 +81,16 @@ class FluidState:
 
     .. attribute:: cv
 
-        :class:`~mirgecom.fluid.ConservedVars` for the fluid conserved state
+        Fluid conserved quantities
 
     .. attribute:: dv
 
-        :class:`~mirgecom.eos.EOSDependentVars` for the fluid state-dependent
-        quantities corresponding to the chosen equation of state.
+        Fluid state-dependent quantities corresponding to the chosen equation of
+        state.
 
     .. attribute:: tv
-        :class:`~mirgecom.transport.TransportDependentVars` for the fluid
-        state-dependent transport properties.
+
+        Fluid state-dependent transport properties.
 
     .. autoattribute:: array_context
     .. autoattribute:: dim
@@ -235,19 +236,22 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
     Parameters
     ----------
     cv: :class:`~mirgecom.fluid.ConservedVars`
+
         The gas conserved state
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
+
         The physical model for the gas/fluid.
 
-    temperature_seed: DOFArray or float
-        An optional :class:`~meshmode.dof_array.DOFArray` or number with the
-        temperature to use as a seed for a temperature evaluation for the created
-        fluid state
+    temperature_seed: :class:`~meshmode.dof_array.DOFArray` or float
+
+        An optional array or number with the temperature to use as a seed
+        for a temperature evaluation for the created fluid state
 
     Returns
     -------
     :class:`~mirgecom.gas_model.FluidState`
+
         Thermally consistent fluid state
     """
     dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
@@ -266,20 +270,25 @@ def project_fluid_state(discr, btag, state, gas_model):
     Parameters
     ----------
     discr: :class:`~grudge.eager.EagerDGDiscretization`
+
         A discretization collection encapsulating the DG elements
 
     btag:
+
         A boundary tag indicating the boundary to which to project the state
 
     state: :class:`~mirgecom.gas_model.FluidState`
+
         The full fluid conserved and thermal state
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
+
         The physical model constructs for the gas_model
 
     Returns
     -------
     :class:`~mirgecom.gas_model.FluidState`
+
         Thermally consistent fluid state
     """
     cv_sd = discr.project("vol", btag, state.cv)
@@ -301,25 +310,29 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
     """Create a fluid state from the conserved vars and equation of state.
 
     This routine helps create a thermally consistent fluid state out of a collection
-    of  CV (:class:`~mirgecom.fluid.ConservedVars) pairs.  It is useful for creating
+    of  CV (:class:`~mirgecom.fluid.ConservedVars`) pairs.  It is useful for creating
     consistent boundary states for partition boundaries.
 
     Parameters
     ----------
     cv_pairs: list of :class:`~grudge.trace_pair.TracePair`
+
         List of tracepairs of fluid CV (:class:`~mirgecom.fluid.ConservedVars`) for
         each boundary on which the thermally consistent state is desired
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
+
         The physical model constructs for the gas_model
 
     temperature_seed_pairs: list of :class:`~grudge.trace_pair.TracePair`
+
         List of tracepairs of :class:`~meshmode.dof_array.DOFArray` with the
         temperature seeds to use in creation of the thermally consistent states.
 
     Returns
     -------
     List of :class:`~grudge.trace_pair.TracePair`
+
         List of tracepairs of thermally consistent states
         (:class:`~mirgecom.gas_model.FluidState`) for each boundary in the input set
     """
@@ -341,17 +354,21 @@ def make_fluid_state_interior_trace_pair(discr, state, gas_model):
     Parameters
     ----------
     discr: :class:`~grudge.eager.EagerDGDiscretization`
+
         A discretization collection encapsulating the DG elements
 
     state: :class:`~mirgecom.gas_model.FluidState`
+
         The full fluid conserved and thermal state
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
+
         The physical model constructs for the gas_model
 
     Returns
     -------
     :class:`~grudge.trace_pair.TracePair`
+
         A tracepair of thermally consistent states
         (:class:`~mirgecom.gas_model.FluidState`) on the interior faces
     """
