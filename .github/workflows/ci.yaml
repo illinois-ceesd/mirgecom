@@ -179,10 +179,6 @@ jobs:
             cd emirge.y1
             source ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
             source ${MIRGEDIR}/../config/activate_env.sh
-
-            # Make sure we can build mpi4py
-            [[ $(uname) == Linux ]] && conda install gcc_linux-64
-
             source ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
