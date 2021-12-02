@@ -121,7 +121,7 @@ class GasEOS(metaclass=ABCMeta):
 
     @abstractmethod
     def temperature(self, cv: ConservedVars,
-                    reference_state: ConservedVars = None):
+                    temperature_seed: DOFArray = None):
         """Get the gas temperature."""
 
     @abstractmethod
@@ -820,6 +820,11 @@ class PyrometheusMixture(MixtureEOS):
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
+            # For mixtures, the temperature calcuation *must* be seeded. This
+            # check catches any actual temperature calculation that did not
+            # provide a seed.  Subsequent calls to *temperature* may or may
+            # not provide a seed - but those calls don't matter as the temperature
+            # calculation is actually performed only once per conserved state (cv).
             if temperature_seed is None:
                 raise TemperatureSeedError("MixtureEOS.get_temperature requires"
                                               " a *temperature_seed*.")
