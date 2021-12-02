@@ -197,14 +197,12 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing a noslip moving boundary.
 
     .. automethod:: adiabatic_noslip_state
-    .. automethod:: grad_cv_plus
     """
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
         PrescribedFluidBoundary.__init__(
-            self, boundary_cv_func=self.cv_plus,
-            fluid_solution_gradient_func=self.grad_cv_plus
+            self, boundary_state_func=self.adiabatic_noslip_state,
         )
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
@@ -225,7 +223,3 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         return make_conserved(dim=dim, mass=state_minus.mass,
                               energy=state_minus.energy, momentum=ext_mom,
                               species_mass=state_minus.species_mass)
-
-    def grad_cv_plus(self, nodes, nhat, grad_cv_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return(-grad_cv_minus)
