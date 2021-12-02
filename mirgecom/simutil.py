@@ -72,8 +72,7 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, eos,
-                     t_final, constant_cfl=False):
+def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
@@ -121,7 +120,7 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
         mydt = state.array_context.to_numpy(
             cfl * nodal_min(
                 discr, "vol",
-                get_viscous_timestep(discr=discr, eos=eos, cv=state)))[()]
+                get_viscous_timestep(discr=discr, state=state)))[()]
     return min(t_remaining, mydt)
 
 
@@ -282,15 +281,17 @@ def check_naninf_local(discr, dd, field):
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state):
+def compare_fluid_solutions(discr, red_state, blue_state, comm=None):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
     actx = red_state.array_context
-    resid = red_state - blue_state
-    return [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
+    resid = actx.np.abs(red_state - blue_state)
+    max_local_error = [actx.to_numpy(op.nodal_max_loc(discr, "vol", v))
+                       for v in resid.join()]
+    return allsync(max_local_error, comm=comm)
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
