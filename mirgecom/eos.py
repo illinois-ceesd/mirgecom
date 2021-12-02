@@ -7,10 +7,16 @@ This module is designed provide Equation of State objects used to compute and
 manage the relationships between and among state and thermodynamic variables.
 
 .. autoclass:: EOSDependentVars
+.. autoclass:: MixtureDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: MixtureEOS
 .. autoclass:: IdealSingleGas
 .. autoclass:: PyrometheusMixture
+
+Exceptions
+^^^^^^^^^^
+.. autoexception:: TemperatureSeedError
+.. autoexception:: MixtureEOSError
 """
 
 __copyright__ = """
@@ -41,11 +47,26 @@ from dataclasses import dataclass
 import numpy as np
 from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
+from arraycontext import dataclass_array_container
 
 
-@dataclass
+class TemperatureSeedError(Exception):
+    """Indicate that EOS is inappropriately called without seeding temperature."""
+
+    pass
+
+
+class MixtureEOSError(Exception):
+    """Indicate that a mixture EOS is required for model evaluation."""
+
+    pass
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
 class EOSDependentVars:
     """State-dependent quantities for :class:`GasEOS`.
 
@@ -58,6 +79,18 @@ class EOSDependentVars:
 
     temperature: np.ndarray
     pressure: np.ndarray
+    speed_of_sound: np.ndarray
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
+class MixtureDependentVars(EOSDependentVars):
+    """Mixture state-dependent quantities for :class:`MixtureEOS`.
+
+    ..attribute:: species_enthalpies
+    """
+
+    species_enthalpies: np.ndarray
 
 
 class GasEOS(metaclass=ABCMeta):
@@ -79,7 +112,6 @@ class GasEOS(metaclass=ABCMeta):
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
     .. automethod:: gamma
-    .. automethod:: transport_model
     .. automethod:: get_internal_energy
     """
 
@@ -88,7 +120,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas pressure."""
 
     @abstractmethod
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars,
+                    reference_state: ConservedVars = None):
         """Get the gas temperature."""
 
     @abstractmethod
@@ -124,18 +157,21 @@ class GasEOS(metaclass=ABCMeta):
         """Get the ratio of gas specific heats Cp/Cv."""
 
     @abstractmethod
-    def transport_model(self):
-        """Get the transport model if it exists."""
-
-    @abstractmethod
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
 
-    def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
-        """Get an agglomerated array of the dependent variables."""
+    def dependent_vars(self, cv: ConservedVars,
+                       temperature_seed: DOFArray = None) -> EOSDependentVars:
+        """Get an agglomerated array of the dependent variables.
+
+        Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
+        may raise :exc:`TemperatureSeedError` if *temperature_seed* is not
+        given.
+        """
         return EOSDependentVars(
+            temperature=self.temperature(cv, temperature_seed),
             pressure=self.pressure(cv),
-            temperature=self.temperature(cv),
+            speed_of_sound=self.sound_speed(cv)
         )
 
 
@@ -150,7 +186,13 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_seed
     """
+
+    @abstractmethod
+    def get_temperature_seed(self, cv: ConservedVars,
+                              temperature_seed: DOFArray = None):
+        r"""Get a constant and uniform guess for the gas temperature."""
 
     @abstractmethod
     def get_density(self, pressure, temperature, species_mass_fractions):
@@ -171,6 +213,21 @@ class MixtureEOS(GasEOS):
     @abstractmethod
     def get_species_source_terms(self, cv: ConservedVars):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
+
+    def dependent_vars(self, cv: ConservedVars,
+                       temperature_seed: DOFArray = None) -> MixtureDependentVars:
+        """Get an agglomerated array of the dependent variables.
+
+        Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
+        may raise :exc:`TemperatureSeedError` if *temperature_seed* is not
+        given.
+        """
+        return MixtureDependentVars(
+            temperature=self.temperature(cv, temperature_seed),
+            pressure=self.pressure(cv),
+            speed_of_sound=self.sound_speed(cv),
+            species_enthalpies=self.species_enthalpies(cv)
+        )
 
 
 class IdealSingleGas(GasEOS):
@@ -194,19 +251,13 @@ class IdealSingleGas(GasEOS):
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
     .. automethod:: gamma
-    .. automethod:: transport_model
     .. automethod:: get_internal_energy
     """
 
-    def __init__(self, gamma=1.4, gas_const=287.1, transport_model=None):
+    def __init__(self, gamma=1.4, gas_const=287.1):
         """Initialize Ideal Gas EOS parameters."""
         self._gamma = gamma
         self._gas_const = gas_const
-        self._transport_model = transport_model
-
-    def transport_model(self):
-        """Get the transport model object for this EOS."""
-        return self._transport_model
 
     def gamma(self, cv: ConservedVars = None):
         """Get specific heat ratio Cp/Cv."""
@@ -330,7 +381,7 @@ class IdealSingleGas(GasEOS):
         actx = cv.array_context
         return actx.np.sqrt(self._gamma / cv.mass * self.pressure(cv))
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, temperature_seed: DOFArray = None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature (T) is calculated from
@@ -346,6 +397,9 @@ class IdealSingleGas(GasEOS):
         cv: :class:`~mirgecom.fluid.ConservedVars`
             :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$).
+
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Ignored for this EOS.
 
         Returns
         -------
@@ -441,17 +495,16 @@ class PyrometheusMixture(MixtureEOS):
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
     .. automethod:: gamma
-    .. automethod:: transport_model
     .. automethod:: get_internal_energy
     .. automethod:: get_density
     .. automethod:: get_species_molecular_weights
     .. automethod:: get_production_rates
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
+    .. automethod:: get_temperature_seed
     """
 
-    def __init__(self, pyrometheus_mech, temperature_guess=300.0,
-                 transport_model=None):
+    def __init__(self, pyrometheus_mech, temperature_guess=300.0):
         """Initialize Pyrometheus-based EOS with mechanism class.
 
         Parameters
@@ -475,11 +528,28 @@ class PyrometheusMixture(MixtureEOS):
         """
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
-        self._transport_model = transport_model
 
-    def transport_model(self):
-        """Get the transport model object for this EOS."""
-        return self._transport_model
+    def get_temperature_seed(self, cv, temperature_seed=None):
+        """Get a *cv*-shape-consistent array with which to seed temperature calcuation.
+
+        Parameters
+        ----------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            :class:`~mirgecom.fluid.ConservedVars` used to conjure the required shape
+            for the returned temperature guess.
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Optional data from which to seed temperature calculation.
+
+        Returns
+        -------
+        :class:`~meshmode.dof_array.DOFArray`
+            The temperature with which to seed the Newton solver in
+            :module:thermochemistry.
+        """
+        tseed = self._tguess
+        if temperature_seed is not None:
+            tseed = temperature_seed
+        return tseed if isinstance(tseed, DOFArray) else tseed * (0*cv.mass + 1.0)
 
     def heat_capacity_cp(self, cv: ConservedVars):
         r"""Get mixture-averaged specific heat capacity at constant pressure.
@@ -721,7 +791,7 @@ class PyrometheusMixture(MixtureEOS):
             return actx.np.sqrt((self.gamma(cv) * self.pressure(cv)) / cv.mass)
         return get_sos()
 
-    def temperature(self, cv: ConservedVars):
+    def temperature(self, cv: ConservedVars, temperature_seed=None):
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated from
@@ -738,18 +808,26 @@ class PyrometheusMixture(MixtureEOS):
             :class:`~mirgecom.fluid.ConservedVars` containing at least the mass
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Optional data from which to seed temperature calculation.
 
         Returns
         -------
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
+
         @memoize_in(cv, (PyrometheusMixture.temperature,
                          type(self._pyrometheus_mech)))
         def get_temp():
+            if temperature_seed is None:
+                raise TemperatureSeedError("MixtureEOS.get_temperature requires"
+                                              " a *temperature_seed*.")
+            tseed = self.get_temperature_seed(cv, temperature_seed)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, self._tguess, y)
+            return self._pyrometheus_mech.get_temperature(e, tseed, y)
+
         return get_temp()
 
     def total_energy(self, cv, pressure):
