@@ -211,3 +211,73 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
     """
     from arraycontext import outer
     return f_tpair.avg - lam*outer(cv_tpair.diff, normal)/2
+
+# This one knows about fluid stuff
+def rusanov_flux(state_tpair, normal):
+    actx = state_tpair.int.array_context
+    
+    # This calculates the local maximum eigenvalue of the flux Jacobian
+    # for a single component gas, i.e. the element-local max wavespeed |v| + c.
+    w_int = \
+        np.abs(np.dot(state_tpair.int.velocity, normal)
+               - state_tpair.int.dv.speed_of_sound)
+    w_ext = \
+        np.abs(np.dot(state_tpair.ext.velocity, normal)
+               + state_tpair.ext.dv.speed_of_sound)
+    
+    # w_int = state_tpair.int.dv.speed_of_sound + state_tpair.int.cv.speed
+    # w_ext = state_tpair.ext.dv.speed_of_sound + state_tpair.ext.cv.speed
+    lam = actx.np.maximum(w_int, w_ext)
+    from grudge.trace_pair import TracePair
+    from mirgecom.inviscid import inviscid_flux
+    q_tpair = TracePair(state_tpair.dd, interior=state_tpair.int.cv,
+                        exterior=state_tpair.ext.cv)
+    f_tpair = TracePair(state_tpair.dd, interior=inviscid_flux(state_tpair.int),
+                        exterior=inviscid_flux(state_tpair.ext))
+    return flux_reconstruction_lfr(q_tpair, f_tpair, lam, normal) 
+
+
+def flux_reconstruction_lfr(q_tpair, f_tpair, lam, normal):
+    """Rusanov if lam=max(wavespeed), LF if lam=(gridspeed)."""
+    from arraycontext import outer
+    return f_tpair.avg - .5*lam*outer(q_tpair.diff, normal)
+
+
+def flux_reconstruction_hll(q_tpair, f_tpair, s_tpair, normal):
+    r"""Compute Harten-Lax-vanLeer (HLL) flux reconstruction
+
+    The HLL flux is calculated as:
+
+    .. math::
+
+        \mathbf{F}_{\mathtt{HLL}} = \frac{S^+~\mathbf{F}^- - S^-~\mathbf{F}^+
+        + S^+~S^-\left(Q^+ - Q^-\right)}{S^+ - S^-}
+
+    where $Q^{\left{-,+\right}}, \mathbf{F}^{\left{-,+\right}}$ are the scalar
+    solution components and fluxes on the left(interior) and the right(exterior) of
+    the face on which the flux is to be reconstructed.
+
+    Parameters
+    ----------
+    q_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Solution trace pair for faces for which numerical flux is to be calculated
+
+    f_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Physical flux trace pair on faces on which numerical flux is to be calculated
+
+    s_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        The wavespeeds at the faces for which the numerical flux is to be calculated
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLL reconstructed flux
+    """
+    from arraycontext import outer
+    return (s_tpair.ext*f_tpair.int - s_tpair.int*f_tpair.ext
+            + s_tpair.int * s_tpair.ext * outer(q_tpair.diff, normal)) / s_tpair.diff
