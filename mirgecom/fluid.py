@@ -431,5 +431,5 @@ def species_mass_fraction_gradient(cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    y = cv.species_mass_fractions
-    return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
+    return (grad_cv.species_mass
+            - np.outer(cv.species_mass_fractions, grad_cv.mass))/cv.mass
