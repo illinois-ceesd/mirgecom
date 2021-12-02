@@ -54,6 +54,8 @@ from mirgecom.fluid import (
 )
 
 
+# low level routine works with numpy arrays and can be tested without
+# a full grid + fluid state, etc
 def _compute_viscous_stress_tensor(dim, mu, mu_b, grad_v):
     return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*np.trace(grad_v)*np.eye(dim)
 
@@ -90,6 +92,8 @@ def viscous_stress_tensor(state, grad_cv):
         grad_v=velocity_gradient(state.cv, grad_cv))
 
 
+# low level routine works with numpy arrays and can be tested without
+# a full grid + fluid state, etc
 def _compute_diffusive_flux(density, d_alpha, grad_y):
     return -density*d_alpha.reshape(-1, 1)*grad_y
 
@@ -127,6 +131,8 @@ def diffusive_flux(state, grad_cv):
                                    species_mass_fraction_gradient(state.cv, grad_cv))
 
 
+# low level routine works with numpy arrays and can be tested without
+# a full grid + fluid state, etc
 def _compute_conductive_heat_flux(grad_t, kappa):
     return -kappa*grad_t
 
@@ -161,6 +167,8 @@ def conductive_heat_flux(state, grad_t):
     return _compute_conductive_heat_flux(grad_t, state.thermal_conductivity)
 
 
+# low level routine works with numpy arrays and can be tested without
+# a full grid + fluid state, etc
 def _compute_diffusive_heat_flux(j, h_alpha):
     return sum(h_alpha.reshape(-1, 1) * j)
 
