@@ -1,7 +1,7 @@
 """:mod:`mirgecom.fluid` provides common utilities for fluid simulation.
 
-State Vector Handling
-^^^^^^^^^^^^^^^^^^^^^
+Conserved Quantities Handling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved

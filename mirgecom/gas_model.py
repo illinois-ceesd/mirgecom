@@ -12,7 +12,7 @@ Fluid State Handling
 .. autofunction: make_fluid_state
 .. autofunction: project_fluid_state
 .. autofunction: make_fluid_state_trace_pairs
-
+.. autofunction: make_fluid_state_interior_trace_pair
 """
 
 __copyright__ = """
