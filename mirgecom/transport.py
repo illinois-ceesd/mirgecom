@@ -14,7 +14,9 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
 
-.. autoexception:: TransportModelRequired
+Exceptions
+^^^^^^^^^^
+.. autoexception:: TransportModelError
 """
 
 __copyright__ = """
@@ -49,7 +51,7 @@ from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS
 
 
-class TransportModelRequired(Exception):
+class TransportModelError(Exception):
     """Indicate that transport model is required for model evaluation."""
 
     pass
