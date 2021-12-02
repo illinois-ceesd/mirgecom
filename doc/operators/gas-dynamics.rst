@@ -10,3 +10,4 @@ Gas Dynamics
 .. automodule:: mirgecom.viscous
 .. automodule:: mirgecom.boundary
 .. automodule:: mirgecom.flux
+.. automodule:: mirgecom.gas_model
