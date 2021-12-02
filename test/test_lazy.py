@@ -1,3 +1,5 @@
+"""Test some lazy operations."""
+
 __copyright__ = """Copyright (C) 2021 University of Illinois Board of Trustees"""
 
 __license__ = """
@@ -45,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def op_test_data(ctx_factory):
+    """Test fixtures for lazy tests."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -126,6 +129,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_lazy_op_divergence(op_test_data, order):
+    """Test divergence operation in lazy context."""
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
@@ -164,6 +168,7 @@ def test_lazy_op_divergence(op_test_data, order):
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_lazy_op_diffusion(op_test_data, order):
+    """Test diffusion operator in lazy context."""
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
@@ -205,14 +210,15 @@ def test_lazy_op_diffusion(op_test_data, order):
 
 def _get_pulse():
     from mirgecom.eos import IdealSingleGas
-    eos = IdealSingleGas()
+    from mirgecom.gas_model import GasModel
+    gas_model = GasModel(eos=IdealSingleGas())
 
     from mirgecom.initializers import Uniform, AcousticPulse
     uniform_init = Uniform(dim=2)
     pulse_init = AcousticPulse(dim=2, center=np.zeros(2), amplitude=1.0, width=.1)
 
     def init(nodes):
-        return pulse_init(x_vec=nodes, cv=uniform_init(nodes), eos=eos)
+        return pulse_init(x_vec=nodes, cv=uniform_init(nodes), eos=gas_model.eos)
 
     from meshmode.mesh import BTAG_ALL
     from mirgecom.boundary import AdiabaticSlipBoundary
@@ -220,25 +226,33 @@ def _get_pulse():
         BTAG_ALL: AdiabaticSlipBoundary()
     }
 
-    return eos, init, boundaries, 3e-12
+    return gas_model, init, boundaries, 3e-12
 
 
 def _get_scalar_lump():
     from mirgecom.eos import IdealSingleGas
-    eos = IdealSingleGas()
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    gas_model = GasModel(eos=IdealSingleGas())
 
     from mirgecom.initializers import MulticomponentLump
     init = MulticomponentLump(
         dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
         spec_amplitudes=np.ones(3))
 
+    def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return make_fluid_state(init(x_vec=nodes, eos=gas_model.eos,
+                                     **kwargs), gas_model)
+
     from meshmode.mesh import BTAG_ALL
-    from mirgecom.boundary import PrescribedInviscidBoundary
+    from mirgecom.boundary import PrescribedFluidBoundary
     boundaries = {
-        BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=init)
+        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
     }
 
-    return eos, init, boundaries, 5e-12
+    return gas_model, init, boundaries, 5e-12
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -247,15 +261,19 @@ def _get_scalar_lump():
     _get_scalar_lump(),
 ])
 def test_lazy_op_euler(op_test_data, problem, order):
+    """Test Euler operator in lazy context."""
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    eos, init, boundaries, tol = problem
+    gas_model, init, boundaries, tol = problem
 
     from mirgecom.euler import euler_operator
+    from mirgecom.gas_model import make_fluid_state
 
     def op(state):
-        return euler_operator(discr, eos, boundaries, state)
+        fluid_state = make_fluid_state(state, gas_model)
+        return euler_operator(discr, gas_model=gas_model,
+                              boundaries=boundaries, state=fluid_state)
 
     lazy_op = lazy_actx.compile(op)
 
