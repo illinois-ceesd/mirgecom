@@ -55,7 +55,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_divergence_flux
 )
 from grudge.eager import (
     interior_trace_pair,
@@ -66,7 +66,7 @@ from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, state, gas_model, boundaries, time=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -81,8 +81,9 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
 
     Parameters
     ----------
-    cv: :class:`mirgecom.fluid.ConservedVars`
-        Fluid conserved state object with the conserved variables.
+    state: :class:`~mirgecom.gas_model.FluidState`
+        Fluid state object with the conserved state, and dependent
+        quantities.
 
     boundaries
         Dictionary of boundary functions, one for each valid btag
@@ -100,28 +101,50 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
+    cv = state.cv
+    dim = state.dim
+
+    from mirgecom.gas_model import project_fluid_state
+    boundary_states = {btag:
+                       project_fluid_state(discr, btag, state, gas_model)
+                       for btag in boundaries}
+
+    cv_int_pair = interior_trace_pair(discr, cv)
+    cv_interior_pairs = [cv_int_pair]
+    q_comm_pairs = cross_rank_trace_pairs(discr, cv.join())
+    cv_part_pairs = [
+        TracePair(q_pair.dd,
+                  interior=make_conserved(dim, q=q_pair.int),
+                  exterior=make_conserved(dim, q=q_pair.ext))
+        for q_pair in q_comm_pairs]
+    cv_interior_pairs.extend(cv_part_pairs)
+
+    tseed_interior_pairs = None
+    if cv.nspecies > 0:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        tseed_int_pair = interior_trace_pair(discr, state.temperature)
+        tseed_part_pairs = cross_rank_trace_pairs(discr, state.temperature)
+        tseed_interior_pairs = [tseed_int_pair]
+        tseed_interior_pairs.extend(tseed_part_pairs)
+
+    from mirgecom.gas_model import make_fluid_state_trace_pairs
+    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
+                                                   tseed_interior_pairs)
+
+    inviscid_flux_vol = inviscid_flux(state)
     inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=time)
-              for btag in boundaries)
+        sum(boundaries[btag].inviscid_divergence_flux(
+            discr, btag, gas_model, state_minus=boundary_states[btag], time=time)
+            for btag in boundaries)
+        + sum(inviscid_facial_divergence_flux(discr, state_pair)
+              for state_pair in interior_states)
     )
+
     q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
     return make_conserved(discr.dim, q=q)
-
-
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
 
 
 # By default, run unitless
