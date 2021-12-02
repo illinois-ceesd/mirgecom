@@ -88,14 +88,14 @@ class ConservedVars:
 
     .. attribute:: momentum
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
+        Object array (:class:`numpy.ndarray`) with shape ``(ndim,)``
         of :class:`~meshmode.dof_array.DOFArray` , or an object array with shape
         ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
         to the ndim equations of momentum conservation.
 
     .. attribute:: species_mass
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        Object array (:class:`numpy.ndarray`) with shape ``(nspecies,)``
         of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
         ``(nspecies, ndim)`` respectively for scalar or vector quantities
         corresponding to the `nspecies` species mass conservation equations.
