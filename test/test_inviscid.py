@@ -119,8 +119,9 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
     # }}}
 
-    from mirgecom.gas_model import make_fluid_state
-    state = make_fluid_state(cv, eos)
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    gas_model = GasModel(eos=eos)
+    state = make_fluid_state(cv, gas_model)
 
     flux = inviscid_flux(state)
     flux_resid = flux - expected_flux
@@ -177,8 +178,8 @@ def test_inviscid_flux_components(actx_factory, dim):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     p = eos.pressure(cv)
 
-    from mirgecom.gas_model import make_fluid_state
-    state = make_fluid_state(cv, eos)
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    state = make_fluid_state(cv, GasModel(eos=eos))
 
     flux = inviscid_flux(state)
 
@@ -240,8 +241,8 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
         )
         cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         p = eos.pressure(cv)
-        from mirgecom.gas_model import make_fluid_state
-        state = make_fluid_state(cv, eos)
+        from mirgecom.gas_model import GasModel, make_fluid_state
+        state = make_fluid_state(cv, GasModel(eos=eos))
 
         def inf_norm(x):
             return actx.to_numpy(discr.norm(x, np.inf))
@@ -311,13 +312,15 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             species_mass=species_mass_input)
 
         # Check the boundary facial fluxes as called on an interior boundary
-        eos = IdealSingleGas()
+        # eos = IdealSingleGas()
         from mirgecom.gas_model import (
+            GasModel,
             make_fluid_state,
             make_fluid_state_interior_trace_pair
         )
+        gas_model = GasModel(eos=IdealSingleGas())
         state_tpair = make_fluid_state_interior_trace_pair(
-            discr, make_fluid_state(cv, eos), eos
+            discr, make_fluid_state(cv, gas_model), gas_model
         )
 
         from mirgecom.inviscid import inviscid_facial_divergence_flux
@@ -364,8 +367,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                   momentum=dir_mom, species_mass=dir_mf)
         state_tpair = TracePair(BTAG_ALL,
-                                interior=make_fluid_state(dir_bval, eos),
-                                exterior=make_fluid_state(dir_bc, eos))
+                                interior=make_fluid_state(dir_bval, gas_model),
+                                exterior=make_fluid_state(dir_bc, gas_model))
         boundary_flux = inviscid_facial_divergence_flux(
             discr, state_tpair=state_tpair
         )

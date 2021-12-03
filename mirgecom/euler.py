@@ -81,23 +81,28 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0):
 
     Parameters
     ----------
-    state: :class:`mirgecom.gas_model.FluidState`
+    state: :class:`~mirgecom.gas_model.FluidState`
+
         Fluid state object with the conserved state, and dependent
         quantities.
 
     boundaries
+
         Dictionary of boundary functions, one for each valid btag
 
     time
+
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
 
     Returns
     -------
     numpy.ndarray
+
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """

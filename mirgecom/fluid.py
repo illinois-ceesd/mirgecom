@@ -1,7 +1,7 @@
 """:mod:`mirgecom.fluid` provides common utilities for fluid simulation.
 
-State Vector Handling
-^^^^^^^^^^^^^^^^^^^^^
+Conserved Quantities Handling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
@@ -88,14 +88,14 @@ class ConservedVars:
 
     .. attribute:: momentum
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
+        Object array (:class:`numpy.ndarray`) with shape ``(ndim,)``
         of :class:`~meshmode.dof_array.DOFArray` , or an object array with shape
         ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
         to the ndim equations of momentum conservation.
 
     .. attribute:: species_mass
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        Object array (:class:`numpy.ndarray`) with shape ``(nspecies,)``
         of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
         ``(nspecies, ndim)`` respectively for scalar or vector quantities
         corresponding to the `nspecies` species mass conservation equations.
@@ -431,5 +431,5 @@ def species_mass_fraction_gradient(cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    y = cv.species_mass_fractions
-    return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
+    return (grad_cv.species_mass
+            - np.outer(cv.species_mass_fractions, grad_cv.mass))/cv.mass

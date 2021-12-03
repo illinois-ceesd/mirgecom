@@ -48,6 +48,10 @@ from mirgecom.boundary import (
     DummyBoundary
 )
 from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -109,6 +113,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv, gas_model)
 
         expected_rhs = make_conserved(
             dim, q=make_obj_array([discr.zeros(actx)
@@ -116,8 +122,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, time=0.0)
+        inviscid_rhs = euler_operator(discr, state=fluid_state, gas_model=gas_model,
+                                      boundaries=boundaries, time=0.0)
+
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -157,10 +164,12 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv, gas_model)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, time=0.0)
+        inviscid_rhs = euler_operator(discr, state=fluid_state, gas_model=gas_model,
+                                      boundaries=boundaries, time=0.0)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -226,20 +235,22 @@ def test_vortex_rhs(actx_factory, order):
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(vortex_soln, gas_model)
 
-        def _vortex_boundary(discr, btag, cv_minus, **kwargs):
-            actx = cv_minus.mass.array_context
+        def _vortex_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
             nodes = thaw(bnd_discr.nodes(), actx)
-            return vortex(x_vec=nodes, **kwargs)
+            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
-            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_vortex_boundary)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries,
-            cv=vortex_soln, time=0.0)
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0)
 
         err_max = actx.to_numpy(discr.norm(inviscid_rhs.join(), np.inf))
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
@@ -291,19 +302,22 @@ def test_lump_rhs(actx_factory, dim, order):
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(lump_soln, gas_model)
 
-        def _lump_boundary(discr, btag, cv_minus, **kwargs):
-            actx = cv_minus.mass.array_context
+        def _lump_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
             nodes = thaw(bnd_discr.nodes(), actx)
-            return lump(x_vec=nodes, cv=cv_minus, **kwargs)
+            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
+                                    gas_model)
 
         boundaries = {
-            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_lump_boundary)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_lump_boundary)
         }
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
             time=0.0
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
@@ -372,19 +386,21 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(lump_soln, gas_model)
 
-        def _my_boundary(discr, btag, cv_minus, **kwargs):
-            actx = cv_minus.mass.array_context
+        def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
             nodes = thaw(bnd_discr.nodes(), actx)
-            return lump(x_vec=nodes, **kwargs)
+            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
-            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_my_boundary)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
         }
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
             time=0.0
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
@@ -441,7 +457,10 @@ def _euler_flow_stepper(actx, parameters):
     nodes = thaw(discr.nodes(), actx)
 
     cv = initializer(nodes)
-    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+    gas_model = GasModel(eos=eos)
+    fluid_state = make_fluid_state(cv, gas_model)
+
+    sdt = cfl * get_inviscid_timestep(discr, fluid_state)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -485,7 +504,9 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return euler_operator(discr, eos=eos, boundaries=boundaries, cv=q, time=t)
+        fluid_state = make_fluid_state(q, gas_model)
+        return euler_operator(discr, fluid_state, boundaries=boundaries,
+                              gas_model=gas_model, time=t)
 
     filter_order = 8
     eta = .5
@@ -517,11 +538,12 @@ def _euler_flow_stepper(actx, parameters):
         cv = make_conserved(
             dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
         )
+        fluid_state = make_fluid_state(cv, gas_model)
 
         t += dt
         istep += 1
 
-        sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+        sdt = cfl * get_inviscid_timestep(discr, fluid_state)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
@@ -572,14 +594,14 @@ def test_isentropic_vortex(actx_factory, order):
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
 
-        def _vortex_boundary(discr, btag, cv_minus, **kwargs):
-            actx = cv_minus.mass.array_context
+        def _vortex_boundary(discr, btag, state_minus, gas_model, **kwargs):
+            actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
             nodes = thaw(bnd_discr.nodes(), actx)
-            return initializer(x_vec=nodes, **kwargs)
+            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
-            BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_vortex_boundary)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
 
         eos = IdealSingleGas()

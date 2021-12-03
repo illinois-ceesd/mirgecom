@@ -57,6 +57,19 @@ def inviscid_flux(state):
         object with a *dim-vector* for each conservation equation. See
         :class:`mirgecom.fluid.ConservedVars` for more information about
         how the fluxes are represented.
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Full fluid conserved and thermal state.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the inviscid flux vector for each
+        conservation equation.
     """
     mass_flux = state.momentum_density
     energy_flux = state.velocity * (state.energy_density + state.pressure)
@@ -90,15 +103,30 @@ def inviscid_facial_divergence_flux(discr, state_tpair, local=False):
 
     Parameters
     ----------
-    cv_tpair: :class:`grudge.trace_pair.TracePair`
-        Trace pair of :class:`mirgecom.fluid.ConservedVars` for the face upon
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
+        The discretization collection to use
+
+    state_tpair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
         which the flux calculation is to be performed
 
     local: bool
+
         Indicates whether to skip projection of fluxes to "all_faces" or not. If
         set to *False* (the default), the returned fluxes are projected to
         "all_faces."  If set to *True*, the returned fluxes are not projected to
         "all_faces"; remaining instead on the boundary restriction.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
     """
     actx = state_tpair.int.array_context
     flux_tpair = TracePair(state_tpair.dd,
@@ -133,15 +161,17 @@ def get_inviscid_timestep(discr, state):
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
+
         the discretization to use
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        Fluid solution
+
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Full fluid conserved and thermal state
+
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
+
         The maximum stable timestep at each node.
     """
     from grudge.dt_utils import characteristic_lengthscales
@@ -156,19 +186,22 @@ def get_inviscid_cfl(discr, state, dt):
 
     Parameters
     ----------
-    discr: :class:`grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
         the discretization to use
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+
     dt: float or :class:`~meshmode.dof_array.DOFArray`
+
         A constant scalar dt or node-local dt
-    cv: :class:`~mirgecom.fluid.ConservedVars`
-        The fluid conserved variables
+
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        The full fluid conserved and thermal state
 
     Returns
     -------
-    :class:`meshmode.dof_array.DOFArray`
+    :class:`~meshmode.dof_array.DOFArray`
+
         The CFL at each node.
     """
     return dt / get_inviscid_timestep(discr, state=state)
