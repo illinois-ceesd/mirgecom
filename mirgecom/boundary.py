@@ -253,7 +253,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
     boundary conditions described in detail in [Poinsot_1992]_.
 
-    .. automethod:: adiabatic_slip_cv
+    .. automethod:: adiabatic_slip_state
     """
 
     def __init__(self):
@@ -300,16 +300,15 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing a noslip moving boundary.
 
-    .. automethod:: adiabatic_noslip_pair
-    .. automethod:: exterior_soln
-    .. automethod:: exterior_grad_q
+    .. automethod:: adiabatic_noslip_state
+    .. automethod:: adiabatic_noslip_grad_cv
     """
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
         PrescribedFluidBoundary.__init__(
-            self, boundary_cv_func=self.cv_plus,
-            fluid_solution_gradient_func=self.grad_cv_plus
+            self, boundary_state_func=self.adiabatic_noslip_state,
+            cv_gradient_func=self.adiabatic_noslip_grad_cv,
         )
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
@@ -323,14 +322,16 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         dim = discr.dim
 
         # Compute momentum solution
-        wall_pen = 2.0 * self._wall_velocity * cv_minus.mass
-        ext_mom = wall_pen - cv_minus.momentum  # no-slip
+        wall_pen = 2.0 * self._wall_velocity * state_minus.mass_density
+        ext_mom = wall_pen - state_minus.momentum_density  # no-slip
 
         # Form the external boundary solution with the new momentum
-        return make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
-                              momentum=ext_mom, species_mass=cv_minus.species_mass)
+        return make_conserved(dim=dim, mass=state_minus.mass_density,
+                              energy=state_minus.energy_density,
+                              momentum=ext_mom,
+                              species_mass=state_minus.species_mass_density)
 
-    def grad_cv_plus(self, nodes, nhat, grad_cv_minus, **kwargs):
+    def adiabatic_noslip_grad_cv(self, nodes, nhat, grad_cv_minus, **kwargs):
         """Get the exterior solution on the boundary."""
         return(-grad_cv_minus)
 

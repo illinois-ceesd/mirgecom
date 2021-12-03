@@ -31,7 +31,7 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
@@ -50,6 +50,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
+from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
 
@@ -180,28 +181,31 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     orig = np.zeros(shape=(dim,))
     vel[:dim] = 1.0
     initializer = Lump(dim=dim, center=orig, velocity=vel)
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    gas_model = GasModel(eos=eos)
 
-    def _lump_boundary(discr, btag, eos, cv_minus, dv_minus, time=0):
-        actx = cv_minus.mass.array_context
+    def boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
         nodes = thaw(bnd_discr.nodes(), actx)
-        return initializer(x_vec=nodes, eos=eos, cv=cv_minus, time=time)
+        return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
+                                            **kwargs), gas_model)
 
-    from mirgecom.boundary import PrescribedFluidBoundary
     boundaries = {
-        BTAG_ALL: PrescribedFluidBoundary(boundary_cv_func=_lump_boundary)
+        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
     }
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        current_state = restart_data["state"]
+        current_cv = restart_data["cv"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = initializer(nodes)
+        current_cv = initializer(nodes)
+    current_state = make_fluid_state(current_cv, gas_model)
 
     visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
@@ -265,8 +269,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        fluid_state = make_fluid_state(state, gas_model)
+        dv = fluid_state.dv
         try:
-            dv = None
             exact = None
 
             if logmgr:
@@ -279,7 +284,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
-                dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
                 health_errors = global_reduce(
                     my_health_check(dv=dv, state=state, exact=exact), op="lor")
@@ -292,8 +296,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                if dv is None:
-                    dv = eos.dependent_vars(state)
                 if exact is None:
                     exact = initializer(x_vec=nodes, eos=eos, time=t)
                 resid = state - exact
@@ -318,7 +320,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos, t_final,
+        dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl, t_final,
                               constant_cfl)
         return state, dt
 
@@ -332,28 +334,30 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return euler_operator(discr, cv=state, time=t,
-                              boundaries=boundaries, eos=eos)
+        fluid_state = make_fluid_state(state, gas_model)
+        return euler_operator(discr, state=fluid_state, time=t,
+                              boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
+                                  current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_state = \
+    current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_dv = eos.dependent_vars(current_state)
+    current_state = make_fluid_state(current_cv, gas_model)
+    final_dv = current_state.dv
     final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
-    final_resid = current_state - final_exact
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv,
+    final_resid = current_state.cv - final_exact
+    my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv,
                  exact=final_exact, resid=final_resid)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_restart(step=current_step, t=current_t, state=current_state.cv)
 
     if logmgr:
         logmgr.close()
