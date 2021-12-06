@@ -5,6 +5,7 @@
 .. autofunction:: grad
 
 .. autoclass:: EvaluationMapper
+.. autofunction:: evaluate
 """
 
 __copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
@@ -33,7 +34,7 @@ import numpy as np
 import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-import pymbolic.mapper.evaluator as ev
+from pymbolic.mapper.evaluator import EvaluationMapper as BaseEvaluationMapper
 from arraycontext import get_container_context_recursively
 
 
@@ -67,7 +68,7 @@ def grad(dim, func):
     return make_obj_array([diff(coords[i])(func) for i in range(dim)])
 
 
-class EvaluationMapper(ev.EvaluationMapper):
+class EvaluationMapper(BaseEvaluationMapper):
     """Evaluates symbolic expressions given a mapping from variables to values.
 
     Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
@@ -105,3 +106,8 @@ class EvaluationMapper(ev.EvaluationMapper):
 
     def _exp(self, val):
         return self._np_like_for(val).exp(val)
+
+
+def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
+    """Evaluate a symbolic expression using a specified mapper."""
+    return mapper_type(kwargs)(expr)
