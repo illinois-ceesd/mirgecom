@@ -40,6 +40,11 @@ def num_flux_lfr(f_minus, f_plus, q_minus, q_plus, lam):
     return (f_minus + f_plus - lam*(q_plus - q_minus))/2
 
 
+def num_flux_central(f_minus, f_plus, **kwargs):
+    """Central low-level numerical flux."""
+    return (f_plus + f_minus)/2
+
+
 def gradient_flux_central(u_tpair, normal):
     r"""Compute a central flux for the gradient operator.
 
