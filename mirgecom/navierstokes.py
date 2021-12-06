@@ -154,7 +154,7 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
     cv_int_pair = interior_trace_pair(discr, cv)
     cv_interior_pairs = [cv_int_pair]
     q_comm_pairs = cross_rank_trace_pairs(discr, cv.join())
-    num_partition_interfaces = len(q_comm_pairs)
+    # num_partition_interfaces = len(q_comm_pairs)
     cv_part_pairs = [
         TracePair(q_pair.dd,
                   interior=make_conserved(dim, q=q_pair.int),
@@ -241,7 +241,7 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
 
     # glob the inputs together in a tuple to use the _elbnd_flux wrapper
     viscous_states_int_bnd = [
-        (cv_pair, grad_cv_pair, grad_t_pair) 
+        (cv_pair, grad_cv_pair, grad_t_pair)
         for cv_pair, grad_cv_pair, grad_t_pair in
         zip(cv_interior_pairs, grad_cv_interior_pairs, grad_t_interior_pairs)]
 
@@ -269,7 +269,7 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
             viscous_states_int_bnd, boundaries)
         - _elbnd_flux(
             discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
-            cv_int_tpair, cv_part_pairs, boundaries)
+            cv_int_pair, cv_part_pairs, boundaries)
     ).join()
 
     # NS RHS
