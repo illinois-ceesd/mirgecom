@@ -63,11 +63,13 @@ from grudge.eager import (
 )
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_divergence_flux
+    inviscid_facial_flux,
+    inviscid_rusanov
 )
 from mirgecom.viscous import (
     viscous_flux,
-    viscous_facial_flux
+    viscous_facial_flux,
+    viscous_flux_central
 )
 from mirgecom.flux import (
     gradient_flux_central
@@ -79,7 +81,10 @@ from mirgecom.operators import (
 from meshmode.dof_array import thaw
 
 
-def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
+def ns_operator(discr, gas_model, state, boundaries, time=0.0,
+                inviscid_numerical_flux_func=inviscid_rusanov,
+                gradient_numerical_flux_func=gradient_flux_central,
+                viscous_numerical_flux_func=viscous_flux_central):
     r"""Compute RHS of the Navier-Stokes equations.
 
     Returns
@@ -117,39 +122,15 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
         Agglomerated object array of DOF arrays representing the RHS of the
         Navier-Stokes equations.
     """
-    dim = discr.dim
-    actx = cv.array_context
-    if dv is None:
-        dv = eos.dependent_vars(cv)
+    dim = state.dim
+    cv = state.cv
+    dv = state.dv
+    actx = state.array_context
 
-    # These locally-defined utilities use global discr, eos
-    def _make_consistent_dv_pairs(cv_pairs, temperature_pairs=None):
-        if temperature_pairs is not None:
-            return [TracePair(
-                    cv_pair.dd,
-                    interior=eos.dependent_vars(cv_pair.int, tseed_pair.int),
-                    exterior=eos.dependent_vars(cv_pair.ext, tseed_pair.ext))
-                    for cv_pair, tseed_pair in zip(cv_pairs, temperature_pairs)]
-        else:
-            return [TracePair(cv_pair.dd,
-                              interior=eos.dependent_vars(cv_pair.int),
-                              exterior=eos.dependent_vars(cv_pair.ext))
-                    for cv_pair in cv_pairs]
-
-    def _make_thermally_consistent_cv_pairs(cv_pairs, temperature_pairs=None):
-        return cv_pairs, _make_consistent_dv_pairs(eos, cv_pairs, temperature_pairs)
-
-    def _make_thermally_consistent_cv_on_subdiscr(btag, cv, dv):
-        cv_sub = discr.project("vol", btag, cv)
-        tseed_sub = None
-        if cv.nspecies > 0:
-            tseed_sub = discr.project("vol", btag, dv.temperature)
-        return cv_sub, eos.dependent_vars(cv_sub, tseed_sub)
-
-    def _make_persistent_boundary_cv(boundaries, cv):
-        dv = eos.dependent_vars(cv)
-        return {btag: _make_thermally_consistent_cv_on_subdiscr(btag, cv, dv)[0]
-                for btag in boundaries}
+    from mirgecom.gas_model import project_fluid_state
+    boundary_states = {btag:
+                       project_fluid_state(discr, btag, state, gas_model)
+                       for btag in boundaries}
 
     cv_int_pair = interior_trace_pair(discr, cv)
     cv_interior_pairs = [cv_int_pair]
@@ -161,7 +142,6 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
                   exterior=make_conserved(dim, q=q_pair.ext))
         for q_pair in q_comm_pairs]
     cv_interior_pairs.extend(cv_part_pairs)
-    cv_bnds = _make_persistent_boundary_cv(boundaries, cv)
 
     tseed_interior_pairs = None
     tseed_int_pair = interior_trace_pair(discr, dv.temperature)
@@ -169,9 +149,9 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
     tseed_interior_pairs = [tseed_int_pair]
     tseed_interior_pairs.extend(tseed_part_pairs)
 
-    cv_interior_pairs, dv_interior_pairs = \
-        _make_thermally_consistent_cv_pairs(eos, cv_interior_pairs,
-                                            tseed_interior_pairs)
+    from mirgecom.gas_model import make_fluid_state_trace_pairs
+    interior_state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
+                                                        tseed_interior_pairs)
 
     # Operator-independent boundary flux interface
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
@@ -182,20 +162,21 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
                       for btag in boundary_states))
 
     # Data-independent grad flux for faces
-    def _grad_flux_interior(int_tpair):
-        normal = thaw(actx, discr.normal(int_tpair.dd))
+    def _grad_flux_interior(q_pair):
+        normal = thaw(actx, discr.normal(q_pair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = gradient_flux_central(int_tpair, normal)
-        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+        flux_weak = gradient_numerical_flux_func(q_pair, normal)
+        return discr.project(q_pair.dd, "all_faces", flux_weak)
 
     # CV-specific boundary flux for grad operator
-    def _cv_grad_flux_bnd(btag, boundary_cv):
+    def _cv_grad_flux_bnd(btag, boundary_state):
         return boundaries[btag].cv_gradient_flux(
-            discr, btag=btag, eos=eos, cv_minus=boundary_cv, time=time
+            discr, btag=btag, gas_model=gas_model, state_minus=boundary_state,
+            time=time, numerical_flux_func=gradient_numerical_flux_func
         )
 
     cv_flux_bnd = _elbnd_flux(discr, _grad_flux_interior, _cv_grad_flux_bnd,
-                              cv_interior_pairs, cv_bnds)
+                              cv_interior_pairs, boundary_states)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
@@ -213,54 +194,62 @@ def ns_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
 
     # Capture the temperature for the interior faces for grad(T) calc
     t_interior_pairs = [TracePair("int_faces",
-                                  interior=dv_pair.int.temperature,
-                                  exterior=dv_pair.ext.temperature)
-                        for dv_pair in dv_interior_pairs]
+                                  interior=state_pair.int.temperature,
+                                  exterior=state_pair.ext.temperature)
+                        for state_pair in interior_state_pairs]
 
     t_flux_bnd = (sum(_grad_flux_interior(tpair) for tpair in t_interior_pairs)
                   + sum(boundaries[btag].temperature_gradient_flux(
-                      discr, btag=btag, eos=eos, cv_minus=cv_bnds[btag], time=time)
+                      discr, btag=btag, gas_model=gas_model,
+                      state_minus=boundary_states[btag], time=time)
                       for btag in boundaries))
 
     # Fluxes in-hand, compute the gradient of temperature
-    grad_t = grad_operator(discr, dv.temperature, t_flux_bnd)
+    grad_t = grad_operator(discr, state.temperature, t_flux_bnd)
     delt_int_pair = interior_trace_pair(discr, grad_t)
     delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
     grad_t_interior_pairs = [delt_int_pair]
     grad_t_interior_pairs.append(delt_part_pairs)
 
     # inviscid flux divergence-specific flux function for interior faces
-    def finv_divergence_flux_interior(cv_tpair):
-        return inviscid_facial_divergence_flux(discr, eos, cv_tpair=cv_tpair)
+    def finv_divergence_flux_interior(state_pair):
+        return inviscid_facial_flux(
+            discr, gas_model=gas_model, state_pair=state_pair,
+            numerical_flux_func=inviscid_numerical_flux_func)
 
     # inviscid part of bcs applied here
-    def finv_divergence_flux_boundary(btag, boundary_cv):
+    def finv_divergence_flux_boundary(btag, boundary_state):
         return boundaries[btag].inviscid_divergence_flux(
-            discr, btag=btag, eos=eos, cv_minus=boundary_cv, time=time
-        )
+            discr, btag=btag, gas_model=gas_model, state_minus=boundary_state,
+            time=time, numerical_flux_func=inviscid_numerical_flux_func)
 
     # glob the inputs together in a tuple to use the _elbnd_flux wrapper
     viscous_states_int_bnd = [
-        (cv_pair, grad_cv_pair, grad_t_pair)
-        for cv_pair, grad_cv_pair, grad_t_pair in
-        zip(cv_interior_pairs, grad_cv_interior_pairs, grad_t_interior_pairs)]
+        (state_pair, grad_cv_pair, grad_t_pair)
+        for state_pair, grad_cv_pair, grad_t_pair in
+        zip(interior_state_pairs, grad_cv_interior_pairs, grad_t_interior_pairs)]
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def fvisc_divergence_flux_interior(tpair_tuple):
-        cv_pair_int = tpair_tuple[0]
-        s_pair_int = tpair_tuple[1]
-        dt_pair_int = tpair_tuple[2]
-        return viscous_facial_flux(discr, eos, cv_pair_int, s_pair_int, dt_pair_int)
+        state_pair = tpair_tuple[0]
+        grad_cv_pair = tpair_tuple[1]
+        grad_t_pair = tpair_tuple[2]
+        return viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair,
+                                   grad_t_pair,
+                                   numerical_flux_func=viscous_numerical_flux_func)
 
     # viscous part of bcs applied here
     def fvisc_divergence_flux_boundary(btag, boundary_state):
-        return boundaries[btag].viscous_divergence_flux(discr, btag, eos=eos,
-                                                        cv_minus=cv, grad_cv=grad_cv,
-                                                        grad_t=grad_t, time=time)
+        grad_cv_minus = discr.project("vol", btag, grad_cv)
+        grad_t_minus = discr.project("vol", btag, grad_t)
+        return boundaries[btag].viscous_divergence_flux(
+            discr, btag, gas_model=gas_model, state_minus=boundary_state[btag],
+            grad_cv_minus=grad_cv_minus, grad_t=grad_t_minus, time=time,
+            numerical_flux_func=viscous_numerical_flux_func)
 
     vol_term = (
-        viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
-        - inviscid_flux(discr, eos=eos, cv=cv)
+        viscous_flux(state=state, grad_cv=grad_cv, grad_t=grad_t)
+        - inviscid_flux(state=state)
     ).join()
 
     bnd_term = (
