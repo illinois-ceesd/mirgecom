@@ -569,16 +569,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return make_obj_array([cv, fluid_state.temperature]), dt
 
+    from mirgecom.inviscid import inviscid_rusanov
     def my_rhs(t, state):
         cv, tseed = state
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        return make_obj_array([euler_operator(discr, state=fluid_state, time=t,
-                                              boundaries=boundaries,
-                                              gas_model=gas_model)
-                               + eos.get_species_source_terms(cv),
-                               0*tseed])
+        return make_obj_array([
+            euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
+                           gas_model=gas_model,
+                           inviscid_numerical_flux_func=inviscid_rusanov)
+            + eos.get_species_source_terms(cv),
+            0*tseed])
 
     current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
