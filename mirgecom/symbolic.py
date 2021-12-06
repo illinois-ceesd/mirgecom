@@ -30,12 +30,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+import numpy as np  # noqa
 import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 from pymbolic.mapper.evaluator import EvaluationMapper as BaseEvaluationMapper
-from arraycontext import get_container_context_recursively
+from mirgecom.math import math_mapper as mm
 
 
 def diff(var):
@@ -78,34 +78,8 @@ class EvaluationMapper(BaseEvaluationMapper):
         """Map a symbolic code expression to actual function call."""
         from pymbolic.primitives import Variable
         assert isinstance(expr.function, Variable)
-        if expr.function.name == "sin":
-            par, = expr.parameters
-            return self._sin(self.rec(par))
-        elif expr.function.name == "cos":
-            par, = expr.parameters
-            return self._cos(self.rec(par))
-        elif expr.function.name == "exp":
-            par, = expr.parameters
-            return self._exp(self.rec(par))
-        else:
-            raise ValueError("Unrecognized function '%s'" % expr.function)
-
-    @staticmethod
-    def _np_like_for(val):
-        actx = get_container_context_recursively(val)
-        if actx is None:
-            return np
-        else:
-            return actx.np
-
-    def _sin(self, val):
-        return self._np_like_for(val).sin(val)
-
-    def _cos(self, val):
-        return self._np_like_for(val).cos(val)
-
-    def _exp(self, val):
-        return self._np_like_for(val).exp(val)
+        par, = expr.parameters
+        return getattr(mm, expr.function.name)(self.rec(par))
 
 
 def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):

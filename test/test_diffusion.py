@@ -31,6 +31,7 @@ from mirgecom.symbolic import (
     grad as sym_grad,
     div as sym_div,
     evaluate)
+from mirgecom.math import math_mapper as mm
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -48,36 +49,6 @@ from numbers import Number
 
 import logging
 logger = logging.getLogger(__name__)
-
-
-def _np_like_for(val):
-    from arraycontext import get_container_context_recursively
-    actx = get_container_context_recursively(val)
-    if actx is None:
-        return np
-    else:
-        return actx.np
-
-
-def _cos(val):
-    if isinstance(val, Expression):
-        return pmbl.var("cos")(val)
-    else:
-        return _np_like_for(val).cos(val)
-
-
-def _sin(val):
-    if isinstance(val, Expression):
-        return pmbl.var("sin")(val)
-    else:
-        return _np_like_for(val).sin(val)
-
-
-def _exp(val):
-    if isinstance(val, Expression):
-        return pmbl.var("exp")(val)
-    else:
-        return _np_like_for(val).exp(val)
 
 
 class HeatProblem(metaclass=ABCMeta):
@@ -147,10 +118,10 @@ class DecayingTrig(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _exp(-self.dim*self._alpha*t)
+        u = mm.exp(-self.dim*self._alpha*t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -185,10 +156,10 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.25*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _exp(-self.dim*self._alpha*t)
+        u = mm.exp(-self.dim*self._alpha*t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -237,16 +208,16 @@ class OscillatingTrigVarDiff(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _cos(t)
+        u = mm.cos(t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
         alpha = 1
         for i in range(self.dim):
-            alpha = alpha * _cos(3.*x[i])
+            alpha = alpha * mm.cos(3.*x[i])
         alpha = 1 + 0.2*alpha
         return alpha
 
@@ -279,10 +250,10 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _cos(t)
+        u = mm.cos(t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
