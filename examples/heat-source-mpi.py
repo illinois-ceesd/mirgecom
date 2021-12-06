@@ -27,10 +27,9 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
+from grudge.array_context import (PyOpenCLArrayContext,
+    MPIPytatoPyOpenCLArrayContext)
+
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -47,7 +46,7 @@ from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_device_name,
+                                         logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 from logpyle import IntervalTimer, set_dt
@@ -74,9 +73,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if actx_class == MPIPytatoPyOpenCLArrayContext:
+        actx = actx_class(comm, queue)
+    else:
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
@@ -135,7 +136,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     u = discr.zeros(actx)
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
@@ -208,7 +209,7 @@ if __name__ == "__main__":
             raise ValueError("Can't use lazy and profiling together.")
         actx_class = PyOpenCLProfilingArrayContext
     else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
+        actx_class = MPIPytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
