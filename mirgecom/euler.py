@@ -127,7 +127,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
     cv_interior_pairs.extend(cv_part_pairs)
 
     tseed_interior_pairs = None
-    if cv.nspecies > 0:
+    if state.is_mixture > 0:
         # If this is a mixture, we need to exchange the temperature field because
         # mixture pressure (used in the inviscid flux calculations) depends on
         # temperature and we need to seed the temperature calculation for the
