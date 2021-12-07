@@ -112,7 +112,7 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0,
                 interior=make_conserved(discr.dim, q=part_tpair.int),
                 exterior=make_conserved(discr.dim, q=part_tpair.ext)))
               for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
+        + sum(boundaries[btag].inviscid_divergence_flux(discr=discr, btag=btag, cv=cv,
                                                         eos=eos, time=time)
               for btag in boundaries)
     )

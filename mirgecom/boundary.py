@@ -243,7 +243,7 @@ class PrescribedInviscidBoundary(FluidBC):
                                                   temperature=t_minus, eos=eos,
                                                   **kwargs)
         else:
-            t_plus = -t_minus
+            t_plus = t_minus
         nhat = thaw(actx, discr.normal(btag))
         bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
 

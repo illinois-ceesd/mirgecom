@@ -155,7 +155,9 @@ def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
         object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov flux.
     """
-    return flux_lfr(cv_tpair, f_tpair, normal, lam)@normal
+    from arraycontext import outer
+    #return flux_lfr(cv_tpair, f_tpair, normal, lam)@normal
+    return flux_lfr(cv_tpair, f_tpair, normal, lam)
 
 
 def flux_lfr(cv_tpair, f_tpair, normal, lam):
@@ -210,7 +212,13 @@ def flux_lfr(cv_tpair, f_tpair, normal, lam):
         Lax-Friedrichs/Rusanov flux.
     """
     from arraycontext import outer
-    return f_tpair.avg - lam*outer(cv_tpair.diff, normal)/2
+    #return f_tpair.avg - lam*outer(cv_tpair.diff, normal)/2.
+    return lfr(f_tpair.ext@normal, f_tpair.int@normal, cv_tpair.ext, cv_tpair.int, lam)
+
+def lfr(f_plus, f_minus, cv_plus, cv_minus, lam):
+    from arraycontext import outer
+    #return (f_plus + f_minus - lam*outer(cv_plus - cv_minus, normal))/2.
+    return (f_plus + f_minus - lam*(cv_plus - cv_minus))/2.
 
 
 def divergence_flux_hll(cv_tpair, normal, eos):
