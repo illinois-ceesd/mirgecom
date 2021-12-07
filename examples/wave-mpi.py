@@ -30,7 +30,7 @@ import pyopencl as cl
 from pytools.obj_array import flat_obj_array
 
 from grudge.array_context import (PyOpenCLArrayContext,
-    MPIPytatoPyOpenCLArrayContext)
+    MPISingleGridWorkBalancingPytatoArrayContext)
 from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
@@ -93,7 +93,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             logmgr=logmgr)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        if actx_class == MPIPytatoPyOpenCLArrayContext:
+        if actx_class == MPISingleGridWorkBalancingPytatoArrayContext:
             actx = actx_class(comm, queue)
         else:
             actx = actx_class(queue,
@@ -257,7 +257,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=MPIPytatoPyOpenCLArrayContext if args.lazy
+         actx_class=MPISingleGridWorkBalancingPytatoArrayContext if args.lazy
          else PyOpenCLArrayContext)
 
 
