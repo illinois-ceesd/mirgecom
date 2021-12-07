@@ -35,7 +35,7 @@ import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 from pymbolic.mapper.evaluator import EvaluationMapper as BaseEvaluationMapper
-from mirgecom.math import math_mapper as mm
+import mirgecom.math as mm
 
 
 def diff(var):

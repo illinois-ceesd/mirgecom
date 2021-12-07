@@ -1,6 +1,6 @@
 """Utilities and functions for math.
 
-.. autodata:: math_mapper
+.. autofunction:: __getattr__
 """
 
 __copyright__ = """Copyright (C) 2021 University of Illinois Board of Trustees"""
@@ -33,28 +33,32 @@ from pymbolic.primitives import Expression
 from arraycontext import get_container_context_recursively
 
 
-class _SymbolicMathContainer:
-    def __getattr__(self, name):
-        return pmbl.var(name)
+def __getattr__(name):
+    """
+    Return a function that calls an appropriate math function based on its inputs.
 
+    Returns a function that inspects the types of its input arguments and dispatches
+    to the appropriate math function. If any of the arguments are symbolic, the
+    function returns a :class:`pymbolic.primitives.Expression` representing the call
+    to *name*. If not, it next checks whether any of the arguments have array
+    contexts. If so, it calls *name* from the array context's :mod:`numpy` workalike.
+    And if none of the arguments have array contexts, it calls :mod:`numpy`'s version
+    of *name*.
+    """
+    # Avoid special/private names, and restrict to functions that exist in numpy
+    if name.startswith("_") or name.endswith("_") or not hasattr(np, name):
+        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
-class MathMapper:
-    """Dispatcher for math operations on symbolic/numeric input."""
-
-    @staticmethod
-    def _math_container_for(*args):
+    def dispatcher_func(*args):
         if any(isinstance(arg, Expression) for arg in args):
-            return _SymbolicMathContainer()
+            math_func = pmbl.var(name)
         else:
             actx = get_container_context_recursively(make_obj_array(args))
             if actx is not None:
-                return actx.np
+                np_like = actx.np
             else:
-                return np
+                np_like = np
+            math_func = getattr(np_like, name)
+        return math_func(*args)
 
-    def __getattr__(self, name):
-        """Retrieve the function corresponding to *name*."""
-        return lambda *args: getattr(self._math_container_for(*args), name)(*args)
-
-
-math_mapper = MathMapper()
+    return dispatcher_func

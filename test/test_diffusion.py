@@ -31,7 +31,7 @@ from mirgecom.symbolic import (
     grad as sym_grad,
     div as sym_div,
     evaluate)
-from mirgecom.math import math_mapper as mm
+import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
