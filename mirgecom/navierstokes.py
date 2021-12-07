@@ -64,7 +64,7 @@ from grudge.eager import (
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
-    inviscid_rusanov
+    inviscid_flux_rusanov
 )
 from mirgecom.viscous import (
     viscous_flux,
@@ -78,11 +78,11 @@ from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
     div_operator, grad_operator
 )
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 
 
 def ns_operator(discr, gas_model, state, boundaries, time=0.0,
-                inviscid_numerical_flux_func=inviscid_rusanov,
+                inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
                 viscous_numerical_flux_func=viscous_flux_central):
     r"""Compute RHS of the Navier-Stokes equations.
@@ -163,7 +163,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
 
     # Data-independent grad flux for faces
     def _grad_flux_interior(q_pair):
-        normal = thaw(actx, discr.normal(q_pair.dd))
+        normal = thaw(discr.normal(q_pair.dd), actx)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = gradient_numerical_flux_func(q_pair, normal)
         return discr.project(q_pair.dd, "all_faces", flux_weak)
@@ -234,8 +234,9 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         state_pair = tpair_tuple[0]
         grad_cv_pair = tpair_tuple[1]
         grad_t_pair = tpair_tuple[2]
-        return viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair,
-                                   grad_t_pair,
+        return viscous_facial_flux(discr=discr, gas_model=gas_model,
+                                   state_pair=state_pair, grad_cv_pair=grad_cv_pair,
+                                   grad_t_pair=grad_t_pair,
                                    numerical_flux_func=viscous_numerical_flux_func)
 
     # viscous part of bcs applied here
@@ -243,8 +244,9 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         grad_cv_minus = discr.project("vol", btag, grad_cv)
         grad_t_minus = discr.project("vol", btag, grad_t)
         return boundaries[btag].viscous_divergence_flux(
-            discr, btag, gas_model=gas_model, state_minus=boundary_state[btag],
-            grad_cv_minus=grad_cv_minus, grad_t=grad_t_minus, time=time,
+            discr=discr, btag=btag, gas_model=gas_model,
+            state_minus=boundary_state,
+            grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus, time=time,
             numerical_flux_func=viscous_numerical_flux_func)
 
     vol_term = (
@@ -255,10 +257,10 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     bnd_term = (
         _elbnd_flux(
             discr, fvisc_divergence_flux_interior, fvisc_divergence_flux_boundary,
-            viscous_states_int_bnd, boundaries)
+            viscous_states_int_bnd, boundary_states)
         - _elbnd_flux(
             discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
-            cv_int_pair, cv_part_pairs, boundaries)
+            interior_state_pairs, boundary_states)
     ).join()
 
     # NS RHS
