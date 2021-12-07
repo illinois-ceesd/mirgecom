@@ -34,6 +34,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state,
+    project_fluid_state
+)
 from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair

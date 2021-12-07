@@ -82,6 +82,9 @@ def inviscid_flux(state):
     return make_conserved(state.dim, mass=mass_flux, energy=energy_flux,
                           momentum=mom_flux, species_mass=species_mass_flux)
 
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
 
 def inviscid_flux_rusanov(discr, gas_model, state_pair, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
