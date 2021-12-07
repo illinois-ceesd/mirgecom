@@ -50,11 +50,11 @@ from mirgecom.inviscid import inviscid_flux
 
 logger = logging.getLogger(__name__)
 
-# @pytest.mark.parametrize("nspecies", [0, 1, 10])
-# @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("nspecies", [0])
-@pytest.mark.parametrize("dim", [1])
-def test_lfr_flux(actx_factory, nspecies, dim):
+@pytest.mark.parametrize("nspecies", [0, 1, 10])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("norm_dir", [1, -1])
+@pytest.mark.parametrize("vel_dir", [0, 1, -1])
+def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_dir):
     """Check inviscid flux against exact expected result.
 
     Directly check Lax-Friedrichs/Rusanov flux routine,
@@ -65,6 +65,7 @@ def test_lfr_flux(actx_factory, nspecies, dim):
     The expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI, rhoY V>
     """
+    tolerance = 1e-12
     actx = actx_factory()
     numeq = dim + 2 + nspecies
 
@@ -74,17 +75,21 @@ def test_lfr_flux(actx_factory, nspecies, dim):
     p0 = 15.0
     rho0 = 2.0
     vel0 = np.zeros(shape=dim, )
-    #vel0[0] = -4.0
-    vel0[0] = 0.
+    for i in range(dim):
+        vel0[i] = 4.0*vel_dir*(i+1)
     y0 = np.zeros(shape=nspecies, )
+    for i in range(nspecies):
+        y0[i] = (i+1)
     c0 = np.sqrt(gamma*p0/rho0)
     # exterior state
     p1 = 20.0
     rho1 = 4.0
     vel1 = np.zeros(shape=dim, )
-    #vel1[0] = 0.5
-    vel1[0] = 0.
+    for i in range(dim):
+        vel1[i] = 0.5*vel_dir*(i+1)
     y1 = np.zeros(shape=nspecies, )
+    for i in range(nspecies):
+        y1[i] = 2*(i+1)
     c1 = np.sqrt(gamma*p1/rho1)
 
     #q_int = np.zeros(shape=2+dim+nspecies, )
@@ -118,44 +123,55 @@ def test_lfr_flux(actx_factory, nspecies, dim):
     print(f"{flux_ext=}")
 
     # interface normal
-    normal = np.zeros(shape=dim, )
-    normal[0] = 1
+    normal = np.ones(shape=dim, )
+    mag = np.linalg.norm(normal)
+    normal = norm_dir*normal/mag
+    print(f"{normal=}")
 
     # wave speed 
     lam = np.maximum(np.linalg.norm(vel0)+c0, np.linalg.norm(vel1)+c1)
-    from mirgecom.flux import lfr
+    print(f"{lam=}")
 
+
+    print(f"{flux_ext@normal=}")
+    print(f"{flux_int@normal=}")
+    from mirgecom.flux import lfr
+    # code passes in fluxes in the direction of the surface normal, 
+    # so we will too
     flux_bnd = lfr(flux_ext@normal, flux_int@normal, cv_ext, cv_int, lam)
     print(f"{flux_bnd=}")
 
     # compute the flux in the interface normal direction
     vel_int_norm = np.dot(vel0, normal)
     vel_ext_norm = np.dot(vel1, normal)
-    mass_flux_exact = 0.5*(mass_int*vel_int_norm + mass_ext*vel_ext_norm
-                           - lam*(mass_ext - mass_int))
-    mom_flux_exact = 0.5*(mass_int*vel_int_norm*vel_int +
-                          mass_ext*vel_ext_norm*vel_ext +
-                          p_int + p_ext -
-                          lam*(mass_ext*vel_ext - mass_int*vel_int))
-    mom_flux_exact = make_obj_array([mom_flux_exact for _ in range(dim)])
+    mass_flux_exact = 0.5*(mass_int*vel_int_norm + mass_ext*vel_ext_norm -
+                           lam*(mass_ext - mass_int))
+    mom_flux_exact = np.zeros(shape=(dim, dim), )
+    for i in range(dim):
+        for j in range(dim):
+            mom_flux_exact[i][j] = (mass_int*vel_int[i]*vel_int[j] + (p_int if i == j else 0) +
+                                    mass_ext*vel_ext[i]*vel_ext[j] + (p_ext if i == j else 0))/2.
+    mom_flux_norm_exact = np.zeros(shape=dim, )
+    for i in range(dim):
+        mom_flux_norm_exact[i] = (np.dot(mom_flux_exact[i], normal) -
+                                  0.5*lam*(mass_ext*vel_ext[i] - mass_int*vel_int[i]))
+    mom_flux_norm_exact = make_obj_array([mom_flux_norm_exact[idim] for idim in range(dim)])
     energy_flux_exact = 0.5*(vel_ext_norm*(energy_ext+p_ext) +
                              vel_int_norm*(energy_int+p_int) -
                              lam*(energy_ext - energy_int))
     species_mass_flux_exact = 0.5*(vel_int_norm*species_mass_int +
-                                   vel_int_norm*species_mass_ext -
+                                   vel_ext_norm*species_mass_ext -
                                    lam*(species_mass_ext - species_mass_int))
     species_mass_flux_exact = make_obj_array([species_mass_flux_exact[ispec] for ispec in range(nspecies)])
 
     flux_bnd_exact = make_conserved(dim, mass=mass_flux_exact, energy=energy_flux_exact,
-                                momentum=mom_flux_exact, species_mass=species_mass_flux_exact)
+                                momentum=mom_flux_norm_exact, species_mass=species_mass_flux_exact)
     print(f"{flux_bnd_exact=}")
 
 
     flux_resid = flux_bnd - flux_bnd_exact
     print(f"{flux_resid=}")
 
-    for i in range(numeq, dim):
-        for j in range(dim):
-            assert (la.norm(flux_resid[i, j].get())) == 0.0
+    assert np.abs(actx.np.linalg.norm(flux_resid)) < tolerance
 
-    assert 1==0
+    #assert 1==0
