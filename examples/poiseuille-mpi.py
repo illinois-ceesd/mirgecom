@@ -51,12 +51,12 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    PrescribedViscousBoundary,
-    IsothermalNoSlipBoundary
+    PrescribedFluidBoundary,
+    AdiabaticNoslipMovingBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
-
+from mirgecom.gas_model import GasModel, make_fluid_state
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -221,30 +221,42 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                               momentum=mass*velocity)
 
     initializer = poiseuille_2d
-    eos = IdealSingleGas(transport_model=SimpleTransport(viscosity=mu))
-    exact = initializer(x_vec=nodes, eos=eos)
+    gas_model = GasModel(eos=IdealSingleGas(),
+                         transport=SimpleTransport(viscosity=mu))
+    exact = initializer(x_vec=nodes, eos=gas_model.eos)
 
-    boundaries = {DTAG_BOUNDARY("-1"): PrescribedViscousBoundary(q_func=initializer),
-                  DTAG_BOUNDARY("+1"): PrescribedViscousBoundary(q_func=initializer),
-                  DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(),
-                  DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary()}
+    def _boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
+                                            cv=state_minus.cv, **kwargs), gas_model)
+
+    boundaries = {DTAG_BOUNDARY("-1"):
+                  PrescribedFluidBoundary(boundary_state_func=_boundary_solution),
+                  DTAG_BOUNDARY("+1"):
+                  PrescribedFluidBoundary(boundary_state_func=_boundary_solution),
+                  DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
+                  DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        current_state = restart_data["state"]
+        current_cv = restart_data["cv"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = exact
+        current_cv = exact
+
+    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
     vis_timer = None
 
     visualizer = make_visualizer(discr, order)
 
-    eosname = eos.__class__.__name__
+    eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
@@ -255,7 +267,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(step, t, dt, dv, state, component_errors):
+    def my_write_status(step, t, dt, state, component_errors):
+        dv = state.dv
         from grudge.op import nodal_min, nodal_max
         p_min = nodal_min(discr, "vol", dv.pressure)
         p_max = nodal_max(discr, "vol", dv.pressure)
@@ -266,7 +279,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             from mirgecom.viscous import get_viscous_cfl
             cfl = nodal_max(discr, "vol",
-                            get_viscous_cfl(discr, eos, dt, state))
+                            get_viscous_cfl(discr, dt, state))
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
@@ -274,9 +287,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         "----- errors="
                         + ", ".join("%.3g" % en for en in component_errors))
 
-    def my_write_viz(step, t, state, dv=None):
-        if dv is None:
-            dv = eos.dependent_vars(state)
+    def my_write_viz(step, t, state, dv):
         resid = state - exact
         viz_fields = [("cv", state),
                       ("dv", dv),
@@ -292,7 +303,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "state": state,
+                "cv": state,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -339,8 +350,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+        dv = fluid_state.dv
         try:
-            dv = None
             component_errors = None
 
             if logmgr:
@@ -353,7 +365,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
-                dv = eos.dependent_vars(state)
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
                 from mirgecom.simutil import allsync
@@ -370,26 +381,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                if dv is None:
-                    dv = eos.dependent_vars(state)
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
-            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+            dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
 
             if do_status:  # needed because logging fails to make output
-                if dv is None:
-                    dv = eos.dependent_vars(state)
                 if component_errors is None:
                     from mirgecom.simutil import compare_fluid_solutions
                     component_errors = compare_fluid_solutions(discr, state, exact)
-                my_write_status(step=step, t=t, dt=dt, dv=dv, state=state,
+                my_write_status(step=step, t=t, dt=dt, state=fluid_state,
                                 component_errors=component_errors)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
+            my_write_viz(step=step, t=t, state=state, dv=dv)
             my_write_restart(step=step, t=t, state=state)
             raise
 
@@ -400,34 +407,36 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, dim, state, gas_model.eos)
             logmgr.tick_after()
         return state, dt
 
     def my_rhs(t, state):
-        return ns_operator(discr, eos=eos, boundaries=boundaries, cv=state, t=t)
+        return ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+                           state=state, time=t)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
+                                  current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_state = \
+    current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=current_state, t=current_t, t_final=t_final)
+    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_dv = eos.dependent_vars(current_state)
+    final_dv = current_state.dv
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                current_cfl, eos, t_final, constant_cfl)
+                                current_cfl, t_final, constant_cfl)
     from mirgecom.simutil import compare_fluid_solutions
     component_errors = compare_fluid_solutions(discr, current_state, exact)
 
     my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
-    my_write_status(step=current_step, t=current_t, dt=final_dt, dv=final_dv,
+    my_write_status(step=current_step, t=current_t, dt=final_dt,
                     state=current_state, component_errors=component_errors)
 
     if logmgr:
