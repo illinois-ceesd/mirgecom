@@ -121,9 +121,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
                                    for i in range(num_equations)])
         )
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, state=fluid_state, gas_model=gas_model,
-                                      boundaries=boundaries, time=0.0)
+        inviscid_rhs = euler_operator(
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
 
         rhs_resid = inviscid_rhs - expected_rhs
 
@@ -168,8 +170,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         fluid_state = make_fluid_state(cv, gas_model)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, state=fluid_state, gas_model=gas_model,
-                                      boundaries=boundaries, time=0.0)
+        inviscid_rhs = euler_operator(
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -248,9 +251,10 @@ def test_vortex_rhs(actx_factory, order):
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0)
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
 
         err_max = actx.to_numpy(discr.norm(inviscid_rhs.join(), np.inf))
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
@@ -316,9 +320,10 @@ def test_lump_rhs(actx_factory, dim, order):
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_lump_boundary)
         }
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
@@ -399,9 +404,10 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
         }
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
@@ -503,10 +509,13 @@ def _euler_flow_stepper(actx, parameters):
 
         return maxerr
 
+    from mirgecom.inviscid import inviscid_flux_rusanov
+
     def rhs(t, q):
         fluid_state = make_fluid_state(q, gas_model)
         return euler_operator(discr, fluid_state, boundaries=boundaries,
-                              gas_model=gas_model, time=t)
+                              gas_model=gas_model, time=t,
+                              inviscid_numerical_flux_func=inviscid_flux_rusanov)
 
     filter_order = 8
     eta = .5
