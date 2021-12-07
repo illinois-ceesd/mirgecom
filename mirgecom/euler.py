@@ -56,7 +56,7 @@ import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
-    inviscid_rusanov
+    inviscid_flux_rusanov
 )
 from grudge.eager import (
     interior_trace_pair,
@@ -68,7 +68,7 @@ from mirgecom.operators import div_operator
 
 
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
-                   inviscid_numerical_flux_func=inviscid_rusanov):
+                   inviscid_numerical_flux_func=inviscid_flux_rusanov):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
