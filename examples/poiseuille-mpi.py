@@ -35,7 +35,7 @@ from meshmode.array_context import (
     PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
@@ -166,7 +166,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
@@ -412,8 +412,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
+        fluid_state = make_fluid_state(state, gas_model)
         return ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
-                           state=state, time=t)
+                           state=fluid_state, time=t)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -422,7 +423,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final)
+
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
     # Dump the final data
@@ -432,9 +434,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
     from mirgecom.simutil import compare_fluid_solutions
-    component_errors = compare_fluid_solutions(discr, current_state, exact)
+    component_errors = compare_fluid_solutions(discr, current_state.cv, exact)
 
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
+    my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)
     my_write_status(step=current_step, t=current_t, dt=final_dt,
                     state=current_state, component_errors=component_errors)

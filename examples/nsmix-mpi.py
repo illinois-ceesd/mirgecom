@@ -270,7 +270,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_cv = initializer(x_vec=nodes, eos=eos)
+        current_cv = initializer(x_vec=nodes, eos=gas_model.eos)
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
                                      temperature_seed=tseed)
 
@@ -290,7 +290,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     visualizer = make_visualizer(discr, order + 3
                                  if discr.dim == 2 else order)
     initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
+    eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
@@ -323,14 +323,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
 
-    def my_write_viz(step, t, state, dv=None, production_rates=None):
-        if dv is None:
-            dv = eos.dependent_vars(state)
-        if production_rates is None:
-            production_rates = eos.get_production_rates(state)
+    def my_write_viz(step, t, state, dv):
         viz_fields = [("cv", state),
-                      ("dv", dv),
-                      ("reaction_rates", production_rates)]
+                      ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
@@ -415,9 +410,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=cv, tseed=tseed)
 
             if do_viz:
-                production_rates = eos.get_production_rates(cv)
-                my_write_viz(step=step, t=t, state=cv, dv=dv,
-                             production_rates=production_rates)
+                my_write_viz(step=step, t=t, state=cv, dv=dv)
 
             dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
@@ -427,7 +420,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=cv)
+            my_write_viz(step=step, t=t, state=cv, dv=dv)
             my_write_restart(step=step, t=t, state=cv, tseed=tseed)
             raise
 
