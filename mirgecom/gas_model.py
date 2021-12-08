@@ -375,9 +375,8 @@ def make_fluid_state_interior_trace_pair(discr, state, gas_model):
     from grudge.eager import interior_trace_pair
     from grudge.trace_pair import TracePair
     cv_tpair = interior_trace_pair(discr, state.cv)
-    tseed_pair = None
-    if state.nspecies > 0:
-        tseed_pair = interior_trace_pair(discr, state.dv.temperature)
+    tseed_pair = interior_trace_pair(discr, state.dv.temperature) \
+        if state.is_mixture else None
     return TracePair(
         cv_tpair.dd,
         interior=make_fluid_state(cv_tpair.int, gas_model,
