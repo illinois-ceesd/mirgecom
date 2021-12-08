@@ -285,7 +285,7 @@ def viscous_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair, **kwargs)
         + \mathbf{f}_v^-\right)\cdot\hat{\mathbf{n}},
 
     with viscous fluxes ($\mathbf{f}_v$), and the outward pointing
-    face normal ($\hat\mathbf{n}$).
+    face normal ($\hat{\mathbf{n}}$).
 
     Parameters
     ----------
