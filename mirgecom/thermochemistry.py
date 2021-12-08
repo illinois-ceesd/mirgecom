@@ -66,7 +66,9 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
                                              zero, concs[i])
             return concs
 
-        # This is the temperature update for *get_temperature*
+        # This is the temperature update for *get_temperature*.  Having this
+        # separated out allows it to be used in the fluid drivers for evaluating
+        # convergence of the temperature calculation.
         def get_temperature_update_energy(self, e_in, t_in, y):
             pv_func = self.get_mixture_specific_heat_cv_mass
             he_func = self.get_mixture_internal_energy_mass
@@ -128,6 +130,7 @@ def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5):
     return _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter)
 
 
+# backwards compat
 def make_pyrometheus_mechanism(actx, cantera_soln):
     """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism.
 

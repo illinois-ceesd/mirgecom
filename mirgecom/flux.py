@@ -1,4 +1,4 @@
-""":mod:`mirgecom.flux` provides inter-facial flux routines.
+""":mod:`mirgecom.flux` provides inter-elemental flux routines.
 
 Numerical Flux Routines
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -33,6 +33,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
+
+
+def num_flux_lfr(f_minus, f_plus, q_minus, q_plus, lam, **kwargs):
+    """Lax-Friedrichs/Rusanov low-level numerical flux."""
+    return (f_minus + f_plus - lam*(q_plus - q_minus))/2
+
+
+def num_flux_central(f_minus, f_plus, **kwargs):
+    """Central low-level numerical flux."""
+    return (f_plus + f_minus)/2
+
+
+def lfr_flux_driver(discr, state_pair, physical_flux_func):
+    """State-to-flux driver for Rusanov numerical fluxes."""
+    from arraycontext import thaw
+    actx = state_pair.int.array_context
+    normal = thaw(discr.normal(state_pair.dd), actx)
+    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
+
+    return num_flux_lfr(f_minus=physical_flux_func(state_pair.int)@normal,
+                        f_plus=physical_flux_func(state_pair.ext)@normal,
+                        q_minus=state_pair.int.cv,
+                        q_plus=state_pair.ext.cv, lam=lam)
 
 
 def gradient_flux_central(u_tpair, normal):

@@ -36,7 +36,7 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 from mirgecom.fluid import make_conserved
@@ -44,7 +44,7 @@ from grudge.dof_desc import DTAG_BOUNDARY
 
 from mirgecom.boundary import (
     DummyBoundary,
-    PrescribedViscousBoundary,
+    PrescribedFluidBoundary,
     AdiabaticNoslipMovingBoundary
 )
 from mirgecom.eos import IdealSingleGas
@@ -113,12 +113,18 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mu = 1.0
         kappa = 0.0
         spec_diffusivity = 0 * np.ones(nspecies)
-        transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
-                                          species_diffusivity=spec_diffusivity)
-        eos = IdealSingleGas(transport_model=transport_model)
+
+        from mirgecom.gas_model import GasModel, make_fluid_state
+        gas_model = GasModel(
+            eos=IdealSingleGas(),
+            transport=SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
+                                      species_diffusivity=spec_diffusivity))
+        state = make_fluid_state(gas_model=gas_model, cv=cv)
+
         boundaries = {BTAG_ALL: DummyBoundary()}
 
-        ns_rhs = ns_operator(discr, eos=eos, boundaries=boundaries, cv=cv, t=0.0)
+        ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+                             state=state, time=0.0)
 
         rhs_resid = ns_rhs - expected_rhs
         rho_resid = rhs_resid.mass
@@ -156,8 +162,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
+        state = make_fluid_state(gas_model=gas_model, cv=cv)
         boundaries = {BTAG_ALL: DummyBoundary()}
-        ns_rhs = ns_operator(discr, eos=eos, boundaries=boundaries, cv=cv, t=0.0)
+        ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+                             state=state, time=0.0)
+
         rhs_resid = ns_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -227,10 +236,11 @@ def test_poiseuille_rhs(actx_factory, order):
     mu = 1.0
     kappa = 0.0
     spec_diffusivity = 0 * np.ones(nspecies)
-    transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
-                                      species_diffusivity=spec_diffusivity)
-
-    eos = IdealSingleGas(transport_model=transport_model)
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    gas_model = GasModel(
+        eos=IdealSingleGas(),
+        transport=SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
+                                  species_diffusivity=spec_diffusivity))
 
     def poiseuille_2d(x_vec, eos, cv=None, **kwargs):
         y = x_vec[1]
@@ -275,22 +285,33 @@ def test_poiseuille_rhs(actx_factory, order):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
-        cv_input = initializer(x_vec=nodes, eos=eos)
+        cv_input = initializer(x_vec=nodes, eos=gas_model.eos)
         num_eqns = dim + 2
         expected_rhs = make_conserved(
             dim, q=make_obj_array([discr.zeros(actx)
                                    for i in range(num_eqns)])
         )
+
+        def boundary_func(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
+                                                **kwargs), gas_model)
+
         boundaries = {
-            DTAG_BOUNDARY("-1"): PrescribedViscousBoundary(q_func=initializer),
-            DTAG_BOUNDARY("+1"): PrescribedViscousBoundary(q_func=initializer),
+            DTAG_BOUNDARY("-1"):
+            PrescribedFluidBoundary(boundary_state_func=boundary_func),
+            DTAG_BOUNDARY("+1"):
+            PrescribedFluidBoundary(boundary_state_func=boundary_func),
             DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
             DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
 
-        ns_rhs = ns_operator(discr, eos=eos, boundaries=boundaries, cv=cv_input,
-                             t=0.0)
+        state = make_fluid_state(gas_model=gas_model, cv=cv_input)
+        ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+                             state=state, time=0.0)
 
         rhs_resid = ns_rhs - expected_rhs
         rho_resid = rhs_resid.mass

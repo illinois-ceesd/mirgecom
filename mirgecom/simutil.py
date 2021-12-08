@@ -73,8 +73,7 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, eos,
-                     t_final, constant_cfl=False):
+def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
@@ -93,8 +92,8 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     ----------
     discr
         Grudge discretization or discretization collection?
-    state: :class:`~mirgecom.fluid.ConservedVars`
-        The fluid state.
+    state: :class:`~mirgecom.gas_model.FluidState`
+        The full fluid conserved and thermal state
     t: float
         Current time
     t_final: float
@@ -103,9 +102,6 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
         The current timestep
     cfl: float
         The current CFL number
-    eos: :class:`~mirgecom.eos.GasEOS`
-        Gas equation-of-state optionally with a non-empty
-        :class:`~mirgecom.transport.TransportModel` for viscous transport properties.
     constant_cfl: bool
         True if running constant CFL mode
 
@@ -122,7 +118,7 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
         mydt = state.array_context.to_numpy(
             cfl * nodal_min(
                 discr, "vol",
-                get_viscous_timestep(discr=discr, eos=eos, cv=state)))[()]
+                get_viscous_timestep(discr=discr, state=state)))[()]
     return min(t_remaining, mydt)
 
 

@@ -30,7 +30,7 @@ import pyopencl as cl
 from pytools.obj_array import flat_obj_array
 
 from meshmode.array_context import (PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext)
+    PytatoPyOpenCLArrayContext)
 from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa

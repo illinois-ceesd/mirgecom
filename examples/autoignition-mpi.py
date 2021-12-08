@@ -31,7 +31,7 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -56,6 +56,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
+from mirgecom.gas_model import GasModel
 from arraycontext import thaw, freeze
 
 from mirgecom.logging_quantities import (
@@ -136,10 +137,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     constant_cfl = False
 
     # i.o frequencies
-    nstatus = 1
-    nviz = 10
-    nhealth = 1
-    nrestart = 10
+    nstatus = 100
+    nviz = 100
+    nhealth = 100
+    nrestart = 100
 
     # }}}  Time stepping control
 
@@ -257,17 +258,24 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
+    gas_model = GasModel(eos=eos)
     from pytools.obj_array import make_obj_array
 
-    def get_temperature_update(state, temperature):
-        y = state.species_mass_fractions
-        e = eos.internal_energy(state) / state.mass
+    def get_temperature_update(cv, temperature):
+        y = cv.species_mass_fractions
+        e = eos.internal_energy(cv) / cv.mass
         return make_obj_array(
             [pyro_mechanism.get_temperature_update_energy(e, temperature, y)]
         )
 
+    from mirgecom.gas_model import make_fluid_state
+
+    def get_fluid_state(cv, temperature_seed):
+        return make_fluid_state(cv, gas_model, temperature_seed)
+
     compute_temperature_update = actx.compile(get_temperature_update)
     compute_dependent_vars = actx.compile(eos.dependent_vars)
+    create_fluid_state = actx.compile(get_fluid_state)
 
     # }}}
 
@@ -291,20 +299,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
         if order == rst_order:
-            current_state = restart_data["state"]
-            temperature_seed = restart_data["temperature"]
+            current_cv = restart_data["cv"]
+            temperature_seed = restart_data["temperature_seed"]
         else:
-            rst_state = restart_data["state"]
+            rst_cv = restart_data["cv"]
             old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
                                               mpi_communicator=comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
-            current_state = connection(rst_state)
-            temperature_seed = connection(restart_data["temperature"])
+            current_cv = connection(rst_cv)
+            temperature_seed = connection(restart_data["temperature_seed"])
     else:
         # Set the current state from time 0
-        current_state = initializer(eos=eos, x_vec=nodes)
+        current_cv = initializer(eos=eos, x_vec=nodes)
 
     # This bit memoizes the initial state's temperature onto the initial state
     # (assuming `initializer` just above didn't call eos.dv funcs.)
@@ -325,8 +333,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # and instead of writing the *current* running temperature to the restart file,
     # we could write the *temperature_seed*.  That could fix up the non-deterministic
     # restart issue.
-    current_dv = compute_dependent_vars(current_state,
-                                        temperature_seed=temperature_seed)
+    current_fluid_state = create_fluid_state(current_cv,
+                                             temperature_seed=temperature_seed)
+    current_dv = current_fluid_state.dv
     temperature_seed = current_dv.temperature
 
     # import ipdb
@@ -335,9 +344,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Inspection at physics debugging time
     if debug:
         print("Initial MIRGE-Com state:")
-        print(f"{current_state=}")
-        print(f"Initial DV pressure: {eos.pressure(current_state)}")
-        print(f"Initial DV temperature: {eos.temperature(current_state)}")
+        print(f"{current_cv=}")
+        print(f"Initial DV pressure: {current_fluid_state.pressure}")
+        print(f"Initial DV temperature: {current_fluid_state.temperature}")
 
     # }}}
 
@@ -401,17 +410,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
-    def my_write_restart(step, t, state):
+    def my_write_restart(step, t, state, temperature_seed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname == rst_filename:
             if rank == 0:
                 logger.info("Skipping overwrite of restart file.")
         else:
-            rst_dv = compute_dependent_vars(state)
             rst_data = {
                 "local_mesh": local_mesh,
-                "state": state,
-                "temperature": rst_dv.temperature,
+                "cv": state.cv,
+                "temperature_seed": temperature_seed,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -467,19 +475,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.inviscid import get_inviscid_timestep
 
     def get_dt(state):
-        return make_obj_array([get_inviscid_timestep(discr, eos=eos, cv=state)])
+        return make_obj_array([get_inviscid_timestep(discr, state=state)])
 
     compute_dt = actx.compile(get_dt)
 
     from mirgecom.inviscid import get_inviscid_cfl
 
     def get_cfl(state, dt):
-        return make_obj_array([get_inviscid_cfl(discr, eos, dt, cv=state)])
+        return make_obj_array([get_inviscid_cfl(discr, dt=dt, state=state)])
 
     compute_cfl = actx.compile(get_cfl)
 
-    def get_production_rates(state):
-        return make_obj_array([eos.get_production_rates(state)])
+    def get_production_rates(cv):
+        return make_obj_array([eos.get_production_rates(cv)])
 
     compute_production_rates = actx.compile(get_production_rates)
 
@@ -503,9 +511,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
-        cv = state[0]
+        cv, tseed = state
+        fluid_state = create_fluid_state(cv, tseed)
+        dv = fluid_state.dv
+
         try:
-            dv = None
 
             if logmgr:
                 logmgr.tick_before()
@@ -517,28 +527,23 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
-                if dv is None:
-                    dv = compute_dependent_vars(cv)
                 health_errors = global_reduce(my_health_check(cv, dv), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=cv)
+            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=fluid_state)
 
             if do_status:
-                if dv is None:
-                    dv = compute_dependent_vars(cv)
                 my_write_status(dt=dt, cfl=cfl, dv=dv)
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=cv)
+                my_write_restart(step=step, t=t, state=fluid_state,
+                                 temperature_seed=tseed)
 
             if do_viz:
                 production_rates, = compute_production_rates(cv)
-                if dv is None:
-                    dv = compute_dependent_vars(cv)
                 my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field, cfl=cfl)
@@ -546,16 +551,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            # my_write_viz(step=step, t=t, dt=dt, state=state)
-            # my_write_restart(step=step, t=t, state=state)
+            # my_write_viz(step=step, t=t, dt=dt, state=cv)
+            # my_write_restart(step=step, t=t, state=fluid_state)
             raise
 
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        cv = state[0]
-        new_dv = compute_dependent_vars(cv,  # noqa
-                                       temperature_seed=state[1])
+        cv, tseed = state
+        fluid_state = create_fluid_state(cv, tseed)
 
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -563,42 +567,47 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, cv, eos)
             logmgr.tick_after()
-        return make_obj_array([cv, new_dv.temperature]), dt
+        return make_obj_array([cv, fluid_state.temperature]), dt
+
+    from mirgecom.inviscid import inviscid_flux_rusanov
 
     def my_rhs(t, state):
-        cv = state[0]
-        current_dv = eos.dependent_vars(cv,
-                                        temperature_seed=state[1])
+        cv, tseed = state
+        from mirgecom.gas_model import make_fluid_state
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
+                                       temperature_seed=tseed)
+        return make_obj_array([
+            euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
+                           gas_model=gas_model,
+                           inviscid_numerical_flux_func=inviscid_flux_rusanov)
+            + eos.get_species_source_terms(cv),
+            0*tseed])
 
-        return make_obj_array([euler_operator(discr, cv=cv, time=t,
-                               boundaries=boundaries, eos=eos,
-                               dv=current_dv)
-                               + eos.get_species_source_terms(cv),
-                               0*state[1]])
-
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
+    current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
+                                  current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=make_obj_array([current_state, temperature_seed]),
+                      state=make_obj_array([current_cv, temperature_seed]),
                       t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_cv = current_state[0]
-    final_dv = compute_dependent_vars(final_cv)
+    final_cv, tseed = current_state
+    final_fluid_state = create_fluid_state(final_cv, tseed)
+    final_dv = final_fluid_state.dv
     final_dm, = compute_production_rates(final_cv)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
-                                        state=final_cv)
+                                        state=final_fluid_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
                  dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
     my_write_status(dt=dt, cfl=cfl, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=final_cv)
+    my_write_restart(step=current_step, t=current_t, state=final_fluid_state,
+                     temperature_seed=tseed)
 
     if logmgr:
         logmgr.close()

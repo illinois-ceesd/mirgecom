@@ -28,6 +28,7 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
+from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
@@ -54,6 +55,10 @@ from mirgecom.boundary import (  # noqa
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
 import cantera
 
 from logpyle import IntervalTimer, set_dt
@@ -234,8 +239,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature,
-                             transport_model=transport_model)
+                             temperature_guess=init_temperature)
+    gas_model = GasModel(eos=eos, transport=transport_model)
 
     # }}}
 
@@ -253,34 +258,39 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
+    tseed = can_t
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        current_state = restart_data["state"]
+        current_cv = restart_data["cv"]
+        tseed = restart_data["temperature_seed"]
+
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = initializer(x_vec=nodes, eos=eos)
+        current_cv = initializer(x_vec=nodes, eos=gas_model.eos)
+    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
+                                     temperature_seed=tseed)
 
     # Inspection at physics debugging time
     if debug:
         print("Initial MIRGE-Com state:")
-        print(f"{current_state.mass=}")
-        print(f"{current_state.energy=}")
-        print(f"{current_state.momentum=}")
-        print(f"{current_state.species_mass=}")
-        print(f"Initial Y: {current_state.species_mass / current_state.mass}")
-        print(f"Initial DV pressure: {eos.pressure(current_state)}")
-        print(f"Initial DV temperature: {eos.temperature(current_state)}")
+        print(f"{current_state.mass_density=}")
+        print(f"{current_state.energy_density=}")
+        print(f"{current_state.momentum_density=}")
+        print(f"{current_state.species_mass_density=}")
+        print(f"Initial Y: {current_state.species_mass_fractions=}")
+        print(f"Initial DV pressure: {current_state.temperature=}")
+        print(f"Initial DV temperature: {current_state.pressure=}")
 
     # }}}
 
     visualizer = make_visualizer(discr, order + 3
                                  if discr.dim == 2 else order)
     initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
+    eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
@@ -307,30 +317,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             cfl = current_cfl
         else:
             from mirgecom.viscous import get_viscous_cfl
-            cfl_field = get_viscous_cfl(discr, eos, dt, cv=state)
+            cfl_field = get_viscous_cfl(discr, dt, state=state)
             from grudge.op import nodal_max
             cfl = actx.to_numpy(nodal_max(discr, "vol", cfl_field))
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
 
-    def my_write_viz(step, t, state, dv=None, production_rates=None):
-        if dv is None:
-            dv = eos.dependent_vars(state)
-        if production_rates is None:
-            production_rates = eos.get_production_rates(state)
+    def my_write_viz(step, t, state, dv):
         viz_fields = [("cv", state),
-                      ("dv", dv),
-                      ("reaction_rates", production_rates)]
+                      ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
-    def my_write_restart(step, t, state):
+    def my_write_restart(step, t, state, tseed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "state": state,
+                "cv": state,
+                "temperature_seed": tseed,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -376,8 +382,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        cv, tseed = state
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
+                                       temperature_seed=tseed)
+        dv = fluid_state.dv
         try:
-            dv = None
 
             if logmgr:
                 logmgr.tick_before()
@@ -389,9 +398,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step, interval=nstatus)
 
             if do_health:
-                dv = eos.dependent_vars(state)
                 from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(state, dv), comm,
+                health_errors = allsync(my_health_check(cv, dv), comm,
                                         op=MPI.LOR)
                 if health_errors:
                     if rank == 0:
@@ -399,62 +407,72 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+                my_write_restart(step=step, t=t, state=cv, tseed=tseed)
 
             if do_viz:
-                if dv is None:
-                    dv = eos.dependent_vars(state)
-                production_rates = eos.get_production_rates(state)
-                my_write_viz(step=step, t=t, state=state, dv=dv,
-                             production_rates=production_rates)
+                my_write_viz(step=step, t=t, state=cv, dv=dv)
 
-            dt = get_sim_timestep(discr, state, t, dt, current_cfl, eos,
+            dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
             if do_status:
-                my_write_status(step, t, dt, state)
+                my_write_status(step, t, dt, state=fluid_state)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
-            my_write_restart(step=step, t=t, state=state)
+            my_write_viz(step=step, t=t, state=cv, dv=dv)
+            my_write_restart(step=step, t=t, state=cv, tseed=tseed)
             raise
 
         return state, dt
 
     def my_post_step(step, t, dt, state):
+        cv, tseed = state
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
+                                       temperature_seed=tseed)
+
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
+            set_sim_state(logmgr, dim, cv, gas_model.eos)
             logmgr.tick_after()
-        return state, dt
+
+        return make_obj_array([cv, fluid_state.temperature]), dt
 
     def my_rhs(t, state):
-        ns_rhs = ns_operator(discr, cv=state, t=t,
-                             boundaries=visc_bnds, eos=eos)
-        reaction_source = eos.get_species_source_terms(state)
-        return ns_rhs + reaction_source
+        cv, tseed = state
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
+                                       temperature_seed=tseed)
+        ns_rhs = ns_operator(discr, state=fluid_state, time=t,
+                             boundaries=visc_bnds, gas_model=gas_model)
+        cv_rhs = ns_rhs + eos.get_species_source_terms(cv)
+        return make_obj_array([cv_rhs, 0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t,
-                                  current_dt, current_cfl, eos,
-                                  t_final, constant_cfl)
+                                  current_dt, current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_state = \
+    current_step, current_t, current_stepper_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=make_obj_array([current_state.cv,
+                                            current_state.temperature]),
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_dv = eos.dependent_vars(current_state)
+
+    current_cv, tseed = current_stepper_state
+    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
+                                     temperature_seed=tseed)
+    final_dv = current_state.dv
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                current_cfl, eos, t_final, constant_cfl)
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+                                current_cfl, t_final, constant_cfl)
+    my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
+    my_write_restart(step=current_step, t=current_t, state=current_state.cv,
+                     tseed=tseed)
     my_write_status(current_step, current_t, final_dt, current_state)
 
     if logmgr:

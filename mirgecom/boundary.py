@@ -4,12 +4,11 @@ Boundary Treatment Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass FluidBoundary
-.. autoclass FluidBC
 
 Inviscid Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: PrescribedInviscidBoundary
+.. autoclass:: PrescribedFluidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
@@ -18,7 +17,6 @@ Viscous Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: IsothermalNoSlipBoundary
-.. autoclass:: PrescribedViscousBoundary
 """
 
 __copyright__ = """
@@ -46,11 +44,14 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-from mirgecom.inviscid import inviscid_facial_flux
+from mirgecom.inviscid import inviscid_flux_rusanov
+from mirgecom.viscous import viscous_flux_central
+from mirgecom.flux import gradient_flux_central
+from mirgecom.gas_model import make_fluid_state
 
 from abc import ABCMeta, abstractmethod
 
@@ -65,89 +66,96 @@ class FluidBoundary(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, eos, cv_minus, dv_minus,
+                                 numerical_flux_func, **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
 
     @abstractmethod
-    def viscous_divergence_flux(self, discr, btag, cv, grad_cv, grad_t,
-                              eos, **kwargs):
+    def viscous_divergence_flux(self, discr, btag, gas_model, state_minus,
+                                grad_cv_minus, grad_t_minus, **kwargs):
         """Get the viscous boundary flux for the divergence operator."""
 
     @abstractmethod
-    def cv_gradient_flux(self, discr, btag, cv, eos, **kwargs):
+    def cv_gradient_flux(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the fluid soln boundary flux for the gradient operator."""
 
     @abstractmethod
-    def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
+    def temperature_gradient_flux(self, discr, btag, gas_model, state_minus,
+                                  **kwargs):
         r"""Get temperature flux across the boundary faces."""
 
 
-class FluidBC(FluidBoundary):
-    r"""Abstract interface to viscous boundary conditions.
-
-    .. automethod:: cv_gradient_flux
-    .. automethod:: t_gradient_flux
-    .. automethod:: inviscid_divergence_flux
-    .. automethod:: viscous_divergence_flux
-    .. automethod:: boundary_pair
-    """
-
-    def cv_gradient_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the flux through boundary *btag* for each scalar in *q*."""
-        raise NotImplementedError()
-
-    def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the "temperature flux" through boundary *btag*."""
-        raise NotImplementedError()
-
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid boundary flux for the divergence operator."""
-        raise NotImplementedError()
-
-    def viscous_divergence_flux(self, discr, btag, cv, grad_cv, grad_t, eos,
-                                **kwargs):
-        """Get the viscous part of the physical flux across the boundary *btag*."""
-        raise NotImplementedError()
-
-    def boundary_pair(self, discr, btag, cv, eos, **kwargs):
-        """Get the interior and exterior solution (*u*) on the boundary."""
-        raise NotImplementedError()
-
-
-class PrescribedInviscidBoundary(FluidBC):
+class PrescribedFluidBoundary(FluidBoundary):
     r"""Abstract interface to a prescribed fluid boundary treatment.
 
     .. automethod:: __init__
-    .. automethod:: boundary_pair
     .. automethod:: inviscid_divergence_flux
-    .. automethod:: soln_gradient_flux
     .. automethod:: av_flux
+    .. automethod:: cv_gradient_flux
     """
 
-    def __init__(self, inviscid_divergence_flux_func=None, boundary_pair_func=None,
-                 inviscid_facial_flux_func=None, fluid_solution_func=None,
-                 fluid_solution_flux_func=None, scalar_numerical_flux_func=None,
-                 fluid_solution_gradient_func=None,
-                 fluid_solution_gradient_flux_func=None,
-                 fluid_temperature_func=None):
-        """Initialize the PrescribedInviscidBoundary and methods."""
-        self._bnd_pair_func = boundary_pair_func
-        self._inviscid_bnd_flux_func = inviscid_divergence_flux_func
-        self._inviscid_facial_flux_func = inviscid_facial_flux_func
-        if not self._inviscid_facial_flux_func:
-            self._inviscid_facial_flux_func = inviscid_facial_flux
-        self._fluid_soln_func = fluid_solution_func
-        self._fluid_soln_flux_func = fluid_solution_flux_func
-        self._scalar_num_flux_func = scalar_numerical_flux_func
-        from mirgecom.flux import gradient_flux_central
-        if not self._scalar_num_flux_func:
-            self._scalar_num_flux_func = gradient_flux_central
-        self._fluid_soln_grad_func = fluid_solution_gradient_func
-        self._fluid_soln_grad_flux_func = fluid_solution_gradient_flux_func
-        from mirgecom.flux import divergence_flux_central
-        if not self._fluid_soln_grad_flux_func:
-            self._fluid_soln_grad_flux_func = divergence_flux_central
-        self._fluid_temperature_func = fluid_temperature_func
+    def __init__(self,
+                 # returns the flux to be used in div op (prescribed flux)
+                 inviscid_flux_func=None,
+                 # returns CV+, to be used in num flux func (prescribed soln)
+                 boundary_state_func=None,
+                 # Inviscid facial flux func given CV(+/-)
+                 # inviscid_numerical_flux_func=None,
+                 # Flux to be used in grad(Temperature) op
+                 temperature_gradient_flux_func=None,
+                 # Function returns boundary temperature_plus
+                 boundary_temperature_func=None,
+                 # Function returns the flux to be used in grad(cv)
+                 cv_gradient_flux_func=None,
+                 # Function computes the numerical flux for a gradient
+                 gradient_numerical_flux_func=None,
+                 # Function computes the flux to be used in the div op
+                 viscous_flux_func=None,
+                 # Returns the boundary value for grad(cv)
+                 boundary_gradient_cv_func=None,
+                 # Returns the boundary value for grad(temperature)
+                 boundary_gradient_temperature_func=None
+                 ):
+        """Initialize the PrescribedFluidBoundary and methods."""
+        self._bnd_state_func = boundary_state_func
+        self._inviscid_flux_func = inviscid_flux_func
+        # self._inviscid_num_flux_func = inviscid_numerical_flux_func
+        self._temperature_grad_flux_func = temperature_gradient_flux_func
+        self._bnd_temperature_func = boundary_temperature_func
+        self._grad_num_flux_func = gradient_numerical_flux_func
+        self._cv_gradient_flux_func = cv_gradient_flux_func
+        self._viscous_flux_func = viscous_flux_func
+        self._bnd_grad_cv_func = boundary_gradient_cv_func
+        self._bnd_grad_temperature_func = boundary_gradient_temperature_func
+
+        if not self._inviscid_flux_func and not self._bnd_state_func:
+            from warnings import warn
+            warn("Using dummy boundary: copies interior solution.", stacklevel=2)
+
+        if not self._inviscid_flux_func:
+            self._inviscid_flux_func = self._inviscid_flux_for_prescribed_state
+        # if not self._inviscid_num_flux_func:
+        #     self._inviscid_num_flux_func = inviscid_facial_flux
+        if not self._bnd_state_func:
+            self._bnd_state_func = self._identical_state
+
+        if not self._bnd_temperature_func:
+            self._bnd_temperature_func = self._opposite_temperature
+        if not self._grad_num_flux_func:
+            self._grad_num_flux_func = gradient_flux_central
+
+        if not self._cv_gradient_flux_func:
+            self._cv_gradient_flux_func = self._gradient_flux_for_prescribed_cv
+        if not self._temperature_grad_flux_func:
+            self._temperature_grad_flux_func = \
+                self._gradient_flux_for_prescribed_temperature
+
+        if not self._viscous_flux_func:
+            self._viscous_flux_func = self._viscous_flux_for_prescribed_state
+        if not self._bnd_grad_cv_func:
+            self._bnd_grad_cv_func = self._identical_grad_cv
+        if not self._bnd_grad_temperature_func:
+            self._bnd_grad_temperature_func = self._identical_grad_temperature
 
     def _boundary_quantity(self, discr, btag, quantity, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
@@ -155,55 +163,6 @@ class PrescribedInviscidBoundary(FluidBC):
             if kwargs["local"]:
                 return quantity
         return discr.project(btag, "all_faces", quantity)
-
-    def boundary_pair(self, discr, btag, cv, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
-        if self._bnd_pair_func:
-            return self._bnd_pair_func(discr, cv=cv, btag=btag, **kwargs)
-        if not self._fluid_soln_func:
-            raise NotImplementedError()
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        int_soln = discr.project("vol", btag, cv)
-        ext_soln = self._fluid_soln_func(nodes, cv=int_soln, normal=nhat, **kwargs)
-        return TracePair(btag, interior=int_soln, exterior=ext_soln)
-
-    def inviscid_divergence_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the inviscid boundary flux for the divergence operator."""
-        if self._inviscid_bnd_flux_func:
-            actx = cv.array_context
-            boundary_discr = discr.discr_from_dd(btag)
-            nodes = thaw(actx, boundary_discr.nodes())
-            nhat = thaw(actx, discr.normal(btag))
-            int_soln = discr.project("vol", btag, cv)
-            return self._inviscid_bnd_flux_func(nodes, normal=nhat,
-                                                cv=int_soln, eos=eos, **kwargs)
-        bnd_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
-        return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
-
-    def cv_gradient_flux(self, discr, btag, cv, **kwargs):
-        """Get the flux through boundary *btag* for each scalar in *q*."""
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-        if self._fluid_soln_flux_func:
-            cv_minus = discr.project("vol", btag, cv)
-            flux_weak = self._fluid_soln_flux_func(nodes, cv=cv_minus, nhat=nhat,
-                                                   **kwargs)
-        else:
-            bnd_pair = self.boundary_pair(discr, btag=btag, cv=cv, **kwargs)
-            flux_weak = self._scalar_num_flux_func(bnd_pair, normal=nhat)
-
-        return self._boundary_quantity(discr, btag=btag, quantity=flux_weak,
-                                       **kwargs)
-
-    def soln_gradient_flux(self, discr, btag, soln, **kwargs):
-        """Get the flux for solution gradient with AV API."""
-        cv = make_conserved(discr.dim, q=soln)
-        return self.cv_gradient_flux(discr, btag, cv, **kwargs).join()
 
     def s_boundary_flux(self, discr, btag, grad_cv, **kwargs):
         r"""Get $\nabla\mathbf{Q}$ flux across the boundary faces."""
@@ -231,87 +190,141 @@ class PrescribedInviscidBoundary(FluidBC):
         diff_cv = make_conserved(discr.dim, q=diffusion)
         return self.s_boundary_flux(discr, btag, grad_cv=diff_cv, **kwargs).join()
 
-    def t_gradient_flux(self, discr, btag, cv, eos, **kwargs):
-        """Get the "temperature flux" through boundary *btag*."""
-        cv_minus = discr.project("vol", btag, cv)
-        t_minus = eos.temperature(cv_minus)
-        actx = cv.array_context
-        if self._fluid_temperature_func:
-            boundary_discr = discr.discr_from_dd(btag)
-            nodes = thaw(actx, boundary_discr.nodes())
-            t_plus = self._fluid_temperature_func(nodes, cv=cv_minus,
-                                                  temperature=t_minus, eos=eos,
-                                                  **kwargs)
-        else:
-            t_plus = -t_minus
-        nhat = thaw(actx, discr.normal(btag))
-        bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
+    def _boundary_state_pair(self, discr, btag, gas_model, state_minus, **kwargs):
+        return TracePair(btag,
+                         interior=state_minus,
+                         exterior=self._bnd_state_func(discr=discr, btag=btag,
+                                                       gas_model=gas_model,
+                                                       state_minus=state_minus,
+                                                       **kwargs))
 
+    def _opposite_temperature(self, state_minus, **kwargs):
+        return -state_minus.temperature
+
+    def _identical_state(self, state_minus, **kwargs):
+        return state_minus
+
+    def _identical_grad_cv(self, grad_cv_minus, **kwargs):
+        return grad_cv_minus
+
+    def _identical_grad_temperature(self, grad_t_minus, **kwargs):
+        return grad_t_minus
+
+    def _gradient_flux_for_prescribed_cv(self, discr, btag, gas_model, state_minus,
+                                         **kwargs):
+        # Use prescribed external state and gradient numerical flux function
+        boundary_state = self._bnd_state_func(discr=discr, btag=btag,
+                                              gas_model=gas_model,
+                                              state_minus=state_minus,
+                                              **kwargs)
+        cv_pair = TracePair(btag,
+                            interior=state_minus.cv,
+                            exterior=boundary_state.cv)
+
+        actx = state_minus.array_context
+        nhat = thaw(discr.normal(btag), actx)
+        return self._boundary_quantity(
+            discr, btag=btag,
+            quantity=self._grad_num_flux_func(cv_pair, nhat), **kwargs)
+
+    def _gradient_flux_for_prescribed_temperature(self, discr, btag, gas_model,
+                                                  state_minus, **kwargs):
+        # Feed a boundary temperature to numerical flux for grad op
+        actx = state_minus.array_context
+        nhat = thaw(discr.normal(btag), actx)
+        bnd_tpair = TracePair(btag,
+                              interior=state_minus.temperature,
+                              exterior=self._bnd_temperature_func(
+                                  discr=discr, btag=btag, gas_model=gas_model,
+                                  state_minus=state_minus, **kwargs))
         return self._boundary_quantity(discr, btag,
-                                       self._scalar_num_flux_func(bnd_tpair, nhat),
+                                       self._grad_num_flux_func(bnd_tpair, nhat),
                                        **kwargs)
 
-    def viscous_divergence_flux(self, discr, btag, eos, cv, grad_cv, grad_t,
-                                **kwargs):
-        """Get the viscous part of the physical flux across the boundary *btag*."""
-        cv_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
+    def _inviscid_flux_for_prescribed_state(
+            self, discr, btag, gas_model, state_minus,
+            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+        # Use a prescribed boundary state and the numerical flux function
+        boundary_state_pair = self._boundary_state_pair(discr=discr, btag=btag,
+                                                        gas_model=gas_model,
+                                                        state_minus=state_minus,
+                                                        **kwargs)
+        return self._boundary_quantity(
+            discr, btag,
+            numerical_flux_func(discr, gas_model=gas_model,
+                                state_pair=boundary_state_pair),
+            **kwargs)
 
-        grad_cv_minus = discr.project("vol", btag, grad_cv)
-        grad_cv_tpair = TracePair(btag, interior=grad_cv_minus,
-                                  exterior=grad_cv_minus)
+    def _viscous_flux_for_prescribed_state(self, discr, btag, gas_model, state_minus,
+                                           grad_cv_minus, grad_t_minus,
+                                           numerical_flux_func=viscous_flux_central,
+                                           **kwargs):
+        state_pair = self._boundary_state_pair(discr=discr, btag=btag,
+                                               gas_model=gas_model,
+                                               state_minus=state_minus, **kwargs)
+        grad_cv_pair = \
+            TracePair(btag, interior=grad_cv_minus,
+                      exterior=self._bnd_grad_cv_func(
+                          discr=discr, btag=btag, gas_model=gas_model,
+                          state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+                          grad_t_minus=grad_t_minus))
 
-        grad_t_minus = discr.project("vol", btag, grad_t)
-        grad_t_tpair = TracePair(btag, interior=grad_t_minus, exterior=grad_t_minus)
+        grad_t_pair = \
+            TracePair(
+                btag, interior=grad_t_minus,
+                exterior=self._bnd_grad_temperature_func(
+                    discr=discr, btag=btag, gas_model=gas_model,
+                    state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+                    grad_t_minus=grad_t_minus))
 
-        from mirgecom.viscous import viscous_facial_flux
-        return viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair)
+        return self._boundary_quantity(
+            discr, btag,
+            quantity=numerical_flux_func(discr=discr, gas_model=gas_model,
+                                         state_pair=state_pair,
+                                         grad_cv_pair=grad_cv_pair,
+                                         grad_t_pair=grad_t_pair))
+
+    def inviscid_divergence_flux(
+            self, discr, btag, gas_model, state_minus,
+            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+        """Get the inviscid boundary flux for the divergence operator."""
+        return self._inviscid_flux_func(discr, btag, gas_model, state_minus,
+                                        numerical_flux_func=numerical_flux_func,
+                                        **kwargs)
+
+    def cv_gradient_flux(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Get the cv flux for *btag* for use in the gradient operator."""
+        return self._cv_gradient_flux_func(
+            discr=discr, btag=btag, gas_model=gas_model, state_minus=state_minus,
+            **kwargs)
+
+    def temperature_gradient_flux(self, discr, btag, gas_model, state_minus,
+                                  **kwargs):
+        """Get the "temperature flux" for *btag* for use in the gradient operator."""
+        return self._temperature_grad_flux_func(discr, btag, gas_model, state_minus,
+                                                **kwargs)
+
+    def viscous_divergence_flux(self, discr, btag, gas_model, state_minus,
+                                grad_cv_minus, grad_t_minus,
+                                numerical_flux_func=viscous_flux_central, **kwargs):
+        """Get the viscous flux for *btag* for use in the divergence operator."""
+        return self._viscous_flux_func(discr=discr, btag=btag, gas_model=gas_model,
+                                       state_minus=state_minus,
+                                       grad_cv_minus=grad_cv_minus,
+                                       grad_t_minus=grad_t_minus,
+                                       numerical_flux_func=numerical_flux_func,
+                                       **kwargs)
 
 
-class PrescribedBoundary(PrescribedInviscidBoundary):
-    """Boundary condition prescribes boundary soln with user-specified function.
-
-    .. automethod:: __init__
-    """
-
-    def __init__(self, userfunc):
-        """Set the boundary function.
-
-        Parameters
-        ----------
-        userfunc
-            User function that prescribes the solution values on the exterior
-            of the boundary. The given user function (*userfunc*) must take at
-            least one parameter that specifies the coordinates at which to prescribe
-            the solution.
-        """
-        from warnings import warn
-        warn("Do not use PrescribedBoundary; use PrescribedInvscidBoundary. This"
-             "boundary type will vanish by August 2021.", DeprecationWarning,
-             stacklevel=2)
-        PrescribedInviscidBoundary.__init__(self, fluid_solution_func=userfunc)
-
-
-class DummyBoundary(PrescribedInviscidBoundary):
-    """Boundary condition that assigns boundary-adjacent soln as the boundary solution.
-
-    .. automethod:: dummy_pair
-    """
+class DummyBoundary(PrescribedFluidBoundary):
+    """Boundary type that assigns boundary-adjacent soln as the boundary solution."""
 
     def __init__(self):
         """Initialize the DummyBoundary boundary type."""
-        PrescribedInviscidBoundary.__init__(self, boundary_pair_func=self.dummy_pair)
-
-    def dummy_pair(self, discr, cv, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
-        dir_soln = self.exterior_q(discr, cv, btag, **kwargs)
-        return TracePair(btag, interior=dir_soln, exterior=dir_soln)
-
-    def exterior_q(self, discr, cv, btag, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return discr.project("vol", btag, cv)
+        PrescribedFluidBoundary.__init__(self)
 
 
-class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
+class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
     a.k.a. Reflective inviscid wall boundary
@@ -326,18 +339,18 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
     [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
     boundary conditions described in detail in [Poinsot_1992]_.
 
-    .. automethod:: adiabatic_slip_pair
+    .. automethod:: adiabatic_slip_state
     """
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
-        PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_slip_pair,
-            fluid_solution_gradient_func=self.exterior_grad_q
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.adiabatic_slip_state
+            # fluid_solution_gradient_func=self.exterior_grad_q
         )
 
-    def adiabatic_slip_pair(self, discr, cv, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary.
+    def adiabatic_slip_state(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
 
         The exterior solution is set such that there will be vanishing
         flux through the boundary, preserving mass, momentum (magnitude) and
@@ -349,26 +362,25 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
         """
         # Grab some boundary-relevant data
         dim = discr.dim
-        actx = cv.mass.array_context
+        actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
-
-        # Get the interior/exterior solns
-        int_cv = discr.project("vol", btag, cv)
+        nhat = thaw(discr.normal(btag), actx)
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to
         # induce an equal but opposite wall-normal (reflected) wave
         # preserving the tangential component
-        mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
-        wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
-        ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
-
+        cv_minus = state_minus.cv
+        ext_mom = (cv_minus.momentum
+                   - 2.0*np.dot(cv_minus.momentum, nhat)*nhat)
         # Form the external boundary solution with the new momentum
-        ext_cv = make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
-                                momentum=ext_mom, species_mass=int_cv.species_mass)
-        return TracePair(btag, interior=int_cv, exterior=ext_cv)
+        ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
+                                momentum=ext_mom, species_mass=cv_minus.species_mass)
+        t_seed = state_minus.temperature if state_minus.is_mixture else None
+
+        return make_fluid_state(cv=ext_cv, gas_model=gas_model,
+                                temperature_seed=t_seed)
 
     def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
@@ -386,19 +398,18 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
                               species_mass=-grad_cv.species_mass)
 
 
-class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
+class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing a noslip moving boundary.
 
-    .. automethod:: adiabatic_noslip_pair
-    .. automethod:: exterior_soln
-    .. automethod:: exterior_grad_q
+    .. automethod:: adiabatic_noslip_state
+    .. automethod:: adiabatic_noslip_grad_cv
     """
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
-        PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.adiabatic_noslip_pair,
-            fluid_solution_gradient_func=self.exterior_grad_q
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.adiabatic_noslip_state,
+            # boundary_gradient_cv_func=self.adiabatic_noslip_grad_cv,
         )
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
@@ -407,34 +418,25 @@ class AdiabaticNoslipMovingBoundary(PrescribedInviscidBoundary):
             raise ValueError(f"Specified wall velocity must be {dim}-vector.")
         self._wall_velocity = wall_velocity
 
-    def adiabatic_noslip_pair(self, discr, cv, btag, **kwargs):
-        """Get the interior and exterior solution on the boundary."""
-        bndry_soln = self.exterior_soln(discr, cv, btag, **kwargs)
-        int_soln = discr.project("vol", btag, cv)
-
-        return TracePair(btag, interior=int_soln, exterior=bndry_soln)
-
-    def exterior_soln(self, discr, cv, btag, **kwargs):
+    def adiabatic_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary."""
-        dim = discr.dim
-
-        # Get the interior/exterior solns
-        int_cv = discr.project("vol", btag, cv)
-
-        # Compute momentum solution
-        wall_pen = 2.0 * self._wall_velocity * int_cv.mass
-        ext_mom = wall_pen - int_cv.momentum  # no-slip
+        wall_pen = 2.0 * self._wall_velocity * state_minus.mass_density
+        ext_mom = wall_pen - state_minus.momentum_density  # no-slip
 
         # Form the external boundary solution with the new momentum
-        return make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
-                              momentum=ext_mom, species_mass=int_cv.species_mass)
+        cv = make_conserved(dim=state_minus.dim, mass=state_minus.mass_density,
+                            energy=state_minus.energy_density,
+                            momentum=ext_mom,
+                            species_mass=state_minus.species_mass_density)
+        tseed = state_minus.temperature if state_minus.is_mixture else None
+        return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=tseed)
 
-    def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
+    def adiabatic_noslip_grad_cv(self, grad_cv_minus, **kwargs):
         """Get the exterior solution on the boundary."""
-        return(-grad_cv)
+        return(-grad_cv_minus)
 
 
-class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
+class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     r"""Isothermal no-slip viscous wall boundary.
 
     This class implements an isothermal no-slip wall by:
@@ -446,194 +448,34 @@ class IsothermalNoSlipBoundary(PrescribedInviscidBoundary):
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
         self._wall_temp = wall_temperature
-        PrescribedInviscidBoundary.__init__(
-            self, boundary_pair_func=self.isothermal_noslip_pair,
-            fluid_temperature_func=self.temperature_bc
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.isothermal_noslip_state,
+            boundary_temperature_func=self.temperature_bc
         )
 
-    def isothermal_noslip_pair(self, discr, btag, eos, cv, **kwargs):
-        """Get the interior and exterior solution (*cv*) on the boundary."""
-        cv_minus = discr.project("vol", btag, cv)
+    def isothermal_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Get the interior and exterior solution (*state_minus*) on the boundary."""
+        temperature_wall = self._wall_temp + 0*state_minus.mass_density
+        velocity_plus = -state_minus.velocity
+        mass_frac_plus = state_minus.species_mass_fractions
 
-        t_plus = self._wall_temp + 0*cv_minus.mass
-        velocity_plus = -cv_minus.momentum / cv_minus.mass
-        mass_frac_plus = cv_minus.species_mass / cv_minus.mass
-
-        internal_energy_plus = eos.get_internal_energy(
-            temperature=t_plus, species_mass_fractions=mass_frac_plus,
-            mass=cv_minus.mass
+        internal_energy_plus = gas_model.eos.get_internal_energy(
+            temperature=temperature_wall, species_mass_fractions=mass_frac_plus,
+            mass=state_minus.mass_density
         )
-        total_energy_plus = (internal_energy_plus
-                             + .5*cv_minus.mass*np.dot(velocity_plus, velocity_plus))
+
+        total_energy_plus = state_minus.mass_density*(internal_energy_plus
+                                           + .5*np.dot(velocity_plus, velocity_plus))
 
         cv_plus = make_conserved(
-            discr.dim, mass=cv_minus.mass, energy=total_energy_plus,
-            momentum=-cv_minus.momentum, species_mass=cv_minus.species_mass
+            state_minus.dim, mass=state_minus.mass_density, energy=total_energy_plus,
+            momentum=-state_minus.momentum_density,
+            species_mass=state_minus.species_mass_density
         )
+        tseed = state_minus.temperature if state_minus.is_mixture else None
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=tseed)
 
-        return TracePair(btag, interior=cv_minus, exterior=cv_plus)
-
-    def temperature_bc(self, nodes, cv, temperature, eos, **kwargs):
+    def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value to weakly prescribe wall bc."""
-        return self._wall_temp + 0*temperature
-
-
-class PrescribedViscousBoundary(FluidBC):
-    r"""Fully prescribed boundary for viscous flows.
-
-    This class implements an inflow/outflow by:
-    (TBD)
-    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
-    boundary conditions described in detail in [Poinsot_1992]_.
-    """
-
-    def __init__(self, q_func=None, grad_q_func=None, t_func=None,
-                 grad_t_func=None, inviscid_flux_func=None,
-                 viscous_flux_func=None, t_flux_func=None,
-                 q_flux_func=None):
-        """Initialize the boundary condition object."""
-        self._q_func = q_func
-        self._q_flux_func = q_flux_func
-        self._grad_q_func = grad_q_func
-        self._t_func = t_func
-        self._t_flux_func = t_flux_func
-        self._grad_t_func = grad_t_func
-        self._inviscid_flux_func = inviscid_flux_func
-        self._viscous_flux_func = viscous_flux_func
-
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
-
-    def cv_gradient_flux(self, discr, btag, eos, cv, **kwargs):
-        """Get the flux through boundary *btag* for each scalar in *q*."""
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        cv_minus = discr.project("vol", btag, cv)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-
-        flux_weak = 0
-        if self._q_flux_func:
-            flux_weak = self._q_flux_func(nodes, eos, cv_minus, nhat, **kwargs)
-        elif self._q_func:
-            cv_plus = self._q_func(nodes, eos=eos, cv=cv_minus, **kwargs)
-        else:
-            cv_plus = cv_minus
-
-        cv_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
-
-        from mirgecom.flux import gradient_flux_central
-        flux_func = gradient_flux_central
-        if "numerical_flux_func" in kwargs:
-            flux_func = kwargs["numerical_flux_func"]
-
-        flux_weak = flux_func(cv_tpair, nhat)
-
-        return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
-
-    def t_gradient_flux(self, discr, btag, eos, cv, **kwargs):
-        """Get the "temperature flux" through boundary *btag*."""
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        cv_minus = discr.project("vol", btag, cv)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-
-        if self._t_flux_func:
-            flux_weak = self._t_flux_func(nodes, eos, cv=cv_minus, nhat=nhat,
-                                          **kwargs)
-        else:
-            t_minus = eos.temperature(cv_minus)
-            if self._t_func:
-                t_plus = self._t_func(nodes, eos, cv=cv_minus, **kwargs)
-            elif self._q_func:
-                cv_plus = self._q_func(nodes, eos=eos, cv=cv_minus, **kwargs)
-                t_plus = eos.temperature(cv_plus)
-            else:
-                t_plus = t_minus
-
-            bnd_tpair = TracePair(btag, interior=t_minus, exterior=t_plus)
-
-            from mirgecom.flux import gradient_flux_central
-            flux_func = gradient_flux_central
-            if "numerical_flux_func" in kwargs:
-                flux_func = kwargs["numerical_flux_func"]
-
-            flux_weak = flux_func(bnd_tpair, nhat)
-
-        return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
-
-    def inviscid_divergence_flux(self, discr, btag, eos, cv, **kwargs):
-        """Get the inviscid part of the physical flux across the boundary *btag*."""
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        cv_minus = discr.project("vol", btag, cv)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-
-        flux_weak = 0
-        if self._inviscid_flux_func:
-            flux_weak = self._inviscid_flux_func(nodes, eos, cv=cv_minus,
-                                                 nhat=nhat, **kwargs)
-        else:
-            if self._q_func:
-                cv_plus = self._q_func(nodes, eos=eos, cv=cv_minus, **kwargs)
-            else:
-                cv_plus = cv_minus
-
-            bnd_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
-            from mirgecom.inviscid import inviscid_facial_flux
-            return inviscid_facial_flux(discr, eos, bnd_tpair)
-
-        return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
-
-    def viscous_divergence_flux(self, discr, btag, eos, cv, grad_cv, grad_t,
-                                **kwargs):
-        """Get the viscous part of the physical flux across the boundary *btag*."""
-        actx = cv.array_context
-        boundary_discr = discr.discr_from_dd(btag)
-        cv_minus = discr.project("vol", btag, cv)
-        s_minus = discr.project("vol", btag, grad_cv)
-        grad_t_minus = discr.project("vol", btag, grad_t)
-        nodes = thaw(actx, boundary_discr.nodes())
-        nhat = thaw(actx, discr.normal(btag))
-
-        flux_weak = 0
-        if self._viscous_flux_func:
-            flux_weak = self._viscous_flux_func(nodes, eos, cv=cv_minus,
-                                                grad_cv=s_minus,
-                                                grad_temperature=grad_t_minus,
-                                                nhat=nhat, **kwargs)
-            return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
-        else:
-            if self._q_func:
-                cv_plus = self._q_func(nodes, eos=eos, cv=cv_minus, **kwargs)
-            else:
-                cv_plus = cv_minus
-
-            if self._grad_q_func:
-                s_plus = self._grad_q_func(nodes, eos, cv=cv_minus,
-                                           grad_cv=s_minus, **kwargs)
-            else:
-                s_plus = s_minus
-
-            if self._grad_t_func:
-                grad_t_plus = self._grad_t_func(nodes, eos, cv=cv_minus,
-                                                grad_temperature=grad_t_minus,
-                                                **kwargs)
-            else:
-                grad_t_plus = grad_t_minus
-
-            cv_tpair = TracePair(btag, interior=cv_minus, exterior=cv_plus)
-            s_tpair = TracePair(btag, interior=s_minus, exterior=s_plus)
-            grad_t_tpair = TracePair(btag, interior=grad_t_minus,
-                                     exterior=grad_t_plus)
-
-            from mirgecom.viscous import viscous_facial_flux
-            return viscous_facial_flux(discr, eos, cv_tpair=cv_tpair,
-                                       grad_cv_tpair=s_tpair,
-                                       grad_t_tpair=grad_t_tpair)
+        return 2*self._wall_temp - state_minus.temperature
