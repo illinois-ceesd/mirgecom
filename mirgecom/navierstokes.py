@@ -144,10 +144,11 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     cv_interior_pairs.extend(cv_part_pairs)
 
     tseed_interior_pairs = None
-    tseed_int_pair = interior_trace_pair(discr, dv.temperature)
-    tseed_part_pairs = cross_rank_trace_pairs(discr, dv.temperature)
-    tseed_interior_pairs = [tseed_int_pair]
-    tseed_interior_pairs.extend(tseed_part_pairs)
+    if state.is_mixture:
+        tseed_int_pair = interior_trace_pair(discr, dv.temperature)
+        tseed_part_pairs = cross_rank_trace_pairs(discr, dv.temperature)
+        tseed_interior_pairs = [tseed_int_pair]
+        tseed_interior_pairs.extend(tseed_part_pairs)
 
     from mirgecom.gas_model import make_fluid_state_trace_pairs
     interior_state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
@@ -187,13 +188,13 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                              interior=make_conserved(dim, q=xrank_tpair.int),
                              exterior=make_conserved(dim, q=xrank_tpair.ext))
                     for xrank_tpair in cross_rank_trace_pairs(discr, grad_cv.join())]
+
     grad_cv_interior_pairs = [s_int_pair]
-    grad_cv_interior_pairs.append(s_part_pairs)
+    grad_cv_interior_pairs.extend(s_part_pairs)
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
-
     # Capture the temperature for the interior faces for grad(T) calc
-    t_interior_pairs = [TracePair("int_faces",
+    t_interior_pairs = [TracePair(state_pair.dd,
                                   interior=state_pair.int.temperature,
                                   exterior=state_pair.ext.temperature)
                         for state_pair in interior_state_pairs]
@@ -204,12 +205,12 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                       state_minus=boundary_states[btag], time=time)
                       for btag in boundaries))
 
-    # Fluxes in-hand, compute the gradient of temperature
+    # Fluxes in-hand, compute the gradient of temperature and mpi exchange it
     grad_t = grad_operator(discr, state.temperature, t_flux_bnd)
     delt_int_pair = interior_trace_pair(discr, grad_t)
     delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
     grad_t_interior_pairs = [delt_int_pair]
-    grad_t_interior_pairs.append(delt_part_pairs)
+    grad_t_interior_pairs.extend(delt_part_pairs)
 
     # inviscid flux divergence-specific flux function for interior faces
     def finv_divergence_flux_interior(state_pair):
