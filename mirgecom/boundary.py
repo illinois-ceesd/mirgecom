@@ -140,7 +140,7 @@ class PrescribedFluidBoundary(FluidBoundary):
             self._bnd_state_func = self._identical_state
 
         if not self._bnd_temperature_func:
-            self._bnd_temperature_func = self._opposite_temperature
+            self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
             self._grad_num_flux_func = gradient_flux_central
 
@@ -181,8 +181,13 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                        state_minus=state_minus,
                                                        **kwargs))
 
-    def _opposite_temperature(self, state_minus, **kwargs):
-        return -state_minus.temperature
+    def _temperature_for_prescribed_state(self, discr, btag,
+                                          gas_model, state_minus, **kwargs):
+        boundary_state = self._bnd_state_func(discr=discr, btag=btag,
+                                              gas_model=gas_model,
+                                              state_minus=state_minus,
+                                              **kwargs)
+        return boundary_state.temperature
 
     def _identical_state(self, state_minus, **kwargs):
         return state_minus
