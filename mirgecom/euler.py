@@ -52,18 +52,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_flux,
+    flux_chandrashekar
 )
-from grudge.eager import (
+from mirgecom.fluid import (
+    make_conserved,
+    conservative_to_entropy_vars,
+    entropy_to_conservative_vars
+)
+from mirgecom.operators import div_operator
+
+from functools import partial
+
+from grudge.trace_pair import (
+    TracePair,
     interior_trace_pair,
     cross_rank_trace_pairs
 )
-from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
-from mirgecom.operators import div_operator
+from grudge.dof_desc import DOFDesc
+from grudge.projection import volume_quadrature_project
+from grudge.interpolation import \
+    volume_and_surface_quadrature_interpolation
+from grudge.flux_differencing import volume_flux_differencing
+
+import grudge.op as op
 
 
 def euler_operator(discr, eos, boundaries, cv, time=0.0):
@@ -122,6 +136,93 @@ def inviscid_operator(discr, eos, boundaries, q, t=0.0):
     warn("Do not call inviscid_operator; it is now called euler_operator. This"
          "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
     return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
+
+
+def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=None):
+    """todo.
+    """
+    dq = DOFDesc("vol", qtag)
+    df = DOFDesc("all_faces", qtag)
+
+    # Interpolate cv_state to vol quad grid: u_q = V_q u
+    cv_quad = op.project(dcoll, "vol", dq, cv)
+
+    # Convert to projected entropy variables: v_q = V_h P_q v(u_q)
+    entropy_vars = conservative_to_entropy_vars(eos, cv_quad)
+    proj_entropy_vars = volume_quadrature_project(dcoll, dq, entropy_vars)
+
+    # Compute volume derivatives using flux differencing
+    inviscid_flux_vol = volume_flux_differencing(
+        dcoll,
+        partial(flux_chandrashekar, dcoll, eos),
+        dq, df,
+        # Compute conserved state in terms of the (interpolated)
+        # projected entropy variables on the quad grid
+        entropy_to_conservative_vars(
+            eos,
+            # Interpolate projected entropy variables to
+            # volume + surface quadrature grids
+            volume_and_surface_quadrature_interpolation(
+                dcoll, dq, df, proj_entropy_vars
+            )
+        )
+    )
+
+    def modified_conservedvars(proj_ev):
+        """Converts the projected entropy variables into
+        conserved variables on the quadrature grid.
+        """
+        vtilde = op.project(dcoll, "vol", dq, proj_ev)
+        return entropy_to_conservative_vars(eos, vtilde)
+
+
+    def modified_conservedvars_tpair(tpair):
+        """Takes a trace pair containing the projected entropy variables
+        and converts them into conserved variables on the quadrature
+        grid.
+        """
+        dd_intfaces = tpair.dd
+        dd_intfaces_quad = dd_intfaces.with_discr_tag(qtag)
+        # Interpolate entropy variables to the surface quadrature grid
+        vtilde_tpair = op.project(dcoll, dd_intfaces, dd_intfaces_quad, tpair)
+        return TracePair(
+            dd_intfaces_quad,
+            # Convert interior and exterior states to conserved variables
+            interior=entropy_to_conservative_vars(eos, vtilde_tpair.int),
+            exterior=entropy_to_conservative_vars(eos, vtilde_tpair.ext)
+        )
+
+    # Compute interface terms
+    inviscid_flux_bnd = (
+        inviscid_facial_flux(
+            dcoll,
+            eos=eos,
+            cv_tpair=modified_conservedvars_tpair(
+                interior_trace_pair(dcoll, proj_entropy_vars)
+            )
+        )
+        + sum(
+            inviscid_facial_flux(
+                dcoll,
+                eos=eos,
+                cv_tpair=modified_conservedvars_tpair(part_tpair)
+            ) for part_tpair in cross_rank_trace_pairs(dcoll, proj_entropy_vars)
+        )
+        + sum(
+            boundaries[btag].inviscid_boundary_flux(
+                dcoll,
+                btag=btag,
+                cv=modified_conservedvars(proj_entropy_vars),
+                eos=eos,
+                time=time
+            ) for btag in boundaries
+        )
+    )
+
+    return op.inverse_mass(
+        dcoll,
+        -inviscid_flux_vol - op.face_mass(dcoll, df, inviscid_flux_bnd)
+    )
 
 
 # By default, run unitless

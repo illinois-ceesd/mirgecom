@@ -38,7 +38,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from meshmode.dof_array import thaw
+from meshmode.dof_array import thaw, DOFArray
 from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
 from mirgecom.flux import divergence_flux_lfr
@@ -125,6 +125,65 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
 
     return flux_weak
+
+
+def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
+    """Two-point volume flux based on the entropy conserving
+    and kinetic energy preserving two-point flux in:
+
+    - Chandrashekar (2013) Kinetic Energy Preserving and Entropy Stable Finite
+    Volume Schemes for Compressible Euler and Navier-Stokes Equations
+    [DOI](https://doi.org/10.4208/cicp.170712.010313a)
+
+    :args q_ll: an array container for the "left" state.
+    :args q_rr: an array container for the "right" state.
+    :arg gamma: The isentropic expansion factor for a single-species gas
+        (default set to 1.4).
+    """
+    from mirgecom.fluid import conservative_to_primitive_vars
+
+    dim = discr.dim
+    actx = cv_ll.array_context
+
+    def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
+        return actx.np.where(
+            actx.np.less(f2, epsilon),
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
+        )
+
+    rho_ll, u_ll, p_ll = conservative_to_primitive_vars(eos, cv_ll)
+    rho_rr, u_rr, p_rr = conservative_to_primitive_vars(eos, cv_rr)
+
+    beta_ll = 0.5 * rho_ll / p_ll
+    beta_rr = 0.5 * rho_rr / p_rr
+    specific_kin_ll = 0.5 * sum(v**2 for v in u_ll)
+    specific_kin_rr = 0.5 * sum(v**2 for v in u_rr)
+
+    rho_avg = 0.5 * (rho_ll + rho_rr)
+    rho_mean = ln_mean(rho_ll,  rho_rr)
+    beta_mean = ln_mean(beta_ll, beta_rr)
+    beta_avg = 0.5 * (beta_ll + beta_rr)
+    u_avg = 0.5 * (u_ll + u_rr)
+    p_mean = 0.5 * rho_avg / beta_avg
+
+    velocity_square_avg = specific_kin_ll + specific_kin_rr
+
+    mass_flux = rho_mean * u_avg
+    momentum_flux = np.outer(mass_flux, u_avg) + np.eye(dim) * p_mean
+    energy_flux = (
+        mass_flux * 0.5 * (1/(eos.gamma() - 1)/beta_mean - velocity_square_avg)
+        + np.dot(momentum_flux, u_avg)
+    )
+
+    return make_conserved(
+        dim,
+        mass=mass_flux,
+        energy=energy_flux,
+        momentum=momentum_flux,
+        # TODO: species mass
+    )
 
 
 def get_inviscid_timestep(discr, eos, cv):

@@ -449,3 +449,108 @@ def compute_wavespeed(eos, cv: ConservedVars):
     actx = cv.array_context
     v = cv.velocity
     return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
+
+
+def conservative_to_primitive_vars(eos, cv: ConservedVars):
+    """Converts from conserved variables (density, momentum, total energy)
+    into primitive variables (density, velocity, pressure).
+
+    :arg cv: A :class:`ConservedVars` containing the conserved
+        variables.
+    :returns: A :class:`Tuple` containing the primitive variables:
+        (density, velocity, pressure).
+    """
+    rho = cv.mass
+    rho_u = cv.momentum
+    u = rho_u / rho
+    p = eos.pressure(cv)
+
+    return (rho, u, p)
+
+
+def primitive_to_conservative_vars(eos, prim_vars):
+    """Converts from primitive variables (density, velocity, pressure)
+    into conserved variables (density, momentum, total energy).
+
+    :arg prim_vars: A :class:`Tuple` containing the primitive variables:
+        (density, velocity, pressure).
+    :returns: A :class:`ConservedVars` containing the conserved
+        variables.
+    """
+    rho, u, p = prim_vars
+    dim = len(u)
+    inv_gamma_minus_one = 1/(eos.gamma() - 1)
+    rhou = rho * u
+    rhoe = p * inv_gamma_minus_one + 0.5 * sum(rhou * u)
+
+    return make_conserved(
+        dim,
+        mass=rho,
+        energy=rhoe,
+        momentum=rhou
+        # TODO: species mass
+    )
+
+
+def conservative_to_entropy_vars(eos, cv: ConservedVars):
+    """Converts from conserved variables (density, momentum, total energy)
+    into entropy variables.
+
+    :arg cv: A :class:`ConservedVars` containing the conserved
+        variables.
+    :returns: A :class:`ConservedVars` containing the entropy variables.
+    """
+    dim = cv.dim
+    actx = cv.array_context
+    gamma = eos.gamma()
+    rho, u, p = conservative_to_primitive_vars(eos, cv)
+
+    u_square = sum(v ** 2 for v in u)
+    # Move to EOS?
+    s = actx.np.log(p) - gamma*actx.np.log(rho)
+    rho_p = rho / p
+
+    return make_conserved(
+        dim,
+        mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
+        energy=-rho_p,
+        momentum=rho_p * u
+        # TODO: species mass
+    )
+
+
+def entropy_to_conservative_vars(eos, ev: ConservedVars):
+    """Converts from entropy variables into conserved variables
+    (density, momentum, total energy).
+
+    :arg ev: A :class:`ConservedVars` containing the entropy
+        variables.
+    :returns: A :class:`ConservedVars` containing the conserved variables.
+    """
+    gamma = eos.gamma()
+    actx = ev.array_context
+    # See Hughes, Franca, Mallet (1986) A new finite element
+    # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+    inv_gamma_minus_one = 1/(gamma - 1)
+
+    # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+    ev_state = ev * (gamma - 1)
+    v1 = ev_state.mass
+    v2t4 = ev_state.momentum
+    v5 = ev_state.energy
+
+    dim = len(v2t4)
+
+    v_square = sum(v**2 for v in v2t4)
+    s = gamma - v1 + v_square/(2*v5)
+    rho_iota = (
+        ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    ) * actx.np.exp(-s * inv_gamma_minus_one)
+
+    return make_conserved(
+        dim,
+        mass=-rho_iota * v5,
+        energy=rho_iota * (1 - v_square/(2*v5)),
+        momentum=rho_iota * v2t4
+        # TODO: species mass
+    )
