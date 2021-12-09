@@ -448,7 +448,7 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
-    def get_internal_energy(self, temperature, mass, species_mass_fractions=None):
+    def get_internal_energy(self, temperature, **kwargs):
         r"""Get the gas thermal energy from temperature, and fluid density.
 
         The gas internal energy $e$ is calculated from:
@@ -466,7 +466,7 @@ class IdealSingleGas(GasEOS):
         species_mass_fractions:
             Unused
         """
-        return self._gas_const * mass * temperature / (self._gamma - 1)
+        return self._gas_const * temperature / (self._gamma - 1)
 
 
 class PyrometheusMixture(MixtureEOS):
