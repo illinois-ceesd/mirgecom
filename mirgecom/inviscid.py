@@ -41,7 +41,7 @@ import numpy as np
 from meshmode.dof_array import thaw
 from mirgecom.fluid import compute_wavespeed
 from grudge.trace_pair import TracePair
-from mirgecom.flux import divergence_flux_lfr, divergence_flux_hllc, divergence_flux_hll
+from mirgecom.flux import divergence_flux_lfr, divergence_flux_hllc, inviscid_flux_hll
 from mirgecom.fluid import make_conserved
 
 
@@ -144,24 +144,9 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     #print(f"{cv_tpair_hll.int.momentum=}")
 
     # todo: user-supplied flux routine
-    flux_weak_lfr = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
-    #flux_weak_hll = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
-    #flux_weak_hllc = divergence_flux_hll(cv_tpair, normal=normal, eos=eos)
-    #flux_weak = divergence_flux_hllc(cv_tpair, flux_tpair, normal=normal, eos=eos)
-
-    #print(f"flux_hll.mass {flux_weak_hll.mass}")
-    #print(f"flux_hll.momentum {flux_weak_hll.momentum}")
-    #print(f"flux_hll.energy {flux_weak_hll.energy}")
-
-    #print(f"mass_int {cv_tpair.int.mass}")
-    #print(f"p_int {p_int}")
-    #print(f"flux_lfr.mass {flux_weak_lfr.mass}")
-    #print(f"flux_lfr.momentum {flux_weak_lfr.momentum}")
-    #print(f"flux_lfr.energy {flux_weak_lfr.energy}")
-
-    #flux_weak = flux_weak_hllc
-    #flux_weak = flux_weak_hll
-    flux_weak = flux_weak_lfr
+    #flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
+    flux_weak = inviscid_flux_hll(cv_tpair, normal=normal, eos=eos)
+    #flux_weak = divergence_flux_hllc(cv_tpair, normal=normal, eos=eos)
 
     if local is False:
         return discr.project(cv_tpair.dd, "all_faces", flux_weak)
