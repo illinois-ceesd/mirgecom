@@ -189,11 +189,11 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
         def av_flux(self, disc, btag, diffusion, **kwargs):
             nhat = thaw(actx, disc.normal(btag))
-            grad_soln_minus = discr.project("vol", btag, diffusion)
-            grad_soln_plus = grad_soln_minus
+            diffusion_minus = discr.project("vol", btag, diffusion)
+            diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
-            bnd_grad_pair = TracePair(btag, interior=grad_soln_minus,
-                                      exterior=grad_soln_plus)
+            bnd_grad_pair = TracePair(btag, interior=diffusion_minus,
+                                      exterior=diffusion_plus)
             from mirgecom.flux import divergence_flux_central
             flux_weak = divergence_flux_central(bnd_grad_pair, normal=nhat)
             return disc.project(btag, "all_faces", flux_weak)
