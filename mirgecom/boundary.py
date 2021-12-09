@@ -1,21 +1,17 @@
 """:mod:`mirgecom.boundary` provides methods and constructs for boundary treatments.
 
-Boundary Treatment Interface
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Boundary Treatment Interfaces
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass FluidBoundary
-
-Inviscid Boundary Conditions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 .. autoclass:: PrescribedFluidBoundary
+
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
+
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
-
-Viscous Boundary Conditions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 .. autoclass:: IsothermalNoSlipBoundary
 """
 
@@ -50,9 +46,14 @@ from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import inviscid_flux_rusanov
 from mirgecom.viscous import viscous_flux_central
-from mirgecom.flux import gradient_flux_central
-from mirgecom.gas_model import make_fluid_state
-
+from mirgecom.flux import (
+    gradient_flux_central,
+    divergence_flux_central
+)
+from mirgecom.gas_model import (
+    make_fluid_state,
+    project_fluid_state,
+)
 from abc import ABCMeta, abstractmethod
 
 
@@ -62,7 +63,7 @@ class FluidBoundary(metaclass=ABCMeta):
     .. automethod:: inviscid_divergence_flux
     .. automethod:: viscous_divergence_flux
     .. automethod:: cv_gradient_flux
-    .. automethod:: t_gradient_flux
+    .. automethod:: temperature_gradient_flux
     """
 
     @abstractmethod
@@ -92,6 +93,7 @@ class PrescribedFluidBoundary(FluidBoundary):
     .. automethod:: inviscid_divergence_flux
     .. automethod:: av_flux
     .. automethod:: cv_gradient_flux
+    .. automethod:: soln_gradient_flux
     """
 
     def __init__(self,
@@ -114,12 +116,13 @@ class PrescribedFluidBoundary(FluidBoundary):
                  # Returns the boundary value for grad(cv)
                  boundary_gradient_cv_func=None,
                  # Returns the boundary value for grad(temperature)
-                 boundary_gradient_temperature_func=None
+                 boundary_gradient_temperature_func=None,
+                 # For artificial viscosity - grad fluid soln on boundary
+                 boundary_grad_av_func=None,
                  ):
         """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_state_func = boundary_state_func
         self._inviscid_flux_func = inviscid_flux_func
-        # self._inviscid_num_flux_func = inviscid_numerical_flux_func
         self._temperature_grad_flux_func = temperature_gradient_flux_func
         self._bnd_temperature_func = boundary_temperature_func
         self._grad_num_flux_func = gradient_numerical_flux_func
@@ -127,6 +130,11 @@ class PrescribedFluidBoundary(FluidBoundary):
         self._viscous_flux_func = viscous_flux_func
         self._bnd_grad_cv_func = boundary_gradient_cv_func
         self._bnd_grad_temperature_func = boundary_gradient_temperature_func
+        self._av_div_num_flux_func = divergence_flux_central
+        self._bnd_grad_av_func = boundary_grad_av_func
+
+        if not self._bnd_grad_av_func:
+            self._bnd_grad_av_func = self._identical_grad_av
 
         if not self._inviscid_flux_func and not self._bnd_state_func:
             from warnings import warn
@@ -163,15 +171,6 @@ class PrescribedFluidBoundary(FluidBoundary):
             if kwargs["local"]:
                 return quantity
         return discr.project(btag, "all_faces", quantity)
-
-    def av_flux(self, discr, btag, diffusion, **kwargs):
-        """Get the diffusive fluxes for the AV operator API."""
-        diff_cv = make_conserved(discr.dim, q=diffusion)
-        diff_cv_minus = discr.project("vol", btag, diff_cv)
-        actx = diff_cv_minus.mass[0].array_context
-        nhat = thaw(discr.normal(btag), actx)
-        flux_weak = (0*diff_cv_minus@nhat)
-        return self._boundary_quantity(discr, btag, flux_weak, **kwargs)
 
     def _boundary_state_pair(self, discr, btag, gas_model, state_minus, **kwargs):
         return TracePair(btag,
@@ -303,6 +302,40 @@ class PrescribedFluidBoundary(FluidBoundary):
                                        numerical_flux_func=numerical_flux_func,
                                        **kwargs)
 
+    # {{{ Boundary interface for artificial viscosity
+
+    def _identical_grad_av(self, grad_av_minus, **kwargs):
+        return grad_av_minus
+
+    def soln_gradient_flux(self, discr, btag, soln, gas_model, **kwargs):
+        """Get the flux for solution gradient with AV API."""
+        fluid_state = make_fluid_state(make_conserved(discr.dim, q=soln),
+                                       gas_model=gas_model)
+        fluid_state_minus = project_fluid_state(discr=discr, btag=btag,
+                                                gas_model=gas_model,
+                                                state=fluid_state)
+        grad_flux = self.cv_gradient_flux(discr=discr, btag=btag,
+                                          gas_model=gas_model,
+                                          state_minus=fluid_state_minus,
+                                          **kwargs)
+        return grad_flux.join()
+
+    def av_flux(self, discr, btag, diffusion, **kwargs):
+        """Get the diffusive fluxes for the AV operator API."""
+        grad_av = make_conserved(discr.dim, q=diffusion)
+        grad_av_minus = discr.project("vol", btag, grad_av)
+        actx = grad_av_minus.mass[0].array_context
+        nhat = thaw(discr.normal(btag), actx)
+        grad_av_plus = self._bnd_grad_av_func(
+            discr=discr, btag=btag, grad_av_minus=grad_av_minus, **kwargs)
+        bnd_grad_pair = TracePair(btag, interior=grad_av_minus,
+                                  exterior=grad_av_plus)
+        num_flux = self._av_div_num_flux_func(bnd_grad_pair, nhat)
+        flux = self._boundary_quantity(discr, btag, num_flux, **kwargs)
+        return flux.join()
+
+    # }}}
+
 
 class DummyBoundary(PrescribedFluidBoundary):
     """Boundary type that assigns boundary-adjacent soln as the boundary solution."""
@@ -328,13 +361,14 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     boundary conditions described in detail in [Poinsot_1992]_.
 
     .. automethod:: adiabatic_slip_state
+    .. automethod:: adiabatic_slip_grad_av
     """
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
         PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.adiabatic_slip_state
-            # fluid_solution_gradient_func=self.exterior_grad_q
+            self, boundary_state_func=self.adiabatic_slip_state,
+            boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
 
     def adiabatic_slip_state(self, discr, btag, gas_model, state_minus, **kwargs):
@@ -370,34 +404,38 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         return make_fluid_state(cv=ext_cv, gas_model=gas_model,
                                 temperature_seed=t_seed)
 
-    def exterior_grad_q(self, nodes, nhat, grad_cv, **kwargs):
+    def adiabatic_slip_grad_av(self, discr, btag, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
-        dim, = grad_cv.mass.shape
+        dim, = grad_av_minus.mass.shape
+        actx = grad_av_minus.mass[0].array_context
+        nhat = thaw(discr.norm(btag), actx)
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
-        s_mom_normcomp = np.outer(nhat, np.dot(grad_cv.momentum, nhat))
-        s_mom_flux = grad_cv.momentum - 2*s_mom_normcomp
+        s_mom_normcomp = np.outer(nhat,
+                                  np.dot(grad_av_minus.momentum, nhat))
+        s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
 
         # flip components to set a neumann condition
-        return make_conserved(dim, mass=-grad_cv.mass, energy=-grad_cv.energy,
+        return make_conserved(dim, mass=-grad_av_minus.mass,
+                              energy=-grad_av_minus.energy,
                               momentum=-s_mom_flux,
-                              species_mass=-grad_cv.species_mass)
+                              species_mass=-grad_av_minus.species_mass)
 
 
 class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing a noslip moving boundary.
 
     .. automethod:: adiabatic_noslip_state
-    .. automethod:: adiabatic_noslip_grad_cv
+    .. automethod:: adiabatic_noslip_grad_av
     """
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_noslip_state,
-            # boundary_gradient_cv_func=self.adiabatic_noslip_grad_cv,
+            boundary_grad_av_func=self.adiabatic_noslip_grad_av,
         )
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
@@ -419,9 +457,9 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         tseed = state_minus.temperature if state_minus.is_mixture else None
         return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=tseed)
 
-    def adiabatic_noslip_grad_cv(self, grad_cv_minus, **kwargs):
+    def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
         """Get the exterior solution on the boundary."""
-        return(-grad_cv_minus)
+        return(-grad_av_minus)
 
 
 class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
