@@ -197,7 +197,7 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
 
     # Get smoothness indicator based on first component
     indicator_field = q[0] if isinstance(q, np.ndarray) else q
-    indicator = smoothness_indicator(discr, indicator_field, **kwargs)
+    alpha_ind = -alpha*smoothness_indicator(discr, indicator_field, **kwargs)
 
     # R=Grad(Q) volume part
     if isinstance(q, np.ndarray):
@@ -217,9 +217,8 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
 
     # Compute R
     r = discr.inverse_mass(
-        -alpha * indicator * (grad_q_vol - discr.face_mass(q_bnd_flux))
+        alpha_ind*(grad_q_vol - discr.face_mass(q_bnd_flux))
     )
-
     # RHS_av = div(R) volume part
     div_r_vol = discr.weak_div(r)
     # Total flux of grad(Q) across element boundaries
