@@ -194,16 +194,20 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # Capture the temperature for the interior faces for grad(T) calc
+    # Note this is *all interior faces*, including partition boundaries
+    # due to the use of *interior_state_pairs*.
     t_interior_pairs = [TracePair(state_pair.dd,
                                   interior=state_pair.int.temperature,
                                   exterior=state_pair.ext.temperature)
                         for state_pair in interior_state_pairs]
 
-    t_flux_bnd = (sum(_grad_flux_interior(tpair) for tpair in t_interior_pairs)
-                  + sum(boundaries[btag].temperature_gradient_flux(
-                      discr, btag=btag, gas_model=gas_model,
-                      state_minus=boundary_states[btag], time=time)
-                      for btag in boundaries))
+    def _t_grad_flux_bnd(btag, boundary_state):
+        return boundaries[btag].temperature_gradient_flux(
+            discr, btag=btag, gas_model=gas_model,
+            state_minus=boundary_state, time=time)
+
+    t_flux_bnd = _elbnd_flux(discr, _grad_flux_interior, _t_grad_flux_bnd,
+                             t_interior_pairs, boundary_states)
 
     # Fluxes in-hand, compute the gradient of temperature and mpi exchange it
     grad_t = grad_operator(discr, state.temperature, t_flux_bnd)
