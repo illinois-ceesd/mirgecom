@@ -1095,12 +1095,8 @@ class PlanarDiscontinuity:
 
         specmass = mass * y
         mom = mass * velocity
-        if self._nspecies:
-            internal_energy = \
-                eos.get_internal_energy(temperature,
-                                        species_mass_fractions=y)
-        else:
-            internal_energy = pressure/mass/(eos.gamma() - 1)
+        internal_energy = eos.get_internal_energy(temperature,
+                                                  species_mass_fractions=y)
 
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
