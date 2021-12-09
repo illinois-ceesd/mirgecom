@@ -273,7 +273,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             from mirgecom.viscous import get_viscous_cfl
             cfl = actx.to_numpy(nodal_max(discr, "vol",
-                            get_viscous_cfl(discr, dt, state)))
+                                          get_viscous_cfl(discr, dt=current_dt,
+                                                          state=state)))
+
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
@@ -428,10 +430,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
     from mirgecom.simutil import compare_fluid_solutions
-    component_errors = compare_fluid_solutions(discr, current_state, exact)
+    component_errors = compare_fluid_solutions(discr, current_cv, exact)
 
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv)
+    my_write_restart(step=current_step, t=current_t, state=current_cv)
     my_write_status(step=current_step, t=current_t, dt=final_dt,
                     state=current_state, component_errors=component_errors)
 
