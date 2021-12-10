@@ -33,7 +33,7 @@ import pyopencl.tools as cl_tools
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
@@ -297,14 +297,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        inviscid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return euler_operator(discr, state=inviscid_state, time=t,
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+        return euler_operator(discr, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_state = \
+    current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
@@ -313,11 +313,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_state = make_fluid_state(current_state, gas_model)
+    final_state = make_fluid_state(current_cv, gas_model)
     final_dv = final_state.dv
 
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv)
+    my_write_restart(step=current_step, t=current_t, state=current_cv)
 
     if logmgr:
         logmgr.close()
