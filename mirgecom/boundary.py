@@ -236,10 +236,14 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                         gas_model=gas_model,
                                                         state_minus=state_minus,
                                                         **kwargs)
+
+        from mirgecom.inviscid import inviscid_facial_flux
         return self._boundary_quantity(
             discr, btag,
-            numerical_flux_func(discr, gas_model=gas_model,
-                                state_pair=boundary_state_pair),
+            inviscid_facial_flux(discr, gas_model=gas_model,
+                                 state_pair=boundary_state_pair,
+                                 numerical_flux_func=numerical_flux_func,
+                                 local=True),
             **kwargs)
 
     def _viscous_flux_for_prescribed_state(self, discr, btag, gas_model, state_minus,
