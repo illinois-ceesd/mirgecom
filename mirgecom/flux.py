@@ -45,19 +45,6 @@ def num_flux_central(f_minus, f_plus, **kwargs):
     return (f_plus + f_minus)/2
 
 
-def lfr_flux_driver(discr, state_pair, physical_flux_func):
-    """State-to-flux driver for Rusanov numerical fluxes."""
-    from arraycontext import thaw
-    actx = state_pair.int.array_context
-    normal = thaw(discr.normal(state_pair.dd), actx)
-    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
-
-    return num_flux_lfr(f_minus=physical_flux_func(state_pair.int)@normal,
-                        f_plus=physical_flux_func(state_pair.ext)@normal,
-                        q_minus=state_pair.int.cv,
-                        q_plus=state_pair.ext.cv, lam=lam)
-
-
 def gradient_flux_central(u_tpair, normal):
     r"""Compute a central flux for the gradient operator.
 
