@@ -12,6 +12,7 @@ Diagnostic utilities
 --------------------
 
 .. autofunction:: compare_fluid_solutions
+.. autofunction:: componentwise_norms
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
 
@@ -304,6 +305,11 @@ def compare_fluid_solutions(discr, red_state, blue_state):
 
 
 def componentwise_norms(discr, fields, order=np.inf):
+    """Return the *order*-norm for each component of *fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
     if not isinstance(fields, DOFArray):
         return map_array_container(
             partial(componentwise_norms, discr, order=order), fields)
