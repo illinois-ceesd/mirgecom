@@ -38,11 +38,14 @@ THE SOFTWARE.
 """
 
 import numpy as np
+
 from meshmode.dof_array import thaw, DOFArray
-from mirgecom.fluid import compute_wavespeed
+
+from grudge.dof_desc import DOFDesc
 from grudge.trace_pair import TracePair
+
 from mirgecom.flux import divergence_flux_lfr
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import make_conserved, compute_wavespeed, ConservedVars
 
 
 def inviscid_flux(discr, eos, cv):
@@ -122,7 +125,8 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
-        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+        dd_allfaces = DOFDesc("all_faces", cv_tpair.dd.quadrature_tag)
+        return discr.project(cv_tpair.dd, dd_allfaces, flux_weak)
 
     return flux_weak
 
@@ -177,12 +181,12 @@ def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
         + np.dot(momentum_flux, u_avg)
     )
 
-    return make_conserved(
-        dim,
+    return ConservedVars(
         mass=mass_flux,
         energy=energy_flux,
         momentum=momentum_flux,
-        # TODO: species mass
+        # TODO: Figure out what the species mass flux needs to be
+        species_mass=cv_ll.species_mass
     )
 
 

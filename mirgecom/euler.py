@@ -168,12 +168,12 @@ def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=Non
         )
     )
 
-    def modified_conservedvars(proj_ev):
-        """Converts the projected entropy variables into
-        conserved variables on the quadrature grid.
-        """
-        vtilde = op.project(dcoll, "vol", dq, proj_ev)
-        return entropy_to_conservative_vars(eos, vtilde)
+    # def modified_conservedvars(proj_ev):
+    #     """Converts the projected entropy variables into
+    #     conserved variables on the quadrature grid.
+    #     """
+    #     vtilde = op.project(dcoll, "vol", dq, proj_ev)
+    #     return entropy_to_conservative_vars(eos, vtilde)
 
 
     def modified_conservedvars_tpair(tpair):
@@ -212,9 +212,11 @@ def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=Non
             boundaries[btag].inviscid_boundary_flux(
                 dcoll,
                 btag=btag,
-                cv=modified_conservedvars(proj_entropy_vars),
+                cv=cv,
+                # cv=modified_conservedvars(proj_entropy_vars),
                 eos=eos,
-                time=time
+                time=time,
+                quad_tag=qtag
             ) for btag in boundaries
         )
     )
