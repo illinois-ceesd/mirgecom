@@ -48,6 +48,13 @@ import logging
 import numpy as np
 import grudge.op as op
 
+from arraycontext import map_array_container, flatten
+
+from functools import partial
+
+from meshmode.dof_array import DOFArray
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -290,7 +297,18 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     """
     actx = red_state.array_context
     resid = red_state - blue_state
-    return [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
+    resid_errs = actx.to_numpy(
+        flatten(componentwise_norms(discr, resid, order=np.inf), actx))
+
+    return resid_errs.tolist()
+
+
+def componentwise_norms(discr, fields, order=np.inf):
+    if not isinstance(fields, DOFArray):
+        return map_array_container(
+            partial(componentwise_norms, discr, order=order), fields)
+
+    return discr.norm(fields, order)
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
