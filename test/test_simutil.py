@@ -29,6 +29,7 @@ import pytest  # noqa
 
 from arraycontext import (  # noqa
     thaw,
+    flatten,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
@@ -108,7 +109,7 @@ def test_basic_cfd_healthcheck(actx_factory):
 def test_analytic_comparison(actx_factory):
     """Quick test of state comparison routine."""
     from mirgecom.initializers import Vortex2D
-    from mirgecom.simutil import compare_fluid_solutions
+    from mirgecom.simutil import compare_fluid_solutions, componentwise_norms
 
     actx = actx_factory()
     nel_1d = 4
@@ -134,7 +135,9 @@ def test_analytic_comparison(actx_factory):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     resid = vortex_soln - cv
-    expected_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
+
+    expected_errors = actx.to_numpy(
+        flatten(componentwise_norms(discr, resid, order=np.inf), actx)).tolist()
 
     errors = compare_fluid_solutions(discr, cv, cv)
     assert max(errors) == 0
