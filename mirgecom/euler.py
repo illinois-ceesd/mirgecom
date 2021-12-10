@@ -55,7 +55,8 @@ THE SOFTWARE.
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
-    flux_chandrashekar
+    flux_chandrashekar,
+    entropy_stable_facial_flux
 )
 from mirgecom.fluid import (
     make_conserved,
@@ -144,36 +145,40 @@ def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=Non
     dq = DOFDesc("vol", qtag)
     df = DOFDesc("all_faces", qtag)
 
-    # Interpolate cv_state to vol quad grid: u_q = V_q u
-    cv_quad = op.project(dcoll, "vol", dq, cv)
+    # Convert to projected entropy variables: ev_q = V_h P_q v(cv_q)
+    proj_entropy_vars = volume_quadrature_project(
+        dcoll,
+        dq,
+        # Map to entropy variables: v(u_q)
+        conservative_to_entropy_vars(
+            eos,
+            # Interpolate state to vol quad grid: cv_q = V_q cv
+            op.project(dcoll, "vol", dq, cv)
+        )
+    )
 
-    # Convert to projected entropy variables: v_q = V_h P_q v(u_q)
-    entropy_vars = conservative_to_entropy_vars(eos, cv_quad)
-    proj_entropy_vars = volume_quadrature_project(dcoll, dq, entropy_vars)
+
+    def modified_conservedvars(proj_ev):
+        """Converts the projected entropy variables into
+        conserved variables on the quadrature (vol + surf) grid.
+        """
+        return entropy_to_conservative_vars(
+            eos,
+            # Interpolate projected entropy variables to
+            # volume + surface quadrature grids
+            volume_and_surface_quadrature_interpolation(
+                dcoll, dq, df, proj_ev
+            )
+        )
+
 
     # Compute volume derivatives using flux differencing
     inviscid_flux_vol = volume_flux_differencing(
         dcoll,
         partial(flux_chandrashekar, dcoll, eos),
         dq, df,
-        # Compute conserved state in terms of the (interpolated)
-        # projected entropy variables on the quad grid
-        entropy_to_conservative_vars(
-            eos,
-            # Interpolate projected entropy variables to
-            # volume + surface quadrature grids
-            volume_and_surface_quadrature_interpolation(
-                dcoll, dq, df, proj_entropy_vars
-            )
-        )
+        modified_conservedvars(proj_entropy_vars)
     )
-
-    # def modified_conservedvars(proj_ev):
-    #     """Converts the projected entropy variables into
-    #     conserved variables on the quadrature grid.
-    #     """
-    #     vtilde = op.project(dcoll, "vol", dq, proj_ev)
-    #     return entropy_to_conservative_vars(eos, vtilde)
 
 
     def modified_conservedvars_tpair(tpair):
@@ -194,7 +199,7 @@ def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=Non
 
     # Compute interface terms
     inviscid_flux_bnd = (
-        inviscid_facial_flux(
+        entropy_stable_facial_flux(
             dcoll,
             eos=eos,
             cv_tpair=modified_conservedvars_tpair(
@@ -202,7 +207,7 @@ def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=Non
             )
         )
         + sum(
-            inviscid_facial_flux(
+            entropy_stable_facial_flux(
                 dcoll,
                 eos=eos,
                 cv_tpair=modified_conservedvars_tpair(part_tpair)
@@ -213,7 +218,6 @@ def entropy_stable_euler_operator(dcoll, eos, boundaries, cv, time=0.0, qtag=Non
                 dcoll,
                 btag=btag,
                 cv=cv,
-                # cv=modified_conservedvars(proj_entropy_vars),
                 eos=eos,
                 time=time,
                 quad_tag=qtag

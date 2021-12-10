@@ -186,8 +186,35 @@ def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
         energy=energy_flux,
         momentum=momentum_flux,
         # TODO: Figure out what the species mass flux needs to be
-        species_mass=cv_ll.species_mass
+        species_mass=cv_ll.species_mass.reshape(0, dim)
     )
+
+
+def entropy_stable_facial_flux(discr, eos, cv_tpair, local=False):
+    """todo.
+    """
+    from arraycontext import outer
+
+    actx = cv_tpair.int.array_context
+
+    twopt_flux = flux_chandrashekar(discr, eos, cv_tpair.int, cv_tpair.ext)
+
+    # This calculates the local maximum eigenvalue of the flux Jacobian
+    # for a single component gas, i.e. the element-local max wavespeed |v| + c.
+    lam = actx.np.maximum(
+        compute_wavespeed(eos=eos, cv=cv_tpair.int),
+        compute_wavespeed(eos=eos, cv=cv_tpair.ext)
+    )
+
+    normal = thaw(actx, discr.normal(cv_tpair.dd))
+
+    numerical_flux = (twopt_flux - lam*outer(cv_tpair.diff, normal)/2) @ normal
+
+    if local is False:
+        dd_allfaces = DOFDesc("all_faces", cv_tpair.dd.quadrature_tag)
+        return discr.project(cv_tpair.dd, dd_allfaces, numerical_flux)
+
+    return numerical_flux
 
 
 def get_inviscid_timestep(discr, eos, cv):
