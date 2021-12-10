@@ -141,8 +141,6 @@ def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
 
     :args q_ll: an array container for the "left" state.
     :args q_rr: an array container for the "right" state.
-    :arg gamma: The isentropic expansion factor for a single-species gas
-        (default set to 1.4).
     """
     from mirgecom.fluid import conservative_to_primitive_vars
 
@@ -157,8 +155,8 @@ def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
             (y - x) / actx.np.log(y / x)
         )
 
-    rho_ll, u_ll, p_ll = conservative_to_primitive_vars(eos, cv_ll)
-    rho_rr, u_rr, p_rr = conservative_to_primitive_vars(eos, cv_rr)
+    rho_ll, u_ll, p_ll, rho_species_ll = conservative_to_primitive_vars(eos, cv_ll)
+    rho_rr, u_rr, p_rr, rho_species_rr = conservative_to_primitive_vars(eos, cv_rr)
 
     beta_ll = 0.5 * rho_ll / p_ll
     beta_rr = 0.5 * rho_rr / p_rr
@@ -167,6 +165,7 @@ def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
 
     rho_avg = 0.5 * (rho_ll + rho_rr)
     rho_mean = ln_mean(rho_ll,  rho_rr)
+    rho_species_mean = ln_mean(rho_species_ll, rho_species_rr)
     beta_mean = ln_mean(beta_ll, beta_rr)
     beta_avg = 0.5 * (beta_ll + beta_rr)
     u_avg = 0.5 * (u_ll + u_rr)
@@ -180,13 +179,13 @@ def flux_chandrashekar(discr, eos, cv_ll, cv_rr):
         mass_flux * 0.5 * (1/(eos.gamma() - 1)/beta_mean - velocity_square_avg)
         + np.dot(momentum_flux, u_avg)
     )
+    species_mass_flux = rho_species_mean.reshape(-1, 1) * u_avg
 
     return ConservedVars(
         mass=mass_flux,
         energy=energy_flux,
         momentum=momentum_flux,
-        # TODO: Figure out what the species mass flux needs to be
-        species_mass=cv_ll.species_mass.reshape(0, dim)
+        species_mass=species_mass_flux
     )
 
 

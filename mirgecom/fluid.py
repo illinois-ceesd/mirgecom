@@ -461,11 +461,11 @@ def conservative_to_primitive_vars(eos, cv: ConservedVars):
         (density, velocity, pressure).
     """
     rho = cv.mass
-    rho_u = cv.momentum
-    u = rho_u / rho
+    u = cv.velocity
     p = eos.pressure(cv)
+    rho_species = cv.species_mass
 
-    return (rho, u, p)
+    return (rho, u, p, rho_species)
 
 
 def primitive_to_conservative_vars(eos, prim_vars):
@@ -477,7 +477,7 @@ def primitive_to_conservative_vars(eos, prim_vars):
     :returns: A :class:`ConservedVars` containing the conserved
         variables.
     """
-    rho, u, p = prim_vars
+    rho, u, p, rho_species = prim_vars
     dim = len(u)
     inv_gamma_minus_one = 1/(eos.gamma() - 1)
     rhou = rho * u
@@ -487,8 +487,8 @@ def primitive_to_conservative_vars(eos, prim_vars):
         dim,
         mass=rho,
         energy=rhoe,
-        momentum=rhou
-        # TODO: species mass
+        momentum=rhou,
+        species_mass=rho_species
     )
 
 
@@ -503,19 +503,20 @@ def conservative_to_entropy_vars(eos, cv: ConservedVars):
     dim = cv.dim
     actx = cv.array_context
     gamma = eos.gamma()
-    rho, u, p = conservative_to_primitive_vars(eos, cv)
+    rho, u, p, rho_species = conservative_to_primitive_vars(eos, cv)
 
     u_square = sum(v ** 2 for v in u)
     # Move to EOS?
     s = actx.np.log(p) - gamma*actx.np.log(rho)
     rho_p = rho / p
+    rho_species_p = rho_species / p
 
     return make_conserved(
         dim,
         mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
         energy=-rho_p,
-        momentum=rho_p * u
-        # TODO: species mass
+        momentum=rho_p * u,
+        species_mass=rho_species_p
     )
 
 
@@ -538,6 +539,7 @@ def entropy_to_conservative_vars(eos, ev: ConservedVars):
     v1 = ev_state.mass
     v2t4 = ev_state.momentum
     v5 = ev_state.energy
+    v6 = ev_state.species_mass
 
     dim = len(v2t4)
 
@@ -551,6 +553,6 @@ def entropy_to_conservative_vars(eos, ev: ConservedVars):
         dim,
         mass=-rho_iota * v5,
         energy=rho_iota * (1 - v_square/(2*v5)),
-        momentum=rho_iota * v2t4
-        # TODO: species mass
+        momentum=rho_iota * v2t4,
+        species_mass=-rho_iota * v6
     )
