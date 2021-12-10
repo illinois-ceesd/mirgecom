@@ -32,7 +32,6 @@ from functools import partial
 from meshmode.array_context import (
     PyOpenCLArrayContext,
     SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
-    # PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -63,7 +62,7 @@ from arraycontext import thaw, freeze
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -120,7 +119,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
+    # To run to equilibrium, set t_final >= 40ms.
 
     # Time stepper selection
     if use_leap:
@@ -181,7 +180,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -334,7 +333,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # and instead of writing the *current* running temperature to the restart file,
     # we could write the *temperature_seed*.  That could fix up the non-deterministic
     # restart issue.
-    current_fluid_state = create_fluid_state(current_cv,
+    current_fluid_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
                                              temperature_seed=temperature_seed)
     current_dv = current_fluid_state.dv
     temperature_seed = current_dv.temperature

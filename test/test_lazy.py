@@ -31,7 +31,7 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from arraycontext.container.traversal import freeze, thaw
 

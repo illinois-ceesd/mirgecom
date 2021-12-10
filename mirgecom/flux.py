@@ -45,28 +45,18 @@ def num_flux_central(f_minus, f_plus, **kwargs):
     return (f_plus + f_minus)/2
 
 
-def lfr_flux_driver(normal, state_pair, physical_flux_func):
-    """State-to-flux driver for Rusanov numerical fluxes."""
-    actx = state_pair.int.array_context
-    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
-
-    return num_flux_lfr(f_minus=physical_flux_func(state_pair.int)@normal,
-                        f_plus=physical_flux_func(state_pair.ext)@normal,
-                        q_minus=state_pair.int.cv,
-                        q_plus=state_pair.ext.cv, lam=lam)
-
-def hll_flux_driver(normal, state_pair, physical_flux_func, wavespeed_int, wavespeed_ext):
+def hll_flux_driver(state_pair, physical_flux_func,
+                    s_minus, s_plus, normal):
     """State-to-flux driver for hll numerical fluxes."""
     actx = state_pair.int.array_context
     zeros = 0.*state_pair.int.mass_density
 
     f_minus = physical_flux_func(state_pair.int)@normal
     f_plus = physical_flux_func(state_pair.ext)@normal
-    q_minus=state_pair.int.cv
-    q_plus=state_pair.ext.cv
-    s_minus=wavespeed_int
-    s_plus=wavespeed_ext
-    f_star = (s_plus*f_minus - s_minus*f_plus + s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
+    q_minus = state_pair.int.cv
+    q_plus = state_pair.ext.cv
+    f_star = (s_plus*f_minus - s_minus*f_plus +
+              s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
 
     # choose the correct f contribution based on the wave speeds
     f_check_minus = actx.np.greater_equal(s_minus, zeros)*(0*f_minus + 1.0)

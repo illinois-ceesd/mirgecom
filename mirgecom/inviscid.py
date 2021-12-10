@@ -39,7 +39,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.flux import lfr_flux_driver, hll_flux_driver
 from mirgecom.fluid import make_conserved
 
 
@@ -83,7 +82,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_flux_rusanov(normal, gas_model, state_pair, **kwargs):
+def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov inviscid numerical flux is calculated as:
@@ -98,9 +97,15 @@ def inviscid_flux_rusanov(normal, gas_model, state_pair, **kwargs):
     the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
     *local* maximum fluid wavespeed.
     """
-    return lfr_flux_driver(normal, state_pair, inviscid_flux)
+    actx = state_pair.int.array_context
+    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
+    from mirgecom.flux import num_flux_lfr
+    return num_flux_lfr(f_minus=inviscid_flux(state_pair.int)@normal,
+                        f_plus=inviscid_flux(state_pair.ext)@normal,
+                        q_minus=state_pair.int.cv,
+                        q_plus=state_pair.ext.cv, lam=lam)
 
-def inviscid_flux_hll(normal, gas_model, state_pair, **kwargs):
+def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
     The Harten, Lax, and van Leer approximate riemann numerical flux is calculated as:
@@ -156,7 +161,8 @@ def inviscid_flux_hll(normal, gas_model, state_pair, **kwargs):
     print(f"{wavespeed_int=}")
     print(f"{wavespeed_ext=}")
 
-    return hll_flux_driver(normal, state_pair, inviscid_flux, wavespeed_int, wavespeed_ext)
+    from mirgecom.flux import hll_flux_driver
+    return hll_flux_driver(state_pair, inviscid_flux, wavespeed_int, wavespeed_ext, normal)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
@@ -193,9 +199,9 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
         the face normals as required by the divergence operator for which they
         are being computed.
     """
-    actx = state_pair.int.array_context
-    normal = thaw(discr.normal(state_pair.dd), actx)
-    num_flux = numerical_flux_func(normal, gas_model, state_pair)
+    from arraycontext import thaw
+    normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
+    num_flux = numerical_flux_func(state_pair, gas_model, normal)
     return num_flux if local else discr.project(state_pair.dd, "all_faces", num_flux)
 
 
