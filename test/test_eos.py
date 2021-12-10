@@ -37,7 +37,7 @@ from pytools.obj_array import make_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
