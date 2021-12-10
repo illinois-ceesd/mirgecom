@@ -63,7 +63,7 @@ from arraycontext import thaw, freeze
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -120,7 +120,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # This example runs only 3 steps by default (to keep CI ~short)
     # With the mixture defined below, equilibrium is achieved at ~40ms
-    # To run to equlibrium, set t_final >= 40ms.
+    # To run to equilibrium, set t_final >= 40ms.
 
     # Time stepper selection
     if use_leap:
@@ -181,7 +181,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
