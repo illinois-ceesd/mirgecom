@@ -39,7 +39,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.flux import lfr_flux_driver
+from mirgecom.flux import lfr_flux_driver, hll_flux_driver
 from mirgecom.fluid import make_conserved
 
 
@@ -83,7 +83,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_flux_rusanov(discr, gas_model, state_pair, **kwargs):
+def inviscid_flux_rusanov(normal, gas_model, state_pair, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov inviscid numerical flux is calculated as:
@@ -98,7 +98,65 @@ def inviscid_flux_rusanov(discr, gas_model, state_pair, **kwargs):
     the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
     *local* maximum fluid wavespeed.
     """
-    return lfr_flux_driver(discr, state_pair, inviscid_flux)
+    return lfr_flux_driver(normal, state_pair, inviscid_flux)
+
+def inviscid_flux_hll(normal, gas_model, state_pair, **kwargs):
+    r"""High-level interface for inviscid facial flux using HLL numerical flux.
+
+    The Harten, Lax, and van Leer approximate riemann numerical flux is calculated as:
+
+    .. math::
+
+        F^{*}_{\mathtt{HLL}} = \frac{1}{2}(\mathbf{F}(q^-)
+        +\mathbf{F}(q^+)) \cdot \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
+
+    where $q^-, q^+$ are the fluid solution state on the interior and the
+    exterior of the face on which the flux is to be calculated, $\mathbf{F}$ is
+    the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
+    *local* maximum fluid wavespeed.
+    """
+    #calculate left/right wavespeeds
+    actx = state_pair.int.array_context
+    ones = 0.*state_pair.int.mass_density + 1.
+
+    # note for me, treat the interior state as left and the exterior state as right
+    # pressure estimate
+    p_int = state_pair.int.pressure
+    p_ext = state_pair.ext.pressure
+    u_int = np.dot(state_pair.int.velocity, normal)
+    u_ext = np.dot(state_pair.ext.velocity, normal)
+    rho_int = state_pair.int.mass_density
+    rho_ext = state_pair.ext.mass_density
+    c_int = state_pair.int.speed_of_sound
+    c_ext = state_pair.ext.speed_of_sound
+
+    p_star = (0.5*(p_int + p_ext) + (1./8.)*(u_int - u_ext)*
+             (rho_int + rho_ext)*(c_int + c_ext))
+
+    gamma_int = gas_model.eos.gamma(state_pair.int.cv)
+    gamma_ext = gas_model.eos.gamma(state_pair.ext.cv)
+
+    q_int = 1 + (gamma_int + 1)/(2*gamma_int)*(p_star/p_int - 1)
+    q_ext = 1 + (gamma_ext + 1)/(2*gamma_ext)*(p_star/p_ext - 1)
+
+    pres_check_int = actx.np.greater(p_star, p_int)
+    pres_check_ext = actx.np.greater(p_star, p_ext)
+
+    q_int = actx.np.where(pres_check_int, q_int, ones)
+    q_ext = actx.np.where(pres_check_ext, q_ext, ones)
+
+    q_int = actx.np.sqrt(q_int)
+    q_ext = actx.np.sqrt(q_ext)
+
+    # left (internal), and right (external) wave speed estimates
+    # can alternatively use the roe estimated states to find the wave speeds
+    wavespeed_int = u_int - c_int*q_int
+    wavespeed_ext = u_ext + c_ext*q_ext
+
+    print(f"{wavespeed_int=}")
+    print(f"{wavespeed_ext=}")
+
+    return hll_flux_driver(normal, state_pair, inviscid_flux, wavespeed_int, wavespeed_ext)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
@@ -135,7 +193,9 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
         the face normals as required by the divergence operator for which they
         are being computed.
     """
-    num_flux = numerical_flux_func(discr, gas_model, state_pair)
+    actx = state_pair.int.array_context
+    normal = thaw(discr.normal(state_pair.dd), actx)
+    num_flux = numerical_flux_func(normal, gas_model, state_pair)
     return num_flux if local else discr.project(state_pair.dd, "all_faces", num_flux)
 
 
