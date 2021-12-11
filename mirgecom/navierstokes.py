@@ -132,7 +132,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     cv_interior_pairs = interior_trace_pairs(discr, state.cv)
 
     tseed_interior_pairs = \
-        interior_trace_pairs(discr, state.cv) if state.is_mixture else None
+        interior_trace_pairs(discr, state.temperature) if state.is_mixture else None
 
     from mirgecom.gas_model import make_fluid_state_trace_pairs
     interior_state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
