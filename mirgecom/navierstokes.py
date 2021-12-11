@@ -122,9 +122,10 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         Agglomerated object array of DOF arrays representing the RHS of the
         Navier-Stokes equations.
     """
+    if not state.is_viscous:
+        raise ValueError("Navier-Stokes operator expects viscous gas model.")
+
     dim = state.dim
-    cv = state.cv
-    dv = state.dv
     actx = state.array_context
 
     from mirgecom.gas_model import project_fluid_state
@@ -132,10 +133,11 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                        project_fluid_state(discr, btag, state, gas_model)
                        for btag in boundaries}
 
-    cv_int_pair = interior_trace_pair(discr, cv)
+    # CV
+    cv_int_pair = interior_trace_pair(discr, state.cv)
     cv_interior_pairs = [cv_int_pair]
-    q_comm_pairs = cross_rank_trace_pairs(discr, cv.join())
-    # num_partition_interfaces = len(q_comm_pairs)
+    q_comm_pairs = cross_rank_trace_pairs(discr, state.cv.join())
+
     cv_part_pairs = [
         TracePair(q_pair.dd,
                   interior=make_conserved(dim, q=q_pair.int),
@@ -145,8 +147,8 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
 
     tseed_interior_pairs = None
     if state.is_mixture:
-        tseed_int_pair = interior_trace_pair(discr, dv.temperature)
-        tseed_part_pairs = cross_rank_trace_pairs(discr, dv.temperature)
+        tseed_int_pair = interior_trace_pair(discr, state.temperature)
+        tseed_part_pairs = cross_rank_trace_pairs(discr, state.temperature)
         tseed_interior_pairs = [tseed_int_pair]
         tseed_interior_pairs.extend(tseed_part_pairs)
 
@@ -180,7 +182,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                               cv_interior_pairs, boundary_states)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
+    grad_cv = make_conserved(dim, q=grad_operator(discr, state.cv.join(),
                                                   cv_flux_bnd.join()))
 
     s_int_pair = interior_trace_pair(discr, grad_cv)
