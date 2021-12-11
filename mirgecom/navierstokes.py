@@ -72,7 +72,6 @@ from mirgecom.viscous import (
 from mirgecom.flux import (
     gradient_flux_central
 )
-from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
     div_operator, grad_operator
 )
@@ -140,10 +139,11 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                                                         tseed_interior_pairs)
 
     # Operator-independent boundary flux interface
-    def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                    interior_trace_pairs, boundary_states):
+    def _sum_element_boundary_fluxes(discr, compute_interior_flux,
+                                   compute_boundary_flux, interior_trace_pairs,
+                                   boundary_states):
         return (sum(compute_interior_flux(tpair)
-                      for tpair in interior_trace_pairs)
+                    for tpair in interior_trace_pairs)
                 + sum(compute_boundary_flux(btag, boundary_states[btag])
                       for btag in boundary_states))
 
@@ -161,10 +161,13 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             time=time, numerical_flux_func=gradient_numerical_flux_func
         )
 
-    cv_flux_bnd = _elbnd_flux(discr, _grad_flux_interior, _cv_grad_flux_bnd,
-                              cv_interior_pairs, boundary_states)
+    cv_flux_bnd = \
+        _sum_element_boundary_fluxes(discr, _grad_flux_interior, _cv_grad_flux_bnd,
+                                     cv_interior_pairs, boundary_states)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
+    # grad_cv = grad_operator(discr, state.cv, cv_flux_bnd)
+    from mirgecom.fluid import make_conserved
     grad_cv = make_conserved(state.dim, q=grad_operator(discr, state.cv.join(),
                                                         cv_flux_bnd.join()))
 
@@ -184,8 +187,9 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             discr, btag=btag, gas_model=gas_model,
             state_minus=boundary_state, time=time)
 
-    t_flux_bnd = _elbnd_flux(discr, _grad_flux_interior, _t_grad_flux_bnd,
-                             t_interior_pairs, boundary_states)
+    t_flux_bnd = \
+        _sum_element_boundary_fluxes(discr, _grad_flux_interior, _t_grad_flux_bnd,
+                                     t_interior_pairs, boundary_states)
 
     # Fluxes in-hand, compute the gradient of temperature and mpi exchange it
     grad_t = grad_operator(discr, state.temperature, t_flux_bnd)
@@ -203,7 +207,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             discr, btag=btag, gas_model=gas_model, state_minus=boundary_state,
             time=time, numerical_flux_func=inviscid_numerical_flux_func)
 
-    # glob the inputs together in a tuple to use the _elbnd_flux wrapper
+    # glob viscous flux inputs for use by the _sum_element_boundary_fluxes wrapper
     viscous_states_int_bnd = [
         (state_pair, grad_cv_pair, grad_t_pair)
         for state_pair, grad_cv_pair, grad_t_pair in
@@ -235,10 +239,10 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     )
 
     bnd_term = (
-        _elbnd_flux(
+        _sum_element_boundary_fluxes(
             discr, fvisc_divergence_flux_interior, fvisc_divergence_flux_boundary,
             viscous_states_int_bnd, boundary_states)
-        - _elbnd_flux(
+        - _sum_element_boundary_fluxes(
             discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
             interior_state_pairs, boundary_states)
     )
