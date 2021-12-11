@@ -209,7 +209,7 @@ class MixtureEOS(GasEOS):
         """Get the species specific enthalpies."""
 
     @abstractmethod
-    def get_production_rates(self, cv: ConservedVars):
+    def get_production_rates(self, cv: ConservedVars, temperature: DOFArray):
         """Get the production rate for each species."""
 
     @abstractmethod
