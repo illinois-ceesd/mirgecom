@@ -480,7 +480,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     compute_cfl = actx.compile(get_cfl)
 
     def get_production_rates(cv, temperature):
-        return make_obj_array([gas_model.eos.get_production_rates(cv, temperature)])
+        return make_obj_array([eos.get_production_rates(cv, temperature)])
 
     compute_production_rates = actx.compile(get_production_rates)
 
@@ -574,7 +574,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
                            gas_model=gas_model,
                            inviscid_numerical_flux_func=inviscid_flux_rusanov)
-            + gas_model.eos.get_species_source_terms(cv, fluid_state.temperature),
+            + eos.get_species_source_terms(cv, fluid_state.temperature),
             0*tseed])
 
     current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
