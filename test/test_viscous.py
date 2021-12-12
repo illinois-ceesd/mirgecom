@@ -83,7 +83,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     mom = mass * velocity
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    grad_cv = op.local_grad(discr, cv)
 
     if transport_model:
         tv_model = SimpleTransport(bulk_viscosity=1.0, viscosity=0.5)
@@ -203,8 +203,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
                                   cv_int_tpair, boundaries)
         from mirgecom.operators import grad_operator
-        grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
-                                                      cv_flux_bnd.join()))
+        grad_cv = grad_operator(discr, cv, cv_flux_bnd)
 
         xp_grad_cv = initializer.exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
         xp_grad_v = 1/cv.mass * xp_grad_cv.momentum
@@ -244,9 +243,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
 
         # verify diffusive mass flux is zilch (no scalar components)
-        from mirgecom.viscous import diffusive_flux
-        j = diffusive_flux(discr, eos, cv, grad_cv)
-        assert len(j) == 0
+        # Don't call for non-multi CV
+        if cv.has_multispecies:
+            from mirgecom.viscous import diffusive_flux
+            j = diffusive_flux(discr, eos, cv, grad_cv)
+            assert len(j) == 0
 
         xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
         xp_mom_flux = xp_tau
@@ -319,7 +320,7 @@ def test_species_diffusive_flux(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
 
-    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    grad_cv = op.local_grad(discr, cv)
 
     mu_b = 1.0
     mu = 0.5
@@ -392,7 +393,7 @@ def test_diffusive_heat_flux(actx_factory):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
-    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    grad_cv = op.local_grad(discr, cv)
 
     mu_b = 1.0
     mu = 0.5
