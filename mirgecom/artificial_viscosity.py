@@ -101,6 +101,7 @@ from pytools import memoize_in, keyed_memoize_in
 from meshmode.dof_array import thaw, DOFArray
 
 from mirgecom.flux import gradient_flux_central, divergence_flux_central
+from mirgecom.operators import div_operator, grad_operator
 
 from grudge.trace_pair import (
     TracePair,
@@ -164,7 +165,6 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
     def interp_to_vol_quad(u):
         return op.project(discr, "vol", dd_vol, u)
 
-
     def interp_to_surf_quad(utpair):
         local_dd = utpair.dd
         local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
@@ -173,7 +173,6 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
             interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
             exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
         )
-
 
     # Get smoothness indicator based on mass component
     kappa = kwargs.get("kappa", 1.0)
@@ -192,7 +191,6 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
             gradient_flux_central(utpair, normal)
         )
 
-
     cv_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
         + sum(
@@ -210,14 +208,9 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
         )
     )
 
-    # Compute R = grad(Q)
-    r = op.inverse_mass(
-        discr,
-        -alpha * indicator * (
-            op.weak_local_grad(discr, dd_vol, interp_to_vol_quad(cv))
-            - op.face_mass(discr, dd_faces, cv_bnd)
-        )
-    )
+    # Compute R = alpha*grad(Q)
+    r = -alpha * indicator \
+        * grad_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(cv), cv_bnd)
 
     def central_flux_div(utpair):
         dd = utpair.dd
@@ -230,7 +223,6 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
             # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
             divergence_flux_central(utpair, normal)
         )
-
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
@@ -251,11 +243,7 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
     )
 
     # Return the AV RHS term
-    return op.inverse_mass(
-        discr,
-        -op.weak_local_div(discr, dd_vol, interp_to_vol_quad(r))
-        + op.face_mass(discr, dd_faces, r_bnd)
-    )
+    return -div_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
 
 
 def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
