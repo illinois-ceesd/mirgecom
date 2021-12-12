@@ -248,7 +248,7 @@ class ConservedVars:
 
     def join(self):
         """Call :func:`join_conserved` on *self*."""
-        return join_conserved(
+        return _join_conserved(
             dim=self.dim,
             mass=self.mass,
             energy=self.energy,
@@ -296,7 +296,7 @@ class MultiGasConservedVars(ConservedVars):
 
     def join(self):
         """Call :func:`join_conserved` on *self*."""
-        return join_conserved(
+        return _join_conserved(
             dim=self.dim,
             mass=self.mass,
             energy=self.energy,
@@ -376,10 +376,10 @@ def _join_conserved(dim, mass, energy, momentum, species_mass=None):
     return result
 
 
-def join_conserved(dim, mass, energy, momentum, species_mass=None):
-    """Create agglomerated array from quantities for each conservation eqn."""
-    return _join_conserved(dim, mass=mass, energy=energy,
-                           momentum=momentum, species_mass=species_mass)
+# def join_conserved(dim, mass, energy, momentum, species_mass=None):
+#    """Create agglomerated array from quantities for each conservation eqn."""
+#    return _join_conserved(dim, mass=mass, energy=energy,
+#                           momentum=momentum, species_mass=species_mass)
 
 
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,

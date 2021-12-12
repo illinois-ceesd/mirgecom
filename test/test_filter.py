@@ -186,7 +186,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     # the filter unharmed.
     from mirgecom.initializers import Uniform
     initr = Uniform(dim=dim)
-    uniform_soln = initr(t=0, x_vec=nodes).join()
+    uniform_soln = initr(t=0, x_vec=nodes)
 
     from mirgecom.filter import filter_modally
     filtered_soln = filter_modally(discr, "vol", cutoff,
