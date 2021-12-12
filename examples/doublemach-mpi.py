@@ -50,7 +50,6 @@ from mirgecom.artificial_viscosity import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.fluid import make_conserved
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
