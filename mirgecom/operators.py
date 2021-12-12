@@ -31,26 +31,33 @@ THE SOFTWARE.
 import grudge.op as op
 
 
-def grad_operator(discr, u, flux):
+def grad_operator(discr, dd_vol, dd_face, volume_fluxes, boundary_fluxes):
     r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    u: meshmode.dof_array.DOFArray or numpy.ndarray
-        the DOF array (or object array of DOF arrays) to which the operator should be
-        applied
-    flux: numpy.ndarray
+    dd_vol: grudge.dof_desc.DOFDesc
+        the degree-of-freedom tag associated with the volume discrezation.
+        This determines the type of quadrature to be used.
+    dd_faces: grudge.dof_desc.DOFDesc
+        the degree-of-freedom tag associated with the surface discrezation.
+        This determines the type of quadrature to be used.
+    volume_fluxes: :class:`mirgecom.fluid.ConservedVars`
+        the vector-valued function for which divergence is to be calculated
+    boundary_fluxes: :class:`mirgecom.fluid.ConservedVars`
         the boundary fluxes across the faces of the element
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
-    from grudge.op import weak_local_grad
-    return -discr.inverse_mass(weak_local_grad(discr, u, nested=False)
-                               - discr.face_mass(flux))
+    return -op.inverse_mass(
+        discr,
+        op.weak_local_grad(discr, dd_vol, volume_fluxes)
+        - op.face_mass(discr, dd_face, boundary_fluxes)
+    )
 
 
 def div_operator(discr, dd_vol, dd_face, volume_fluxes, boundary_fluxes):
@@ -68,7 +75,7 @@ def div_operator(discr, dd_vol, dd_face, volume_fluxes, boundary_fluxes):
         This determines the type of quadrature to be used.
     volume_fluxes: :class:`mirgecom.fluid.ConservedVars`
         the vector-valued function for which divergence is to be calculated
-    interface_fluxes: :class:`mirgecom.fluid.ConservedVars`
+    boundary_fluxes: :class:`mirgecom.fluid.ConservedVars`
         the boundary fluxes across the faces of the element
     Returns
     -------
