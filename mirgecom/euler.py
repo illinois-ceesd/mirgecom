@@ -59,7 +59,6 @@ from mirgecom.inviscid import (
     inviscid_flux_rusanov
 )
 from grudge.trace_pair import interior_trace_pairs
-from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
 
@@ -138,8 +137,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
               for state_pair in interior_states)
     )
 
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
+    return -div_operator(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless

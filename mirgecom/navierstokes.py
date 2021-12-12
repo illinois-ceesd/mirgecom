@@ -166,10 +166,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                                      cv_interior_pairs, boundary_states)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    # grad_cv = grad_operator(discr, state.cv, cv_flux_bnd)
-    from mirgecom.fluid import make_conserved
-    grad_cv = make_conserved(state.dim, q=grad_operator(discr, state.cv.join(),
-                                                        cv_flux_bnd.join()))
+    grad_cv = grad_operator(discr, state.cv, cv_flux_bnd)
 
     grad_cv_interior_pairs = interior_trace_pairs(discr, grad_cv)
 
