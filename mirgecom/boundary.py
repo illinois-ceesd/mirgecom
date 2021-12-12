@@ -311,23 +311,22 @@ class PrescribedFluidBoundary(FluidBoundary):
     def _identical_grad_av(self, grad_av_minus, **kwargs):
         return grad_av_minus
 
-    def soln_gradient_flux(self, discr, btag, soln, gas_model, **kwargs):
+    def soln_gradient_flux(self, discr, btag, cv, gas_model, **kwargs):
         """Get the flux for solution gradient with AV API."""
-        fluid_state = make_fluid_state(make_conserved(discr.dim, q=soln),
-                                       gas_model=gas_model)
-        fluid_state_minus = project_fluid_state(discr=discr, btag=btag,
+        fluid_state = make_fluid_state(cv, gas_model=gas_model)
+        fluid_state_minus = project_fluid_state(discr=discr,
+                                                src="vol",
+                                                tgt=btag,
                                                 gas_model=gas_model,
                                                 state=fluid_state)
-        grad_flux = self.cv_gradient_flux(discr=discr, btag=btag,
-                                          gas_model=gas_model,
-                                          state_minus=fluid_state_minus,
-                                          **kwargs)
-        return grad_flux.join()
+        return self.cv_gradient_flux(discr=discr, btag=btag,
+                                     gas_model=gas_model,
+                                     state_minus=fluid_state_minus,
+                                     **kwargs)
 
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
-        grad_av = make_conserved(discr.dim, q=diffusion)
-        grad_av_minus = discr.project("vol", btag, grad_av)
+        grad_av_minus = discr.project("vol", btag, diffusion)
         actx = grad_av_minus.mass[0].array_context
         nhat = thaw(discr.normal(btag), actx)
         grad_av_plus = self._bnd_grad_av_func(
@@ -335,8 +334,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         bnd_grad_pair = TracePair(btag, interior=grad_av_minus,
                                   exterior=grad_av_plus)
         num_flux = self._av_div_num_flux_func(bnd_grad_pair, nhat)
-        flux = self._boundary_quantity(discr, btag, num_flux, **kwargs)
-        return flux.join()
+        return self._boundary_quantity(discr, btag, num_flux, **kwargs)
 
     # }}}
 
