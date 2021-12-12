@@ -131,7 +131,6 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
             exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
         )
 
-
     boundary_states = {
         btag: project_fluid_state(
             discr,
