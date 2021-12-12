@@ -77,11 +77,14 @@ def op_test_data(ctx_factory):
 def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
     from mirgecom.simutil import componentwise_norms
-    lhs = componentwise_norms(discr, x - y, np.inf)
+    from arraycontext import flatten
+    actx = x.array_context
+    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, np.inf), actx))
+
     rhs = np.maximum(
         rel_tol * np.maximum(
-            componentwise_norms(discr, x, np.inf),
-            componentwise_norms(discr, y, np.inf)),
+            actx.to_numpy(flatten(componentwise_norms(discr, x, np.inf), actx)),
+            actx.to_numpy(flatten(componentwise_norms(discr, y, np.inf), actx))),
         abs_tol)
 
     is_close = np.all(lhs <= rhs)
