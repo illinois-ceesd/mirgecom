@@ -244,7 +244,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
         # verify diffusive mass flux is zilch (no scalar components)
         # Don't call for non-multi CV
-        if cv.has_multispecies:
+        if cv.nspecies > 0:
             from mirgecom.viscous import diffusive_flux
             j = diffusive_flux(discr, eos, cv, grad_cv)
             assert len(j) == 0

@@ -13,6 +13,7 @@ Diagnostic utilities
 
 .. autofunction:: compare_fluid_solutions
 .. autofunction:: componentwise_norms
+.. autofunction:: componentwise_max_error
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
 
@@ -313,8 +314,21 @@ def componentwise_norms(discr, fields, order=np.inf):
     if not isinstance(fields, DOFArray):
         return map_array_container(
             partial(componentwise_norms, discr, order=order), fields)
+    if len(fields) > 0:
+        return discr.norm(fields, order)
+    else:
+        return 0
 
-    return discr.norm(fields, order)
+
+def max_component_norm(discr, fields, order=np.inf):
+    """Return the *order*-norm for each component of *fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
+    actx = fields.array_context
+    return max(actx.to_numpy(flatten(
+        componentwise_norms(discr, fields, order), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
