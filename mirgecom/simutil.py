@@ -13,7 +13,7 @@ Diagnostic utilities
 
 .. autofunction:: compare_fluid_solutions
 .. autofunction:: componentwise_norms
-.. autofunction:: componentwise_max_error
+.. autofunction:: max_component_norm
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
 
@@ -321,7 +321,7 @@ def componentwise_norms(discr, fields, order=np.inf):
 
 
 def max_component_norm(discr, fields, order=np.inf):
-    """Return the *order*-norm for each component of *fields*.
+    """Return the max *order*-norm over the components of *fields*.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
