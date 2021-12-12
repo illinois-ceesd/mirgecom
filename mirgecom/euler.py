@@ -52,22 +52,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
 )
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
 
+from grudge.trace_pair import (
+    TracePair,
+    local_interior_trace_pair,
+    cross_rank_trace_pairs
+)
+from grudge.dof_desc import DOFDesc, as_dofdesc
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0,
-                   dv=None):
+import grudge.op as op
+
+
+def euler_operator(
+        discr, eos, boundaries, cv, time=0.0, dv=None, quadrature_tag=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -95,29 +98,76 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0,
         Implementing the pressure and temperature functions for
         returning pressure and temperature as a function of the state q.
 
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
     Returns
     -------
-    numpy.ndarray
-        Agglomerated object array of DOF arrays representing the RHS of the Euler
+    :class:`mirgecom.fluid.ConservedVars`
+        Fluid conserved state object containing the RHS evaluation of the Euler
         flow equations.
     """
-    if dv is None:
-        dv = eos.dependent_vars(cv)
+    dd_vol = DOFDesc("vol", quadrature_tag)
+    dd_faces = DOFDesc("all_faces", quadrature_tag)
 
-    inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv)
+    def interp_to_vol_quad(u):
+        return op.project(discr, "vol", dd_vol, u)
+
+
+    def interp_to_surf_quad(utpair):
+        local_dd = utpair.dd
+        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        return TracePair(
+            local_dd_quad,
+            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
+            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
+        )
+
+    # Interpolate conserved state to the volume quadrature grid
+    cv_quad = interp_to_vol_quad(cv)
+
+    if dv is None:
+        dv = eos.dependent_vars(cv_quad)
+
+    # Volume flux calculation
+    inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv_quad)
+
+    # Surface flux calculations
     inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
-                                                        eos=eos, time=time)
-              for btag in boundaries)
+        # Rank-local contributions
+        inviscid_facial_flux(
+            discr,
+            eos=eos,
+            cv_tpair=interp_to_surf_quad(local_interior_trace_pair(discr, cv))
+        )
+        # Cross-rank (across parallel partitions) contributions
+        + sum(
+            inviscid_facial_flux(
+                discr,
+                eos=eos,
+                cv_tpair=interp_to_surf_quad(tpair)
+            ) for tpair in cross_rank_trace_pairs(discr, cv)
+        )
+        # Contributions from boundary conditions
+        + sum(
+            boundaries[btag].inviscid_divergence_flux(
+                discr,
+                btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
+                cv=cv,
+                eos=eos,
+                time=time
+            ) for btag in boundaries
+        )
     )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
+    return -div_operator(
+        discr,
+        dd_vol,
+        dd_faces,
+        inviscid_flux_vol,
+        inviscid_flux_bnd
+    )
 
 
 def inviscid_operator(discr, eos, boundaries, q, t=0.0):

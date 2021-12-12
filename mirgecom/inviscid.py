@@ -123,7 +123,8 @@ def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
     flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
-        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+        return discr.project(
+            cv_tpair.dd, cv_tpair.dd.with_dtag("all_faces"), flux_weak)
 
     return flux_weak
 

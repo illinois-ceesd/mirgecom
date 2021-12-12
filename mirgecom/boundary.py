@@ -48,9 +48,12 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
 from mirgecom.fluid import make_conserved
-from grudge.trace_pair import TracePair
 from mirgecom.inviscid import inviscid_facial_flux
+
+from grudge.trace_pair import TracePair
+from grudge.dof_desc import as_dofdesc
 
 from abc import ABCMeta, abstractmethod
 
@@ -113,6 +116,14 @@ class FluidBC(FluidBoundary):
         """Get the interior and exterior solution (*u*) on the boundary."""
         raise NotImplementedError()
 
+    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
+        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        btag = as_dofdesc(btag)
+        if "local" in kwargs:
+            if kwargs["local"]:
+                return quantity
+        return discr.project(btag, btag.with_dtag("all_faces"), quantity)
+
 
 class PrescribedInviscidBoundary(FluidBC):
     r"""Abstract interface to a prescribed fluid boundary treatment.
@@ -149,13 +160,6 @@ class PrescribedInviscidBoundary(FluidBC):
             self._fluid_soln_grad_flux_func = divergence_flux_central
         self._fluid_temperature_func = fluid_temperature_func
 
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
-
     def boundary_pair(self, discr, btag, cv, **kwargs):
         """Get the interior and exterior solution on the boundary."""
         if self._bnd_pair_func:
@@ -180,7 +184,8 @@ class PrescribedInviscidBoundary(FluidBC):
             int_soln = discr.project("vol", btag, cv)
             return self._inviscid_bnd_flux_func(nodes, normal=nhat,
                                                 cv=int_soln, eos=eos, **kwargs)
-        bnd_tpair = self.boundary_pair(discr, btag=btag, cv=cv, eos=eos, **kwargs)
+        bnd_tpair = self.boundary_pair(
+            discr, btag=btag, cv=cv, eos=eos, **kwargs)
         return self._inviscid_facial_flux_func(discr, eos=eos, cv_tpair=bnd_tpair)
 
     def cv_gradient_flux(self, discr, btag, cv, **kwargs):
@@ -500,13 +505,6 @@ class PrescribedViscousBoundary(FluidBC):
         self._grad_t_func = grad_t_func
         self._inviscid_flux_func = inviscid_flux_func
         self._viscous_flux_func = viscous_flux_func
-
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, "all_faces", quantity)
 
     def cv_gradient_flux(self, discr, btag, eos, cv, **kwargs):
         """Get the flux through boundary *btag* for each scalar in *q*."""
