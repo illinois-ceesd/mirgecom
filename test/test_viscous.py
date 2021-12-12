@@ -244,9 +244,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
 
         # verify diffusive mass flux is zilch (no scalar components)
-        from mirgecom.viscous import diffusive_flux
-        j = diffusive_flux(discr, eos, cv, grad_cv)
-        assert len(j) == 0
+        # Don't call for non-multi CV
+        if cv.has_multispecies:
+            from mirgecom.viscous import diffusive_flux
+            j = diffusive_flux(discr, eos, cv, grad_cv)
+            assert len(j) == 0
 
         xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
         xp_mom_flux = xp_tau

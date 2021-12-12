@@ -126,7 +126,6 @@ def diffusive_flux(discr, eos, cv, grad_cv):
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
     transport = eos.transport_model()
-
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
     d = transport.species_diffusivity(eos, cv)
     return -cv.mass*d.reshape(-1, 1)*grad_y
@@ -253,8 +252,12 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     dim = cv.dim
     viscous_mass_flux = 0 * cv.momentum
 
-    j = diffusive_flux(discr, eos, cv, grad_cv)
-    heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
+    heat_flux_diffusive = 0
+    species_mass_flux = None
+    if cv.has_multispecies:
+        j = diffusive_flux(discr, eos, cv, grad_cv)
+        heat_flux_diffusive = diffusive_heat_flux(discr, eos, cv, j)
+        species_mass_flux = -j
 
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
     viscous_energy_flux = (
@@ -264,9 +267,9 @@ def viscous_flux(discr, eos, cv, grad_cv, grad_t):
     )
 
     return make_conserved(dim,
-            mass=viscous_mass_flux,
-            energy=viscous_energy_flux,
-            momentum=tau, species_mass=-j)
+                          mass=viscous_mass_flux,
+                          energy=viscous_energy_flux,
+                          momentum=tau, species_mass=species_mass_flux)
 
 
 def viscous_facial_flux(discr, eos, cv_tpair, grad_cv_tpair, grad_t_tpair,

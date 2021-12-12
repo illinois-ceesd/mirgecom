@@ -219,8 +219,10 @@ class AdiabaticSlipBoundary(PrescribedInviscidBoundary):
         mom_normcomp = np.dot(int_cv.momentum, nhat)  # wall-normal component
         wnorm_mom = nhat * mom_normcomp  # wall-normal mom vec
         ext_mom = int_cv.momentum - 2.0 * wnorm_mom  # prescribed ext momentum
+        species_mass = int_cv.species_mass if int_cv.has_multispecies else None
 
         # Form the external boundary solution with the new momentum
         ext_cv = make_conserved(dim=dim, mass=int_cv.mass, energy=int_cv.energy,
-                                momentum=ext_mom, species_mass=int_cv.species_mass)
+                                momentum=ext_mom, species_mass=species_mass)
+
         return TracePair(btag, interior=int_cv, exterior=ext_cv)

@@ -316,7 +316,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         assert inf_norm(interior_face_flux.mass) < tolerance
         assert inf_norm(interior_face_flux.energy) < tolerance
-        assert inf_norm(interior_face_flux.species_mass) < tolerance
+        if cv.has_multispecies:
+            assert inf_norm(interior_face_flux.species_mass) < tolerance
 
         # The expected pressure is 1.0 (by design). And the flux diagonal is
         # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
@@ -354,7 +355,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
 
         assert inf_norm(boundary_flux.mass) < tolerance
         assert inf_norm(boundary_flux.energy) < tolerance
-        assert inf_norm(boundary_flux.species_mass) < tolerance
+        if cv.has_multispecies:
+            assert inf_norm(boundary_flux.species_mass) < tolerance
 
         nhat = thaw(actx, discr.normal(BTAG_ALL))
         mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)

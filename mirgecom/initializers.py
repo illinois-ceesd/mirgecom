@@ -709,11 +709,10 @@ class Uniform:
         else:
             self._velocity = np.zeros(shape=(dim,))
 
+        self._nspecies = nspecies
         if mass_fracs is not None:
-            self._nspecies = len(mass_fracs)
             self._mass_fracs = mass_fracs
         else:
-            self._nspecies = nspecies
             self._mass_fracs = np.zeros(shape=(nspecies,))
 
         if self._velocity.shape != (dim,):
@@ -742,7 +741,7 @@ class Uniform:
         mass = 0.0 * x_vec[0] + self._rho
         mom = self._velocity * mass
         energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        species_mass = self._mass_fracs * mass
+        species_mass = self._mass_fracs * mass if self._nspecies > 0 else None
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
@@ -765,7 +764,9 @@ class Uniform:
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
         momrhs = make_obj_array([0 * mass for i in range(self._dim)])
-        yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
+        yrhs = None
+        if self._nspecies > 0:
+            yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
         return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=yrhs)
@@ -968,6 +969,9 @@ class PlanarPoiseuille:
         dvy = make_obj_array([0*x, 0*x])
         dv = np.stack((dvx, dvy))
         dmom = mass*dv
-        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
+        species_mass = None
+        if cv_exact.has_multispecies:
+            species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
+
         return make_conserved(2, mass=dmass, energy=denergy,
                               momentum=dmom, species_mass=species_mass)

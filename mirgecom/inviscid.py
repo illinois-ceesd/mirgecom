@@ -61,14 +61,14 @@ def inviscid_flux(discr, eos, cv):
     """
     dim = cv.dim
     p = eos.pressure(cv)
-
     mom = cv.momentum
+    species_mass = \
+        cv.species_mass.reshape(-1, 1)*mom/cv.mass if cv.has_multispecies else None
 
     return make_conserved(
         dim, mass=mom, energy=mom * (cv.energy + p) / cv.mass,
         momentum=np.outer(mom, mom) / cv.mass + np.eye(dim)*p,
-        species_mass=(  # reshaped: (nspecies, dim)
-            (mom / cv.mass) * cv.species_mass.reshape(-1, 1)))
+        species_mass=species_mass)
 
 
 def inviscid_facial_flux(discr, eos, cv_tpair, local=False):
