@@ -29,17 +29,24 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pytest
+
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
+
 from mirgecom.artificial_viscosity import (
     av_operator,
     smoothness_indicator
 )
+from mirgecom.fluid import make_conserved
+
 from grudge.eager import EagerDGDiscretization
+
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+
+from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
 
@@ -202,18 +209,39 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     # Uniform field return 0 rhs
     soln = zeros + 1.0
-    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
+    cv = make_conserved(
+        dim,
+        mass=soln,
+        energy=soln,
+        momentum=make_obj_array([soln for _ in range(dim)]),
+        species_mass=make_obj_array([soln for _ in range(dim)])
+    )
+    rhs = av_operator(discr, boundaries=boundaries, cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Linear field return 0 rhs
     soln = nodes[0]
-    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
+    cv = make_conserved(
+        dim,
+        mass=soln,
+        energy=soln,
+        momentum=make_obj_array([soln for _ in range(dim)]),
+        species_mass=make_obj_array([soln for _ in range(dim)])
+    )
+    rhs = av_operator(discr, boundaries=boundaries, cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
     soln = np.dot(nodes, nodes)
-    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
+    cv = make_conserved(
+        dim,
+        mass=soln,
+        energy=soln,
+        momentum=make_obj_array([soln for _ in range(dim)]),
+        species_mass=make_obj_array([soln for _ in range(dim)])
+    )
+    rhs = av_operator(discr, boundaries=boundaries, cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
