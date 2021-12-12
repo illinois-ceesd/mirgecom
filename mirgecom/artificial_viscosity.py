@@ -175,11 +175,11 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
             exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
         )
 
-    # Get smoothness indicator based on mass component
-    indicator = smoothness_indicator(discr, cv.mass, **kwargs)
 
-    # Interpolate conserved state to the volume quadrature grid
-    cv_quad = interp_to_vol_quad(cv)
+    # Get smoothness indicator based on mass component
+    kappa = kwargs.get("kappa", 1.0)
+    s0 = kwargs.get("s0", -6.0)
+    indicator = smoothness_indicator(discr, cv.mass, kappa=kappa, s0=s0)
 
     def central_flux(utpair):
         dd = utpair.dd
@@ -207,7 +207,7 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
             boundaries[btag].soln_gradient_flux(
                 discr,
                 btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-                soln=cv,
+                cv=cv,
                 **boundary_kwargs
             ) for btag in boundaries
         )
@@ -217,7 +217,7 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
     r = op.inverse_mass(
         discr,
         -alpha * indicator * (
-            op.weak_local_grad(discr, dd_vol, cv_quad)
+            op.weak_local_grad(discr, dd_vol, interp_to_vol_quad(cv))
             - op.face_mass(discr, dd_faces, cv_bnd)
         )
     )
