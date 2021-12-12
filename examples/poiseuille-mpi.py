@@ -90,6 +90,7 @@ def _get_box_mesh(dim, a, b, n, t=None):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_overintegration=False,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
@@ -165,11 +166,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
     order = 2
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=local_mesh.dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
@@ -417,7 +433,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
-                           state=fluid_state, time=t)
+                           state=fluid_state, time=t,
+                           quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -457,6 +474,8 @@ if __name__ == "__main__":
     import argparse
     casename = "poiseuille"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -484,6 +503,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+         use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
