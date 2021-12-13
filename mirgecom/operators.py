@@ -53,8 +53,7 @@ def grad_operator(discr, dd_vol, dd_faces, volume_fluxes, boundary_fluxes):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
-    return -op.inverse_mass(
-        discr,
+    return -discr.inverse_mass(
         op.weak_local_grad(discr, dd_vol, volume_fluxes)
         - op.face_mass(discr, dd_faces, boundary_fluxes)
     )
@@ -82,8 +81,7 @@ def div_operator(discr, dd_vol, dd_faces, volume_fluxes, boundary_fluxes):
     :class:`mirgecom.fluid.ConservedVars`
         the dg divergence operator applied to vector-valued function *u*.
     """
-    return -op.inverse_mass(
-        discr,
+    return -discr.inverse_mass(
         op.weak_local_div(discr, dd_vol, volume_fluxes)
         - op.face_mass(discr, dd_faces, boundary_fluxes)
     )

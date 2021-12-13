@@ -133,14 +133,11 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
     boundary_states = {
         btag: project_fluid_state(
-            discr,
-            dd_base,
+            discr, dd_base,
             # Make sure we get the state on the quadrature grid
             # restricted to the tag *btag*
             as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            state,
-            gas_model
-        ) for btag in boundaries
+            state, gas_model) for btag in boundaries
     }
 
     cv_interior_pairs = [
@@ -192,13 +189,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
               for state_pair in interior_states)
     )
 
-    return -div_operator(
-        discr,
-        dd_vol,
-        dd_faces,
-        inviscid_flux_vol,
-        inviscid_flux_bnd
-    )
+    return -div_operator(discr, dd_vol, dd_faces,
+                         inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless

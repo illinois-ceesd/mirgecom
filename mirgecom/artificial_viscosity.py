@@ -182,30 +182,20 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
     def central_flux(utpair):
         dd = utpair.dd
         normal = thaw(actx, discr.normal(dd))
-        return op.project(
-            discr,
-            dd,
-            dd.with_dtag("all_faces"),
-            # This uses a central scalar flux along nhat:
-            # flux = 1/2 * (Q- + Q+) * nhat
-            gradient_flux_central(utpair, normal)
-        )
+        return op.project(discr, dd, dd.with_dtag("all_faces"),
+                          # This uses a central scalar flux along nhat:
+                          # flux = 1/2 * (Q- + Q+) * nhat
+                          gradient_flux_central(utpair, normal))
 
     cv_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(
-            central_flux(interp_to_surf_quad(tpair))
-            for tpair in interior_trace_pairs(discr, cv)
-        )
+        + sum(central_flux(interp_to_surf_quad(tpair))
+              for tpair in interior_trace_pairs(discr, cv))
         # Contributions from boundary fluxes
-        + sum(
-            boundaries[btag].soln_gradient_flux(
-                discr,
-                btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-                cv=cv,
-                **boundary_kwargs
-            ) for btag in boundaries
-        )
+        + sum(boundaries[btag].soln_gradient_flux(
+            discr,
+            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            cv=cv, **boundary_kwargs) for btag in boundaries)
     )
 
     # Compute R = alpha*grad(Q)
@@ -215,31 +205,21 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
     def central_flux_div(utpair):
         dd = utpair.dd
         normal = thaw(actx, discr.normal(dd))
-        return op.project(
-            discr,
-            dd,
-            dd.with_dtag("all_faces"),
-            # This uses a central vector flux along nhat:
-            # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-            divergence_flux_central(utpair, normal)
-        )
+        return op.project(discr, dd, dd.with_dtag("all_faces"),
+                          # This uses a central vector flux along nhat:
+                          # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
+                          divergence_flux_central(utpair, normal))
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(
-            central_flux_div(interp_to_surf_quad(tpair))
-            for tpair in interior_trace_pairs(discr, r)
-        )
+        + sum(central_flux_div(interp_to_surf_quad(tpair))
+              for tpair in interior_trace_pairs(discr, r))
         # Contributions from boundary fluxes
-        + sum(
-            boundaries[btag].av_flux(
-                discr,
-                btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-                diffusion=r,
-                **boundary_kwargs
-            ) for btag in boundaries
-        )
+        + sum(boundaries[btag].av_flux(
+            discr,
+            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            diffusion=r, **boundary_kwargs) for btag in boundaries)
     )
 
     # Return the AV RHS term
