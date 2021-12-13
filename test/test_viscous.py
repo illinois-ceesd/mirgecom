@@ -87,7 +87,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     mom = mass * velocity
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    grad_cv = op.local_grad(discr, cv)
 
     if transport_model:
         tv_model = SimpleTransport(bulk_viscosity=1.0, viscosity=0.5)
@@ -255,9 +255,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
 
         # verify diffusive mass flux is zilch (no scalar components)
-        from mirgecom.viscous import diffusive_flux
-        j = diffusive_flux(fluid_state, grad_cv)
-        assert len(j) == 0
+        # Don't call for non-multi CV
+        if cv.nspecies > 0:
+            from mirgecom.viscous import diffusive_flux
+            j = diffusive_flux(discr, eos, cv, grad_cv)
+            assert len(j) == 0
 
         xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
         xp_mom_flux = xp_tau
@@ -330,7 +332,7 @@ def test_species_diffusive_flux(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
 
-    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    grad_cv = op.local_grad(discr, cv)
 
     mu_b = 1.0
     mu = 0.5
@@ -405,7 +407,7 @@ def test_diffusive_heat_flux(actx_factory):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
-    grad_cv = make_conserved(dim, q=op.local_grad(discr, cv.join()))
+    grad_cv = op.local_grad(discr, cv)
 
     mu_b = 1.0
     mu = 0.5

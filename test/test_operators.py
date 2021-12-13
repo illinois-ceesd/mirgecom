@@ -217,13 +217,12 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
 
-        def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+        from mirgecom.simutil import componentwise_norms
+        from arraycontext import flatten
 
-        if isinstance(test_data, ConservedVars):
-            err_scale = inf_norm(exact_grad.join())
-        else:
-            err_scale = inf_norm(exact_grad)
+        err_scale = max(flatten(componentwise_norms(discr, exact_grad, np.inf),
+                                actx))
+
         if err_scale <= 1e-16:
             err_scale = 1
 
@@ -241,13 +240,14 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         dd_faces = as_dofdesc("all_faces")
         test_grad = grad_operator(discr, dd_vol, dd_faces,
                                   test_data, test_data_flux_bnd)
-        if isinstance(test_grad, ConservedVars):
-            grad_err = inf_norm((test_grad - exact_grad).join())/err_scale
-        else:
-            grad_err = inf_norm(test_grad - exact_grad)/err_scale
+        
 
         print(f"{test_grad=}")
-        eoc.add_data_point(actx.to_numpy(h_max), grad_err)
+        grad_err = \
+            max(flatten(componentwise_norms(discr, test_grad - exact_grad, np.inf),
+                        actx)) / err_scale
+
+        eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 
     assert (
         eoc.order_estimate() >= order - 0.5
