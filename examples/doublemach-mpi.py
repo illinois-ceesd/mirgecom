@@ -45,7 +45,7 @@ from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
-    av_operator,
+    av_laplacian_operator,
     smoothness_indicator
 )
 from mirgecom.io import make_init_message
@@ -418,11 +418,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                            boundaries=boundaries,
                            gas_model=gas_model,
                            quadrature_tag=quadrature_tag)
-            + av_operator(discr, cv=fluid_state.cv,
-                          boundaries=boundaries,
-                          boundary_kwargs={"time": t, "gas_model": gas_model},
-                          alpha=alpha, s0=s0, kappa=kappa,
-                          quadrature_tag=quadrature_tag)
+            + av_laplacian_operator(discr, cv=fluid_state.cv,
+                                    boundaries=boundaries,
+                                    boundary_kwargs={"time": t,
+                                                     "gas_model": gas_model},
+                                    alpha=alpha, s0=s0, kappa=kappa,
+                                    quadrature_tag=quadrature_tag)
         )
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,

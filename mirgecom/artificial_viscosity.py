@@ -67,7 +67,7 @@ Smoothness Indicator Evaluation
 AV RHS Evaluation
 ^^^^^^^^^^^^^^^^^
 
-.. autofunction:: av_operator
+.. autofunction:: av_laplacian_operator
 """
 
 __copyright__ = """
@@ -95,6 +95,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from mirgecom.fluid import make_conserved
 
 from pytools import memoize_in, keyed_memoize_in
 
@@ -117,7 +118,8 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 
-def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
+def av_laplacian_operator(discr, boundaries, cv, alpha,
+                          boundary_kwargs=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -227,12 +229,23 @@ def av_operator(discr, boundaries, cv, alpha, boundary_kwargs=None, **kwargs):
 
 
 def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
-    """Interface :function:`av_operator` with backwards-compatible API."""
+    """Interface :function:`av_laplacian_operator` with backwards-compatible API."""
     from warnings import warn
-    warn("Do not call artificial_viscosity; it is now called av_operator. This"
-         "function will disappear in 2021", DeprecationWarning, stacklevel=2)
-    return av_operator(discr=discr, boundaries=boundaries,
-        boundary_kwargs={"t": t, "eos": eos}, q=q, alpha=alpha, **kwargs)
+    warn("Do not call artificial_viscosity; it is now called av_laplacian_operator."
+         " This function will disappear in 2022", DeprecationWarning, stacklevel=2)
+    return av_laplacian_operator(
+        discr=discr, cv=make_conserved(discr.dim, q=q), alpha=alpha,
+        boundaries=boundaries, boundary_kwargs={"t": t, "eos": eos}, **kwargs)
+
+
+def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
+    """Interface :function:`av_laplacian_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call av_operator; it is now called av_laplacian_operator. This"
+         "function will disappear in 2022", DeprecationWarning, stacklevel=2)
+    return av_laplacian_operator(
+        discr=discr, cv=make_conserved(discr.dim, q=q), alpha=alpha,
+        boundaries=boundaries, boundary_kwargs=boundary_kwargs, **kwargs)
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):

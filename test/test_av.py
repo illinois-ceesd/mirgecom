@@ -35,7 +35,7 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
 
 from mirgecom.artificial_viscosity import (
-    av_operator,
+    av_laplacian_operator,
     smoothness_indicator
 )
 from mirgecom.fluid import make_conserved
@@ -216,7 +216,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         momentum=make_obj_array([soln for _ in range(dim)]),
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
-    rhs = av_operator(discr, boundaries=boundaries, cv=cv, alpha=1.0, s0=-np.inf)
+    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
@@ -229,7 +230,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         momentum=make_obj_array([soln for _ in range(dim)]),
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
-    rhs = av_operator(discr, boundaries=boundaries, cv=cv, alpha=1.0, s0=-np.inf)
+    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
@@ -242,6 +244,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         momentum=make_obj_array([soln for _ in range(dim)]),
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
-    rhs = av_operator(discr, boundaries=boundaries, cv=cv, alpha=1.0, s0=-np.inf)
+    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
