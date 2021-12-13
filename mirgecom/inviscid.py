@@ -158,11 +158,9 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     wavespeed_int = u_int - c_int*q_int
     wavespeed_ext = u_ext + c_ext*q_ext
 
-    print(f"{wavespeed_int=}")
-    print(f"{wavespeed_ext=}")
-
     from mirgecom.flux import hll_flux_driver
-    return hll_flux_driver(state_pair, inviscid_flux, wavespeed_int, wavespeed_ext, normal)
+    return hll_flux_driver(state_pair, inviscid_flux,
+                           wavespeed_int, wavespeed_ext, normal)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
