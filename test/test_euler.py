@@ -546,6 +546,7 @@ def _euler_flow_stepper(actx, parameters):
 
         cv = rk4_step(cv, t, dt, rhs)
         cv = filter_modally(discr, "vol", cutoff, frfunc, cv)
+        fluid_state = make_fluid_state(cv, gas_model)
 
         t += dt
         istep += 1
