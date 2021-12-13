@@ -12,6 +12,8 @@ Diagnostic utilities
 --------------------
 
 .. autofunction:: compare_fluid_solutions
+.. autofunction:: componentwise_norms
+.. autofunction:: max_component_norm
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
 .. autofunction:: boundary_report
@@ -48,6 +50,13 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import grudge.op as op
+
+from arraycontext import map_array_container, flatten
+
+from functools import partial
+
+from meshmode.dof_array import DOFArray
+
 
 logger = logging.getLogger(__name__)
 
@@ -290,10 +299,37 @@ def compare_fluid_solutions(discr, red_state, blue_state, comm=None):
         This is a collective routine and must be called by all MPI ranks.
     """
     actx = red_state.array_context
-    resid = actx.np.abs(red_state - blue_state)
-    max_local_error = [actx.to_numpy(op.nodal_max_loc(discr, "vol", v))
-                       for v in resid.join()]
-    return allsync(max_local_error, comm=comm)
+    resid = red_state - blue_state
+    resid_errs = actx.to_numpy(
+        flatten(componentwise_norms(discr, resid, order=np.inf), actx))
+
+    return resid_errs.tolist()
+
+
+def componentwise_norms(discr, fields, order=np.inf):
+    """Return the *order*-norm for each component of *fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
+    if not isinstance(fields, DOFArray):
+        return map_array_container(
+            partial(componentwise_norms, discr, order=order), fields)
+    if len(fields) > 0:
+        return discr.norm(fields, order)
+    else:
+        return 0
+
+
+def max_component_norm(discr, fields, order=np.inf):
+    """Return the max *order*-norm over the components of *fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
+    actx = fields.array_context
+    return max(actx.to_numpy(flatten(
+        componentwise_norms(discr, fields, order), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
