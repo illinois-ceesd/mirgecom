@@ -38,7 +38,6 @@ from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair
 )
-from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
