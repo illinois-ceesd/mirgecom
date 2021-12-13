@@ -176,6 +176,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+    ones = discr.zeros(actx) + 1.0
 
     vis_timer = None
 
@@ -263,19 +264,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def get_temperature_update(cv, temperature):
         y = cv.species_mass_fractions
-        e = eos.internal_energy(cv) / cv.mass
+        e = gas_model.eos.internal_energy(cv) / cv.mass
         return make_obj_array(
             [pyro_mechanism.get_temperature_update_energy(e, temperature, y)]
         )
 
     from mirgecom.gas_model import make_fluid_state
 
-    def get_fluid_state(cv, temperature_seed):
-        return make_fluid_state(cv, gas_model, temperature_seed)
+    def get_fluid_state(cv, tseed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=tseed)
 
     compute_temperature_update = actx.compile(get_temperature_update)
-    compute_dependent_vars = actx.compile(eos.dependent_vars)
-    create_fluid_state = actx.compile(get_fluid_state)
+    construct_fluid_state = actx.compile(get_fluid_state)
 
     # }}}
 
@@ -312,7 +313,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             temperature_seed = connection(restart_data["temperature_seed"])
     else:
         # Set the current state from time 0
-        current_cv = initializer(eos=eos, x_vec=nodes)
+        current_cv = initializer(eos=gas_model.eos, x_vec=nodes)
+        temperature_seed = temperature_seed * ones
 
     # This bit memoizes the initial state's temperature onto the initial state
     # (assuming `initializer` just above didn't call eos.dv funcs.)
@@ -333,8 +335,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # and instead of writing the *current* running temperature to the restart file,
     # we could write the *temperature_seed*.  That could fix up the non-deterministic
     # restart issue.
-    current_fluid_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
-                                             temperature_seed=temperature_seed)
+    current_fluid_state = construct_fluid_state(current_cv, temperature_seed)
     current_dv = current_fluid_state.dv
     temperature_seed = current_dv.temperature
 
@@ -344,7 +345,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Inspection at physics debugging time
     if debug:
         print("Initial MIRGE-Com state:")
-        print(f"{current_cv=}")
         print(f"Initial DV pressure: {current_fluid_state.pressure}")
         print(f"Initial DV temperature: {current_fluid_state.temperature}")
 
@@ -352,7 +352,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
+    eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
@@ -396,14 +396,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(status_msg)
 
-    def my_write_viz(step, t, dt, state, ts_field=None, dv=None,
-                     production_rates=None, cfl=None):
-        if dv is None:
-            dv = compute_dependent_vars(state)
-        if production_rates is None:
-            production_rates = compute_production_rates(state)
-        if ts_field is None:
-            ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=state)
+    def my_write_viz(step, t, dt, state, ts_field, dv, production_rates, cfl):
         viz_fields = [("cv", state), ("dv", dv),
                       ("production_rates", production_rates),
                       ("dt" if constant_cfl else "cfl", ts_field)]
@@ -486,8 +479,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     compute_cfl = actx.compile(get_cfl)
 
-    def get_production_rates(cv):
-        return make_obj_array([eos.get_production_rates(cv)])
+    def get_production_rates(cv, temperature):
+        return make_obj_array([eos.get_production_rates(cv, temperature)])
 
     compute_production_rates = actx.compile(get_production_rates)
 
@@ -512,7 +505,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = create_fluid_state(cv, tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
         dv = fluid_state.dv
 
         try:
@@ -543,7 +536,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                  temperature_seed=tseed)
 
             if do_viz:
-                production_rates, = compute_production_rates(cv)
+                production_rates, = compute_production_rates(fluid_state.cv,
+                                                             fluid_state.temperature)
                 my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field, cfl=cfl)
@@ -559,13 +553,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_post_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = create_fluid_state(cv, tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
 
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, cv, eos)
+            set_sim_state(logmgr, dim, cv, gas_model.eos)
             logmgr.tick_after()
         return make_obj_array([cv, fluid_state.temperature]), dt
 
@@ -580,7 +574,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
                            gas_model=gas_model,
                            inviscid_numerical_flux_func=inviscid_flux_rusanov)
-            + eos.get_species_source_terms(cv),
+            + eos.get_species_source_terms(cv, fluid_state.temperature),
             0*tseed])
 
     current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
@@ -598,9 +592,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     final_cv, tseed = current_state
-    final_fluid_state = create_fluid_state(final_cv, tseed)
+    final_fluid_state = construct_fluid_state(final_cv, tseed)
     final_dv = final_fluid_state.dv
-    final_dm, = compute_production_rates(final_cv)
+    final_dm, = compute_production_rates(final_cv, final_dv.temperature)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=final_fluid_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,

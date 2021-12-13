@@ -35,13 +35,13 @@ from meshmode.array_context import (
     SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw, freeze
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.transport import SimpleTransport
-from mirgecom.simutil import get_sim_timestep
+from mirgecom.simutil import get_sim_timestep, allsync
 from mirgecom.navierstokes import ns_operator
 
 from mirgecom.io import make_init_message
@@ -66,7 +66,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -83,7 +83,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         rst_filename=None, actx_class=PyOpenCLArrayContext,
+         log_dependent=True):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -155,27 +156,32 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
+    ones = discr.zeros(actx) + 1.0
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
-            ("min_temperature", "------- T (min, max) (K) = ({value:1.9e}, "),
-            ("max_temperature",    "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
+        if log_dependent:
+            logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                                                      extract_vars_for_logging,
+                                                      units_for_logging)
+            logmgr.add_watches([
+                ("min_pressure", "\n------- P (min, max) (Pa) = ({value:1.9e}, "),
+                ("max_pressure",    "{value:1.9e})\n"),
+                ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+                ("max_temperature",    "{value:7g})\n")])
 
     # {{{  Set up initial state using Cantera
 
@@ -258,6 +264,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
+    def _get_temperature_update(cv, temperature):
+        y = cv.species_mass_fractions
+        e = gas_model.eos.internal_energy(cv) / cv.mass
+        return make_obj_array(
+            [pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y)]
+        )
+
+    def _get_fluid_state(cv, temp_seed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=temp_seed)
+
+    compute_temperature_update = actx.compile(_get_temperature_update)
+    construct_fluid_state = actx.compile(_get_fluid_state)
+
     tseed = can_t
     if rst_filename:
         current_t = restart_data["t"]
@@ -271,8 +291,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_cv = initializer(x_vec=nodes, eos=gas_model.eos)
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
-                                     temperature_seed=tseed)
+        tseed = tseed * ones
+
+    current_state = construct_fluid_state(current_cv, tseed)
 
     # Inspection at physics debugging time
     if debug:
@@ -312,7 +333,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_status(step, t, dt, state):
+    def my_write_status(step, t, dt, dv, state):
         if constant_cfl:
             cfl = current_cfl
         else:
@@ -320,8 +341,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             cfl_field = get_viscous_cfl(discr, dt, state=state)
             from grudge.op import nodal_max
             cfl = actx.to_numpy(nodal_max(discr, "vol", cfl_field))
+        status_msg = f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}"
+
+        if ((dv is not None) and (not log_dependent)):
+            temp = dv.temperature
+            press = dv.pressure
+            temp = thaw(freeze(temp, actx), actx)
+            press = thaw(freeze(press, actx), actx)
+            from grudge.op import nodal_min_loc, nodal_max_loc
+            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                           comm=comm, op=MPI.MIN)
+            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                           comm=comm, op=MPI.MAX)
+            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                           comm=comm, op=MPI.MIN)
+            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                           comm=comm, op=MPI.MAX)
+            dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
+            status_msg = status_msg + dv_status_msg
+
         if rank == 0:
-            logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}")
+            logger.info(status_msg)
 
     def my_write_viz(step, t, state, dv):
         viz_fields = [("cv", state),
@@ -346,7 +386,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, dv):
+    def my_health_check(cv, dv):
         # Note: This health check is tuned to expected results
         #       which effectively makes this example a CI test that
         #       the case gets the expected solution.  If dt,t_final or
@@ -379,12 +419,30 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
+        # This check is the temperature convergence check
+        # The current *temperature* is what Pyrometheus gets
+        # after a fixed number of Newton iterations, *n_iter*.
+        # Calling `compute_temperature` here with *temperature*
+        # input as the guess returns the calculated gas temperature after
+        # yet another *n_iter*.
+        # The difference between those two temperatures is the
+        # temperature residual, which can be used as an indicator of
+        # convergence in Pyrometheus `get_temperature`.
+        # Note: The local max jig below works around a very long compile
+        # in lazy mode.
+        from grudge import op
+        temp_update, = compute_temperature_update(cv, dv.temperature)
+        temp_resid = thaw(freeze(temp_update, actx), actx) / dv.temperature
+        temp_resid = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
+        if temp_resid > 1e-8:
+            health_error = True
+            logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
+
         return health_error
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
-                                       temperature_seed=tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
         dv = fluid_state.dv
         try:
 
@@ -415,7 +473,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
             if do_status:
-                my_write_status(step, t, dt, state=fluid_state)
+                my_write_status(step, t, dt, dv=dv, state=fluid_state)
 
         except MyRuntimeError:
             if rank == 0:
@@ -428,8 +486,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_post_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
-                                       temperature_seed=tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
 
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -446,7 +503,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                        temperature_seed=tseed)
         ns_rhs = ns_operator(discr, state=fluid_state, time=t,
                              boundaries=visc_bnds, gas_model=gas_model)
-        cv_rhs = ns_rhs + eos.get_species_source_terms(cv)
+        cv_rhs = ns_rhs + eos.get_species_source_terms(cv, fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t,
@@ -465,15 +522,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     current_cv, tseed = current_stepper_state
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
-                                     temperature_seed=tseed)
+    current_state = construct_fluid_state(current_cv, tseed)
     final_dv = current_state.dv
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state.cv,
                      tseed=tseed)
-    my_write_status(current_step, current_t, final_dt, current_state)
+    my_write_status(current_step, current_t, final_dt, state=current_state,
+                    dv=final_dv)
 
     if logmgr:
         logmgr.close()
@@ -499,6 +556,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    log_dependent = not args.lazy
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -515,6 +573,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         log_dependent=log_dependent)
 
 # vim: foldmethod=marker

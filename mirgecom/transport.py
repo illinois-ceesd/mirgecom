@@ -148,11 +148,11 @@ class SimpleTransport(TransportModel):
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return self._mu_bulk
+        return self._mu_bulk*(0*cv.mass + 1.0)
 
     def viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return self._mu
+        return self._mu*(0*cv.mass + 1.0)
 
     def volume_viscosity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the 2nd viscosity coefficent, $\lambda$.
@@ -161,15 +161,15 @@ class SimpleTransport(TransportModel):
 
         $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
         """
-        return self._mu_bulk - 2 * self._mu / 3
+        return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
 
     def thermal_conductivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        return self._kappa
+        return self._kappa*(0*cv.mass + 1.0)
 
     def species_diffusivity(self, eos: GasEOS, cv: ConservedVars):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._d_alpha
+        return self._d_alpha*(0*cv.mass + 1.0)
 
 
 class PowerLawTransport(TransportModel):

@@ -57,10 +57,8 @@ THE SOFTWARE.
 
 import numpy as np  # noqa
 from grudge.symbolic.primitives import TracePair
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
+from grudge.trace_pair import interior_trace_pairs
+
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
@@ -74,7 +72,6 @@ from mirgecom.viscous import (
 from mirgecom.flux import (
     gradient_flux_central
 )
-from mirgecom.fluid import make_conserved
 from mirgecom.operators import (
     div_operator, grad_operator
 )
@@ -122,9 +119,9 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         Agglomerated object array of DOF arrays representing the RHS of the
         Navier-Stokes equations.
     """
-    dim = state.dim
-    cv = state.cv
-    dv = state.dv
+    if not state.is_viscous:
+        raise ValueError("Navier-Stokes operator expects viscous gas model.")
+
     actx = state.array_context
 
     from mirgecom.gas_model import project_fluid_state
@@ -132,33 +129,21 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                        project_fluid_state(discr, btag, state, gas_model)
                        for btag in boundaries}
 
-    cv_int_pair = interior_trace_pair(discr, cv)
-    cv_interior_pairs = [cv_int_pair]
-    q_comm_pairs = cross_rank_trace_pairs(discr, cv.join())
-    # num_partition_interfaces = len(q_comm_pairs)
-    cv_part_pairs = [
-        TracePair(q_pair.dd,
-                  interior=make_conserved(dim, q=q_pair.int),
-                  exterior=make_conserved(dim, q=q_pair.ext))
-        for q_pair in q_comm_pairs]
-    cv_interior_pairs.extend(cv_part_pairs)
+    cv_interior_pairs = interior_trace_pairs(discr, state.cv)
 
-    tseed_interior_pairs = None
-    if state.is_mixture:
-        tseed_int_pair = interior_trace_pair(discr, dv.temperature)
-        tseed_part_pairs = cross_rank_trace_pairs(discr, dv.temperature)
-        tseed_interior_pairs = [tseed_int_pair]
-        tseed_interior_pairs.extend(tseed_part_pairs)
+    tseed_interior_pairs = \
+        interior_trace_pairs(discr, state.temperature) if state.is_mixture else None
 
     from mirgecom.gas_model import make_fluid_state_trace_pairs
     interior_state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
                                                         tseed_interior_pairs)
 
     # Operator-independent boundary flux interface
-    def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                    interior_trace_pairs, boundary_states):
+    def _sum_element_boundary_fluxes(discr, compute_interior_flux,
+                                   compute_boundary_flux, interior_trace_pairs,
+                                   boundary_states):
         return (sum(compute_interior_flux(tpair)
-                      for tpair in interior_trace_pairs)
+                    for tpair in interior_trace_pairs)
                 + sum(compute_boundary_flux(btag, boundary_states[btag])
                       for btag in boundary_states))
 
@@ -176,21 +161,14 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             time=time, numerical_flux_func=gradient_numerical_flux_func
         )
 
-    cv_flux_bnd = _elbnd_flux(discr, _grad_flux_interior, _cv_grad_flux_bnd,
-                              cv_interior_pairs, boundary_states)
+    cv_flux_bnd = \
+        _sum_element_boundary_fluxes(discr, _grad_flux_interior, _cv_grad_flux_bnd,
+                                     cv_interior_pairs, boundary_states)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
-    grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
-                                                  cv_flux_bnd.join()))
+    grad_cv = grad_operator(discr, state.cv, cv_flux_bnd)
 
-    s_int_pair = interior_trace_pair(discr, grad_cv)
-    s_part_pairs = [TracePair(xrank_tpair.dd,
-                             interior=make_conserved(dim, q=xrank_tpair.int),
-                             exterior=make_conserved(dim, q=xrank_tpair.ext))
-                    for xrank_tpair in cross_rank_trace_pairs(discr, grad_cv.join())]
-
-    grad_cv_interior_pairs = [s_int_pair]
-    grad_cv_interior_pairs.extend(s_part_pairs)
+    grad_cv_interior_pairs = interior_trace_pairs(discr, grad_cv)
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
     # Capture the temperature for the interior faces for grad(T) calc
@@ -206,15 +184,13 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             discr, btag=btag, gas_model=gas_model,
             state_minus=boundary_state, time=time)
 
-    t_flux_bnd = _elbnd_flux(discr, _grad_flux_interior, _t_grad_flux_bnd,
-                             t_interior_pairs, boundary_states)
+    t_flux_bnd = \
+        _sum_element_boundary_fluxes(discr, _grad_flux_interior, _t_grad_flux_bnd,
+                                     t_interior_pairs, boundary_states)
 
     # Fluxes in-hand, compute the gradient of temperature and mpi exchange it
     grad_t = grad_operator(discr, state.temperature, t_flux_bnd)
-    delt_int_pair = interior_trace_pair(discr, grad_t)
-    delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
-    grad_t_interior_pairs = [delt_int_pair]
-    grad_t_interior_pairs.extend(delt_part_pairs)
+    grad_t_interior_pairs = interior_trace_pairs(discr, grad_t)
 
     # inviscid flux divergence-specific flux function for interior faces
     def finv_divergence_flux_interior(state_pair):
@@ -228,7 +204,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             discr, btag=btag, gas_model=gas_model, state_minus=boundary_state,
             time=time, numerical_flux_func=inviscid_numerical_flux_func)
 
-    # glob the inputs together in a tuple to use the _elbnd_flux wrapper
+    # glob viscous flux inputs for use by the _sum_element_boundary_fluxes wrapper
     viscous_states_int_bnd = [
         (state_pair, grad_cv_pair, grad_t_pair)
         for state_pair, grad_cv_pair, grad_t_pair in
@@ -257,16 +233,16 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     vol_term = (
         viscous_flux(state=state, grad_cv=grad_cv, grad_t=grad_t)
         - inviscid_flux(state=state)
-    ).join()
+    )
 
     bnd_term = (
-        _elbnd_flux(
+        _sum_element_boundary_fluxes(
             discr, fvisc_divergence_flux_interior, fvisc_divergence_flux_boundary,
             viscous_states_int_bnd, boundary_states)
-        - _elbnd_flux(
+        - _sum_element_boundary_fluxes(
             discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
             interior_state_pairs, boundary_states)
-    ).join()
+    )
 
     # NS RHS
-    return make_conserved(dim, q=div_operator(discr, vol_term, bnd_term))
+    return div_operator(discr, vol_term, bnd_term)

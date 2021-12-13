@@ -51,7 +51,6 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import (
     TransportModel,
-    TransportModelError,
     TransportDependentVars
 )
 
@@ -106,11 +105,11 @@ class FluidState:
     .. autoattribute:: energy_density
     .. autoattribute:: species_mass_density
     .. autoattribute:: species_mass_fractions
+    .. autoattribute:: species_enthalpies
     """
 
     cv: ConservedVars
     dv: EOSDependentVars
-    tv: TransportDependentVars = None
 
     @property
     def array_context(self):
@@ -183,20 +182,14 @@ class FluidState:
         return self.cv.speed + self.dv.speed_of_sound
 
     @property
-    def has_transport(self):
+    def is_viscous(self):
         """Indicate if this is a viscous state."""
-        return self.tv is not None
+        return isinstance(self, ViscousFluidState)
 
     @property
     def is_mixture(self):
         """Indicate if this is a state resulting from a mixture gas model."""
         return isinstance(self.dv, MixtureDependentVars)
-
-    def _get_transport_property(self, name):
-        """Grab a transport property if transport model is present."""
-        if not self.has_transport:
-            raise TransportModelError("Viscous transport model not provided.")
-        return getattr(self.tv, name)
 
     def _get_mixture_property(self, name):
         """Grab a mixture property if EOS is a :class:`~mirgecom.eos.MixtureEOS`."""
@@ -205,29 +198,47 @@ class FluidState:
         return getattr(self.dv, name)
 
     @property
+    def species_enthalpies(self):
+        """Return the fluid species diffusivities."""
+        return self._get_mixture_property("species_enthalpies")
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
+class ViscousFluidState(FluidState):
+    r"""Gas model-consistent fluid state for viscous gas models.
+
+    .. attribute:: tv
+
+        Viscous fluid state-dependent transport properties.
+
+    .. autattribute:: viscosity
+    .. autoattribute:: bulk_viscosity
+    .. autoattribute:: species_diffusivity
+    .. autoattribute:: thermal_conductivity
+    """
+
+    tv: TransportDependentVars
+
+    @property
     def viscosity(self):
         """Return the fluid viscosity."""
-        return self._get_transport_property("viscosity")
+        return self.tv.viscosity
 
     @property
     def bulk_viscosity(self):
         """Return the fluid bulk viscosity."""
-        return self._get_transport_property("bulk_viscosity")
+        return self.tv.bulk_viscosity
 
     @property
     def thermal_conductivity(self):
         """Return the fluid thermal conductivity."""
-        return self._get_transport_property("thermal_conductivity")
+        return self.tv.thermal_conductivity
 
     @property
     def species_diffusivity(self):
         """Return the fluid species diffusivities."""
-        return self._get_transport_property("species_diffusivity")
-
-    @property
-    def species_enthalpies(self):
-        """Return the fluid species diffusivities."""
-        return self._get_mixture_property("species_enthalpies")
+        return self.tv.species_diffusivity
 
 
 def make_fluid_state(cv, gas_model, temperature_seed=None):
@@ -255,10 +266,10 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
         Thermally consistent fluid state
     """
     dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
-    tv = None
     if gas_model.transport is not None:
         tv = gas_model.transport.dependent_vars(eos=gas_model.eos, cv=cv)
-    return FluidState(cv=cv, dv=dv, tv=tv)
+        return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+    return FluidState(cv=cv, dv=dv)
 
 
 def project_fluid_state(discr, btag, state, gas_model):
