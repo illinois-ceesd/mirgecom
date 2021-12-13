@@ -327,8 +327,8 @@ def max_component_norm(discr, fields, order=np.inf):
         This is a collective routine and must be called by all MPI ranks.
     """
     actx = fields.array_context
-    return max(actx.to_numpy(flatten(
-        componentwise_norms(discr, fields, order), actx)))
+    return actx.to_numpy(actx.np.max(
+        componentwise_norms(discr, fields, order), actx))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
