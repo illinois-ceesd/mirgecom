@@ -80,7 +80,8 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
+         use_leap=False, use_overintegration=False,
+         use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=True):
     """Drive example."""
@@ -172,10 +173,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=local_mesh.dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
+
     ones = discr.zeros(actx) + 1.0
 
     vis_timer = None
@@ -573,7 +590,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array([
             euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
                            gas_model=gas_model,
-                           inviscid_numerical_flux_func=inviscid_flux_rusanov)
+                           inviscid_numerical_flux_func=inviscid_flux_rusanov,
+                           quadrature_tag=quadrature_tag)
             + eos.get_species_source_terms(cv, fluid_state.temperature),
             0*tseed])
 
@@ -616,6 +634,8 @@ if __name__ == "__main__":
     import argparse
     casename = "autoignition"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -646,7 +666,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+    main(use_logmgr=args.log, use_leap=args.leap,
+         use_overintegration=args.overintegration,
+         use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
          log_dependent=log_dependent)
 
