@@ -62,8 +62,7 @@ from grudge.trace_pair import interior_trace_pairs
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0,
-                   dv=None):
+def euler_operator(discr, eos, boundaries, cv, time=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
