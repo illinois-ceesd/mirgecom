@@ -161,7 +161,7 @@ class ConservedVars:
         after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
         the fluid conserved state data.
 
-        Examples of this sort of use for `join_conserved` can be found in:
+        Examples of this sort of use for :method:`join` can be found in:
 
         - :mod:`~mirgecom.initializers`
 
@@ -194,12 +194,12 @@ class ConservedVars:
 
         Presuming that `grad_q` is the agglomerated *MIRGE* data structure with the
         gradient data, this dataclass can be used to get a fluid CV-specific view on
-        the content of $\nabla\mathbf{Q}$. One can call :func:`split_conserved` to
+        the content of $\nabla\mathbf{Q}$. One can call :func:`make_conserved` to
         get a `ConservedVars` dataclass object that resolves the vector quantity
         associated with each conservation equation::
 
             grad_q = gradient_operator(discr, q)
-            grad_cv = split_conserved(ndim, q=grad_q),
+            grad_cv = make_conserved(ndim, q=grad_q),
 
         after which::
 
