@@ -105,10 +105,11 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_minus=state_pair.int.cv,
                         q_plus=state_pair.ext.cv, lam=lam)
 
+
 def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
-    The Harten, Lax, and van Leer approximate riemann numerical flux is calculated as:
+    The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
 
     .. math::
 
@@ -120,7 +121,7 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
     *local* maximum fluid wavespeed.
     """
-    #calculate left/right wavespeeds
+    # calculate left/right wavespeeds
     actx = state_pair.int.array_context
     ones = 0.*state_pair.int.mass_density + 1.
 
@@ -135,8 +136,8 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     c_int = state_pair.int.speed_of_sound
     c_ext = state_pair.ext.speed_of_sound
 
-    p_star = (0.5*(p_int + p_ext) + (1./8.)*(u_int - u_ext)*
-             (rho_int + rho_ext)*(c_int + c_ext))
+    p_star = (0.5*(p_int + p_ext) + (1./8.)*(u_int - u_ext)
+              * (rho_int + rho_ext) * (c_int + c_ext))
 
     gamma_int = gas_model.eos.gamma(state_pair.int.cv)
     gamma_ext = gas_model.eos.gamma(state_pair.ext.cv)

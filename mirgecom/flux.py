@@ -1,12 +1,21 @@
-""":mod:`mirgecom.flux` provides inter-elemental flux routines.
+""":mod:`mirgecom.flux` provides generic inter-elemental flux routines.
 
-Numerical Flux Routines
-^^^^^^^^^^^^^^^^^^^^^^^
+Low-level interfaces
+^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: num_flux_lfr
+.. autofunction:: num_flux_central
+
+State-to-flux drivers
+^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: hll_flux_driver
+
+Flux pair interfaces for operators
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: gradient_flux_central
 .. autofunction:: divergence_flux_central
-.. autofunction:: flux_lfr
-.. autofunction:: divergence_flux_lfr
 """
 
 __copyright__ = """
@@ -55,8 +64,8 @@ def hll_flux_driver(state_pair, physical_flux_func,
     f_plus = physical_flux_func(state_pair.ext)@normal
     q_minus = state_pair.int.cv
     q_plus = state_pair.ext.cv
-    f_star = (s_plus*f_minus - s_minus*f_plus +
-              s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
+    f_star = (s_plus*f_minus - s_minus*f_plus
+              + s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
 
     # choose the correct f contribution based on the wave speeds
     f_check_minus = actx.np.greater_equal(s_minus, zeros)*(0*f_minus + 1.0)
