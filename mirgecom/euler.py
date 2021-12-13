@@ -58,15 +58,12 @@ from mirgecom.inviscid import (
     inviscid_facial_flux
 )
 
-from grudge.trace_pair import (
-    local_interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from mirgecom.fluid import make_conserved
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, eos, boundaries, cv, time=0.0,
+                   dv=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -101,44 +98,20 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
         flow equations.
     """
     # Compute volume contributions
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
-
+    inviscid_flux_vol = inviscid_flux(discr, eos.pressure(cv), cv)
+    interior_cv = interior_trace_pairs(discr, cv)
     # Compute interface contributions
     inviscid_flux_bnd = (
-        # Rank-local contributions
-        inviscid_facial_flux(
-            discr,
-            eos=eos,
-            cv_tpair=local_interior_trace_pair(discr, cv)
-        )
-        # Cross-rank contributions
-        + sum(
-            inviscid_facial_flux(
-                discr,
-                eos=eos,
-                cv_tpair=part_tpair
-            ) for part_tpair in cross_rank_trace_pairs(discr, cv)
-        )
-        # Boundary condition contributions
-        + sum(
-            boundaries[btag].inviscid_boundary_flux(
-                discr,
-                btag=btag,
-                cv=cv,
-                eos=eos,
-                time=time
-            ) for btag in boundaries
-        )
+        # Interior faces
+        + sum(inviscid_facial_flux(discr, eos=eos, cv_tpair=part_tpair)
+              for part_tpair in interior_cv)
+        # Domain boundaries
+        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
+                                                      eos=eos, time=time)
+              for btag in boundaries)
     )
+
     return -div_operator(discr, inviscid_flux_vol, inviscid_flux_bnd)
-
-
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
 
 
 # By default, run unitless
