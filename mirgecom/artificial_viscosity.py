@@ -233,9 +233,15 @@ def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
     from warnings import warn
     warn("Do not call artificial_viscosity; it is now called av_laplacian_operator."
          " This function will disappear in 2022", DeprecationWarning, stacklevel=2)
+    from mirgecom.fluid import ConservedVars
+
+    if not isinstance(q, ConservedVars):
+        q = make_conserved(discr.dim, q=q)
+
     return av_laplacian_operator(
         discr=discr, cv=make_conserved(discr.dim, q=q), alpha=alpha,
-        boundaries=boundaries, boundary_kwargs={"t": t, "eos": eos}, **kwargs)
+        boundaries=boundaries,
+        boundary_kwargs={"t": t, "eos": eos}, **kwargs).join()
 
 
 def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
@@ -243,9 +249,15 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
     from warnings import warn
     warn("Do not call av_operator; it is now called av_laplacian_operator. This"
          "function will disappear in 2022", DeprecationWarning, stacklevel=2)
+    from mirgecom.fluid import ConservedVars
+
+    if not isinstance(q, ConservedVars):
+        q = make_conserved(discr.dim, q=q)
+
     return av_laplacian_operator(
-        discr=discr, cv=make_conserved(discr.dim, q=q), alpha=alpha,
-        boundaries=boundaries, boundary_kwargs=boundary_kwargs, **kwargs)
+        discr=discr, cv=q, alpha=alpha,
+        boundaries=boundaries,
+        boundary_kwargs=boundary_kwargs, **kwargs).join()
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
