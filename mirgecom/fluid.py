@@ -136,7 +136,7 @@ class ConservedVars:
 
     :example::
 
-        Use :method:`join` to create an agglomerated $\mathbf{Q}$ array from the
+        Use `join` to create an agglomerated $\mathbf{Q}$ array from the
         fluid conserved quantities (CV).
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
@@ -161,7 +161,7 @@ class ConservedVars:
         after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
         the fluid conserved state data.
 
-        Examples of this sort of use for :method:`join` can be found in:
+        Examples of this sort of use for `join` can be found in:
 
         - :mod:`~mirgecom.initializers`
 
