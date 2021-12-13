@@ -37,8 +37,7 @@ from pytools.obj_array import make_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext,
 )
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -77,7 +76,7 @@ def test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    actx_lazy = SingleGridWorkBalancingPytatoArrayContext(
+    actx_lazy = PytatoPyOpenCLArrayContext(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 

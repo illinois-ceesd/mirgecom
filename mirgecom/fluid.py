@@ -4,8 +4,6 @@ State Vector Handling
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: ConservedVars
-.. autofunction:: split_conserved
-.. autofunction:: join_conserved
 .. autofunction:: make_conserved
 
 Helper Functions
@@ -255,7 +253,7 @@ class ConservedVars:
 
     def join(self):
         """Call :func:`join_conserved` on *self*."""
-        return join_conserved(
+        return _join_conserved(
             dim=self.dim,
             mass=self.mass,
             energy=self.energy,
@@ -295,7 +293,7 @@ def get_num_species(dim, q):
     return len(q) - (dim + 2)
 
 
-def split_conserved(dim, q):
+def _split_conserved(dim, q):
     """Get quantities corresponding to fluid conservation equations.
 
     Return a :class:`ConservedVars` with quantities corresponding to the
@@ -333,24 +331,18 @@ def _join_conserved(dim, mass, energy, momentum, species_mass=None):
     return result
 
 
-def join_conserved(dim, mass, energy, momentum, species_mass=None):
-    """Create agglomerated array from quantities for each conservation eqn."""
-    return _join_conserved(dim, mass=mass, energy=energy,
-                           momentum=momentum, species_mass=species_mass)
-
-
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
                    q=None, scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
     if scalar_quantities is not None:
-        return split_conserved(dim, q=scalar_quantities)
+        return _split_conserved(dim, q=scalar_quantities)
     if vector_quantities is not None:
-        return split_conserved(dim, q=vector_quantities)
+        return _split_conserved(dim, q=vector_quantities)
     if q is not None:
-        return split_conserved(dim, q=q)
+        return _split_conserved(dim, q=q)
     if mass is None or energy is None or momentum is None:
         raise ValueError("Must have one of *q* or *mass, energy, momentum*.")
-    return split_conserved(
+    return _split_conserved(
         dim, _join_conserved(dim, mass=mass, energy=energy,
                              momentum=momentum, species_mass=species_mass)
     )

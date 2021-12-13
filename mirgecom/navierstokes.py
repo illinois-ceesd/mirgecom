@@ -57,10 +57,7 @@ THE SOFTWARE.
 
 import numpy as np  # noqa
 from grudge.symbolic.primitives import TracePair
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
@@ -121,10 +118,9 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
         dv = eos.dependent_vars(cv)
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                    int_tpair, xrank_pairs, boundaries):
-        return (compute_interior_flux(int_tpair)
-                + sum(compute_interior_flux(part_tpair)
-                      for part_tpair in xrank_pairs)
+                    int_tpairs, boundaries):
+        return (sum(compute_interior_flux(part_tpair)
+                    for part_tpair in int_tpairs)
                 + sum(compute_boundary_flux(btag) for btag in boundaries))
 
     def grad_flux_interior(int_tpair):
@@ -138,14 +134,9 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
             discr, btag=btag, cv=cv, eos=eos, time=t
         )
 
-    cv_int_tpair = interior_trace_pair(discr, cv)
-    cv_part_pairs = [
-        TracePair(part_tpair.dd,
-                  interior=make_conserved(dim, q=part_tpair.int),
-                  exterior=make_conserved(dim, q=part_tpair.ext))
-        for part_tpair in cross_rank_trace_pairs(discr, cv.join())]
+    cv_interior = interior_trace_pairs(discr, cv)
     cv_flux_bnd = _elbnd_flux(discr, grad_flux_interior, grad_flux_bnd,
-                              cv_int_tpair, cv_part_pairs, boundaries)
+                              cv_interior, boundaries)
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
@@ -158,17 +149,15 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
                                                 time=t)
 
     gas_t = dv.temperature
-    t_int_tpair = TracePair("int_faces",
-                            interior=eos.temperature(cv_int_tpair.int),
-                            exterior=eos.temperature(cv_int_tpair.ext))
-    t_part_pairs = [
-        TracePair(part_tpair.dd,
-                  interior=eos.temperature(part_tpair.int),
-                  exterior=eos.temperature(part_tpair.ext))
-        for part_tpair in cv_part_pairs]
+    temperature_interior = [TracePair(pair.dd,
+                                      interior=eos.temperature(pair.int),
+                                      exterior=eos.temperature(pair.ext))
+                            for pair in cv_interior]
+
     t_flux_bnd = _elbnd_flux(discr, grad_flux_interior, t_grad_flux_bnd,
-                             t_int_tpair, t_part_pairs, boundaries)
+                             temperature_interior, boundaries)
     grad_t = grad_operator(discr, gas_t, t_flux_bnd)
+    grad_t_interior = interior_trace_pairs(discr, grad_t)
 
     # inviscid parts
     def finv_divergence_flux_interior(cv_tpair):
@@ -181,20 +170,13 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
         )
 
     # viscous parts
-    s_int_pair = interior_trace_pair(discr, grad_cv)
-    s_part_pairs = [TracePair(xrank_tpair.dd,
-                             interior=make_conserved(dim, q=xrank_tpair.int),
-                             exterior=make_conserved(dim, q=xrank_tpair.ext))
-                    for xrank_tpair in cross_rank_trace_pairs(discr, grad_cv.join())]
-    delt_int_pair = interior_trace_pair(discr, grad_t)
-    delt_part_pairs = cross_rank_trace_pairs(discr, grad_t)
-    num_partition_interfaces = len(cv_part_pairs)
+    grad_cv_interior = interior_trace_pairs(discr, grad_cv)
 
     # glob the inputs together in a tuple to use the _elbnd_flux wrapper
-    visc_part_inputs = [
-        (cv_part_pairs[bnd_index], s_part_pairs[bnd_index],
-         delt_part_pairs[bnd_index])
-        for bnd_index in range(num_partition_interfaces)]
+    viscous_flux_inputs = [
+        (cv_pair, grad_cv_pair, grad_t_pair)
+        for cv_pair, grad_cv_pair, grad_t_pair in
+        zip(cv_interior, grad_cv_interior, grad_t_interior)]
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def fvisc_divergence_flux_interior(tpair_tuple):
@@ -212,16 +194,15 @@ def ns_operator(discr, eos, boundaries, cv, t=0.0,
     vol_term = (
         viscous_flux(discr, eos=eos, cv=cv, grad_cv=grad_cv, grad_t=grad_t)
         - inviscid_flux(discr, pressure=dv.pressure, cv=cv)
-    ).join()
+    )
 
     bnd_term = (
         _elbnd_flux(
             discr, fvisc_divergence_flux_interior, fvisc_divergence_flux_boundary,
-            (cv_int_tpair, s_int_pair, delt_int_pair), visc_part_inputs, boundaries)
+            viscous_flux_inputs, boundaries)
         - _elbnd_flux(
             discr, finv_divergence_flux_interior, finv_divergence_flux_boundary,
-            cv_int_tpair, cv_part_pairs, boundaries)
-    ).join()
-
+            cv_interior, boundaries)
+    )
     # NS RHS
-    return make_conserved(dim, q=div_operator(discr, vol_term, bnd_term))
+    return div_operator(discr, vol_term, bnd_term)
