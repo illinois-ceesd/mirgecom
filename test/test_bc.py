@@ -272,8 +272,8 @@ def test_noslip(actx_factory, dim):
             initializer = Uniform(dim=dim, velocity=vel)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
-            state_minus = project_fluid_state(discr, BTAG_ALL, uniform_state,
-                                              gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              uniform_state, gas_model)
 
             print(f"{uniform_state=}")
             temper = uniform_state.temperature
@@ -312,14 +312,16 @@ def test_noslip(actx_factory, dim):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
+            from grudge.dof_desc import as_dofdesc
+            dd_vol = as_dofdesc("vol")
+            dd_faces = as_dofdesc("all_faces")
             grad_cv_minus = \
                 discr.project("vol", BTAG_ALL,
-                              make_conserved(dim,
-                                             q=grad_operator(discr,
-                                                             uniform_state.cv.join(),
-                                                             cv_flux_bnd.join())))
+                              grad_operator(discr, dd_vol, dd_faces,
+                                            uniform_state.cv, cv_flux_bnd))
             grad_t_minus = discr.project("vol", BTAG_ALL,
-                                         grad_operator(discr, temper, t_flux_bnd))
+                                         grad_operator(discr, dd_vol, dd_faces,
+                                                       temper, t_flux_bnd))
 
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
@@ -412,7 +414,8 @@ def test_prescribedviscous(actx_factory, dim):
             initializer = Uniform(dim=dim, velocity=vel)
             cv = initializer(nodes, eos=gas_model.eos)
             state = make_fluid_state(cv, gas_model)
-            state_minus = project_fluid_state(discr, BTAG_ALL, state, gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              state, gas_model)
 
             print(f"{cv=}")
             temper = state.temperature
@@ -448,10 +451,11 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            grad_cv = make_conserved(
-                dim, q=grad_operator(discr, cv.join(), cv_flux_bnd.join())
-            )
-            grad_t = grad_operator(discr, temper, t_flux_bnd)
+            from grudge.dof_desc import as_dofdesc
+            dd_vol = as_dofdesc("vol")
+            dd_faces = as_dofdesc("all_faces")
+            grad_cv = grad_operator(discr, dd_vol, dd_faces, cv, cv_flux_bnd)
+            grad_t = grad_operator(discr, dd_vol, dd_faces, temper, t_flux_bnd)
             grad_cv_minus = discr.project("vol", BTAG_ALL, grad_cv)
             grad_t_minus = discr.project("vol", BTAG_ALL, grad_t)
 

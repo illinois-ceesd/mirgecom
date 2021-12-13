@@ -211,8 +211,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
                                   cv_int_tpair, boundaries)
         from mirgecom.operators import grad_operator
-        grad_cv = make_conserved(dim, q=grad_operator(discr, cv.join(),
-                                                      cv_flux_bnd.join()))
+        from grudge.dof_desc import as_dofdesc
+        dd_vol = as_dofdesc("vol")
+        dd_faces = as_dofdesc("all_faces")
+        grad_cv = grad_operator(discr, dd_vol, dd_faces, cv, cv_flux_bnd)
 
         xp_grad_cv = initializer.exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
         xp_grad_v = 1/cv.mass * xp_grad_cv.momentum

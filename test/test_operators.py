@@ -236,14 +236,14 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
                                          test_data_int_tpair, boundaries)
 
         from mirgecom.operators import grad_operator
-        if isinstance(test_data, ConservedVars):
-            test_grad = make_conserved(
-                dim=dim, q=grad_operator(discr, test_data.join(),
-                                         test_data_flux_bnd.join())
-                )
+        from grudge.dof_desc import as_dofdesc
+        dd_vol = as_dofdesc("vol")
+        dd_faces = as_dofdesc("all_faces")
+        test_grad = grad_operator(discr, dd_vol, dd_faces,
+                                  test_data, test_data_flux_bnd)
+        if isinstance(test_grad, ConservedVars):
             grad_err = inf_norm((test_grad - exact_grad).join())/err_scale
         else:
-            test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
             grad_err = inf_norm(test_grad - exact_grad)/err_scale
 
         print(f"{test_grad=}")
