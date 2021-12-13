@@ -413,22 +413,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(
-            discr,
-            state=fluid_state,
-            time=t,
-            boundaries=boundaries,
-            gas_model=gas_model,
-            quadrature_tag=quadrature_tag
-        ) + av_operator(
-            discr,
-            cv=fluid_state.cv,
-            boundaries=boundaries,
-            boundary_kwargs={"time": t, "gas_model": gas_model},
-            alpha=alpha,
-            s0=s0,
-            kappa=kappa,
-            quadrature_tag=quadrature_tag
+        return (
+            euler_operator(discr, state=fluid_state, time=t,
+                           boundaries=boundaries,
+                           gas_model=gas_model,
+                           quadrature_tag=quadrature_tag)
+            + av_operator(discr, cv=fluid_state.cv,
+                          boundaries=boundaries,
+                          boundary_kwargs={"time": t, "gas_model": gas_model},
+                          alpha=alpha, s0=s0, kappa=kappa,
+                          quadrature_tag=quadrature_tag)
         )
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
