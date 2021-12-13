@@ -38,7 +38,6 @@ from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair
 )
-from mirgecom.fluid import make_conserved
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -281,9 +280,7 @@ def test_noslip(actx_factory, dim):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            grad_cv = make_conserved(
-                dim, q=grad_operator(discr, uniform_state.join(), cv_flux_bnd.join())
-            )
+            grad_cv = grad_operator(discr, uniform_state, cv_flux_bnd)
             grad_t = grad_operator(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
@@ -401,9 +398,7 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            grad_cv = make_conserved(
-                dim, q=grad_operator(discr, cv.join(), cv_flux_bnd.join())
-            )
+            grad_cv = grad_operator(discr, cv, cv_flux_bnd)
             grad_t = grad_operator(discr, temper, t_flux_bnd)
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
