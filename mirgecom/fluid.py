@@ -59,15 +59,8 @@ class ConservedVars:
     for the canonical conserved quantities (mass, energy, momentum,
     and species masses) per unit volume: $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.  This data structure is intimately
-    related to helper functions :func:`join_conserved` and :func:`split_conserved`,
-    which pack and unpack (respectively) quantities to-and-from flat object
-    array representations of the data.
-
-    .. note::
-
-        The use of the terms pack and unpack here is misleading. In reality, there
-        is no data movement when using this dataclass to view your data. This
-        dataclass is entirely about the representation of the data.
+    related to the helper function :func:`make_conserved` which forms CV objects from
+    flat object array representations of the data.
 
     .. attribute:: dim
 
@@ -122,11 +115,11 @@ class ConservedVars:
         $N_{\text{eq}}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
-        $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
+        $\mathbf{Q}$, one can call :func:`make_conserved` to get a `ConservedVars`
         dataclass object that resolves the fluid CV associated with each conservation
         equation::
 
-            fluid_cv = split_conserved(ndim, Q),
+            fluid_cv = make_conserved(dim=ndim, q=Q),
 
         after which::
 
@@ -143,7 +136,7 @@ class ConservedVars:
 
     :example::
 
-        Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
+        Use :method:`join` to create an agglomerated $\mathbf{Q}$ array from the
         fluid conserved quantities (CV).
 
         See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
@@ -163,7 +156,7 @@ class ConservedVars:
         An agglomerated array of fluid independent variables can then be
         created with::
 
-            q = join_conserved(ndim, mass=rho, energy=rho*e, momentum=rho*v)
+            q = cv.join()
 
         after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
         the fluid conserved state data.
@@ -205,7 +198,8 @@ class ConservedVars:
         get a `ConservedVars` dataclass object that resolves the vector quantity
         associated with each conservation equation::
 
-            grad_cv = split_conserved(ndim, grad_q),
+            grad_q = gradient_operator(discr, q)
+            grad_cv = split_conserved(ndim, q=grad_q),
 
         after which::
 
@@ -252,7 +246,7 @@ class ConservedVars:
         return self.species_mass / self.mass
 
     def join(self):
-        """Call :func:`join_conserved` on *self*."""
+        """Return a flat object array representation of the conserved quantities."""
         return _join_conserved(
             dim=self.dim,
             mass=self.mass,
