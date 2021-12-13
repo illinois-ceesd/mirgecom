@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array, obj_array_vectorize
+from pytools.obj_array import make_obj_array, obj_array_vectorize  # noqa
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -78,19 +78,16 @@ def op_test_data(ctx_factory):
 
 # Mimics math.isclose for state arrays
 def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
-    def componentwise_norm(a):
-        from mirgecom.fluid import ConservedVars
-        if isinstance(a, ConservedVars):
-            return componentwise_norm(a.join())
-        from arraycontext import get_container_context_recursively
-        actx = get_container_context_recursively(a)
-        return obj_array_vectorize(lambda b: actx.to_numpy(discr.norm(b, np.inf)), a)
 
-    lhs = componentwise_norm(x - y)
+    from mirgecom.simutil import componentwise_norms
+    from arraycontext import flatten
+    actx = x.array_context
+    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, np.inf), actx))
+
     rhs = np.maximum(
         rel_tol * np.maximum(
-            componentwise_norm(x),
-            componentwise_norm(y)),
+            actx.to_numpy(flatten(componentwise_norms(discr, x, np.inf), actx)),
+            actx.to_numpy(flatten(componentwise_norms(discr, y, np.inf), actx))),
         abs_tol)
 
     is_close = np.all(lhs <= rhs)
@@ -134,7 +131,11 @@ def test_lazy_op_divergence(op_test_data, order):
     discr = get_discr(order)
 
     from grudge.trace_pair import interior_trace_pair
+    from grudge.dof_desc import as_dofdesc
     from mirgecom.operators import div_operator
+
+    dd_vol = as_dofdesc("vol")
+    dd_faces = as_dofdesc("all_faces")
 
     def get_flux(u_tpair):
         dd = u_tpair.dd
@@ -144,7 +145,8 @@ def test_lazy_op_divergence(op_test_data, order):
         return discr.project(dd, dd_allfaces, flux)
 
     def op(u):
-        return div_operator(discr, u, get_flux(interior_trace_pair(discr, u)))
+        return div_operator(discr, dd_vol, dd_faces,
+                            u, get_flux(interior_trace_pair(discr, u)))
 
     lazy_op = lazy_actx.compile(op)
 

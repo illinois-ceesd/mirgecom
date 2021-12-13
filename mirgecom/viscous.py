@@ -368,7 +368,9 @@ def viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair, grad_t_pair,
                                    state_pair=state_pair,
                                    grad_cv_pair=grad_cv_pair,
                                    grad_t_pair=grad_t_pair)
-    return num_flux if local else discr.project(state_pair.dd, "all_faces", num_flux)
+    dd = state_pair.dd
+    dd_allfaces = dd.with_dtag("all_faces")
+    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
 
 
 def get_viscous_timestep(discr, state):

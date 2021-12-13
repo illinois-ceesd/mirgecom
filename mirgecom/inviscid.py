@@ -199,8 +199,10 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
     """
     from arraycontext import thaw
     normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
-    num_flux = numerical_flux_func(state_pair, gas_model, normal)
-    return num_flux if local else discr.project(state_pair.dd, "all_faces", num_flux)
+    num_flux = numerical_flux_func(normal, gas_model, state_pair)
+    dd = state_pair.dd
+    dd_allfaces = dd.with_dtag("all_faces")
+    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
 
 
 def get_inviscid_timestep(discr, state):

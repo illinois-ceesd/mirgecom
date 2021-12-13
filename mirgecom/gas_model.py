@@ -272,7 +272,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
     return FluidState(cv=cv, dv=dv)
 
 
-def project_fluid_state(discr, btag, state, gas_model):
+def project_fluid_state(discr, src, tgt, state, gas_model):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -284,9 +284,17 @@ def project_fluid_state(discr, btag, state, gas_model):
 
         A discretization collection encapsulating the DG elements
 
-    btag:
+    src:
 
-        A boundary tag indicating the boundary to which to project the state
+        A :class:`~grudge.dof_desc.DOFDesc`, or a value convertible to one
+        indicating where the state is currently defined
+        (e.g. "vol" or "all_faces")
+
+    tgt:
+
+        A :class:`~grudge.dof_desc.DOFDesc`, or a value convertible to one
+        indicating where to interpolate/project the state
+        (e.g. "all_faces" or a boundary tag *btag*)
 
     state: :class:`~mirgecom.gas_model.FluidState`
 
@@ -302,10 +310,10 @@ def project_fluid_state(discr, btag, state, gas_model):
 
         Thermally consistent fluid state
     """
-    cv_sd = discr.project("vol", btag, state.cv)
+    cv_sd = discr.project(src, tgt, state.cv)
     temperature_seed = None
     if state.is_mixture > 0:
-        temperature_seed = discr.project("vol", btag, state.dv.temperature)
+        temperature_seed = discr.project(src, tgt, state.dv.temperature)
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed)
 
