@@ -98,7 +98,7 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0,
         flow equations.
     """
     # Compute volume contributions
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
+    inviscid_flux_vol = inviscid_flux(discr, eos.pressure(cv), cv)
     interior_cv = interior_trace_pairs(discr, cv)
     # Compute interface contributions
     inviscid_flux_bnd = (
