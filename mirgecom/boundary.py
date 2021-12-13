@@ -167,6 +167,8 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def _boundary_quantity(self, discr, btag, quantity, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        from grudge.dof_desc import as_dofdesc
+        btag = as_dofdesc(btag)
         if "local" in kwargs:
             if kwargs["local"]:
                 return quantity
