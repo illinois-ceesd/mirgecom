@@ -7,6 +7,12 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_rusanov
 
+Entropy Stable Flux Calculation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: entropy_conserving_flux_chandrashekar
+.. autofunction:: entropy_stable_facial_flux
+
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -39,7 +45,20 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.fluid import make_conserved
+import grudge.op as op
+
+from arraycontext import thaw, outer
+
+from mirgecom.fluid import (
+    make_conserved,
+    ConservedVars,
+    conservative_to_primitive_vars
+)
+from mirgecom.eos import GasEOS
+
+from meshmode.dof_array import DOFArray
+
+from pytools.obj_array import make_obj_array
 
 
 def inviscid_flux(state):
@@ -198,12 +217,148 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
         the face normals as required by the divergence operator for which they
         are being computed.
     """
-    from arraycontext import thaw
     normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
     num_flux = numerical_flux_func(state_pair, gas_model, normal)
     dd = state_pair.dd
     dd_allfaces = dd.with_dtag("all_faces")
     return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+
+
+def entropy_conserving_flux_chandrashekar(
+        discr, eos: GasEOS, cv_ll: ConservedVars, cv_rr: ConservedVars):
+    """Compute the entropy conservative fluxes from states *cv_ll* and *cv_rr*.
+
+    This routine implements the two-point volume flux based on the entropy
+    conserving and kinetic energy preserving two-point flux in:
+    - Chandrashekar (2013) Kinetic Energy Preserving and Entropy Stable Finite
+    Volume Schemes for Compressible Euler and Navier-Stokes Equations
+    [DOI](https://doi.org/10.4208/cicp.170712.010313a)
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
+        The discretization collection to use
+
+    cv_ll: :class:`~mirgecom.fluid.ConservedVars`
+
+        The conserved variables for the "left" state
+
+    cv_rr: :class:`~mirgecom.fluid.ConservedVars`
+
+        The conserved variables for the "right" state
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the matrix-valued two-point flux vectors
+        for each conservation equation.
+    """
+    dim = discr.dim
+    actx = cv_ll.array_context
+
+    def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
+        return actx.np.where(
+            actx.np.less(f2, epsilon),
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
+        )
+
+    rho_ll, u_ll, p_ll, rho_species_ll = conservative_to_primitive_vars(eos, cv_ll)
+    rho_rr, u_rr, p_rr, rho_species_rr = conservative_to_primitive_vars(eos, cv_rr)
+
+    beta_ll = 0.5 * rho_ll / p_ll
+    beta_rr = 0.5 * rho_rr / p_rr
+    specific_kin_ll = 0.5 * sum(v**2 for v in u_ll)
+    specific_kin_rr = 0.5 * sum(v**2 for v in u_rr)
+
+    rho_avg = 0.5 * (rho_ll + rho_rr)
+    rho_mean = ln_mean(rho_ll,  rho_rr)
+    rho_species_mean = make_obj_array(
+        [ln_mean(rho_ll_i, rho_rr_i)
+         for rho_ll_i, rho_rr_i in zip(rho_species_ll, rho_species_rr)])
+
+    beta_mean = ln_mean(beta_ll, beta_rr)
+    beta_avg = 0.5 * (beta_ll + beta_rr)
+
+    u_avg = 0.5 * (u_ll + u_rr)
+    p_mean = 0.5 * rho_avg / beta_avg
+    velocity_square_avg = specific_kin_ll + specific_kin_rr
+
+    mass_flux = rho_mean * u_avg
+    momentum_flux = np.outer(mass_flux, u_avg) + np.eye(dim) * p_mean
+    energy_flux = (
+        mass_flux * 0.5 * (
+            1/(eos.gamma() - 1)/beta_mean - velocity_square_avg)
+        + np.dot(momentum_flux, u_avg)
+    )
+    species_mass_flux = rho_species_mean.reshape(-1, 1) * u_avg
+
+    return ConservedVars(
+        mass=mass_flux,
+        energy=energy_flux,
+        momentum=momentum_flux,
+        species_mass=species_mass_flux
+    )
+
+
+def entropy_stable_facial_flux(discr, gas_model, state_pair, local=False):
+    r"""Return the entropy stable inviscid numerical flux.
+
+    This facial flux routine is "entropy stable" in the sense that
+    it computes the flux average component of the interface fluxes
+    using an entropy conservative two-point flux
+    (e.g. :func:`entropy_conserving_flux_chandrashekar`). Additional
+    dissipation is imposed by penalizing the "jump" of the state across
+    interfaces.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
+        The discretization collection to use
+
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    local: bool
+
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals.
+    """
+    actx = state_pair.int.array_context
+    cv_ll = state_pair.int.cv
+    cv_rr = state_pair.ext.cv
+    flux = entropy_conserving_flux_chandrashekar(discr, gas_model.eos,
+                                                 cv_ll, cv_rr)
+
+    # FIXME: Need to refactor the numerical fluxes into the
+    # "flux average" and "dissipation" components
+
+    # This calculates the local maximum eigenvalue of the flux Jacobian
+    # for a single component gas, i.e. the element-local max wavespeed |v| + c.
+    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
+
+    normal = thaw(actx, discr.normal(state_pair.dd))
+    result = (flux - lam*outer(cv_rr - cv_ll, normal)/2) @ normal
+    if local is False:
+        dd = state_pair.dd
+        return op.project(discr, dd, dd.with_dtag("all_faces"), result)
+    return result
 
 
 def get_inviscid_timestep(discr, state):
