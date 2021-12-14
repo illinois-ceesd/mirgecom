@@ -8,6 +8,8 @@ channels:
 - nodefaults
 dependencies:
 - git
+- gh
+- mypy
 - conda-forge::numpy
 - pocl
 - clinfo
@@ -15,7 +17,7 @@ dependencies:
 - oct2py
 - pyopencl
 - pymetis
-- python=3.8
+- python=3.9
 - pip
 - pytest
 - cantera
