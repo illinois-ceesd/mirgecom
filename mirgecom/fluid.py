@@ -6,6 +6,14 @@ Conserved Quantities Handling
 .. autoclass:: ConservedVars
 .. autofunction:: make_conserved
 
+Variable mappings
+^^^^^^^^^^^^^^^^^
+
+.. autofunction:: conservative_to_primitive_vars
+.. autofunction:: primitive_to_conservative_vars
+.. autofunction:: conservative_to_entropy_vars
+.. autofunction:: entropy_to_conservative_vars
+
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
@@ -419,3 +427,140 @@ def species_mass_fraction_gradient(cv, grad_cv):
     """
     return (grad_cv.species_mass
             - np.outer(cv.species_mass_fractions, grad_cv.mass))/cv.mass
+
+
+def conservative_to_primitive_vars(eos, cv: ConservedVars):
+    """Compute the primitive variables from conserved variables *cv*.
+    
+    Converts from conserved variables (density, momentum, total energy)
+    into primitive variables (density, velocity, pressure).
+
+    Parameters
+    ----------
+    cv: ConservedVars
+        The fluid conserved variables
+
+    Returns
+    -------
+    Tuple
+        A tuple containing the primitive variables:
+        (density, velocity, pressure)
+    """
+    rho = cv.mass
+    u = cv.velocity
+    p = eos.pressure(cv)
+    rho_species = cv.species_mass
+
+    return (rho, u, p, rho_species)
+
+
+def primitive_to_conservative_vars(eos, prim_vars):
+    """Compute the conservative variables from primitive variables *prim_vars*.
+    
+    Converts from conserved variables (density, momentum, total energy)
+    into primitive variables (density, velocity, pressure).
+
+    Parameters
+    ----------
+    prim_vars: Tuple
+        A tuple containing the primitive variables
+
+    Returns
+    -------
+    ConservedVars
+        The fluid conserved variables
+    """
+    rho, u, p, rho_species = prim_vars
+    dim = len(u)
+    inv_gamma_minus_one = 1/(eos.gamma() - 1)
+    rhou = rho * u
+    rhoe = p * inv_gamma_minus_one + 0.5 * sum(rhou * u)
+
+    return make_conserved(
+        dim,
+        mass=rho,
+        energy=rhoe,
+        momentum=rhou,
+        species_mass=rho_species
+    )
+
+
+def conservative_to_entropy_vars(eos, cv: ConservedVars):
+    """Compute the entropy variables from conserved variables *cv*.
+    
+    Converts from conserved variables (density, momentum, total energy)
+    into entropy variables.
+
+    Parameters
+    ----------
+    cv: ConservedVars
+        The fluid conserved variables
+
+    Returns
+    -------
+    ConservedVars
+        The entropy variables
+    """
+    dim = cv.dim
+    actx = cv.array_context
+    gamma = eos.gamma()
+    rho, u, p, rho_species = conservative_to_primitive_vars(eos, cv)
+
+    u_square = sum(v ** 2 for v in u)
+    # FIXME: Move to EOS?
+    s = actx.np.log(p) - gamma*actx.np.log(rho)
+    rho_p = rho / p
+    rho_species_p = rho_species / p
+
+    return make_conserved(
+        dim,
+        mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
+        energy=-rho_p,
+        momentum=rho_p * u,
+        species_mass=rho_species_p
+    )
+
+
+def entropy_to_conservative_vars(eos, ev: ConservedVars):
+    """Compute the conserved variables from entropy variables *ev*.
+    
+    Converts from entropy variables into conserved variables
+    (density, momentum, total energy).
+
+    Parameters
+    ----------
+    ev: ConservedVars
+        The entropy variables
+
+    Returns
+    -------
+    ConservedVars
+        The fluid conserved variables
+    """
+    dim = ev.dim
+    actx = ev.array_context
+    # See Hughes, Franca, Mallet (1986) A new finite element
+    # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+    gamma = eos.gamma()
+    inv_gamma_minus_one = 1/(gamma - 1)
+
+    # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+    ev_state = ev * (gamma - 1)
+    v1 = ev_state.mass
+    v234 = ev_state.momentum
+    v5 = ev_state.energy
+    v6ns = ev_state.species_mass
+
+    v_square = sum(v**2 for v in v234)
+    s = gamma - v1 + v_square/(2*v5)
+    rho_iota = (
+        ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    ) * actx.np.exp(-s * inv_gamma_minus_one)
+
+    return make_conserved(
+        dim,
+        mass=-rho_iota * v5,
+        energy=rho_iota * (1 - v_square/(2*v5)),
+        momentum=rho_iota * v234,
+        species_mass=-rho_iota * v6ns
+    )
