@@ -304,7 +304,10 @@ def entropy_conserving_flux_chandrashekar(
     )
 
 
-def entropy_stable_facial_flux(discr, gas_model, state_pair, local=False):
+def entropy_stable_facial_flux(
+        discr, gas_model, state_pair,
+        # FIXME: *numerical_flux_func* is currently ignored
+        numerical_flux_func=inviscid_flux_rusanov, local=False):
     r"""Return the entropy stable inviscid numerical flux.
 
     This facial flux routine is "entropy stable" in the sense that
@@ -353,7 +356,7 @@ def entropy_stable_facial_flux(discr, gas_model, state_pair, local=False):
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
     lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
 
-    normal = thaw(actx, discr.normal(state_pair.dd))
+    normal = thaw(discr.normal(state_pair.dd), actx)
     result = (flux - lam*outer(cv_rr - cv_ll, normal)/2) @ normal
     if local is False:
         dd = state_pair.dd

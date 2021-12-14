@@ -55,18 +55,31 @@ THE SOFTWARE.
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
-    inviscid_flux_rusanov
+    inviscid_flux_rusanov,
+    entropy_conserving_flux_chandrashekar,
+    entropy_stable_facial_flux
 )
 from mirgecom.operators import div_operator
 from mirgecom.gas_model import (
     project_fluid_state,
     make_fluid_state_trace_pairs
 )
+from mirgecom.fluid import (
+    conservative_to_entropy_vars,
+    entropy_to_conservative_vars
+)
+
+from functools import partial
+
 from grudge.trace_pair import (
     TracePair,
     interior_trace_pairs
 )
 from grudge.dof_desc import DOFDesc, as_dofdesc
+from grudge.projection import volume_quadrature_project
+from grudge.interpolation import \
+    volume_and_surface_quadrature_interpolation
+from grudge.flux_differencing import volume_flux_differencing
 
 import grudge.op as op
 
@@ -191,6 +204,169 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
     return -div_operator(discr, dd_vol, dd_faces,
                          inviscid_flux_vol, inviscid_flux_bnd)
+
+
+def entropy_stable_euler_operator(
+        discr, state, gas_model, boundaries, time=0.0,
+        inviscid_numerical_flux_func=inviscid_flux_rusanov, quadrature_tag=None):
+    """Compute RHS of the Euler flow equations using flux-differencing.
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state, and dependent
+        quantities.
+
+    boundaries
+
+        Dictionary of boundary functions, one for each valid btag
+
+    time
+
+        Time
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
+    Returns
+    -------
+    :class:`mirgecom.fluid.ConservedVars`
+
+        Agglomerated object array of DOF arrays representing the RHS of the Euler
+        flow equations.
+    """
+    eos = gas_model.eos
+    dd_base = as_dofdesc("vol")
+    dd_vol = DOFDesc("vol", quadrature_tag)
+    dd_faces = DOFDesc("all_faces", quadrature_tag)
+
+    def interp_to_surf_quad(utpair):
+        local_dd = utpair.dd
+        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        return TracePair(
+            local_dd_quad,
+            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
+            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
+        )
+
+    def interp_to_surf_modified_conservedvars(utpair):
+        """Takes a trace pair containing the projected entropy variables
+        and converts them into conserved variables on the quadrature grid.
+        """
+        local_dd = utpair.dd
+        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        # Interpolate entropy variables to the surface quadrature grid
+        vtilde_tpair = op.project(discr, local_dd, local_dd_quad, utpair)
+        return TracePair(
+            local_dd_quad,
+            # Convert interior and exterior states to conserved variables
+            interior=entropy_to_conservative_vars(eos, vtilde_tpair.int),
+            exterior=entropy_to_conservative_vars(eos, vtilde_tpair.ext)
+        )
+
+    def modified_conservedvars(proj_ev):
+        """Converts the projected entropy variables into
+        conserved variables on the quadrature (vol + surf) grid.
+        """
+        return entropy_to_conservative_vars(
+            eos,
+            # Interpolate projected entropy variables to
+            # volume + surface quadrature grids
+            volume_and_surface_quadrature_interpolation(
+                discr, dd_vol, dd_faces, proj_ev))
+
+    # Convert to projected entropy variables: ev_q = V_h P_q v(cv_q)
+    proj_entropy_vars = volume_quadrature_project(
+        discr, dd_vol,
+        # Map to entropy variables: v(u_q)
+        conservative_to_entropy_vars(
+            eos,
+            # Interpolate state to vol quad grid: cv_q = V_q cv
+            op.project(discr, dd_base, dd_vol, state.cv)))
+
+    cv_interior_pairs = [
+        # Compute interior trace pairs using modified conservative
+        # variables on the quadrature grid
+        # (obtaining state from projected entropy variables)
+        interp_to_surf_modified_conservedvars(tpair)
+        for tpair in interior_trace_pairs(discr, proj_entropy_vars)
+    ]
+
+    boundary_states = {
+        # TODO: Use modified conserved vars as the input state?
+        # Would need to make an "entropy-projection" variant
+        # of *project_fluid_state*
+        btag: project_fluid_state(
+            discr, dd_base,
+            # Make sure we get the state on the quadrature grid
+            # restricted to the tag *btag*
+            as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            state, gas_model) for btag in boundaries
+    }
+
+    # TODO: Recompute state.temperature from the modified conserved vars?
+    tseed_interior_pairs = None
+    if state.is_mixture > 0:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        tseed_interior_pairs = [
+            # Get the interior trace pairs onto the surface quadrature
+            # discretization (if any)
+            interp_to_surf_quad(tpair)
+            for tpair in interior_trace_pairs(discr, state.temperature)
+        ]
+
+    # Interior interface state pairs consisting of modified conservative
+    # variables and the corresponding temperature seeds
+    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs,
+                                                   gas_model,
+                                                   tseed_interior_pairs)
+
+    # Compute volume derivatives using flux differencing
+    inviscid_flux_vol = -volume_flux_differencing(
+        discr,
+        partial(entropy_conserving_flux_chandrashekar, discr, eos),
+        dd_vol, dd_faces,
+        modified_conservedvars(proj_entropy_vars))
+
+    #import ipdb; ipdb.set_trace()
+
+    # Surface contributions
+    inviscid_flux_bnd = (
+
+        # Domain boundaries
+        sum(boundaries[btag].inviscid_divergence_flux(
+            discr,
+            # Make sure we get the state on the quadrature grid
+            # restricted to the tag *btag*
+            as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            gas_model,
+            state_minus=boundary_states[btag],
+            time=time,
+            numerical_flux_func=inviscid_numerical_flux_func)
+            for btag in boundaries)
+
+        # Interior boundaries (using entropy stable numerical flux)
+        + sum(entropy_stable_facial_flux(
+            discr, gas_model=gas_model, state_pair=state_pair,
+            numerical_flux_func=inviscid_numerical_flux_func)
+              for state_pair in interior_states)
+    )
+
+    return op.inverse_mass(
+        discr,
+        inviscid_flux_vol - op.face_mass(discr, dd_faces, inviscid_flux_bnd)
+    )
 
 
 # By default, run unitless
