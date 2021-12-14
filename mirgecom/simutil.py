@@ -6,7 +6,7 @@ General utilities
 .. autofunction:: check_step
 .. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
-.. autofunction:: allsync
+.. autofunction:: global_reduce
 
 Diagnostic utilities
 --------------------
@@ -118,10 +118,10 @@ def get_sim_timestep(discr, state, t, dt, cfl, eos,
     if constant_cfl:
         from mirgecom.viscous import get_viscous_timestep
         from grudge.op import nodal_min
-        mydt = cfl * nodal_min(
-            discr, "vol",
-            get_viscous_timestep(discr=discr, eos=eos, cv=state)
-        )
+        mydt = state.array_context.to_numpy(
+            cfl * nodal_min(
+                discr, "vol",
+                get_viscous_timestep(discr=discr, eos=eos, cv=state)))[()]
     return min(t_remaining, mydt)
 
 
@@ -175,25 +175,103 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         )
 
 
-def allsync(local_values, comm=None, op=None):
-    """Perform allreduce if MPI comm is provided.
+def global_reduce(local_values, op, *, comm=None):
+    """Perform a global reduction (allreduce if MPI comm is provided).
+
+    This routine is a convenience wrapper for the MPI AllReduce operation
+    that also works outside of an MPI context.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
+
+    Parameters
+    ----------
+    local_values:
+        The (:mod:`mpi4py`-compatible) value or array of values on which the
+        reduction operation is to be performed.
+
+    op: str
+        Reduction operation to be performed. Must be one of "min", "max", "sum",
+        "prod", "lor", or "land".
+
+    comm:
+        Optional parameter specifying the MPI communicator on which the
+        reduction operation (if any) is to be performed
+
+    Returns
+    -------
+    Any ( like *local_values* )
+        Returns the result of the reduction operation on *local_values*
     """
+    if comm is not None:
+        from mpi4py import MPI
+        op_to_mpi_op = {
+            "min": MPI.MIN,
+            "max": MPI.MAX,
+            "sum": MPI.SUM,
+            "prod": MPI.PROD,
+            "lor": MPI.LOR,
+            "land": MPI.LAND,
+        }
+        return comm.allreduce(local_values, op=op_to_mpi_op[op])
+    else:
+        if np.ndim(local_values) == 0:
+            return local_values
+        else:
+            op_to_numpy_func = {
+                "min": np.minimum,
+                "max": np.maximum,
+                "sum": np.add,
+                "prod": np.multiply,
+                "lor": np.logical_or,
+                "land": np.logical_and,
+            }
+            from functools import reduce
+            return reduce(op_to_numpy_func[op], local_values)
+
+
+def allsync(local_values, comm=None, op=None):
+    """
+    Perform allreduce if MPI comm is provided.
+
+    Deprecated. Do not use in new code.
+    """
+    from warnings import warn
+    warn("allsync is deprecated and will disappear in Q1 2022. "
+         "Use global_reduce instead.", DeprecationWarning, stacklevel=2)
+
     if comm is None:
         return local_values
+
+    from mpi4py import MPI
+
     if op is None:
-        from mpi4py import MPI
         op = MPI.MAX
-    return comm.allreduce(local_values, op=op)
+
+    if op == MPI.MIN:
+        op_string = "min"
+    elif op == MPI.MAX:
+        op_string = "max"
+    elif op == MPI.SUM:
+        op_string = "sum"
+    elif op == MPI.PROD:
+        op_string = "prod"
+    elif op == MPI.LOR:
+        op_string = "lor"
+    elif op == MPI.LAND:
+        op_string = "land"
+    else:
+        raise ValueError(f"Unrecognized MPI reduce op {op}.")
+
+    return global_reduce(local_values, op_string, comm=comm)
 
 
 def check_range_local(discr, dd, field, min_value, max_value):
     """Check for any negative values."""
+    actx = field.array_context
     return (
-        op.nodal_min_loc(discr, dd, field) < min_value
-        or op.nodal_max_loc(discr, dd, field) > max_value
+        actx.to_numpy(op.nodal_min_loc(discr, dd, field)) < min_value
+        or actx.to_numpy(op.nodal_max_loc(discr, dd, field)) > max_value
     )
 
 
@@ -201,7 +279,7 @@ def check_naninf_local(discr, dd, field):
     """Check for any NANs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
-    return np.isnan(s) or (s == np.inf)
+    return not np.isfinite(s)
 
 
 def compare_fluid_solutions(discr, red_state, blue_state):
@@ -210,8 +288,9 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    actx = red_state.array_context
     resid = red_state - blue_state
-    return [discr.norm(v, np.inf) for v in resid.join()]
+    return [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

@@ -79,7 +79,8 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
+            python -m pip install pytest-xdist
+            python -m pytest -n auto --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples
@@ -163,22 +164,24 @@ jobs:
 
         steps:
         - uses: actions/checkout@v2
+          with:
+            fetch-depth: '0'
         - name: Prepare production environment
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
+            MIRGEDIR=$(pwd)
+            cat .ci-support/production-testing-env.sh
+            . .ci-support/production-testing-env.sh
             cd ..
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            . ../mirgecom/.ci-support/production-install.sh ../mirgecom/.ci-support/production-testing-env.sh
+            . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
+            source ${MIRGEDIR}/../config/activate_env.sh
+            . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
-            cd ..
-            source emirge.y1/config/activate_env.sh
-            . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
-            for production_driver in $(ls | grep "production_driver_");
-            do
-               cd "$production_driver"/smoke_test
-               python -m mpi4py ./driver.py -i run_params.yaml
-               cd ../../
-            done
+            . .ci-support/production-testing-env.sh
+            source ../config/activate_env.sh
+            . .ci-support/production-drivers-install.sh .
+            . .ci-support/production-drivers-run.sh .

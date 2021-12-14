@@ -105,7 +105,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     tau = viscous_stress_tensor(discr, eos, cv, grad_cv)
 
     # The errors come from grad_v
-    assert discr.norm(tau - exp_tau, np.inf) < 1e-12
+    assert actx.to_numpy(discr.norm(tau - exp_tau, np.inf)) < 1e-12
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
@@ -145,7 +145,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     xlen = right_boundary_location - left_boundary_location
     p_low = base_pressure
     p_hi = pressure_ratio*base_pressure
-    dpdx = (p_hi - p_low) / xlen
+    dpdx = (p_low - p_hi) / xlen
     rho = 1.0
 
     eos = IdealSingleGas(transport_model=transport_model)
@@ -189,6 +189,9 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
 
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
+
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
         h_max = h_max_from_volume(discr)
@@ -208,10 +211,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         xp_tau = mu * (xp_grad_v + xp_grad_v.transpose())
 
         # sanity check the gradient:
-        relerr_scale_e = 1.0 / discr.norm(xp_grad_cv.energy, np.inf)
-        relerr_scale_p = 1.0 / discr.norm(xp_grad_cv.momentum, np.inf)
-        graderr_e = discr.norm((grad_cv.energy - xp_grad_cv.energy), np.inf)
-        graderr_p = discr.norm((grad_cv.momentum - xp_grad_cv.momentum), np.inf)
+        relerr_scale_e = 1.0 / inf_norm(xp_grad_cv.energy)
+        relerr_scale_p = 1.0 / inf_norm(xp_grad_cv.momentum)
+        graderr_e = inf_norm(grad_cv.energy - xp_grad_cv.energy)
+        graderr_p = inf_norm(grad_cv.momentum - xp_grad_cv.momentum)
         graderr_e *= relerr_scale_e
         graderr_p *= relerr_scale_p
         assert graderr_e < 5e-7
@@ -221,23 +224,24 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         ones = zeros + 1
         pressure = eos.pressure(cv)
         # grad of p should be dp/dx
-        xp_grad_p = -make_obj_array([dpdx*ones, zeros])
+        xp_grad_p = make_obj_array([dpdx*ones, zeros])
         grad_p = op.local_grad(discr, pressure)
+        dpscal = 1.0/np.abs(dpdx)
 
         temperature = eos.temperature(cv)
-        tscal = dpdx/(rho*eos.gas_const())
+        tscal = rho*eos.gas_const()*dpscal
         xp_grad_t = xp_grad_p/(cv.mass*eos.gas_const())
         grad_t = op.local_grad(discr, temperature)
 
         # sanity check
-        assert discr.norm(grad_p - xp_grad_p, np.inf)/dpdx < 5e-9
-        assert discr.norm(grad_t - xp_grad_t, np.inf)/tscal < 5e-9
+        assert inf_norm(grad_p - xp_grad_p)*dpscal < 5e-9
+        assert inf_norm(grad_t - xp_grad_t)*tscal < 5e-9
 
         # verify heat flux
         from mirgecom.viscous import conductive_heat_flux
         heat_flux = conductive_heat_flux(discr, eos, cv, grad_t)
         xp_heat_flux = -kappa*xp_grad_t
-        assert discr.norm(heat_flux - xp_heat_flux, np.inf) < 2e-8
+        assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
 
         # verify diffusive mass flux is zilch (no scalar components)
         from mirgecom.viscous import diffusive_flux
@@ -250,17 +254,17 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         vflux = viscous_flux(discr, eos, cv, grad_cv, grad_t)
 
         efluxerr = (
-            discr.norm(vflux.energy - xp_e_flux, np.inf)
-            / discr.norm(xp_e_flux, np.inf)
+            inf_norm(vflux.energy - xp_e_flux)
+            / inf_norm(xp_e_flux)
         )
         momfluxerr = (
-            discr.norm(vflux.momentum - xp_mom_flux, np.inf)
-            / discr.norm(xp_mom_flux, np.inf)
+            inf_norm(vflux.momentum - xp_mom_flux)
+            / inf_norm(xp_mom_flux)
         )
 
-        assert discr.norm(vflux.mass, np.inf) == 0
-        e_eoc_rec.add_data_point(h_max, efluxerr)
-        p_eoc_rec.add_data_point(h_max, momfluxerr)
+        assert inf_norm(vflux.mass) == 0
+        e_eoc_rec.add_data_point(actx.to_numpy(h_max), efluxerr)
+        p_eoc_rec.add_data_point(actx.to_numpy(h_max), momfluxerr)
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5
@@ -332,15 +336,18 @@ def test_species_diffusive_flux(actx_factory):
     from mirgecom.viscous import diffusive_flux
     j = diffusive_flux(discr, eos, cv, grad_cv)
 
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
     tol = 1e-10
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)
                              for iidim in range(dim)])
         exact_j = -massval * d_alpha[ispec] * exact_dy
-        assert discr.norm(j[ispec] - exact_j, np.inf) < tol
+        assert inf_norm(j[ispec] - exact_j) < tol
         exact_j = massval * d_alpha[ispec+1] * exact_dy
-        assert discr.norm(j[ispec+1] - exact_j, np.inf) < tol
+        assert inf_norm(j[ispec+1] - exact_j) < tol
 
 
 def test_diffusive_heat_flux(actx_factory):
@@ -402,15 +409,18 @@ def test_diffusive_heat_flux(actx_factory):
     from mirgecom.viscous import diffusive_flux
     j = diffusive_flux(discr, eos, cv, grad_cv)
 
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
     tol = 1e-10
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)
                              for iidim in range(dim)])
         exact_j = -massval * d_alpha[ispec] * exact_dy
-        assert discr.norm(j[ispec] - exact_j, np.inf) < tol
+        assert inf_norm(j[ispec] - exact_j) < tol
         exact_j = massval * d_alpha[ispec+1] * exact_dy
-        assert discr.norm(j[ispec+1] - exact_j, np.inf) < tol
+        assert inf_norm(j[ispec+1] - exact_j) < tol
 
 
 @pytest.mark.parametrize("array_valued", [False, True])
@@ -461,7 +471,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
         expected *= f
     calculated = get_local_max_species_diffusivity(actx, discr, d_alpha)
 
-    assert discr.norm(calculated-expected, np.inf) == 0
+    assert actx.to_numpy(discr.norm(calculated-expected, np.inf)) == 0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -518,4 +528,4 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
     dt_expected = chlen / (speed_total + (mu / chlen))
 
     error = (dt_expected - dt_field) / dt_expected
-    assert discr.norm(error, np.inf) == 0
+    assert actx.to_numpy(discr.norm(error, np.inf)) == 0

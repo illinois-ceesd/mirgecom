@@ -42,6 +42,7 @@ import numpy as np
 from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import ConservedVars, make_conserved
+from abc import ABCMeta, abstractmethod
 
 
 @dataclass
@@ -59,7 +60,7 @@ class EOSDependentVars:
     pressure: np.ndarray
 
 
-class GasEOS:
+class GasEOS(metaclass=ABCMeta):
     r"""Abstract interface to equation of state class.
 
     Equation of state (EOS) classes are responsible for
@@ -80,60 +81,55 @@ class GasEOS:
     .. automethod:: gamma
     .. automethod:: transport_model
     .. automethod:: get_internal_energy
-    .. automethod:: species_enthalpies
     """
 
+    @abstractmethod
     def pressure(self, cv: ConservedVars):
         """Get the gas pressure."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def temperature(self, cv: ConservedVars):
         """Get the gas temperature."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def sound_speed(self, cv: ConservedVars):
         """Get the gas sound speed."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def gas_const(self, cv: ConservedVars):
         r"""Get the specific gas constant ($R_s$)."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def heat_capacity_cp(self, cv: ConservedVars):
         r"""Get the specific heat capacity at constant pressure ($C_p$)."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def heat_capacity_cv(self, cv: ConservedVars):
         r"""Get the specific heat capacity at constant volume ($C_v$)."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def internal_energy(self, cv: ConservedVars):
         """Get the thermal energy of the gas."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def total_energy(self, cv: ConservedVars, pressure: np.ndarray):
         """Get the total (thermal + kinetic) energy for the gas."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def kinetic_energy(self, cv: ConservedVars):
         """Get the kinetic energy for the gas."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def gamma(self, cv: ConservedVars):
         """Get the ratio of gas specific heats Cp/Cv."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def transport_model(self):
         """Get the transport model if it exists."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
-        raise NotImplementedError()
-
-    def species_enthalpies(self, cv: ConservedVars):
-        """Get specific enthalpies for each mixture species."""
-        raise NotImplementedError()
 
     def dependent_vars(self, cv: ConservedVars) -> EOSDependentVars:
         """Get an agglomerated array of the dependent variables."""
@@ -156,25 +152,25 @@ class MixtureEOS(GasEOS):
     .. automethod:: get_species_source_terms
     """
 
+    @abstractmethod
     def get_density(self, pressure, temperature, species_mass_fractions):
         """Get the density from pressure, temperature, and species fractions (Y)."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def species_enthalpies(self, cv: ConservedVars):
         """Get the species specific enthalpies."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def get_production_rates(self, cv: ConservedVars):
         """Get the production rate for each species."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def get_species_source_terms(self, cv: ConservedVars):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
-        raise NotImplementedError()
 
 
 class IdealSingleGas(GasEOS):
@@ -753,8 +749,7 @@ class PyrometheusMixture(MixtureEOS):
         def get_temp():
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, self._tguess,
-                                                          y, True)
+            return self._pyrometheus_mech.get_temperature(e, self._tguess, y)
         return get_temp()
 
     def total_energy(self, cv, pressure):

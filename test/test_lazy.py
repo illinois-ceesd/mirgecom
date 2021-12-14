@@ -79,7 +79,9 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
         from mirgecom.fluid import ConservedVars
         if isinstance(a, ConservedVars):
             return componentwise_norm(a.join())
-        return obj_array_vectorize(lambda b: discr.norm(b, np.inf), a)
+        from arraycontext import get_container_context_recursively
+        actx = get_container_context_recursively(a)
+        return obj_array_vectorize(lambda b: actx.to_numpy(discr.norm(b, np.inf)), a)
 
     lhs = componentwise_norm(x - y)
     rhs = np.maximum(
@@ -188,7 +190,7 @@ def test_lazy_op_diffusion(op_test_data, order):
         u = actx.np.cos(np.pi*nodes[0])
         return alpha, u
 
-    tol = 1e-12
+    tol = 1e-11
     isclose = partial(
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
@@ -218,7 +220,7 @@ def _get_pulse():
         BTAG_ALL: AdiabaticSlipBoundary()
     }
 
-    return eos, init, boundaries, 1e-12
+    return eos, init, boundaries, 3e-12
 
 
 def _get_scalar_lump():
@@ -236,7 +238,7 @@ def _get_scalar_lump():
         BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=init)
     }
 
-    return eos, init, boundaries, 1e-12
+    return eos, init, boundaries, 5e-12
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])

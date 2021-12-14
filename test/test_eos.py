@@ -41,7 +41,6 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 
 import cantera
-import pyrometheus as pyro
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.initializers import (
     Vortex2D, Lump,
@@ -90,7 +89,8 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
@@ -127,7 +127,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
 
         prom_rho = prometheus_mechanism.get_density(pin, tin, yin)
         prom_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin, True)
+        prom_t = prometheus_mechanism.get_temperature(prom_e, tin, yin)
         prom_p = prometheus_mechanism.get_pressure(prom_rho, tin, yin)
         prom_c = prometheus_mechanism.get_concentrations(prom_rho, yin)
         prom_k = prometheus_mechanism.get_fwd_rate_coefficients(prom_t, prom_c)
@@ -149,18 +149,21 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         print(f"can_omega = {can_omega}")
         print(f"prom_omega = {prom_omega}")
 
-        assert discr.norm((prom_c - can_c) / can_c, np.inf) < 1e-14
-        assert discr.norm((prom_t - can_t) / can_t, np.inf) < 1e-14
-        assert discr.norm((prom_rho - can_rho) / can_rho, np.inf) < 1e-14
-        assert discr.norm((prom_p - can_p) / can_p, np.inf) < 1e-14
-        assert discr.norm((prom_e - can_e) / can_e, np.inf) < 1e-6
-        assert discr.norm((prom_k - can_k) / can_k, np.inf) < 1e-10
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
+
+        assert inf_norm((prom_c - can_c) / can_c) < 1e-14
+        assert inf_norm((prom_t - can_t) / can_t) < 1e-14
+        assert inf_norm((prom_rho - can_rho) / can_rho) < 1e-14
+        assert inf_norm((prom_p - can_p) / can_p) < 1e-14
+        assert inf_norm((prom_e - can_e) / can_e) < 1e-6
+        assert inf_norm((prom_k - can_k) / can_k) < 1e-10
 
         # Pyro chem test comparisons
         for i, rate in enumerate(can_r):
-            assert discr.norm((prom_r[i] - rate), np.inf) < rate_tol
+            assert inf_norm(prom_r[i] - rate) < rate_tol
         for i, rate in enumerate(can_omega):
-            assert discr.norm((prom_omega[i] - rate), np.inf) < rate_tol
+            assert inf_norm(prom_omega[i] - rate) < rate_tol
 
 
 @pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
@@ -195,7 +198,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    prometheus_mechanism = pyro.get_thermochem_class(sol)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
@@ -209,7 +213,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     y0s[0] = 1.0 - np.sum(y0s[1:])
     velocity = vel * np.ones(shape=(dim,))
 
-    for fac in range(1, 11):
+    for fac in range(1, 7):
         tempin = fac * temp0
         pressin = fac * press0
 
@@ -223,7 +227,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin, True)
+        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin)
         pyro_p = prometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
 
         print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
@@ -246,11 +250,14 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"pyro_eos.temp = {temperature}")
         print(f"pyro_eos.e = {internal_energy}")
 
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
+
         tol = 1e-14
-        assert discr.norm((cv.mass - pyro_rho) / pyro_rho, np.inf) < tol
-        assert discr.norm((temperature - pyro_t) / pyro_t, np.inf) < tol
-        assert discr.norm((internal_energy - pyro_e) / pyro_e, np.inf) < tol
-        assert discr.norm((p - pyro_p) / pyro_p, np.inf) < tol
+        assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
+        assert inf_norm((temperature - pyro_t) / pyro_t) < tol
+        assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
+        assert inf_norm((p - pyro_p) / pyro_p) < tol
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
@@ -290,7 +297,9 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
-    pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    # pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
@@ -345,24 +354,27 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
         pyro_omega = pyro_obj.get_net_production_rates(rhoin, tin, yin)
 
         # Print
+        def inf_norm(x):
+            return actx.to_numpy(discr.norm(x, np.inf))
+
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
-        abs_diff = discr.norm(pyro_r - can_r, np.inf)
+        abs_diff = inf_norm(pyro_r - can_r)
         if abs_diff > 1e-14:
             min_r = (np.abs(can_r)).min()
             if min_r > 0:
-                assert discr.norm((pyro_r - can_r) / can_r, np.inf) < rate_tol
+                assert inf_norm((pyro_r - can_r) / can_r) < rate_tol
             else:
-                assert discr.norm(pyro_r, np.inf) < rate_tol
+                assert inf_norm(pyro_r) < rate_tol
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
         for i, omega in enumerate(can_omega):
             omin = np.abs(omega).min()
             if omin > 1e-12:
-                assert discr.norm((pyro_omega[i] - omega) / omega, np.inf) < 1e-8
+                assert inf_norm((pyro_omega[i] - omega) / omega) < 1e-8
             else:
-                assert discr.norm(pyro_omega[i], np.inf) < 1e-12
+                assert inf_norm(pyro_omega[i]) < 1e-12
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -398,16 +410,19 @@ def test_idealsingle_lump(ctx_factory, dim):
     eos = IdealSingleGas()
     cv = lump(nodes)
 
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
     p = eos.pressure(cv)
     exp_p = 1.0
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = inf_norm(p - exp_p)
 
     exp_ke = 0.5 * cv.mass
     ke = eos.kinetic_energy(cv)
-    kerr = discr.norm(ke - exp_ke, np.inf)
+    kerr = inf_norm(ke - exp_ke)
 
     te = eos.total_energy(cv, p)
-    terr = discr.norm(te - cv.energy, np.inf)
+    terr = inf_norm(te - cv.energy)
 
     logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
@@ -446,17 +461,20 @@ def test_idealsingle_vortex(ctx_factory):
     vortex = Vortex2D()
     cv = vortex(nodes)
 
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
     gamma = eos.gamma()
     p = eos.pressure(cv)
     exp_p = cv.mass ** gamma
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = inf_norm(p - exp_p)
 
     exp_ke = 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass
     ke = eos.kinetic_energy(cv)
-    kerr = discr.norm(ke - exp_ke, np.inf)
+    kerr = inf_norm(ke - exp_ke)
 
     te = eos.total_energy(cv, p)
-    terr = discr.norm(te - cv.energy, np.inf)
+    terr = inf_norm(te - cv.energy)
 
     logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
