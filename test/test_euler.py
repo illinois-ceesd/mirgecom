@@ -99,12 +99,14 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_input = make_obj_array(
             [discr.zeros(actx) for i in range(discr.dim)]
         )
+        num_equations = dim + 2 + nspecies
 
-        mass_frac_input = flat_obj_array(
-            [ones / ((i + 1) * 10) for i in range(nspecies)]
-        )
-        species_mass_input = mass_input * mass_frac_input
-        num_equations = dim + 2 + len(species_mass_input)
+        species_mass_input = None
+        if nspecies > 0:
+            mass_frac_input = flat_obj_array(
+                [ones / ((i + 1) * 10) for i in range(nspecies)]
+            )
+            species_mass_input = mass_input * mass_frac_input
 
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
@@ -123,18 +125,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         rho_resid = rhs_resid.mass
         rhoe_resid = rhs_resid.energy
         mom_resid = rhs_resid.momentum
-        rhoy_resid = rhs_resid.species_mass
 
         rho_rhs = inviscid_rhs.mass
         rhoe_rhs = inviscid_rhs.energy
         rhov_rhs = inviscid_rhs.momentum
-        rhoy_rhs = inviscid_rhs.species_mass
 
         logger.info(
             f"rho_rhs  = {rho_rhs}\n"
             f"rhoe_rhs = {rhoe_rhs}\n"
             f"rhov_rhs = {rhov_rhs}\n"
-            f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
         def inf_norm(x):
@@ -144,8 +143,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         assert inf_norm(rhoe_resid) < tolerance
         for i in range(dim):
             assert inf_norm(mom_resid[i]) < tolerance
-        for i in range(nspecies):
-            assert inf_norm(rhoy_resid[i]) < tolerance
+
+        if nspecies > 0:
+            rhoy_resid = rhs_resid.species_mass
+            rhoy_rhs = inviscid_rhs.species_mass
+            logger.info(f"rhoy_rhs = {rhoy_rhs}")
+            for i in range(nspecies):
+                assert inf_norm(rhoy_resid[i]) < tolerance
 
         err_max = inf_norm(rho_resid)
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
@@ -166,15 +170,17 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         rho_resid = rhs_resid.mass
         rhoe_resid = rhs_resid.energy
         mom_resid = rhs_resid.momentum
-        rhoy_resid = rhs_resid.species_mass
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
 
         for i in range(dim):
             assert inf_norm(mom_resid[i]) < tolerance
-        for i in range(nspecies):
-            assert inf_norm(rhoy_resid[i]) < tolerance
+
+        if nspecies > 0:
+            rhoy_resid = rhs_resid.species_mass
+            for i in range(nspecies):
+                assert inf_norm(rhoy_resid[i]) < tolerance
 
         err_max = inf_norm(rho_resid)
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
