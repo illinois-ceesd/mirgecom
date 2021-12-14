@@ -88,6 +88,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
+
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
@@ -134,7 +137,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["nparts"] == nparts
+        assert restart_data["num_parts"] == nparts
     else:  # generate the grid from scratch
         box_ll = -5.0
         box_ur = 5.0
@@ -271,11 +274,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
-                from mirgecom.simutil import allsync
-                health_errors = allsync(
-                    my_health_check(dv=dv, state=state, exact=exact),
-                    comm, op=MPI.LOR
-                )
+                health_errors = global_reduce(
+                    my_health_check(dv=dv, state=state, exact=exact), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")

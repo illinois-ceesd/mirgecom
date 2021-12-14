@@ -134,7 +134,7 @@ def test_analytic_comparison(actx_factory):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     resid = vortex_soln - cv
-    expected_errors = [discr.norm(v, np.inf) for v in resid.join()]
+    expected_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in resid.join()]
 
     errors = compare_fluid_solutions(discr, cv, cv)
     assert max(errors) == 0

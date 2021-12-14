@@ -192,7 +192,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     filtered_soln = filter_modally(discr, "vol", cutoff,
                                    frfunc, uniform_soln)
     soln_resid = uniform_soln - filtered_soln
-    max_errors = [discr.norm(v, np.inf) for v in soln_resid]
+    max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in soln_resid]
 
     tol = 1e-14
 
@@ -217,7 +217,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     filtered_field = filter_modally(discr, "vol", cutoff,
                                     frfunc, field)
     soln_resid = field - filtered_field
-    max_errors = [discr.norm(v, np.inf) for v in soln_resid]
+    max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in soln_resid]
     logger.info(f"Field = {field}")
     logger.info(f"Filtered = {filtered_field}")
     logger.info(f"Max Errors (poly) = {max_errors}")
@@ -253,6 +253,6 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
             ]
             vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
         field_resid = unfiltered_spectrum - filtered_spectrum
-        max_errors = [discr.norm(v, np.inf) for v in field_resid]
+        max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in field_resid]
         # fields should be different, but not too different
         assert(tol > np.max(max_errors) > threshold)

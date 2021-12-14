@@ -32,10 +32,14 @@ import numpy as np
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 from pytools import memoize_in
-from arraycontext import freeze, thaw
+from arraycontext import (
+    freeze,
+    thaw,
+    get_container_context_recursively
+)
 
 
-def compile_timestepper(actx, timestepper, state, rhs):
+def _compile_timestepper(actx, timestepper, rhs):
     """Create lazy evaluation version of the timestepper."""
     @memoize_in(actx, ("mirgecom_compiled_operator",
                        timestepper, rhs))
@@ -47,8 +51,11 @@ def compile_timestepper(actx, timestepper, state, rhs):
     return get_timestepper()
 
 
-def compile_rhs(actx, rhs, state):
+def _compile_rhs(actx, rhs):
     """Create lazy evaluation version of the rhs."""
+    if actx is None:
+        return rhs
+
     @memoize_in(actx, ("mirgecom_compiled_rhs",
                        rhs))
     def get_rhs():
@@ -57,14 +64,18 @@ def compile_rhs(actx, rhs, state):
     return get_rhs()
 
 
+def _force_evaluation(actx, state):
+    if actx is None:
+        return state
+    return thaw(freeze(state, actx), actx)
+
+
 def _advance_state_stepper_func(rhs, timestepper,
                                 state, t_final, dt=0,
                                 t=0.0, istep=0,
-                                get_timestep=None,
                                 pre_step_callback=None,
                                 post_step_callback=None,
-                                logmgr=None, eos=None, dim=None,
-                                actx=None):
+                                logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -77,10 +88,6 @@ def _advance_state_stepper_func(rhs, timestepper,
         Function that advances the state from t=time to t=(time+dt), and
         returns the advanced state. Has a call with signature
         ``timestepper(state, t, dt, rhs)``.
-    get_timestep
-        Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully. Takes only state as an argument.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -114,13 +121,12 @@ def _advance_state_stepper_func(rhs, timestepper,
     if t_final <= t:
         return istep, t, state
 
-    if actx is None:
-        actx = state.array_context
+    actx = get_container_context_recursively(state)
 
-    compiled_rhs = compile_rhs(actx, rhs, state)
+    compiled_rhs = _compile_rhs(actx, rhs)
 
     while t < t_final:
-        state = thaw(freeze(state, actx), actx)
+        state = _force_evaluation(actx, state)
 
         if logmgr:
             logmgr.tick_before()
@@ -148,11 +154,9 @@ def _advance_state_leap(rhs, timestepper, state,
                         t_final, dt=0,
                         component_id="state",
                         t=0.0, istep=0,
-                        get_timestep=None,
                         pre_step_callback=None,
                         post_step_callback=None,
-                        logmgr=None, eos=None, dim=None,
-                        actx=None):
+                        logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -163,10 +167,6 @@ def _advance_state_leap(rhs, timestepper, state,
         a call with signature ``rhs(t, state)``.
     timestepper
         An instance of :class:`leap.MethodBuilder`.
-    get_timestep
-        Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -200,19 +200,14 @@ def _advance_state_leap(rhs, timestepper, state,
     if t_final <= t:
         return istep, t, state
 
-    if actx is None:
-        actx = state.array_context
+    actx = get_container_context_recursively(state)
 
-    compiled_rhs = compile_rhs(actx, rhs, state)
+    compiled_rhs = _compile_rhs(actx, rhs)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
                                                     compiled_rhs, t, dt, state)
-    while t < t_final:
 
-        # This is only needed because Leap testing in test/test_time_integrators.py
-        # tests on single scalar values rather than an array-context-ready array
-        # container like a CV.
-        if isinstance(state, np.ndarray):
-            state = thaw(freeze(state, actx), actx)
+    while t < t_final:
+        state = _force_evaluation(actx, state)
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
@@ -279,11 +274,9 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 def advance_state(rhs, timestepper, state, t_final,
                   component_id="state",
                   t=0.0, istep=0, dt=0,
-                  get_timestep=None,
                   pre_step_callback=None,
                   post_step_callback=None,
-                  logmgr=None, eos=None, dim=None,
-                  actx=None):
+                  logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -302,10 +295,6 @@ def advance_state(rhs, timestepper, state, t_final,
         to be integrated, the initial time and timestep, and the RHS function.
     component_id
         State id (required input for leap method generation)
-    get_timestep
-        Function that should return dt for the next step. This interface allows
-        user-defined adaptive timestepping. A negative return value indicated that
-        the stepper should stop gracefully. Takes only state as an argument.
     state: numpy.ndarray
         Agglomerated object array containing at least the state variables that
         will be advanced by this stepper
@@ -346,13 +335,6 @@ def advance_state(rhs, timestepper, state, t_final,
              "signature. See the examples for the current and preferred usage.",
              DeprecationWarning, stacklevel=2)
 
-    if get_timestep is not None:
-        from warnings import warn
-        warn("Passing the get_timestep function into the stepper is deprecated. "
-             "Users should use the dt argument for constant timestep, and "
-             "perform any dt modification in the {pre,post}-step callbacks.",
-             DeprecationWarning, stacklevel=2)
-
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
@@ -364,24 +346,20 @@ def advance_state(rhs, timestepper, state, t_final,
         (current_step, current_t, current_state) = \
             _advance_state_leap(
                 rhs=rhs, timestepper=timestepper,
-                get_timestep=get_timestep, state=state,
-                t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim,
-                actx=actx
             )
     else:
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
-                get_timestep=get_timestep, state=state,
-                t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep,
-                logmgr=logmgr, eos=eos, dim=dim, actx=actx
+                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
             )
 
     return current_step, current_t, current_state

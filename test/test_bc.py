@@ -85,8 +85,9 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
-            from functools import partial
-            bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+
+            def bnd_norm(vec):
+                return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
             bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
                                           eos=eos, cv=uniform_state)
@@ -137,8 +138,8 @@ def test_slipwall_flux(actx_factory, dim, order):
         nhat = thaw(actx, discr.normal(BTAG_ALL))
         h = 1.0 / nel_1d
 
-        from functools import partial
-        bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+        def bnd_norm(vec):
+            return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
@@ -258,20 +259,20 @@ def test_noslip(actx_factory, dim):
             cv_int_tpair = interior_trace_pair(discr, uniform_state)
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
             print(f"{cv_flux_int=}")
-            cv_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
-                                              eos=eos, cv=uniform_state)
+            cv_flux_bc = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
+                                               eos=eos, cv=uniform_state)
             print(f"{cv_flux_bc=}")
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+            t_flux_bc = wall.t_gradient_flux(discr, btag=BTAG_ALL, eos=eos,
                                              cv=uniform_state)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
-            i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                    cv=uniform_state)
+            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                      cv=uniform_state)
             i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -287,9 +288,10 @@ def test_noslip(actx_factory, dim):
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 
-            v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                   cv=uniform_state, grad_cv=grad_cv,
-                                                   t=temper, grad_t=grad_t)
+            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                     cv=uniform_state,
+                                                     grad_cv=grad_cv, t=temper,
+                                                     grad_t=grad_t)
             print(f"{v_flux_bc=}")
 
 
@@ -378,19 +380,19 @@ def test_prescribedviscous(actx_factory, dim):
 
             cv_int_tpair = interior_trace_pair(discr, cv)
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
-            cv_flux_bc = wall.q_boundary_flux(discr, btag=BTAG_ALL,
-                                              eos=eos, cv=cv)
+            cv_flux_bc = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
+                                               eos=eos, cv=cv)
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.t_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
+            t_flux_bc = wall.t_gradient_flux(discr, btag=BTAG_ALL, eos=eos,
                                              cv=cv)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
-            i_flux_bc = wall.inviscid_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                    cv=cv)
+            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                      cv=cv)
             i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -406,7 +408,7 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{grad_cv=}")
             print(f"{grad_t=}")
 
-            v_flux_bc = wall.viscous_boundary_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                   cv=cv, grad_cv=grad_cv,
-                                                   t=temper, grad_t=grad_t)
+            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
+                                                     cv=cv, grad_cv=grad_cv,
+                                                     t=temper, grad_t=grad_t)
             print(f"{v_flux_bc=}")
