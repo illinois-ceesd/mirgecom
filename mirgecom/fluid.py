@@ -4,8 +4,7 @@ State Vector Handling
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: ConservedVars
-.. autofunction:: split_conserved
-.. autofunction:: join_conserved
+.. autoclass:: MixtureConservedVars
 .. autofunction:: make_conserved
 
 Helper Functions
@@ -61,15 +60,9 @@ class ConservedVars:
     for the canonical conserved quantities (mass, energy, momentum,
     and species masses) per unit volume: $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.  This data structure is intimately
-    related to helper functions :func:`join_conserved` and :func:`split_conserved`,
-    which pack and unpack (respectively) quantities to-and-from flat object
-    array representations of the data.
-
-    .. note::
-
-        The use of the terms pack and unpack here is misleading. In reality, there
-        is no data movement when using this dataclass to view your data. This
-        dataclass is entirely about the representation of the data.
+    related to the helper function :func:`make_conserved` which helps form a
+    conservation-law-specific representation of the simulation state data for use by
+    specific operators (fluids in this case).
 
     .. attribute:: dim
 
@@ -94,12 +87,9 @@ class ConservedVars:
         ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
         to the ndim equations of momentum conservation.
 
-    .. attribute:: species_mass
-
-        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
-        of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
-        ``(nspecies, ndim)`` respectively for scalar or vector quantities
-        corresponding to the `nspecies` species mass conservation equations.
+    .. autoattribute:: has_multispecies
+    .. autoattribute:: array_context
+    .. autoattribute:: velocity
 
     :example::
 
@@ -124,11 +114,11 @@ class ConservedVars:
         $N_{\text{eq}}$ :class:`~meshmode.dof_array.DOFArray`.
 
         To use this dataclass for a fluid CV-specific view on the content of
-        $\mathbf{Q}$, one can call :func:`split_conserved` to get a `ConservedVars`
+        $\mathbf{Q}$, one can call :func:`make_conserved` to get a `ConservedVars`
         dataclass object that resolves the fluid CV associated with each conservation
         equation::
 
-            fluid_cv = split_conserved(ndim, Q),
+            fluid_cv = make_conserved(dim=ndim, q=Q),
 
         after which::
 
@@ -142,37 +132,6 @@ class ConservedVars:
         - :mod:`~mirgecom.euler`
         - :mod:`~mirgecom.initializers`
         - :mod:`~mirgecom.simutil`
-
-    :example::
-
-        Use `join_conserved` to create an agglomerated $\mathbf{Q}$ array from the
-        fluid conserved quantities (CV).
-
-        See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
-        `nspecies`, and $N_{\text{eq}}$.
-
-        Often, a user starts with the fluid conserved quantities like mass and
-        energy densities, and it is desired to glom those quantities together into
-        a *MIRGE*-compatible $\mathbf{Q}$ data structure.
-
-        For example, a solution initialization routine may set the fluid
-        quantities::
-
-            rho = ... # rho is a DOFArray with fluid density
-            v = ... # v is an ndim-vector of DOFArray with components of velocity
-            e = ... # e is a DOFArray with fluid energy
-
-        An agglomerated array of fluid independent variables can then be
-        created with::
-
-            q = join_conserved(ndim, mass=rho, energy=rho*e, momentum=rho*v)
-
-        after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
-        the fluid conserved state data.
-
-        Examples of this sort of use for `join_conserved` can be found in:
-
-        - :mod:`~mirgecom.initializers`
 
     :example::
 
@@ -203,11 +162,11 @@ class ConservedVars:
 
         Presuming that `grad_q` is the agglomerated *MIRGE* data structure with the
         gradient data, this dataclass can be used to get a fluid CV-specific view on
-        the content of $\nabla\mathbf{Q}$. One can call :func:`split_conserved` to
+        the content of $\nabla\mathbf{Q}$. One can call :func:`make_conserved` to
         get a `ConservedVars` dataclass object that resolves the vector quantity
         associated with each conservation equation::
 
-            grad_cv = split_conserved(ndim, grad_q),
+            grad_cv = make_conserved(dim=ndim, q=grad_q),
 
         after which::
 
@@ -229,6 +188,7 @@ class ConservedVars:
 
     @property
     def has_multispecies(self):
+        """Return whether this state has multiple species."""
         return False
 
     @property
@@ -247,7 +207,7 @@ class ConservedVars:
         return self.momentum / self.mass
 
     def join(self):
-        """Call :func:`join_conserved` on *self*."""
+        """Return a flat object array of the CV components."""
         return _join_conserved(
             dim=self.dim,
             mass=self.mass,
@@ -271,8 +231,15 @@ class ConservedVars:
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
-class MultiGasConservedVars(ConservedVars):
-    r"""Store and resolve quantities according to the fluid conservation equations.
+class MixtureConservedVars(ConservedVars):
+    r"""Conserved mixture components for multi-species states.
+
+    .. attribute:: species_mass
+
+        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
+        ``(nspecies, ndim)`` respectively for scalar or vector quantities
+        corresponding to the `nspecies` species mass conservation equations.
 
     .. automethod:: join
     .. automethod:: replace
@@ -282,6 +249,7 @@ class MultiGasConservedVars(ConservedVars):
 
     @property
     def has_multispecies(self):
+        """Return whether this CV has multiple species."""
         return True
 
     @property
@@ -295,7 +263,7 @@ class MultiGasConservedVars(ConservedVars):
         return self.species_mass / self.mass
 
     def join(self):
-        """Call :func:`join_conserved` on *self*."""
+        """Return a flat object array of CV components."""
         return _join_conserved(
             dim=self.dim,
             mass=self.mass,
@@ -326,7 +294,7 @@ def get_num_species(dim, q):
     return len(q) - (dim + 2)
 
 
-def split_conserved(dim, q):
+def _split_conserved(dim, q):
     """Get quantities corresponding to fluid conservation equations.
 
     Return a :class:`ConservedVars` with quantities corresponding to the
@@ -338,8 +306,8 @@ def split_conserved(dim, q):
     """
     nspec = get_num_species(dim, q)
     if nspec > 0:
-        return MultiGasConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                                     species_mass=q[2+dim:2+dim+nspec])
+        return MixtureConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
+                                    species_mass=q[2+dim:2+dim+nspec])
     return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
@@ -376,24 +344,18 @@ def _join_conserved(dim, mass, energy, momentum, species_mass=None):
     return result
 
 
-# def join_conserved(dim, mass, energy, momentum, species_mass=None):
-#    """Create agglomerated array from quantities for each conservation eqn."""
-#    return _join_conserved(dim, mass=mass, energy=energy,
-#                           momentum=momentum, species_mass=species_mass)
-
-
 def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None,
                    q=None, scalar_quantities=None, vector_quantities=None):
     """Create :class:`ConservedVars` from separated conserved quantities."""
     if scalar_quantities is not None:
-        return split_conserved(dim, q=scalar_quantities)
+        return _split_conserved(dim, q=scalar_quantities)
     if vector_quantities is not None:
-        return split_conserved(dim, q=vector_quantities)
+        return _split_conserved(dim, q=vector_quantities)
     if q is not None:
-        return split_conserved(dim, q=q)
+        return _split_conserved(dim, q=q)
     if mass is None or energy is None or momentum is None:
         raise ValueError("Must have one of *q* or *mass, energy, momentum*.")
-    return split_conserved(
+    return _split_conserved(
         dim, _join_conserved(dim, mass=mass, energy=energy,
                              momentum=momentum, species_mass=species_mass)
     )

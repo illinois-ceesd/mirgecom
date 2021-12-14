@@ -77,7 +77,8 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     from grudge.op import local_grad
-    grad_cv = local_grad(discr, cv)
+    grad_cv = make_conserved(dim,
+                             q=local_grad(discr, cv.join()))
 
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
@@ -122,7 +123,8 @@ def test_velocity_gradient_eoc(actx_factory, dim):
 
         cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         from grudge.op import local_grad
-        grad_cv = local_grad(discr, cv)
+        grad_cv = make_conserved(dim,
+                                 q=local_grad(discr, cv.join()))
         grad_v = velocity_gradient(discr, cv, grad_cv)
 
         def exact_grad_row(xdata, gdim, dim):
@@ -176,7 +178,8 @@ def test_velocity_gradient_structure(actx_factory):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     from grudge.op import local_grad
-    grad_cv = local_grad(discr, cv)
+    grad_cv = make_conserved(dim,
+                             q=local_grad(discr, cv.join()))
     grad_v = velocity_gradient(discr, cv, grad_cv)
 
     tol = 1e-11
@@ -230,8 +233,8 @@ def test_species_mass_gradient(actx_factory, dim):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
     from grudge.op import local_grad
-    grad_cv = local_grad(discr, cv)
-
+    grad_cv = make_conserved(dim,
+                             q=local_grad(discr, cv.join()))
     from mirgecom.fluid import species_mass_fraction_gradient
     grad_y = species_mass_fraction_gradient(discr, cv, grad_cv)
 

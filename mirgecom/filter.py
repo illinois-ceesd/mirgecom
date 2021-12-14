@@ -201,13 +201,7 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     dd_modal = dof_desc.DD_VOLUME_MODAL
     discr = dcoll.discr_from_dd(dd)
 
-    from arraycontext import map_array_container
-    from functools import partial
-    if not isinstance(field, DOFArray):
-        return map_array_container(
-            partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
-        )
-
+    assert isinstance(field, DOFArray)
     actx = field.array_context
 
     modal_map = dcoll.connection_from_dds(dd, dd_modal)

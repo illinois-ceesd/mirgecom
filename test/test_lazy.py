@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array, obj_array_vectorize  # noqa
+from pytools.obj_array import make_obj_array, obj_array_vectorize
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
@@ -75,13 +75,19 @@ def op_test_data(ctx_factory):
 
 # Mimics math.isclose for state arrays
 def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
+    def componentwise_norm(a):
+        from mirgecom.fluid import ConservedVars
+        if isinstance(a, ConservedVars):
+            return componentwise_norm(a.join())
+        from arraycontext import get_container_context_recursively
+        actx = get_container_context_recursively(a)
+        return obj_array_vectorize(lambda b: actx.to_numpy(discr.norm(b, np.inf)), a)
 
-    from mirgecom.simutil import componentwise_norms
-    lhs = componentwise_norms(discr, x - y, np.inf)
+    lhs = componentwise_norm(x - y)
     rhs = np.maximum(
         rel_tol * np.maximum(
-            componentwise_norms(discr, x, np.inf),
-            componentwise_norms(discr, y, np.inf)),
+            componentwise_norm(x),
+            componentwise_norm(y)),
         abs_tol)
 
     is_close = np.all(lhs <= rhs)
