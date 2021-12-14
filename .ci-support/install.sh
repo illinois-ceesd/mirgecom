@@ -21,6 +21,9 @@ PATH="$MINIFORGE_INSTALL_DIR/bin:$PATH" conda env create --file conda-env.yml --
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 conda list
 
+# See https://github.com/conda-forge/qt-feedstock/issues/208
+rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
+
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 pip install -r requirements.txt
