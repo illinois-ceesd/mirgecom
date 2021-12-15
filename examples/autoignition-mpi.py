@@ -571,8 +571,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                         temperature_seed=state[1])
 
         return make_obj_array([euler_operator(discr, cv=cv, time=t,
-                               boundaries=boundaries, eos=eos,
-                               dv=current_dv)
+                                              boundaries=boundaries, eos=eos,
+                                              dv=current_dv)
                                + eos.get_species_source_terms(cv),
                                0*state[1]])
 

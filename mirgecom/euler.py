@@ -62,7 +62,7 @@ from grudge.trace_pair import interior_trace_pairs
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, eos, boundaries, cv, time=0.0, dv=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -96,8 +96,11 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
+    if dv is None:
+        dv = eos.dependent_vars(cv)
+
     # Compute volume contributions
-    inviscid_flux_vol = inviscid_flux(discr, eos.pressure(cv), cv)
+    inviscid_flux_vol = inviscid_flux(discr, dv.pressure, cv)
     interior_cv = interior_trace_pairs(discr, cv)
     # Compute interface contributions
     inviscid_flux_bnd = (
