@@ -217,14 +217,10 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
 
-        from mirgecom.simutil import componentwise_norms
-        from arraycontext import flatten
-
-        err_scale = max(flatten(componentwise_norms(discr, exact_grad, np.inf),
-                                actx))
+        err_scale = discr.norm(exact_grad, np.inf)
 
         if err_scale <= 1e-16:
-            err_scale = 1
+            err_scale = actx.from_numpy(np.array(1))
 
         print(f"{test_data=}")
         print(f"{exact_grad=}")
@@ -236,9 +232,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
 
         from mirgecom.operators import grad_operator
         test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
-        grad_err = \
-            max(flatten(componentwise_norms(discr, test_grad - exact_grad, np.inf),
-                        actx)) / err_scale
+        grad_err = discr.norm(test_grad - exact_grad, np.inf) / err_scale
 
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 

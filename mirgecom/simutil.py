@@ -13,7 +13,6 @@ Diagnostic utilities
 
 .. autofunction:: compare_fluid_solutions
 .. autofunction:: componentwise_norms
-.. autofunction:: max_component_norm
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
 
@@ -50,9 +49,7 @@ import logging
 import numpy as np
 import grudge.op as op
 
-from arraycontext import map_array_container, flatten
-
-from functools import partial
+from arraycontext import multimapped_over_array_containers
 
 from meshmode.dof_array import DOFArray
 
@@ -294,42 +291,33 @@ def check_naninf_local(discr, dd, field):
 def compare_fluid_solutions(discr, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
+    Deprecated. Do not use in new code.
+
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    from warnings import warn
+    warn("compare_fluid_solutions is deprecated and will disappear in Q3 2022. "
+         "Use componentwise_norms instead.", DeprecationWarning, stacklevel=2)
+
     actx = red_state.array_context
     resid = red_state - blue_state
+    from arraycontext import flatten
     resid_errs = actx.to_numpy(
         flatten(componentwise_norms(discr, resid, order=np.inf), actx))
 
     return resid_errs.tolist()
 
 
+# FIXME: Add componentwise norm functionality to grudge?
+@multimapped_over_array_containers(leaf_class=DOFArray)
 def componentwise_norms(discr, fields, order=np.inf):
     """Return the *order*-norm for each component of *fields*.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
-    if not isinstance(fields, DOFArray):
-        return map_array_container(
-            partial(componentwise_norms, discr, order=order), fields)
-    if len(fields) > 0:
-        return discr.norm(fields, order)
-    else:
-        # FIXME: This work-around for #575 can go away after #569
-        return 0
-
-
-def max_component_norm(discr, fields, order=np.inf):
-    """Return the max *order*-norm over the components of *fields*.
-
-    .. note::
-        This is a collective routine and must be called by all MPI ranks.
-    """
-    actx = fields.array_context
-    return max(actx.to_numpy(flatten(
-        componentwise_norms(discr, fields, order), actx)))
+    return discr.norm(fields, order)
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):

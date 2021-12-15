@@ -29,6 +29,7 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
+from arraycontext import flatten
 from meshmode.array_context import (
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
@@ -43,7 +44,8 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    check_step
+    check_step,
+    componentwise_norms
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -232,10 +234,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         discr, "vol",
                         get_inviscid_cfl(discr, eos, current_dt, cv=state)))[()]
         if rank == 0:
+            flat_component_errors = actx.to_numpy(flatten(component_errors, actx))
             logger.info(
                 f"------ {cfl=}\n"
                 "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+                + ", ".join("%.3g" % en for en in flat_component_errors))
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
@@ -275,8 +278,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
+        max_error = actx.to_numpy(actx.np.max(component_errors))
         exittol = .1
-        if max(component_errors) > exittol:
+        if max_error > exittol:
             health_error = True
             if rank == 0:
                 logger.info("Solution diverged from exact soln.")
@@ -300,8 +304,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 dv = eos.dependent_vars(state)
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
-                from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(discr, state, exact)
+                component_errors = componentwise_norms(discr, state - exact)
                 health_errors = global_reduce(
                     my_health_check(dv.pressure, component_errors), op="lor")
                 if health_errors:
@@ -316,8 +319,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 if component_errors is None:
                     if exact is None:
                         exact = initializer(x_vec=nodes, eos=eos, time=t)
-                    from mirgecom.simutil import compare_fluid_solutions
-                    component_errors = compare_fluid_solutions(discr, state, exact)
+                    component_errors = componentwise_norms(discr, state - exact)
                 my_write_status(state, component_errors)
 
             if do_viz:
