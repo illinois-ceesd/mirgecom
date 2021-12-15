@@ -126,7 +126,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 10
     nhealth = 1
 
-    dim = 2
+    dim = 3
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -141,8 +141,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        box_ll = -0.5
-        box_ur = 0.5
+        box_ll = -1
+        box_ur = 1
         nel_1d = 16
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
