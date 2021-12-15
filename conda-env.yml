@@ -8,6 +8,8 @@ channels:
 - nodefaults
 dependencies:
 - git
+- gh
+- mypy
 - conda-forge::numpy
 - pocl
 - clinfo
