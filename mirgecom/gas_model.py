@@ -51,7 +51,6 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import (
     TransportModel,
-    TransportModelError,
     TransportDependentVars
 )
 
@@ -106,11 +105,11 @@ class FluidState:
     .. autoattribute:: energy_density
     .. autoattribute:: species_mass_density
     .. autoattribute:: species_mass_fractions
+    .. autoattribute:: species_enthalpies
     """
 
     cv: ConservedVars
     dv: GasDependentVars
-    tv: TransportDependentVars = None
 
     @property
     def array_context(self):
@@ -183,52 +182,64 @@ class FluidState:
         return self.cv.speed + self.dv.speed_of_sound
 
     @property
-    def has_transport(self):
+    def is_viscous(self):
         """Indicate if this is a viscous state."""
-        return self.tv is not None
+        return isinstance(self, ViscousFluidState)
 
     @property
     def is_mixture(self):
         """Indicate if this is a state resulting from a mixture gas model."""
         return isinstance(self.dv, MixtureDependentVars)
 
-    def _get_transport_property(self, name):
-        """Grab a transport property if transport model is present."""
-        if not self.has_transport:
-            raise TransportModelError("Viscous transport model not provided.")
-        return getattr(self.tv, name)
-
     def _get_mixture_property(self, name):
         """Grab a mixture property if EOS is a :class:`~mirgecom.eos.MixtureEOS`."""
         if not self.is_mixture:
             raise \
-                MixtureEOSNeededError("MixtureEOS required for mixture properties.")
+                MixtureEOSNeededError("Mixture EOS required for mixture properties.")
         return getattr(self.dv, name)
-
-    @property
-    def viscosity(self):
-        """Return the fluid viscosity."""
-        return self._get_transport_property("viscosity")
-
-    @property
-    def bulk_viscosity(self):
-        """Return the fluid bulk viscosity."""
-        return self._get_transport_property("bulk_viscosity")
-
-    @property
-    def thermal_conductivity(self):
-        """Return the fluid thermal conductivity."""
-        return self._get_transport_property("thermal_conductivity")
-
-    @property
-    def species_diffusivity(self):
-        """Return the fluid species diffusivities."""
-        return self._get_transport_property("species_diffusivity")
 
     @property
     def species_enthalpies(self):
         """Return the fluid species diffusivities."""
         return self._get_mixture_property("species_enthalpies")
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
+class ViscousFluidState(FluidState):
+    r"""Gas model-consistent fluid state for viscous gas models.
+
+    .. attribute:: tv
+
+        Viscous fluid state-dependent transport properties.
+
+    .. autattribute:: viscosity
+    .. autoattribute:: bulk_viscosity
+    .. autoattribute:: species_diffusivity
+    .. autoattribute:: thermal_conductivity
+    """
+
+    tv: TransportDependentVars
+
+    @property
+    def viscosity(self):
+        """Return the fluid viscosity."""
+        return self.tv.viscosity
+
+    @property
+    def bulk_viscosity(self):
+        """Return the fluid bulk viscosity."""
+        return self.tv.bulk_viscosity
+
+    @property
+    def thermal_conductivity(self):
+        """Return the fluid thermal conductivity."""
+        return self.tv.thermal_conductivity
+
+    @property
+    def species_diffusivity(self):
+        """Return the fluid species diffusivities."""
+        return self.tv.species_diffusivity
 
 
 def make_fluid_state(cv, gas_model, temperature_seed=None):
@@ -256,13 +267,13 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
         Thermally consistent fluid state
     """
     dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
-    tv = None
     if gas_model.transport is not None:
         tv = gas_model.transport.dependent_vars(eos=gas_model.eos, cv=cv)
-    return FluidState(cv=cv, dv=dv, tv=tv)
+        return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+    return FluidState(cv=cv, dv=dv)
 
 
-def project_fluid_state(discr, btag, state, gas_model):
+def project_fluid_state(discr, src, tgt, state, gas_model):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -274,9 +285,17 @@ def project_fluid_state(discr, btag, state, gas_model):
 
         A discretization collection encapsulating the DG elements
 
-    btag:
+    src:
 
-        A boundary tag indicating the boundary to which to project the state
+        A :class:`~grudge.dof_desc.DOFDesc`, or a value convertible to one
+        indicating where the state is currently defined
+        (e.g. "vol" or "all_faces")
+
+    tgt:
+
+        A :class:`~grudge.dof_desc.DOFDesc`, or a value convertible to one
+        indicating where to interpolate/project the state
+        (e.g. "all_faces" or a boundary tag *btag*)
 
     state: :class:`~mirgecom.gas_model.FluidState`
 
@@ -292,10 +311,10 @@ def project_fluid_state(discr, btag, state, gas_model):
 
         Thermally consistent fluid state
     """
-    cv_sd = discr.project("vol", btag, state.cv)
+    cv_sd = discr.project(src, tgt, state.cv)
     temperature_seed = None
     if state.is_mixture:
-        temperature_seed = discr.project("vol", btag, state.dv.temperature)
+        temperature_seed = discr.project(src, tgt, state.dv.temperature)
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed)
 
@@ -376,9 +395,8 @@ def make_fluid_state_interior_trace_pair(discr, state, gas_model):
     from grudge.eager import interior_trace_pair
     from grudge.trace_pair import TracePair
     cv_tpair = interior_trace_pair(discr, state.cv)
-    tseed_pair = None
-    if state.nspecies > 0:
-        tseed_pair = interior_trace_pair(discr, state.dv.temperature)
+    tseed_pair = interior_trace_pair(discr, state.dv.temperature) \
+        if state.is_mixture else None
     return TracePair(
         cv_tpair.dd,
         interior=make_fluid_state(cv_tpair.int, gas_model,
