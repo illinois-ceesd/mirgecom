@@ -28,9 +28,9 @@ import logging
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 import pyopencl.clrandom
 import pyopencl.clmath
+import pyopencl.tools as cl_tools
 import pytest
 from pytools.obj_array import make_obj_array
 
