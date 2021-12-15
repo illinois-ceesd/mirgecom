@@ -104,7 +104,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0):
     """
     from mirgecom.gas_model import project_fluid_state
     boundary_states = {btag:
-                       project_fluid_state(discr, btag, state, gas_model)
+                       project_fluid_state(discr, "vol", btag, state, gas_model)
                        for btag in boundaries}
 
     interior_cv = interior_trace_pairs(discr, state.cv)
