@@ -318,6 +318,7 @@ def componentwise_norms(discr, fields, order=np.inf):
     if len(fields) > 0:
         return discr.norm(fields, order)
     else:
+        # FIXME: This work-around for #575 can go away after #569
         return 0
 
 
