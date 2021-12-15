@@ -105,8 +105,8 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
         + sum(inviscid_facial_flux(discr, eos=eos, cv_tpair=part_tpair)
               for part_tpair in interior_cv)
         # Domain boundaries
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=time)
+        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
+                                                        eos=eos, time=time)
               for btag in boundaries)
     )
 
