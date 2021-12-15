@@ -764,7 +764,6 @@ class PyrometheusMixture(MixtureEOS):
         @memoize_in(cv, (PyrometheusMixture.pressure,
                          type(self._pyrometheus_mech)))
         def get_pressure():
-            # temperature = self.temperature(cv)
             y = cv.species_mass_fractions
             return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
         return get_pressure()
