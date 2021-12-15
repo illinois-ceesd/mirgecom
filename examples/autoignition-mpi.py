@@ -177,6 +177,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     nodes = thaw(discr.nodes(), actx)
 
+    ones = discr.zeros(actx) + 1.0
+
     vis_timer = None
 
     if logmgr:
@@ -571,11 +573,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        return make_obj_array([euler_operator(discr, state=fluid_state, time=t,
-                                              boundaries=boundaries,
-                                              gas_model=gas_model)
-                               + eos.get_species_source_terms(cv),
-                               0*tseed])
+        return make_obj_array([
+            euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
+                           gas_model=gas_model)
+            + eos.get_species_source_terms(cv, fluid_state.temperature),
+            0*tseed])
 
     current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
