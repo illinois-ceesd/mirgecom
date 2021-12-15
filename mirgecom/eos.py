@@ -16,7 +16,7 @@ manage the relationships between and among state and thermodynamic variables.
 Exceptions
 ^^^^^^^^^^
 .. autoexception:: TemperatureSeedMissingError
-.. autoexception:: MixtureEOSError
+.. autoexception:: MixtureEOSNeededError
 """
 
 __copyright__ = """
@@ -59,7 +59,7 @@ class TemperatureSeedMissingError(Exception):
     pass
 
 
-class MixtureEOSError(Exception):
+class MixtureEOSNeededError(Exception):
     """Indicate that a mixture EOS is required for model evaluation."""
 
     pass

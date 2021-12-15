@@ -47,7 +47,7 @@ from mirgecom.eos import (
     GasEOS,
     EOSDependentVars,
     MixtureDependentVars,
-    MixtureEOSError
+    MixtureEOSNeededError
 )
 from mirgecom.transport import (
     TransportModel,
@@ -201,7 +201,8 @@ class FluidState:
     def _get_mixture_property(self, name):
         """Grab a mixture property if EOS is a :class:`~mirgecom.eos.MixtureEOS`."""
         if not self.is_mixture:
-            raise MixtureEOSError("Mixture EOS required for mixture properties.")
+            raise \
+                MixtureEOSNeededError("MixtureEOS required for mixture properties.")
         return getattr(self.dv, name)
 
     @property
