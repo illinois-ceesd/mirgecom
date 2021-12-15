@@ -337,8 +337,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_dv = current_fluid_state.dv
     temperature_seed = current_dv.temperature
 
-    # import ipdb
-    # ipdb.set_trace()
 
     # Inspection at physics debugging time
     if debug:
