@@ -11,7 +11,6 @@ Inviscid Boundary Conditions
 .. autoclass:: PrescribedFluidBoundary
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
-.. autoclass:: AdiabaticNoslipMovingBoundary
 """
 
 __copyright__ = """
@@ -191,35 +190,3 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         from mirgecom.gas_model import make_fluid_state
         return make_fluid_state(cv=ext_cv, gas_model=gas_model,
                                 temperature_seed=t_seed)
-
-
-class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
-    r"""Boundary condition implementing a noslip moving boundary.
-
-    .. automethod:: adiabatic_noslip_state
-    """
-
-    def __init__(self, wall_velocity=None, dim=2):
-        """Initialize boundary device."""
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.adiabatic_noslip_state,
-        )
-        # Check wall_velocity (assumes dim is correct)
-        if wall_velocity is None:
-            wall_velocity = np.zeros(shape=(dim,))
-        if len(wall_velocity) != dim:
-            raise ValueError(f"Specified wall velocity must be {dim}-vector.")
-        self._wall_velocity = wall_velocity
-
-    def adiabatic_noslip_state(self, discr, btag, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        dim = discr.dim
-
-        # Compute momentum solution
-        wall_pen = 2.0 * self._wall_velocity * state_minus.mass
-        ext_mom = wall_pen - state_minus.momentum  # no-slip
-
-        # Form the external boundary solution with the new momentum
-        return make_conserved(dim=dim, mass=state_minus.mass,
-                              energy=state_minus.energy, momentum=ext_mom,
-                              species_mass=state_minus.species_mass)
