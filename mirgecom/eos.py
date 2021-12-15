@@ -42,7 +42,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+from typing import Union, Optional
 from dataclasses import dataclass
 import numpy as np
 from pytools import memoize_in
@@ -77,9 +77,9 @@ class GasDependentVars:
     .. attribute:: pressure
     """
 
-    temperature: np.ndarray
-    pressure: np.ndarray
-    speed_of_sound: np.ndarray
+    temperature: DOFArray
+    pressure: DOFArray
+    speed_of_sound: DOFArray
 
 
 @dataclass_array_container
@@ -90,7 +90,7 @@ class MixtureDependentVars(GasDependentVars):
     ..attribute:: species_enthalpies
     """
 
-    species_enthalpies: np.ndarray
+    species_enthalpies: DOFArray
 
 
 class GasEOS(metaclass=ABCMeta):
@@ -121,7 +121,7 @@ class GasEOS(metaclass=ABCMeta):
 
     @abstractmethod
     def temperature(self, cv: ConservedVars,
-                    temperature_seed: DOFArray = None):
+                    temperature_seed: Optional[DOFArray] = None) -> DOFArray:
         """Get the gas temperature."""
 
     @abstractmethod
@@ -192,9 +192,15 @@ class MixtureEOS(GasEOS):
     """
 
     @abstractmethod
-    def get_temperature_seed(self, cv: ConservedVars,
-                              temperature_seed: DOFArray = None):
-        r"""Get a constant and uniform guess for the gas temperature."""
+    def get_temperature_seed(
+            self, cv: ConservedVars,
+            temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
+        r"""Get a constant and uniform guess for the gas temperature.
+
+        This function returns an appropriately sized `DOFArray` for the
+        temperature field that will be used as a starting point for the
+        solve to find the actual temperature field of the gas.
+        """
 
     @abstractmethod
     def get_density(self, pressure, temperature, species_mass_fractions):
