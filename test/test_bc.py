@@ -182,7 +182,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
                 # numerical fluxes cannot be zero.
-                avg_state = 0.5*(bnd_pair.int.cv + bnd_pair.ext.cv)
+                avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
                 from mirgecom.inviscid import inviscid_facial_flux

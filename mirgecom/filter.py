@@ -200,18 +200,10 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     result: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the filtered field(s).
     """
-    if not isinstance(field, DOFArray):
-        return map_array_container(
-            partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
-        )
-
-    actx = field.array_context
     dd = dof_desc.as_dofdesc(dd)
     dd_modal = dof_desc.DD_VOLUME_MODAL
     discr = dcoll.discr_from_dd(dd)
 
-    from arraycontext import map_array_container
-    from functools import partial
     if not isinstance(field, DOFArray):
         return map_array_container(
             partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
