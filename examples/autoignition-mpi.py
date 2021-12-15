@@ -177,8 +177,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     nodes = thaw(discr.nodes(), actx)
 
-    ones = discr.zeros(actx) + 1.0
-
     vis_timer = None
 
     if logmgr:
