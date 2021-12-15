@@ -57,7 +57,7 @@ from mirgecom.inviscid import (
     inviscid_facial_flux,
     inviscid_flux_rusanov,
     entropy_conserving_flux_chandrashekar,
-    entropy_stable_facial_flux
+    entropy_stable_inviscid_flux_rusanov
 )
 from mirgecom.operators import div_operator
 from mirgecom.gas_model import (
@@ -208,7 +208,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
 def entropy_stable_euler_operator(
         discr, state, gas_model, boundaries, time=0.0,
-        inviscid_numerical_flux_func=inviscid_flux_rusanov, quadrature_tag=None):
+        inviscid_numerical_flux_func=entropy_stable_inviscid_flux_rusanov,
+        quadrature_tag=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
 
     Parameters
@@ -335,11 +336,9 @@ def entropy_stable_euler_operator(
     # Compute volume derivatives using flux differencing
     inviscid_flux_vol = -volume_flux_differencing(
         discr,
-        partial(entropy_conserving_flux_chandrashekar, discr, eos),
+        partial(entropy_conserving_flux_chandrashekar, eos),
         dd_vol, dd_faces,
         modified_conservedvars(proj_entropy_vars))
-
-    #import ipdb; ipdb.set_trace()
 
     # Surface contributions
     inviscid_flux_bnd = (
@@ -357,9 +356,8 @@ def entropy_stable_euler_operator(
             for btag in boundaries)
 
         # Interior boundaries (using entropy stable numerical flux)
-        + sum(entropy_stable_facial_flux(
-            discr, gas_model=gas_model, state_pair=state_pair,
-            numerical_flux_func=inviscid_numerical_flux_func)
+        + sum(inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
+                                   numerical_flux_func=inviscid_numerical_flux_func)
               for state_pair in interior_states)
     )
 
