@@ -36,7 +36,7 @@ from meshmode.array_context import (
     PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -62,7 +62,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -154,12 +154,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     discr = EagerDGDiscretization(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     vis_timer = None
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
