@@ -45,7 +45,7 @@ THE SOFTWARE.
 from typing import Union, Optional
 from dataclasses import dataclass
 import numpy as np
-from pytools import memoize_in
+# from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
@@ -761,8 +761,8 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The pressure of the fluid.
         """
-        @memoize_in(cv, (PyrometheusMixture.pressure,
-                         type(self._pyrometheus_mech)))
+        # @memoize_in(cv, (PyrometheusMixture.pressure,
+        #                 type(self._pyrometheus_mech)))
         def get_pressure():
             y = cv.species_mass_fractions
             return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
@@ -789,8 +789,8 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The speed of sound in the fluid.
         """
-        @memoize_in(cv, (PyrometheusMixture.sound_speed,
-                         type(self._pyrometheus_mech)))
+        # @memoize_in(cv, (PyrometheusMixture.sound_speed,
+        #                  type(self._pyrometheus_mech)))
         def get_sos():
             actx = cv.array_context
             return actx.np.sqrt((self.gamma(cv, temperature)
@@ -823,9 +823,8 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
-
-        @memoize_in(cv, (PyrometheusMixture.temperature,
-                         type(self._pyrometheus_mech)))
+        # @memoize_in(cv, (PyrometheusMixture.temperature,
+        #                  type(self._pyrometheus_mech)))
         def get_temp():
             # For mixtures, the temperature calcuation *must* be seeded. This
             # check catches any actual temperature calculation that did not
