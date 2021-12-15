@@ -210,6 +210,9 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
         )
 
     actx = field.array_context
+    dd = dof_desc.as_dofdesc(dd)
+    dd_modal = dof_desc.DD_VOLUME_MODAL
+    discr = dcoll.discr_from_dd(dd)
 
     modal_map = dcoll.connection_from_dds(dd, dd_modal)
     nodal_map = dcoll.connection_from_dds(dd_modal, dd)
