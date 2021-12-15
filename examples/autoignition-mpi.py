@@ -631,7 +631,9 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    log_dependent = True
+    from warnings import warn
+    warn("Automatically turning off DV logging. LogpyleIssue()")
+    log_dependent = False
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
