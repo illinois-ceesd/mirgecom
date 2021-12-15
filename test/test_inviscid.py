@@ -323,9 +323,9 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
             discr, make_fluid_state(cv, gas_model), gas_model
         )
 
-        from mirgecom.inviscid import inviscid_facial_divergence_flux
+        from mirgecom.inviscid import inviscid_facial_flux
         interior_face_flux = \
-            inviscid_facial_divergence_flux(discr, state_tpair=state_tpair)
+            inviscid_facial_flux(discr, state_tpair=state_tpair)
 
         def inf_norm(data):
             if len(data) > 0:
@@ -369,7 +369,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         state_tpair = TracePair(BTAG_ALL,
                                 interior=make_fluid_state(dir_bval, gas_model),
                                 exterior=make_fluid_state(dir_bc, gas_model))
-        boundary_flux = inviscid_facial_divergence_flux(
+        boundary_flux = inviscid_facial_flux(
             discr, state_tpair=state_tpair
         )
 
