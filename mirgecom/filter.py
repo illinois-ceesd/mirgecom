@@ -48,9 +48,13 @@ THE SOFTWARE.
 import numpy as np
 import grudge.dof_desc as dof_desc
 
+from arraycontext import map_array_container
+
+from functools import partial
+
 from meshmode.dof_array import DOFArray
+
 from pytools import keyed_memoize_in
-from pytools.obj_array import obj_array_vectorized_n_args
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
@@ -163,7 +167,6 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     )
 
 
-@obj_array_vectorized_n_args
 def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     """Stand-alone procedural interface to spectral filtering.
 
@@ -189,26 +192,23 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
         Mode below which *field* will not be filtered
     mode_resp_func:
         Modal response function returns a filter coefficient for input mode id
-    field: :class:`numpy.ndarray`
-        DOFArray or object array of DOFArrays
+    field: :class:`mirgecom.fluid.ConservedVars`
+        An array container containing the relevant field(s) to filter.
 
     Returns
     -------
-    result: numpy.ndarray
-        Filtered version of *field*.
+    result: :class:`mirgecom.fluid.ConservedVars`
+        An array container containing the filtered field(s).
     """
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
-
-    from arraycontext import map_array_container
-    from functools import partial
     if not isinstance(field, DOFArray):
         return map_array_container(
             partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
         )
 
     actx = field.array_context
+    dd = dof_desc.as_dofdesc(dd)
+    dd_modal = dof_desc.DD_VOLUME_MODAL
+    discr = dcoll.discr_from_dd(dd)
 
     modal_map = dcoll.connection_from_dds(dd, dd_modal)
     nodal_map = dcoll.connection_from_dds(dd_modal, dd)
