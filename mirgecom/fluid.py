@@ -245,7 +245,7 @@ class ConservedVars:
     @property
     def speed(self):
         """Return the fluid velocity = momentum / mass."""
-        return self.mass.array_context.np.sqrt(np.dot(self.velocity, self.velocity))
+        return self.array_context.np.sqrt(np.dot(self.velocity, self.velocity))
 
     @property
     def nspecies(self):

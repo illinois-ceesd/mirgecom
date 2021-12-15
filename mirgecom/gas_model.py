@@ -294,7 +294,7 @@ def project_fluid_state(discr, btag, state, gas_model):
     """
     cv_sd = discr.project("vol", btag, state.cv)
     temperature_seed = None
-    if state.is_mixture > 0:
+    if state.is_mixture:
         temperature_seed = discr.project("vol", btag, state.dv.temperature)
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed)

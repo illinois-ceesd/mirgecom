@@ -287,7 +287,7 @@ def check_naninf_local(discr, dd, field):
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state, comm=None):
+def compare_fluid_solutions(discr, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
