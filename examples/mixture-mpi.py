@@ -444,7 +444,7 @@ if __name__ == "__main__":
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
     from warnings import warn
-    warn("Automatically turning off DV logging. LogpyleIssue()")
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
     if args.profiling:
         if args.lazy:
