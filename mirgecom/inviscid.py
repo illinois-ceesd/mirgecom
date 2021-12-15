@@ -4,7 +4,7 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_facial_divergence_flux
+.. autofunction:: inviscid_facial_flux
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -84,7 +84,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_facial_divergence_flux(discr, state_tpair, local=False):
+def inviscid_facial_flux(discr, state_tpair, local=False):
     r"""Return the flux across a face given the solution on both sides *q_tpair*.
 
     This flux is currently hard-coded to use a Rusanov-type  local Lax-Friedrichs

@@ -55,14 +55,10 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_divergence_flux
+    inviscid_facial_flux
 )
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
+
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.operators import div_operator
 
 
@@ -106,50 +102,37 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0):
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    cv = state.cv
-    dim = state.dim
-
     from mirgecom.gas_model import project_fluid_state
     boundary_states = {btag:
                        project_fluid_state(discr, btag, state, gas_model)
                        for btag in boundaries}
 
-    cv_int_pair = interior_trace_pair(discr, cv)
-    cv_interior_pairs = [cv_int_pair]
-    q_comm_pairs = cross_rank_trace_pairs(discr, cv.join())
-    cv_part_pairs = [
-        TracePair(q_pair.dd,
-                  interior=make_conserved(dim, q=q_pair.int),
-                  exterior=make_conserved(dim, q=q_pair.ext))
-        for q_pair in q_comm_pairs]
-    cv_interior_pairs.extend(cv_part_pairs)
+    interior_cv = interior_trace_pairs(discr, state.cv)
 
-    tseed_interior_pairs = None
-    if cv.nspecies > 0:
-        # If this is a mixture, we need to exchange the temperature field because
-        # mixture pressure (used in the inviscid flux calculations) depends on
-        # temperature and we need to seed the temperature calculation for the
-        # (+) part of the partition boundary with the remote temperature data.
-        tseed_int_pair = interior_trace_pair(discr, state.temperature)
-        tseed_part_pairs = cross_rank_trace_pairs(discr, state.temperature)
-        tseed_interior_pairs = [tseed_int_pair]
-        tseed_interior_pairs.extend(tseed_part_pairs)
+    # If this is a mixture, we need to exchange the temperature field because
+    # mixture pressure (used in the inviscid flux calculations) depends on
+    # temperature and we need to seed the temperature calculation for the
+    # (+) part of the partition boundary with the remote temperature data.
+    tseed_interior_pairs = (interior_trace_pairs(discr, state.temperature)
+                            if state.is_mixture else None)
 
     from mirgecom.gas_model import make_fluid_state_trace_pairs
-    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
+    interior_states = make_fluid_state_trace_pairs(interior_cv, gas_model,
                                                    tseed_interior_pairs)
 
+    # Compute volume contributions
     inviscid_flux_vol = inviscid_flux(state)
+    # Compute interface contributions
     inviscid_flux_bnd = (
-        sum(boundaries[btag].inviscid_divergence_flux(
-            discr, btag, gas_model, state_minus=boundary_states[btag], time=time)
+        # Interior faces
+        sum(inviscid_facial_flux(discr, pair) for pair in interior_states)
+        # Domain boundary faces
+        + sum(
+            boundaries[btag].inviscid_divergence_flux(
+                discr, btag, gas_model, state_minus=boundary_states[btag], time=time)
             for btag in boundaries)
-        + sum(inviscid_facial_divergence_flux(discr, state_pair)
-              for state_pair in interior_states)
     )
-
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
+    return -div_operator(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless

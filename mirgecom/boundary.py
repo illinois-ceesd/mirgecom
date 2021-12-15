@@ -43,7 +43,7 @@ from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-from mirgecom.inviscid import inviscid_facial_divergence_flux
+from mirgecom.inviscid import inviscid_facial_flux
 
 from abc import ABCMeta, abstractmethod
 
@@ -89,7 +89,7 @@ class PrescribedFluidBoundary(FluidBoundary):
             warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
         if not self._inviscid_div_flux_func:
-            self._inviscid_div_flux_func = inviscid_facial_divergence_flux
+            self._inviscid_div_flux_func = inviscid_facial_flux
         if not self._bnd_state_func:
             self._bnd_state_func = self._dummy_state_func
         if not self._bnd_temperature_func:
