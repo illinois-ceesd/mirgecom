@@ -77,6 +77,7 @@ def inviscid_flux(state):
     )
     species_mass_flux = (  # reshaped: (nspecies, dim)
         state.velocity * state.species_mass_density.reshape(-1, 1)
+        if state.nspecies > 0 else None
     )
     return make_conserved(state.dim, mass=mass_flux, energy=energy_flux,
                           momentum=mom_flux, species_mass=species_mass_flux)
