@@ -45,7 +45,6 @@ THE SOFTWARE.
 from typing import Union, Optional
 from dataclasses import dataclass
 import numpy as np
-from pytools import memoize_in
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars, make_conserved
@@ -761,12 +760,8 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The pressure of the fluid.
         """
-        @memoize_in(cv, (PyrometheusMixture.pressure,
-                         type(self._pyrometheus_mech)))
-        def get_pressure():
-            y = cv.species_mass_fractions
-            return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
-        return get_pressure()
+        y = cv.species_mass_fractions
+        return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
 
     def sound_speed(self, cv: ConservedVars, temperature):
         r"""Get the speed of sound in the gas.
@@ -789,14 +784,10 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The speed of sound in the fluid.
         """
-        @memoize_in(cv, (PyrometheusMixture.sound_speed,
-                         type(self._pyrometheus_mech)))
-        def get_sos():
-            actx = cv.array_context
-            return actx.np.sqrt((self.gamma(cv, temperature)
-                                 * self.pressure(cv, temperature))
-                                / cv.mass)
-        return get_sos()
+        actx = cv.array_context
+        return actx.np.sqrt((self.gamma(cv, temperature)
+                             * self.pressure(cv, temperature))
+                            / cv.mass)
 
     def temperature(self, cv: ConservedVars, temperature_seed=None):
         r"""Get the thermodynamic temperature of the gas.
@@ -823,23 +814,16 @@ class PyrometheusMixture(MixtureEOS):
         :class:`~meshmode.dof_array.DOFArray`
             The temperature of the fluid.
         """
-
-        @memoize_in(cv, (PyrometheusMixture.temperature,
-                         type(self._pyrometheus_mech)))
-        def get_temp():
-            # For mixtures, the temperature calcuation *must* be seeded. This
-            # check catches any actual temperature calculation that did not
-            # provide a seed.  Subsequent calls to *temperature* may or may
-            # not provide a seed - but those calls don't matter as the temperature
-            # calculation is actually performed only once per conserved state (cv).
-            if temperature_seed is None:
-                raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
-                                                  "requires a *temperature_seed*.")
-            tseed = self.get_temperature_seed(cv, temperature_seed)
-            y = cv.species_mass_fractions
-            e = self.internal_energy(cv) / cv.mass
-            return self._pyrometheus_mech.get_temperature(e, tseed, y)
-        return get_temp()
+        # For mixtures, the temperature calcuation *must* be seeded. This
+        # check catches any actual temperature calculation that did not
+        # provide a seed.
+        if temperature_seed is None:
+            raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
+                                              "requires a *temperature_seed*.")
+        tseed = self.get_temperature_seed(cv, temperature_seed)
+        y = cv.species_mass_fractions
+        e = self.internal_energy(cv) / cv.mass
+        return self._pyrometheus_mech.get_temperature(e, tseed, y)
 
     def total_energy(self, cv, pressure, temperature):
         r"""

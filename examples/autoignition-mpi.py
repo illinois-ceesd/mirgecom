@@ -138,10 +138,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     constant_cfl = False
 
     # i.o frequencies
-    nstatus = 100
-    nviz = 100
-    nhealth = 100
-    nrestart = 100
+    nstatus = 1
+    nviz = 5
+    nhealth = 1
+    nrestart = 5
 
     # }}}  Time stepping control
 
@@ -645,7 +645,9 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    log_dependent = True
+    from warnings import warn
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    log_dependent = False
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")

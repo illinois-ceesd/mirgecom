@@ -78,7 +78,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         rst_filename=None, actx_class=PyOpenCLArrayContext,
+         log_dependent=True):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -160,8 +161,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
-                             extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -169,11 +168,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
+
+        if log_dependent:
+            logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+                                                      extract_vars_for_logging,
+                                                      units_for_logging)
+            logmgr.add_watches([
+                ("min_pressure", "\n------- P (min, max) (Pa) = ({value:1.9e}, "),
+                ("max_pressure",    "{value:1.9e})\n"),
+                ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
+                ("max_temperature",    "{value:7g})\n")])
 
     # Pyrometheus initialization
     from mirgecom.mechanisms import get_mechanism_cti
@@ -239,10 +246,31 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(component_errors):
+    def my_write_status(component_errors, dv=None):
+        from arraycontext import freeze
+        from mirgecom.simutil import allsync
         status_msg = (
             "------- errors="
             + ", ".join("%.3g" % en for en in component_errors))
+        if ((dv is not None) and (not log_dependent)):
+            temp = dv.temperature
+            press = dv.pressure
+            temp = thaw(freeze(temp, actx), actx)
+            press = thaw(freeze(press, actx), actx)
+            from grudge.op import nodal_min_loc, nodal_max_loc
+            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                           comm=comm, op=MPI.MIN)
+            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                           comm=comm, op=MPI.MAX)
+            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                           comm=comm, op=MPI.MIN)
+            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                           comm=comm, op=MPI.MAX)
+            dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
+            status_msg = status_msg + dv_status_msg
+
+        if rank == 0:
+            logger.info(status_msg)
         if rank == 0:
             logger.info(status_msg)
 
@@ -333,7 +361,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         exact = initializer(x_vec=nodes, eos=eos, time=t)
                     from mirgecom.simutil import compare_fluid_solutions
                     component_errors = compare_fluid_solutions(discr, cv, exact)
-                my_write_status(component_errors)
+                my_write_status(component_errors, dv=dv)
 
         except MyRuntimeError:
             if rank == 0:
@@ -415,6 +443,9 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    from warnings import warn
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    log_dependent = False
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -431,6 +462,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         log_dependent=log_dependent)
 
 # vim: foldmethod=marker
