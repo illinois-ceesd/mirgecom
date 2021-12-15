@@ -15,8 +15,8 @@ manage the relationships between and among state and thermodynamic variables.
 
 Exceptions
 ^^^^^^^^^^
-.. autoexception:: TemperatureSeedError
-.. autoexception:: MixtureEOSError
+.. autoexception:: TemperatureSeedMissingError
+.. autoexception:: MixtureEOSNeededError
 """
 
 __copyright__ = """
@@ -53,13 +53,13 @@ from abc import ABCMeta, abstractmethod
 from arraycontext import dataclass_array_container
 
 
-class TemperatureSeedError(Exception):
+class TemperatureSeedMissingError(Exception):
     """Indicate that EOS is inappropriately called without seeding temperature."""
 
     pass
 
 
-class MixtureEOSError(Exception):
+class MixtureEOSNeededError(Exception):
     """Indicate that a mixture EOS is required for model evaluation."""
 
     pass
@@ -166,7 +166,7 @@ class GasEOS(metaclass=ABCMeta):
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
-        may raise :exc:`TemperatureSeedError` if *temperature_seed* is not
+        may raise :exc:`TemperatureSeedMissingError` if *temperature_seed* is not
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
@@ -221,7 +221,7 @@ class MixtureEOS(GasEOS):
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
-        may raise :exc:`TemperatureSeedError` if *temperature_seed* is not
+        may raise :exc:`TemperatureSeedMissingError` if *temperature_seed* is not
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
@@ -828,8 +828,8 @@ class PyrometheusMixture(MixtureEOS):
             # not provide a seed - but those calls don't matter as the temperature
             # calculation is actually performed only once per conserved state (cv).
             if temperature_seed is None:
-                raise TemperatureSeedError("MixtureEOS.get_temperature requires"
-                                              " a *temperature_seed*.")
+                raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
+                                                  "requires a *temperature_seed*.")
             tseed = self.get_temperature_seed(cv, temperature_seed)
             y = cv.species_mass_fractions
             e = self.internal_energy(cv) / cv.mass
