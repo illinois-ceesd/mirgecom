@@ -137,10 +137,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     constant_cfl = False
 
     # i.o frequencies
-    nstatus = 100
-    nviz = 100
-    nhealth = 100
-    nrestart = 100
+    nstatus = 1
+    nviz = 5
+    nhealth = 1
+    nrestart = 5
 
     # }}}  Time stepping control
 
