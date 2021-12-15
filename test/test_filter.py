@@ -30,6 +30,7 @@ import pytest
 import numpy as np
 from functools import partial
 
+from arraycontext import flatten
 from meshmode.dof_array import thaw
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
@@ -40,6 +41,7 @@ from pytools.obj_array import (
 )
 from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import make_spectral_filter
+from mirgecom.simutil import componentwise_norms
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -192,8 +194,8 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     filtered_soln = filter_modally(discr, "vol", cutoff,
                                    frfunc, uniform_soln)
     soln_resid = uniform_soln - filtered_soln
-    from mirgecom.simutil import componentwise_norms
-    max_errors = componentwise_norms(discr, soln_resid, np.inf)
+    max_errors = actx.to_numpy(
+        flatten(componentwise_norms(discr, soln_resid, np.inf), actx))
 
     tol = 1e-14
 
@@ -218,7 +220,8 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     filtered_field = filter_modally(discr, "vol", cutoff,
                                     frfunc, field)
     soln_resid = field - filtered_field
-    max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in soln_resid]
+    max_errors = actx.to_numpy(
+        flatten(componentwise_norms(discr, soln_resid, np.inf), actx))
     logger.info(f"Field = {field}")
     logger.info(f"Filtered = {filtered_field}")
     logger.info(f"Max Errors (poly) = {max_errors}")
@@ -254,6 +257,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
             ]
             vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
         field_resid = unfiltered_spectrum - filtered_spectrum
-        max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in field_resid]
+        max_errors = actx.to_numpy(
+            flatten(componentwise_norms(discr, field_resid, np.inf), actx))
         # fields should be different, but not too different
         assert(tol > np.max(max_errors) > threshold)

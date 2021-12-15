@@ -106,10 +106,9 @@ def test_basic_cfd_healthcheck(actx_factory):
                                  max_value=np.inf)
 
 
-def test_analytic_comparison(actx_factory):
+def test_componentwise_norms(actx_factory):
     """Quick test of state comparison routine."""
-    from mirgecom.initializers import Vortex2D
-    from mirgecom.simutil import compare_fluid_solutions, componentwise_norms
+    from mirgecom.simutil import componentwise_norms
 
     actx = actx_factory()
     nel_1d = 4
@@ -130,17 +129,17 @@ def test_analytic_comparison(actx_factory):
     energy = ones
     velocity = 2 * nodes
     mom = mass * velocity
-    vortex_init = Vortex2D()
-    vortex_soln = vortex_init(x_vec=nodes, eos=IdealSingleGas())
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    resid = vortex_soln - cv
 
-    expected_errors = actx.to_numpy(
-        flatten(componentwise_norms(discr, resid, order=np.inf), actx)).tolist()
+    component_norms = componentwise_norms(discr, cv)
 
-    errors = compare_fluid_solutions(discr, cv, cv)
-    assert max(errors) == 0
-
-    errors = compare_fluid_solutions(discr, cv, vortex_soln)
-    assert errors == expected_errors
+    assert (
+        actx.to_numpy(component_norms.mass)
+        == actx.to_numpy(discr.norm(cv.mass, np.inf)))
+    assert (
+        actx.to_numpy(component_norms.energy)
+        == actx.to_numpy(discr.norm(cv.energy, np.inf)))
+    assert np.all(
+        actx.to_numpy(flatten(component_norms.momentum, actx))
+        == actx.to_numpy(flatten(discr.norm(cv.momentum, np.inf), actx)))

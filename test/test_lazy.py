@@ -76,18 +76,16 @@ def op_test_data(ctx_factory):
 # Mimics math.isclose for state arrays
 def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
-    from mirgecom.simutil import componentwise_norms
-    from arraycontext import flatten
     actx = x.array_context
-    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, np.inf), actx))
+    lhs = discr.norm(x - y, np.inf)
 
-    rhs = np.maximum(
-        rel_tol * np.maximum(
-            actx.to_numpy(flatten(componentwise_norms(discr, x, np.inf), actx)),
-            actx.to_numpy(flatten(componentwise_norms(discr, y, np.inf), actx))),
+    rhs = actx.np.maximum(
+        rel_tol * actx.np.maximum(
+            discr.norm(x, np.inf),
+            discr.norm(y, np.inf)),
         abs_tol)
 
-    is_close = np.all(lhs <= rhs)
+    is_close = actx.to_numpy(actx.np.all(lhs <= rhs))
 
     if return_operands:
         return is_close, lhs, rhs
