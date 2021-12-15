@@ -187,6 +187,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+    ones = discr.zeros(actx) + 1.0
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -355,9 +356,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_fluid_state = construct_fluid_state(current_cv, temperature_seed)
     current_dv = current_fluid_state.dv
     temperature_seed = current_dv.temperature
-
-    # import ipdb
-    # ipdb.set_trace()
 
     # Inspection at physics debugging time
     if debug:

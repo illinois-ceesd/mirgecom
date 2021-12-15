@@ -93,14 +93,15 @@ def test_slipwall_identity(actx_factory, dim):
             cv_minus = discr.project("vol", BTAG_ALL, uniform_state)
             state_minus = make_fluid_state(cv=cv_minus, gas_model=gas_model)
 
-            state_plus = wall._bnd_state_func(
-                discr=discr, btag=BTAG_ALL, gas_model=gas_model,
-                state_minus=state_minus)
-
             def bnd_norm(vec):
                 return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
-            bnd_pair = TracePair(BTAG_ALL, interior=cv_minus, exterior=state_plus.cv)
+            state_plus = \
+                wall.adiabatic_slip_state(discr, btag=BTAG_ALL, gas_model=gas_model,
+                                          state_minus=state_minus)
+
+            bnd_pair = TracePair(BTAG_ALL, interior=state_minus.cv,
+                                 exterior=state_plus.cv)
 
             # check that mass and energy are preserved
             mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
@@ -162,13 +163,21 @@ def test_slipwall_flux(actx_factory, dim, order):
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
-                cv_minus = discr.project("vol", BTAG_ALL, initializer(nodes))
-                state_minus = make_fluid_state(cv=cv_minus, gas_model=gas_model)
-                state_plus = wall._bnd_state_func(discr=discr, btag=BTAG_ALL,
-                                               gas_model=gas_model,
-                                               state_minus=state_minus)
-                bnd_pair = TracePair(BTAG_ALL, interior=state_minus,
-                                     exterior=state_plus)
+                uniform_state = initializer(nodes)
+                fluid_state = make_fluid_state(uniform_state, gas_model)
+
+                interior_soln = project_fluid_state(discr, "vol", BTAG_ALL,
+                                                    state=fluid_state,
+                                                    gas_model=gas_model)
+
+                bnd_soln = wall.adiabatic_slip_state(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=interior_soln)
+
+                bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
+                                     exterior=bnd_soln.cv)
+                state_pair = TracePair(BTAG_ALL, interior=interior_soln,
+                                       exterior=bnd_soln)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
@@ -177,9 +186,10 @@ def test_slipwall_flux(actx_factory, dim, order):
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
                 from mirgecom.inviscid import inviscid_facial_flux
+
                 bnd_flux = \
                     inviscid_facial_flux(discr=discr, gas_model=gas_model,
-                                         state_pair=bnd_pair, local=True)
+                                         state_pair=state_pair, local=True)
 
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))

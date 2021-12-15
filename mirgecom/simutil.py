@@ -288,7 +288,7 @@ def check_naninf_local(discr, dd, field):
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state, comm=None):
+def compare_fluid_solutions(discr, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
@@ -311,10 +311,7 @@ def componentwise_norms(discr, fields, order=np.inf):
     if not isinstance(fields, DOFArray):
         return map_array_container(
             partial(componentwise_norms, discr, order=order), fields)
-    if len(fields) > 0:
-        return discr.norm(fields, order)
-    else:
-        return 0
+    return discr.norm(fields, order)
 
 
 def max_component_norm(discr, fields, order=np.inf):

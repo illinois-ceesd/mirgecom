@@ -252,10 +252,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if resid is None:
             resid = state - exact
         viz_fields = [("cv", state), ("dv", dv)]
-        # viz_fields = [("cv", state),
-        #              ("dv", dv),
-        #              ("exact_soln", exact),
-        #              ("residual", resid)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
