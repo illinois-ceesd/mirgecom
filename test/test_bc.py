@@ -95,7 +95,7 @@ def test_slipwall_identity(actx_factory, dim):
                 return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
             interior_soln = \
-                project_fluid_state(discr, btag=BTAG_ALL, gas_model=gas_model,
+                project_fluid_state(discr, "vol", BTAG_ALL, gas_model=gas_model,
                                     state=fluid_state)
 
             bnd_soln = \
@@ -170,7 +170,7 @@ def test_slipwall_flux(actx_factory, dim, order):
                 uniform_state = initializer(nodes)
                 fluid_state = make_fluid_state(uniform_state, gas_model)
 
-                interior_soln = project_fluid_state(discr, btag=BTAG_ALL,
+                interior_soln = project_fluid_state(discr, "vol", BTAG_ALL,
                                                     state=fluid_state,
                                                     gas_model=gas_model)
 

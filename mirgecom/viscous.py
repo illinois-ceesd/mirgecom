@@ -255,7 +255,9 @@ def viscous_flux(state, grad_cv, grad_t):
         The viscous transport flux vector if viscous transport properties
         are provided, scalar zero otherwise.
     """
-    if not state.has_transport:
+    if not state.is_viscous:
+        import warnings
+        warnings.warn("Viscous fluxes requested for inviscid state.")
         return 0
 
     viscous_mass_flux = 0 * state.momentum_density
@@ -354,7 +356,7 @@ def get_viscous_timestep(discr, state):
 
     mu = 0
     d_alpha_max = 0
-    if state.has_transport:
+    if state.is_viscous:
         mu = state.viscosity
         d_alpha_max = \
             get_local_max_species_diffusivity(
