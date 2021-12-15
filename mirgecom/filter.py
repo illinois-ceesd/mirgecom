@@ -48,10 +48,7 @@ THE SOFTWARE.
 import numpy as np
 import grudge.dof_desc as dof_desc
 
-from arraycontext import map_array_container
-
-from functools import partial
-
+from arraycontext import multimapped_over_array_containers
 from meshmode.dof_array import DOFArray
 
 from pytools import keyed_memoize_in
@@ -167,6 +164,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     )
 
 
+@multimapped_over_array_containers(leaf_class=DOFArray)
 def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     """Stand-alone procedural interface to spectral filtering.
 
@@ -200,11 +198,6 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     result: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the filtered field(s).
     """
-    if not isinstance(field, DOFArray):
-        return map_array_container(
-            partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
-        )
-
     actx = field.array_context
     dd = dof_desc.as_dofdesc(dd)
     dd_modal = dof_desc.DD_VOLUME_MODAL
