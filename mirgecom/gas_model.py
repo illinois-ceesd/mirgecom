@@ -45,7 +45,7 @@ from arraycontext import dataclass_array_container
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import (
     GasEOS,
-    EOSDependentVars,
+    GasDependentVars,
     MixtureDependentVars,
     MixtureEOSNeededError
 )
@@ -109,7 +109,7 @@ class FluidState:
     """
 
     cv: ConservedVars
-    dv: EOSDependentVars
+    dv: GasDependentVars
     tv: TransportDependentVars = None
 
     @property

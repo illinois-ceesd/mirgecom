@@ -6,7 +6,7 @@ Equations of State
 This module is designed provide Equation of State objects used to compute and
 manage the relationships between and among state and thermodynamic variables.
 
-.. autoclass:: EOSDependentVars
+.. autoclass:: GasDependentVars
 .. autoclass:: MixtureDependentVars
 .. autoclass:: GasEOS
 .. autoclass:: MixtureEOS
@@ -67,7 +67,7 @@ class MixtureEOSNeededError(Exception):
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class EOSDependentVars:
+class GasDependentVars:
     """State-dependent quantities for :class:`GasEOS`.
 
     Prefer individual methods for model use, use this
@@ -84,7 +84,7 @@ class EOSDependentVars:
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class MixtureDependentVars(EOSDependentVars):
+class MixtureDependentVars(GasDependentVars):
     """Mixture state-dependent quantities for :class:`MixtureEOS`.
 
     ..attribute:: species_enthalpies
@@ -161,14 +161,14 @@ class GasEOS(metaclass=ABCMeta):
         """Get the fluid internal energy from temperature and mass."""
 
     def dependent_vars(self, cv: ConservedVars,
-                       temperature_seed: DOFArray = None) -> EOSDependentVars:
+                       temperature_seed: DOFArray = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
         may raise :exc:`TemperatureSeedMissingError` if *temperature_seed* is not
         given.
         """
-        return EOSDependentVars(
+        return GasDependentVars(
             temperature=self.temperature(cv, temperature_seed),
             pressure=self.pressure(cv),
             speed_of_sound=self.sound_speed(cv)
