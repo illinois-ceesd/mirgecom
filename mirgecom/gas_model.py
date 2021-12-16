@@ -5,10 +5,15 @@ Physical Gas Model Encapsulation
 
 .. autoclass:: GasModel
 
-Fluid State Handling
-^^^^^^^^^^^^^^^^^^^^
+Fluid State Encapsulation
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: FluidState
+.. autoclass:: ViscousFluidState
+
+Fluid State Handling Utilities
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. autofunction:: make_fluid_state
 .. autofunction:: project_fluid_state
 .. autofunction:: make_fluid_state_trace_pairs
@@ -213,7 +218,7 @@ class ViscousFluidState(FluidState):
 
         Viscous fluid state-dependent transport properties.
 
-    .. autattribute:: viscosity
+    .. autoattribute:: viscosity
     .. autoattribute:: bulk_viscosity
     .. autoattribute:: species_diffusivity
     .. autoattribute:: thermal_conductivity
