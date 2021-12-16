@@ -38,21 +38,26 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import (
-    PrescribedInviscidBoundary,
+    PrescribedFluidBoundary,
     DummyBoundary
 )
 from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
+from mirgecom.simutil import max_component_norm
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import get_inviscid_timestep
@@ -109,15 +114,20 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv, gas_model)
 
         expected_rhs = make_conserved(
             dim, q=make_obj_array([discr.zeros(actx)
                                    for i in range(num_equations)])
         )
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, time=0.0)
+        inviscid_rhs = euler_operator(
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
+
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -157,10 +167,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv, gas_model)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, time=0.0)
+        inviscid_rhs = euler_operator(
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -221,20 +234,31 @@ def test_vortex_rhs(actx_factory, order):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(vortex_soln, gas_model)
+
+        def _vortex_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=vortex)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries,
-            cv=vortex_soln, time=0.0)
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
 
-        err_max = actx.to_numpy(discr.norm(inviscid_rhs.join(), np.inf))
+        err_max = max_component_norm(discr, inviscid_rhs, np.inf)
+
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -277,24 +301,35 @@ def test_lump_rhs(actx_factory, dim, order):
         logger.info(f"Number of elements: {mesh.nelements}")
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(lump_soln, gas_model)
+
+        def _lump_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
+                                    gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_lump_boundary)
         }
+
+        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
-            time=0.0
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
-        err_max = actx.to_numpy(
-            discr.norm((inviscid_rhs-expected_rhs).join(), np.inf))
+        err_max = max_component_norm(discr, inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -342,7 +377,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         logger.info(f"Number of elements: {mesh.nelements}")
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -357,13 +392,23 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(lump_soln, gas_model)
+
+        def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
         }
 
+        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
-            time=0.0
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
@@ -371,7 +416,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         print(f"expected_rhs = {expected_rhs}")
 
         err_max = actx.to_numpy(
-            discr.norm((inviscid_rhs-expected_rhs).join(), np.inf))
+            discr.norm((inviscid_rhs-expected_rhs), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -416,10 +461,13 @@ def _euler_flow_stepper(actx, parameters):
     istep = 0
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     cv = initializer(nodes)
-    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+    gas_model = GasModel(eos=eos)
+    fluid_state = make_fluid_state(cv, gas_model)
+
+    sdt = cfl * get_inviscid_timestep(discr, fluid_state)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -437,7 +485,7 @@ def _euler_flow_stepper(actx, parameters):
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)
         expected_result = initializer(nodes, t=t)
-        result_resid = (state - expected_result).join()
+        result_resid = state - expected_result
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -462,8 +510,13 @@ def _euler_flow_stepper(actx, parameters):
 
         return maxerr
 
+    from mirgecom.inviscid import inviscid_flux_rusanov
+
     def rhs(t, q):
-        return euler_operator(discr, eos=eos, boundaries=boundaries, cv=q, time=t)
+        fluid_state = make_fluid_state(q, gas_model)
+        return euler_operator(discr, fluid_state, boundaries=boundaries,
+                              gas_model=gas_model, time=t,
+                              inviscid_numerical_flux_func=inviscid_flux_rusanov)
 
     filter_order = 8
     eta = .5
@@ -492,21 +545,20 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-        cv = make_conserved(
-            dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
-        )
+        cv = filter_modally(discr, "vol", cutoff, frfunc, cv)
+        fluid_state = make_fluid_state(cv, gas_model)
 
         t += dt
         istep += 1
 
-        sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+        sdt = cfl * get_inviscid_timestep(discr, fluid_state)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, time=t)
-        maxerr = actx.to_numpy(discr.norm((cv - expected_result).join(), np.inf))
+        maxerr = max_component_norm(discr, cv-expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
@@ -549,9 +601,17 @@ def test_isentropic_vortex(actx_factory, order):
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
+
+        def _vortex_boundary(discr, btag, state_minus, gas_model, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
+
         eos = IdealSingleGas()
         t = 0
         flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,

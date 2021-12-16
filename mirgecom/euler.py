@@ -52,21 +52,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_flux,
+    inviscid_flux_rusanov
 )
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
 from mirgecom.operators import div_operator
+from mirgecom.gas_model import (
+    project_fluid_state,
+    make_fluid_state_trace_pairs
+)
+from grudge.trace_pair import (
+    TracePair,
+    interior_trace_pairs
+)
+from grudge.dof_desc import DOFDesc, as_dofdesc
+
+import grudge.op as op
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, state, gas_model, boundaries, time=0.0,
+                   inviscid_numerical_flux_func=inviscid_flux_rusanov,
+                   quadrature_tag=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -81,47 +88,109 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
 
     Parameters
     ----------
-    cv: :class:`mirgecom.fluid.ConservedVars`
-        Fluid conserved state object with the conserved variables.
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state, and dependent
+        quantities.
 
     boundaries
+
         Dictionary of boundary functions, one for each valid btag
 
     time
+
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
 
     Returns
     -------
-    numpy.ndarray
+    :class:`mirgecom.fluid.ConservedVars`
+
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
+    dd_base = as_dofdesc("vol")
+    dd_vol = DOFDesc("vol", quadrature_tag)
+    dd_faces = DOFDesc("all_faces", quadrature_tag)
+
+    def interp_to_surf_quad(utpair):
+        local_dd = utpair.dd
+        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        return TracePair(
+            local_dd_quad,
+            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
+            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
+        )
+
+    boundary_states = {
+        btag: project_fluid_state(
+            discr, dd_base,
+            # Make sure we get the state on the quadrature grid
+            # restricted to the tag *btag*
+            as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            state, gas_model) for btag in boundaries
+    }
+
+    cv_interior_pairs = [
+        # Get the interior trace pairs onto the surface quadrature
+        # discretization (if any)
+        interp_to_surf_quad(tpair)
+        for tpair in interior_trace_pairs(discr, state.cv)
+    ]
+
+    tseed_interior_pairs = None
+    if state.is_mixture > 0:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        tseed_interior_pairs = [
+            # Get the interior trace pairs onto the surface quadrature
+            # discretization (if any)
+            interp_to_surf_quad(tpair)
+            for tpair in interior_trace_pairs(discr, state.temperature)
+        ]
+
+    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs,
+                                                   gas_model,
+                                                   tseed_interior_pairs)
+
+    # Interpolate the fluid state to the volume quadrature grid
+    # (conserved vars and derived vars if applicable)
+    state_quad = project_fluid_state(discr, dd_base, dd_vol, state, gas_model)
+
+    inviscid_flux_vol = inviscid_flux(state_quad)
     inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_divergence_flux(discr, btag=btag, cv=cv,
-                                                        eos=eos, time=time)
-              for btag in boundaries)
+
+        # Domain boundaries
+        sum(boundaries[btag].inviscid_divergence_flux(
+            discr,
+            # Make sure we get the state on the quadrature grid
+            # restricted to the tag *btag*
+            as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            gas_model,
+            state_minus=boundary_states[btag],
+            time=time,
+            numerical_flux_func=inviscid_numerical_flux_func)
+            for btag in boundaries)
+
+        # Interior boundaries
+        + sum(inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
+                                   numerical_flux_func=inviscid_numerical_flux_func)
+              for state_pair in interior_states)
     )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
 
-
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
+    return -div_operator(discr, dd_vol, dd_faces,
+                         inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless
