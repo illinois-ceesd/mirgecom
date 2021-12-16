@@ -16,3 +16,4 @@ unique features they exercise are as follows:
 - `vortex-mpi.py`: Isentropic vortex advection: outflow boundaries, verification
 - `hotplate-mpi.py`: Isothermal BC verification (prescribed exact soln)
 - `nsmix-mpi.py`: Viscous mixture w/Pyrometheus-based EOS
+- `poiseuille-mpi.py`: Poiseuille flow verification case
