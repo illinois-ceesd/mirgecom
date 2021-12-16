@@ -76,4 +76,5 @@ def test_restart_cv(actx_factory, nspecies):
     restart_data = read_restart_data(actx, rst_filename)
 
     resid = test_state - restart_data["state"]
-    assert actx.to_numpy(discr.norm(resid.join(), np.inf)) == 0
+    from mirgecom.simutil import max_component_norm
+    assert max_component_norm(discr, resid, np.inf) == 0

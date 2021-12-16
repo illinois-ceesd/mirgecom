@@ -53,6 +53,7 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
+from mirgecom.simutil import max_component_norm
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import get_inviscid_timestep
@@ -234,7 +235,8 @@ def test_vortex_rhs(actx_factory, order):
             discr, eos=IdealSingleGas(), boundaries=boundaries,
             cv=vortex_soln, time=0.0)
 
-        err_max = actx.to_numpy(discr.norm(inviscid_rhs.join(), np.inf))
+        err_max = max_component_norm(discr, inviscid_rhs, np.inf)
+
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -293,8 +295,7 @@ def test_lump_rhs(actx_factory, dim, order):
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
-        err_max = actx.to_numpy(
-            discr.norm((inviscid_rhs-expected_rhs).join(), np.inf))
+        err_max = max_component_norm(discr, inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -371,7 +372,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
         print(f"expected_rhs = {expected_rhs}")
 
         err_max = actx.to_numpy(
-            discr.norm((inviscid_rhs-expected_rhs).join(), np.inf))
+            discr.norm((inviscid_rhs-expected_rhs), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -437,7 +438,7 @@ def _euler_flow_stepper(actx, parameters):
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)
         expected_result = initializer(nodes, t=t)
-        result_resid = (state - expected_result).join()
+        result_resid = state - expected_result
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -492,9 +493,7 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-        cv = make_conserved(
-            dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
-        )
+        cv = filter_modally(discr, "vol", cutoff, frfunc, cv)
 
         t += dt
         istep += 1
@@ -506,7 +505,7 @@ def _euler_flow_stepper(actx, parameters):
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, time=t)
-        maxerr = actx.to_numpy(discr.norm((cv - expected_result).join(), np.inf))
+        maxerr = max_component_norm(discr, cv-expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
