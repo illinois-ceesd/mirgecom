@@ -193,6 +193,21 @@ class ConservedVars:
         return False
 
     @property
+    def nspecies(self):
+        """Return number of species (0)."""
+        return 0
+
+    @property
+    def species_mass_fractions(self):
+        """Return the species mass fractions y = None."""
+        return None
+
+    @property
+    def species_mass(self):
+        """Return the species mass = None."""
+        return None
+
+    @property
     def array_context(self):
         """Return an array context for the :class:`ConservedVars` object."""
         return self.mass.array_context
