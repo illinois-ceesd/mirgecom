@@ -208,7 +208,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = None  # noqa
 
     dim = 2
     if logmgr:
@@ -416,8 +416,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             euler_operator(discr, state=fluid_state, time=t,
                            boundaries=boundaries,
-                           gas_model=gas_model,
-                           quadrature_tag=quadrature_tag)
+                           gas_model=gas_model)
             + av_laplacian_operator(discr, cv=fluid_state.cv,
                                     boundaries=boundaries,
                                     boundary_kwargs={"time": t,
