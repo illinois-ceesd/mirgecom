@@ -557,6 +557,11 @@ if __name__ == "__main__":
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
     log_dependent = not args.lazy
+
+    from warnings import warn
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    log_dependent = False
+
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
