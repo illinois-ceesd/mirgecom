@@ -76,7 +76,8 @@ def inviscid_flux(state):
         + np.eye(state.dim)*state.pressure
     )
     species_mass_flux = \
-        state.velocity*state.species_mass_density.reshape(-1, 1)
+        state.velocity*state.species_mass_density.reshape(-1, 1) \
+        if state.has_multispecies else None
 
     return make_conserved(state.dim, mass=mass_flux, energy=energy_flux,
                           momentum=mom_flux, species_mass=species_mass_flux)

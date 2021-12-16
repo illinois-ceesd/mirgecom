@@ -79,7 +79,8 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     from mirgecom.initializers import Uniform
     mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)])
 
-    initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
+    initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity,
+                          nspecies=nspecies)
     cv = initializer(nodes)
 
     def inf_norm(data):
@@ -98,13 +99,14 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     exp_energy = 2.5 + .5 * dim
     eerrmax = inf_norm(cv.energy - exp_energy)
 
-    exp_species_mass = exp_mass * mass_fracs
-    mferrmax = inf_norm(cv.species_mass - exp_species_mass)
-
     assert perrmax < 1e-15
     assert merrmax < 1e-15
     assert eerrmax < 1e-15
-    assert mferrmax < 1e-15
+
+    if nspecies > 0:
+        exp_species_mass = exp_mass * mass_fracs
+        mferrmax = inf_norm(cv.species_mass - exp_species_mass)
+        assert mferrmax < 1e-15
 
 
 def test_lump_init(ctx_factory):

@@ -400,9 +400,11 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         cv_minus = state_minus.cv
         ext_mom = (cv_minus.momentum
                    - 2.0*np.dot(cv_minus.momentum, nhat)*nhat)
+        species_mass = cv_minus.species_mass if cv_minus.has_multispecies else None
+
         # Form the external boundary solution with the new momentum
         ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
-                                momentum=ext_mom, species_mass=cv_minus.species_mass)
+                                momentum=ext_mom, species_mass=species_mass)
         t_seed = state_minus.temperature if state_minus.is_mixture else None
 
         return make_fluid_state(cv=ext_cv, gas_model=gas_model,
@@ -421,11 +423,15 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                                   np.dot(grad_av_minus.momentum, nhat))
         s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
 
+        grad_av_spec_mass = \
+            -grad_av_minus.species_mass if grad_av_minus.has_multispecies \
+            else None
+
         # flip components to set a neumann condition
         return make_conserved(dim, mass=-grad_av_minus.mass,
                               energy=-grad_av_minus.energy,
                               momentum=-s_mom_flux,
-                              species_mass=-grad_av_minus.species_mass)
+                              species_mass=grad_av_spec_mass)
 
 
 class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
@@ -452,12 +458,15 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         """Get the exterior solution on the boundary."""
         wall_pen = 2.0 * self._wall_velocity * state_minus.mass_density
         ext_mom = wall_pen - state_minus.momentum_density  # no-slip
+        species_mass = \
+            state_minus.species_mass_density if state_minus.has_multispecies \
+            else None
 
         # Form the external boundary solution with the new momentum
         cv = make_conserved(dim=state_minus.dim, mass=state_minus.mass_density,
-                            energy=state_minus.energy_density,
-                            momentum=ext_mom,
-                            species_mass=state_minus.species_mass_density)
+                            energy=state_minus.energy_density, momentum=ext_mom,
+                            species_mass=species_mass)
+
         tseed = state_minus.temperature if state_minus.is_mixture else None
         return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=tseed)
 
@@ -487,7 +496,12 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         """Get the interior and exterior solution (*state_minus*) on the boundary."""
         temperature_wall = self._wall_temp + 0*state_minus.mass_density
         velocity_plus = -state_minus.velocity
-        mass_frac_plus = state_minus.species_mass_fractions
+
+        spec_mass_plus = None
+        mass_frac_plus = None
+        if state_minus.has_multispecies:
+            mass_frac_plus = state_minus.species_mass_fractions
+            spec_mass_plus = state_minus.species_mass_density
 
         internal_energy_plus = gas_model.eos.get_internal_energy(
             temperature=temperature_wall, species_mass_fractions=mass_frac_plus,
@@ -499,8 +513,7 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
 
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density, energy=total_energy_plus,
-            momentum=-state_minus.momentum_density,
-            species_mass=state_minus.species_mass_density
+            momentum=-state_minus.momentum_density, species_mass=spec_mass_plus
         )
         tseed = state_minus.temperature if state_minus.is_mixture else None
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,

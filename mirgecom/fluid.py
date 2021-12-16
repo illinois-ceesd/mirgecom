@@ -4,6 +4,7 @@ Conserved Quantities Handling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: ConservedVars
+.. autoclass:: MixtureConservedVars
 .. autofunction:: make_conserved
 
 Helper Functions
@@ -58,8 +59,9 @@ class ConservedVars:
     for the canonical conserved quantities (mass, energy, momentum,
     and species masses) per unit volume: $(\rho,\rho{E},\rho\vec{V},
     \rho{Y_s})$ from an agglomerated object array.  This data structure is intimately
-    related to the helper function :func:`make_conserved` which forms CV objects from
-    flat object array representations of the data.
+    related to the helper function :func:`make_conserved` which helps form a
+    conservation-law-specific representation of the simulation state data for use by
+    specific operators (fluids in this case).
 
     .. attribute:: dim
 
@@ -84,12 +86,10 @@ class ConservedVars:
         ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
         to the ndim equations of momentum conservation.
 
-    .. attribute:: species_mass
-
-        Object array (:class:`numpy.ndarray`) with shape ``(nspecies,)``
-        of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
-        ``(nspecies, ndim)`` respectively for scalar or vector quantities
-        corresponding to the `nspecies` species mass conservation equations.
+    .. autoattribute:: has_multispecies
+    .. autoattribute:: array_context
+    .. autoattribute:: velocity
+    .. autoattribute:: speed
 
     :example::
 
@@ -132,37 +132,6 @@ class ConservedVars:
         - :mod:`~mirgecom.euler`
         - :mod:`~mirgecom.initializers`
         - :mod:`~mirgecom.simutil`
-
-    :example::
-
-        Use `join` to create an agglomerated $\mathbf{Q}$ array from the
-        fluid conserved quantities (CV).
-
-        See the first example for the definition of CV, $\mathbf{Q}$, `ndim`,
-        `nspecies`, and $N_{\text{eq}}$.
-
-        Often, a user starts with the fluid conserved quantities like mass and
-        energy densities, and it is desired to glom those quantities together into
-        a *MIRGE*-compatible $\mathbf{Q}$ data structure.
-
-        For example, a solution initialization routine may set the fluid
-        quantities::
-
-            rho = ... # rho is a DOFArray with fluid density
-            v = ... # v is an ndim-vector of DOFArray with components of velocity
-            e = ... # e is a DOFArray with fluid energy
-
-        An agglomerated array of fluid independent variables can then be
-        created with::
-
-            q = cv.join()
-
-        after which *q* will be an obj array of $N_{\text{eq}}$ DOFArrays containing
-        the fluid conserved state data.
-
-        Examples of this sort of use for `join` can be found in:
-
-        - :mod:`~mirgecom.initializers`
 
     :example::
 
@@ -217,7 +186,11 @@ class ConservedVars:
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
+
+    @property
+    def has_multispecies(self):
+        """Return whether this state has multiple species."""
+        return False
 
     @property
     def array_context(self):
@@ -239,6 +212,52 @@ class ConservedVars:
         """Return the fluid velocity = momentum / mass."""
         return self.array_context.np.sqrt(np.dot(self.velocity, self.velocity))
 
+    def join(self):
+        """Return a flat object array of the CV components."""
+        return _join_conserved(
+            dim=self.dim,
+            mass=self.mass,
+            energy=self.energy,
+            momentum=self.momentum)
+
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return (type(self), tuple(getattr(self, f.name)
+                                  for f in fields(type(self))))
+
+    def replace(self, **kwargs):
+        """Return a copy of *self* with the attributes in *kwargs* replaced."""
+        from dataclasses import replace
+        return replace(self, **kwargs)
+
+
+@with_container_arithmetic(bcast_obj_array=False,
+                           bcast_container_types=(DOFArray, np.ndarray),
+                           matmul=True,
+                           rel_comparison=True)
+@dataclass_array_container
+@dataclass(frozen=True)
+class MixtureConservedVars(ConservedVars):
+    r"""Conserved mixture components for multi-species states.
+
+    .. attribute:: species_mass
+
+        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
+        ``(nspecies, ndim)`` respectively for scalar or vector quantities
+        corresponding to the `nspecies` species mass conservation equations.
+
+    .. automethod:: join
+    .. automethod:: replace
+    """
+
+    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
+
+    @property
+    def has_multispecies(self):
+        """Return whether this CV has multiple species."""
+        return True
+
     @property
     def nspecies(self):
         """Return the number of mixture species."""
@@ -257,16 +276,6 @@ class ConservedVars:
             energy=self.energy,
             momentum=self.momentum,
             species_mass=self.species_mass)
-
-    def __reduce__(self):
-        """Return a tuple reproduction of self for pickling."""
-        return (ConservedVars, tuple(getattr(self, f.name)
-                                    for f in fields(ConservedVars)))
-
-    def replace(self, **kwargs):
-        """Return a copy of *self* with the attributes in *kwargs* replaced."""
-        from dataclasses import replace
-        return replace(self, **kwargs)
 
 
 def _aux_shape(ary, leading_shape):
@@ -302,29 +311,41 @@ def _split_conserved(dim, q):
     array.
     """
     nspec = get_num_species(dim, q)
-    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
-                         species_mass=q[2+dim:2+dim+nspec])
+    if nspec > 0:
+        return MixtureConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim],
+                                    species_mass=q[2+dim:2+dim+nspec])
+    return ConservedVars(mass=q[0], energy=q[1], momentum=q[2:2+dim])
 
 
 def _join_conserved(dim, mass, energy, momentum, species_mass=None):
-    if species_mass is None:  # empty: immutable
-        species_mass = np.empty((0,), dtype=object)
+    multigas = False
+    if species_mass is not None:
+        nspec = len(species_mass)
+        if nspec > 0:
+            multigas = True
 
-    nspec = len(species_mass)
-    aux_shapes = [
-        _aux_shape(mass, ()),
-        _aux_shape(energy, ()),
-        _aux_shape(momentum, (dim,)),
-        _aux_shape(species_mass, (nspec,))]
+    if multigas:  # empty: immutable
+        aux_shapes = [
+            _aux_shape(mass, ()),
+            _aux_shape(energy, ()),
+            _aux_shape(momentum, (dim,)),
+            _aux_shape(species_mass, (nspec,))]
+    else:
+        nspec = 0
+        aux_shapes = [
+            _aux_shape(mass, ()),
+            _aux_shape(energy, ()),
+            _aux_shape(momentum, (dim,))]
 
     from pytools import single_valued
     aux_shape = single_valued(aux_shapes)
-
     result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
     result[0] = mass
     result[1] = energy
     result[2:dim+2] = momentum
-    result[dim+2:] = species_mass
+
+    if multigas:
+        result[dim+2:] = species_mass
 
     return result
 

@@ -108,6 +108,7 @@ class FluidState:
     .. autoattribute:: mass_density
     .. autoattribute:: momentum_density
     .. autoattribute:: energy_density
+    .. autoattribute:: has_multispecies
     .. autoattribute:: species_mass_density
     .. autoattribute:: species_mass_fractions
     .. autoattribute:: species_enthalpies
@@ -120,6 +121,11 @@ class FluidState:
     def array_context(self):
         """Return the relevant array context for this object."""
         return self.cv.array_context
+
+    @property
+    def has_multispecies(self):
+        """Return whether the state has multiple species."""
+        return self.cv.has_multispecies
 
     @property
     def dim(self):

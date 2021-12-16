@@ -263,17 +263,22 @@ def viscous_flux(state, grad_cv, grad_t):
 
     viscous_mass_flux = 0 * state.momentum_density
     tau = viscous_stress_tensor(state, grad_cv)
-    j = diffusive_flux(state, grad_cv)
+
+    heat_flux_diffusive = 0
+    species_mass_flux = None
+    if state.has_multispecies:
+        j = diffusive_flux(state, grad_cv)
+        heat_flux_diffusive = diffusive_heat_flux(state, j)
+        species_mass_flux = -j
 
     viscous_energy_flux = (
-        np.dot(tau, state.velocity) - diffusive_heat_flux(state, j)
+        np.dot(tau, state.velocity) - heat_flux_diffusive
         - conductive_heat_flux(state, grad_t)
     )
-
     return make_conserved(state.dim,
-            mass=viscous_mass_flux,
-            energy=viscous_energy_flux,
-            momentum=tau, species_mass=-j)
+                          mass=viscous_mass_flux,
+                          energy=viscous_energy_flux,
+                          momentum=tau, species_mass=species_mass_flux)
 
 
 def viscous_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair, **kwargs):
