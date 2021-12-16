@@ -1,6 +1,13 @@
 """MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
+.. autofunction:: make_mpi_context
+
+.. autoclass:: Op
+.. autoclass:: DistributedContext
+.. autoclass:: MPILikeDistributedContext
+.. autoclass:: NoMPIDistributedContext
+.. autoclass:: MPIDistributedContext
 """
 
 __copyright__ = """
@@ -27,9 +34,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABCMeta, abstractmethod
 from functools import wraps
 import os
 import sys
+from enum import Enum, unique, auto
+import numpy as np
 
 from contextlib import contextmanager
 
@@ -103,6 +113,210 @@ def _check_gpu_oversubscription():
                       f" Duplicate PCIe IDs: {dup}.")
 
 
+@unique
+class Op(Enum):
+    """Distributed reduction operation identifier."""
+
+    MIN = auto()
+    MAX = auto()
+    SUM = auto()
+    PROD = auto()
+    LOR = auto()
+    LAND = auto()
+
+
+class DistributedContext(metaclass=ABCMeta):
+    """
+    A generic distributed environment.
+
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
+    """
+
+    @property
+    @abstractmethod
+    def rank(self):
+        """Get the index of the current process."""
+        pass
+
+    @property
+    @abstractmethod
+    def size(self):
+        """Get the number of processes."""
+        pass
+
+    @abstractmethod
+    def barrier(self):
+        """Perform a global barrier."""
+        pass
+
+    @abstractmethod
+    def bcast(self, local_values, root=0) -> None:
+        """
+        Perform a global broadcast.
+
+        Parameters
+        ----------
+        local_values:
+            The value or array of values on which the broadcast is to be performed.
+
+        root:
+            The process from which the data will be broadcast.
+        """
+        pass
+
+    @abstractmethod
+    def allreduce(self, local_values, op):
+        """
+        Perform a global reduction.
+
+        Parameters
+        ----------
+        local_values:
+            The value or array of values on which the reduction operation is to be
+            performed.
+
+        op: Op
+            Reduction operation to be performed.
+
+        Returns
+        -------
+        Any ( like *local_values* )
+            Returns the result of the reduction operation on *local_values*
+        """
+        pass
+
+
+class MPILikeDistributedContext(DistributedContext):
+    """
+    A distributed environment that might have a communicator.
+
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. autoproperty:: comm
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
+    """
+
+    @property
+    @abstractmethod
+    def comm(self):
+        """
+        Get the communicator.
+
+        :returns: An MPI communicator or None.
+        """
+        pass
+
+
+class NoMPIDistributedContext(MPILikeDistributedContext):
+    """
+    A non-distributed MPI-like environment.
+
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. autoproperty:: comm
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
+    """
+
+    @property
+    def rank(self):  # noqa: D102
+        return 0
+
+    @property
+    def size(self):  # noqa: D102
+        return 1
+
+    def barrier(self):  # noqa: D102
+        pass
+
+    @property
+    def comm(self):
+        """
+        Get the communicator.
+
+        :returns: None.
+        """
+        return None
+
+    def bcast(self, local_values, root=0) -> None:  # noqa: D102
+        if root != 0:
+            raise ValueError("Invalid root.")
+
+    def allreduce(self, local_values, op):  # noqa: D102
+        if np.ndim(local_values) == 0:
+            return local_values
+        else:
+            op_to_numpy_func = {
+                Op.MIN: np.minimum,
+                Op.MAX: np.maximum,
+                Op.SUM: np.add,
+                Op.PROD: np.multiply,
+                Op.LOR: np.logical_or,
+                Op.LAND: np.logical_and,
+            }
+            from functools import reduce
+            return reduce(op_to_numpy_func[op], local_values)
+
+
+class MPIDistributedContext(MPILikeDistributedContext):
+    """
+    An MPI-based distributed environment.
+
+    .. automethod:: __init__
+    .. autoproperty:: rank
+    .. autoproperty:: size
+    .. autoproperty:: comm
+    .. automethod:: barrier
+    .. automethod:: bcast
+    .. automethod:: allreduce
+    """
+
+    def __init__(self, comm):
+        self._comm = comm
+
+    @property
+    def rank(self):  # noqa: D102
+        return self.comm.Get_rank()
+
+    @property
+    def size(self):  # noqa: D102
+        return self.comm.Get_size()
+
+    @property
+    def comm(self):
+        """
+        Get the communicator.
+
+        :returns: An MPI communicator.
+        """
+        return self._comm
+
+    def barrier(self):  # noqa: D102
+        self.comm.barrier()
+
+    def bcast(self, local_values, root=0) -> None:  # noqa: D102
+        self.comm.bcast(local_values, root=root)
+
+    def allreduce(self, local_values, op):  # noqa: D102
+        from mpi4py import MPI
+        op_to_mpi_op = {
+            Op.MIN: MPI.MIN,
+            Op.MAX: MPI.MAX,
+            Op.SUM: MPI.SUM,
+            Op.PROD: MPI.PROD,
+            Op.LOR: MPI.LOR,
+            Op.LAND: MPI.LAND,
+        }
+        return self.comm.allreduce(local_values, op=op_to_mpi_op[op])
+
+
 def mpi_entry_point(func):
     """
     Return a decorator that designates a function as the "main" function for MPI.
@@ -138,7 +352,7 @@ def mpi_entry_point(func):
 
         # This code warns the user of potentially slow startups due to file system
         # locking when running with large numbers of ranks. See
-        # https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes
+        # https://mirgecom.readthedocs.io/en/latest/running/large-systems.html
         # for more details
         size = MPI.COMM_WORLD.Get_size()
         rank = MPI.COMM_WORLD.Get_rank()
@@ -151,6 +365,22 @@ def mpi_entry_point(func):
 
         _check_gpu_oversubscription()
 
-        func(*args, **kwargs)
+        func(*args, dist_ctx=MPIDistributedContext(MPI.COMM_WORLD), **kwargs)
 
     return wrapped_func
+
+
+def make_mpi_context(comm=None):
+    """
+    Construct a :class:`DistributedContext` from an (optional) MPI communicator.
+
+    Returns
+    -------
+    DistributedContext
+        A :class:`MPIDistributedContext` instance if *comm* is not `None`, otherwise
+        a :class:`NoMPIDistributedContext` instance.
+    """
+    if comm is not None:
+        return MPIDistributedContext(comm)
+    else:
+        return NoMPIDistributedContext()

@@ -152,22 +152,18 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    comm = discr.mpi_communicator
-    rank = 0
+    from mirgecom.mpi import make_mpi_context
+    dist_ctx = make_mpi_context(discr.mpi_communicator)
 
-    if comm:
-        rank = comm.Get_rank()
+    rank_fn = make_rank_fname(basename=vizname, rank=dist_ctx.rank, step=step, t=t)
 
-    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
-
-    if rank == 0:
+    if dist_ctx.rank == 0:
         import os
         viz_dir = os.path.dirname(rank_fn)
         if viz_dir and not os.path.exists(viz_dir):
             os.makedirs(viz_dir)
 
-    if comm:
-        comm.barrier()
+    dist_ctx.barrier()
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
@@ -176,7 +172,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     with ctm:
         visualizer.write_parallel_vtk_file(
-            comm, rank_fn, io_fields,
+            dist_ctx.comm, rank_fn, io_fields,
             overwrite=overwrite,
             par_manifest_filename=make_par_fname(
                 basename=vizname, step=step, t=t
@@ -212,31 +208,25 @@ def global_reduce(local_values, op, *, comm=None):
     Any ( like *local_values* )
         Returns the result of the reduction operation on *local_values*
     """
-    if comm is not None:
-        from mpi4py import MPI
-        op_to_mpi_op = {
-            "min": MPI.MIN,
-            "max": MPI.MAX,
-            "sum": MPI.SUM,
-            "prod": MPI.PROD,
-            "lor": MPI.LOR,
-            "land": MPI.LAND,
-        }
-        return comm.allreduce(local_values, op=op_to_mpi_op[op])
-    else:
-        if np.ndim(local_values) == 0:
-            return local_values
-        else:
-            op_to_numpy_func = {
-                "min": np.minimum,
-                "max": np.maximum,
-                "sum": np.add,
-                "prod": np.multiply,
-                "lor": np.logical_or,
-                "land": np.logical_and,
-            }
-            from functools import reduce
-            return reduce(op_to_numpy_func[op], local_values)
+    from warnings import warn
+    warn("global_reduce is deprecated and will disappear in Q2 "
+         "2022. Use DistributedContext.allreduce() instead.", DeprecationWarning,
+         stacklevel=2)
+
+    from mirgecom.mpi import make_mpi_context
+    dist_ctx = make_mpi_context(comm)
+
+    from mirgecom.mpi import Op
+    op_string_to_enum = {
+        "min": Op.MIN,
+        "max": Op.MAX,
+        "sum": Op.SUM,
+        "prod": Op.PROD,
+        "lor": Op.LOR,
+        "land": Op.LAND,
+    }
+
+    return dist_ctx.allreduce(local_values, op_string_to_enum[op])
 
 
 def allsync(local_values, comm=None, op=None):
@@ -247,32 +237,34 @@ def allsync(local_values, comm=None, op=None):
     """
     from warnings import warn
     warn("allsync is deprecated and will disappear in Q1 2022. "
-         "Use global_reduce instead.", DeprecationWarning, stacklevel=2)
+         "Use DistributedContext.allreduce() instead.", DeprecationWarning,
+         stacklevel=2)
 
-    if comm is None:
-        return local_values
+    from mirgecom.mpi import make_mpi_context
+    dist_ctx = make_mpi_context(comm)
 
     from mpi4py import MPI
 
     if op is None:
         op = MPI.MAX
 
+    from mirgecom.mpi import Op
     if op == MPI.MIN:
-        op_string = "min"
+        op_enum = Op.MIN
     elif op == MPI.MAX:
-        op_string = "max"
+        op_enum = Op.MAX
     elif op == MPI.SUM:
-        op_string = "sum"
+        op_enum = Op.SUM
     elif op == MPI.PROD:
-        op_string = "prod"
+        op_enum = Op.PROD
     elif op == MPI.LOR:
-        op_string = "lor"
+        op_enum = Op.LOR
     elif op == MPI.LAND:
-        op_string = "land"
+        op_enum = Op.LAND
     else:
         raise ValueError(f"Unrecognized MPI reduce op {op}.")
 
-    return global_reduce(local_values, op_string, comm=comm)
+    return dist_ctx.allreduce(local_values, op_enum)
 
 
 def check_range_local(discr, dd, field, min_value, max_value):
@@ -332,59 +324,79 @@ def max_component_norm(discr, fields, order=np.inf):
         componentwise_norms(discr, fields, order), actx)))
 
 
-def generate_and_distribute_mesh(comm, generate_mesh):
-    """Generate a mesh and distribute it among all ranks in *comm*.
+def generate_and_distribute_mesh(dist_ctx, generate_mesh, *, comm=None):
+    """Generate a mesh and distribute it among all ranks in *dist_ctx*.
 
     Generate the mesh with the user-supplied mesh generation function
     *generate_mesh*, partition the mesh, and distribute it to every
-    rank in the provided MPI communicator *comm*.
+    rank in the provided :class:`mirgecom.mpi.DistributedContext`.
 
     .. note::
-        This is a collective routine and must be called by all MPI ranks.
+        This is a collective routine and must be called by all ranks.
 
     Parameters
     ----------
-    comm:
-        MPI communicator over which to partition the mesh
+    dist_ctx: mirgecom.mpi.DistributedContext
+        Distributed context over which to partition the mesh.
     generate_mesh:
         Callable of zero arguments returning a :class:`meshmode.mesh.Mesh`.
         Will only be called on one (undetermined) rank.
 
     Returns
     -------
-    local_mesh : :class:`meshmode.mesh.Mesh`
+    local_mesh: :class:`meshmode.mesh.Mesh`
         The local partition of the the mesh returned by *generate_mesh*.
-    global_nelements : :class:`int`
+    global_nelements: :class:`int`
         The number of elements in the serial mesh
     """
-    from meshmode.distributed import (
-        MPIMeshDistributor,
-        get_partition_by_pymetis,
-    )
-    num_parts = comm.Get_size()
-    mesh_dist = MPIMeshDistributor(comm)
-    global_nelements = 0
+    from mirgecom.mpi import (
+        DistributedContext,
+        MPILikeDistributedContext,
+        MPIDistributedContext)
+    if dist_ctx is not None:
+        if not isinstance(dist_ctx, DistributedContext):
+            # May have passed an MPI comm positionally
+            dist_ctx = MPIDistributedContext(dist_ctx)
+            from warnings import warn
+            warn("comm argument is deprecated and will disappear in Q2 2022. "
+                 "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+    else:
+        if comm is not None:
+            from warnings import warn
+            warn("comm argument is deprecated and will disappear in Q2 2022. "
+                 "Use dist_ctx instead.", DeprecationWarning, stacklevel=2)
+        from mirgecom.mpi import make_mpi_context
+        dist_ctx = make_mpi_context(comm)
 
-    if mesh_dist.is_mananger_rank():
+    if dist_ctx.size > 1:
+        if not isinstance(dist_ctx, MPILikeDistributedContext):
+            raise TypeError("Distributed context must be MPI-like.")
 
-        mesh = generate_mesh()
+        from meshmode.distributed import (
+            MPIMeshDistributor,
+            get_partition_by_pymetis,
+        )
+        num_parts = dist_ctx.size
+        mesh_dist = MPIMeshDistributor(dist_ctx.comm)
+        global_nelements = 0
 
-        global_nelements = mesh.nelements
+        if mesh_dist.is_mananger_rank():
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-        del mesh
+            mesh = generate_mesh()
+
+            global_nelements = mesh.nelements
+
+            part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+            del mesh
+
+        else:
+            local_mesh = mesh_dist.receive_mesh_part()
+
+        dist_ctx.bcast(global_nelements)
 
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        local_mesh = generate_mesh()
+        global_nelements = local_mesh.nelements
 
     return local_mesh, global_nelements
-
-
-def create_parallel_grid(comm, generate_grid):
-    """Generate and distribute mesh compatibility interface."""
-    from warnings import warn
-    warn("Do not call create_parallel_grid; use generate_and_distribute_mesh "
-         "instead. This function will disappear August 1, 2021",
-         DeprecationWarning, stacklevel=2)
-    return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)

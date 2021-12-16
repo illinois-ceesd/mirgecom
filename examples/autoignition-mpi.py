@@ -51,7 +51,12 @@ from mirgecom.simutil import (
     write_visfile
 )
 from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import (
+    Op,
+    MPILikeDistributedContext,
+    NoMPIDistributedContext,
+    mpi_entry_point
+)
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
@@ -77,26 +82,23 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-@mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+def main(ctx_factory=cl.create_some_context, dist_ctx=None, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, rst_filename=None,
+         actx_class=PyOpenCLArrayContext):
     """Drive example."""
     cl_ctx = ctx_factory()
 
     if casename is None:
         casename = "mirgecom"
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    nproc = comm.Get_size()
+    if dist_ctx is None:
+        dist_ctx = NoMPIDistributedContext()
+    assert isinstance(dist_ctx, MPILikeDistributedContext)
 
-    from mirgecom.simutil import global_reduce as _global_reduce
-    global_reduce = partial(_global_reduce, comm=comm)
+    rank = dist_ctx.rank
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+        filename=f"{casename}.sqlite", mode="wu", dist_ctx=dist_ctx)
 
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
@@ -156,7 +158,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["num_parts"] == nproc
+        assert restart_data["num_parts"] == dist_ctx.size
         rst_time = restart_data["t"]
         rst_step = restart_data["step"]
         rst_order = restart_data["order"]
@@ -166,12 +168,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         box_ur = 0.005
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+        local_mesh, global_nelements = generate_and_distribute_mesh(dist_ctx,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh, order=order, mpi_communicator=dist_ctx.comm
     )
     nodes = thaw(actx, discr.nodes())
 
@@ -278,7 +280,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             rst_state = restart_data["state"]
             old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
-                                              mpi_communicator=comm)
+                                              mpi_communicator=dist_ctx.comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
@@ -364,10 +366,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 "step": step,
                 "order": order,
                 "global_nelements": global_nelements,
-                "num_parts": nproc
+                "num_parts": dist_ctx.size
             }
             from mirgecom.restart import write_restart_file
-            write_restart_file(actx, rst_data, rst_fname, comm)
+            write_restart_file(actx, rst_data, rst_fname, dist_ctx=dist_ctx)
 
     def my_health_check(cv, dv):
         health_error = False
@@ -437,7 +439,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 dv = eos.dependent_vars(state)
-                health_errors = global_reduce(my_health_check(state, dv), op="lor")
+                health_errors = dist_ctx.allreduce(
+                    my_health_check(state, dv), op=Op.LOR)
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
@@ -517,6 +520,7 @@ if __name__ == "__main__":
     import argparse
     casename = "autoignition"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--mpi", action="store_true", help="run with MPI")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -528,6 +532,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
     if args.profiling:
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -536,6 +541,11 @@ if __name__ == "__main__":
         actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
+    if args.mpi:
+        main_func = mpi_entry_point(main)
+    else:
+        main_func = main
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
@@ -543,7 +553,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main_func(
+        use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+        casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
