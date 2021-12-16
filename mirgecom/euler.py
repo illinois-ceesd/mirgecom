@@ -55,7 +55,8 @@ THE SOFTWARE.
 import numpy as np  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_flux,
+    inviscid_flux_rusanov
 )
 
 from grudge.trace_pair import interior_trace_pairs
@@ -63,7 +64,8 @@ from grudge.dof_desc import DOFDesc
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, state, gas_model, boundaries, time=0.0):
+def euler_operator(discr, state, gas_model, boundaries, time=0.0,
+                   inviscid_numerical_flux_func=inviscid_flux_rusanov):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -129,11 +131,14 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0):
     # Compute interface contributions
     inviscid_flux_bnd = (
         # Interior faces
-        sum(inviscid_facial_flux(discr, gas_model, pair) for pair in interior_states)
+        sum(inviscid_facial_flux(discr, gas_model, pair,
+                                 numerical_flux_func=inviscid_numerical_flux_func)
+            for pair in interior_states)
         # Domain boundary faces
         + sum(
             boundaries[btag].inviscid_divergence_flux(
-                discr, btag, gas_model, state_minus=boundary_states[btag], time=time)
+                discr, btag, gas_model, state_minus=boundary_states[btag], time=time,
+                numerical_flux_func=inviscid_numerical_flux_func)
             for btag in boundaries)
     )
     return -div_operator(discr, dd_vol, dd_faces, inviscid_flux_vol,
