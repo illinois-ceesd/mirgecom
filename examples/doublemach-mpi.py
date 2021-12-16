@@ -416,7 +416,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             euler_operator(discr, state=fluid_state, time=t,
                            boundaries=boundaries,
-                           gas_model=gas_model)
+                           gas_model=gas_model, quadrature_tag=quadrature_tag)
             + av_laplacian_operator(discr, cv=fluid_state.cv,
                                     boundaries=boundaries,
                                     boundary_kwargs={"time": t,
