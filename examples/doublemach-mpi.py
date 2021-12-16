@@ -32,30 +32,29 @@ from functools import partial
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.navierstokes import ns_operator
+from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
-    av_operator,
+    av_laplacian_operator,
     smoothness_indicator
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.fluid import make_conserved
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticNoslipMovingBoundary,
-    PrescribedBoundary
+    PrescribedFluidBoundary
 )
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
@@ -130,8 +129,8 @@ def get_doublemach_mesh():
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         use_leap=False, use_profiling=False, use_overintegration=False,
+         casename=None, rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -190,10 +189,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
         local_nelements = local_mesh.nelements
 
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
     order = 3
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                                  mpi_communicator=comm)
-    nodes = thaw(actx, discr.nodes())
+    discr = EagerDGDiscretization(
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=local_mesh.dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        },
+        mpi_communicator=comm
+    )
+    nodes = thaw(discr.nodes(), actx)
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     dim = 2
     if logmgr:
@@ -220,16 +235,30 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{ Initialize simple transport model
     kappa_t = 1e-5
     sigma_v = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma_v,
-                                      thermal_conductivity=kappa_t)
     # }}}
-    eos = IdealSingleGas(transport_model=transport_model)
+
     initializer = DoubleMachReflection()
 
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    transport_model = SimpleTransport(viscosity=sigma_v,
+                                      thermal_conductivity=kappa_t)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=transport_model)
+
+    def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
+                                            **kwargs), gas_model)
+
     boundaries = {
-        DTAG_BOUNDARY("ic1"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic2"): PrescribedBoundary(initializer),
-        DTAG_BOUNDARY("ic3"): PrescribedBoundary(initializer),
+        DTAG_BOUNDARY("ic1"):
+        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        DTAG_BOUNDARY("ic2"):
+        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        DTAG_BOUNDARY("ic3"):
+        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
         DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
         DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
     }
@@ -237,13 +266,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        current_state = restart_data["state"]
+        current_cv = restart_data["cv"]
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_state = initializer(nodes)
+        current_cv = initializer(nodes)
+    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
     visualizer = make_visualizer(discr,
                                  discr.order if discr.dim == 2 else discr.order)
@@ -268,12 +298,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_viz(step, t, state, dv=None, tagged_cells=None):
-        if dv is None:
-            dv = eos.dependent_vars(state)
-        if tagged_cells is None:
-            tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
-                                                kappa=kappa)
+    def my_write_viz(step, t, state, dv, tagged_cells):
         viz_fields = [("cv", state),
                       ("dv", dv),
                       ("tagged_cells", tagged_cells)]
@@ -286,7 +311,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "state": state,
+                "cv": state,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -312,8 +337,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                    comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = nodal_min(discr, "vol", dv.pressure)
-            p_max = nodal_max(discr, "vol", dv.pressure)
+            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(discr, "vol", dv.temperature):
@@ -325,15 +350,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 comm, op=MPI.LOR):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = nodal_min(discr, "vol", dv.temperature)
-            t_max = nodal_max(discr, "vol", dv.temperature)
+            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        fluid_state = make_fluid_state(state, gas_model)
+        dv = fluid_state.dv
         try:
-            dv = None
 
             if logmgr:
                 logmgr.tick_before()
@@ -344,7 +370,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_health = check_step(step=step, interval=nhealth)
 
             if do_health:
-                dv = eos.dependent_vars(state)
                 from mirgecom.simutil import allsync
                 health_errors = allsync(my_health_check(state, dv), comm,
                                         op=MPI.LOR)
@@ -357,8 +382,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                if dv is None:
-                    dv = eos.dependent_vars(state)
                 tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
                                                     kappa=kappa)
                 my_write_viz(step=step, t=t, state=state, dv=dv,
@@ -367,12 +390,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
+            tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
+                                                kappa=kappa)
+            my_write_viz(step=step, t=t, state=state,
+                         tagged_cells=tagged_cells, dv=dv)
             my_write_restart(step=step, t=t, state=state)
             raise
 
         dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                              current_cfl, eos, t_final, constant_cfl)
+                              current_cfl, t_final, constant_cfl)
 
         return state, dt
 
@@ -386,29 +412,38 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        return ns_operator(
-            discr, cv=state, t=t, boundaries=boundaries, eos=eos
-        ) + make_conserved(dim, q=av_operator(
-            discr, q=state.join(), boundaries=boundaries,
-            boundary_kwargs={"time": t, "eos": eos}, alpha=alpha,
-            s0=s0, kappa=kappa)
+        fluid_state = make_fluid_state(state, gas_model)
+        return (
+            euler_operator(discr, state=fluid_state, time=t,
+                           boundaries=boundaries,
+                           gas_model=gas_model,
+                           quadrature_tag=quadrature_tag)
+            + av_laplacian_operator(discr, cv=fluid_state.cv,
+                                    boundaries=boundaries,
+                                    boundary_kwargs={"time": t,
+                                                     "gas_model": gas_model},
+                                    alpha=alpha, s0=s0, kappa=kappa,
+                                    quadrature_tag=quadrature_tag)
         )
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, eos, t_final, constant_cfl)
+                                  current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_state = \
+    current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_dv = eos.dependent_vars(current_state)
-    my_write_viz(step=current_step, t=current_t, state=current_state, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_state)
+    current_state = make_fluid_state(current_cv, gas_model)
+    final_dv = current_state.dv
+    tagged_cells = smoothness_indicator(discr, current_cv.mass, s0=s0, kappa=kappa)
+    my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv,
+                 tagged_cells=tagged_cells)
+    my_write_restart(step=current_step, t=current_t, state=current_cv)
 
     if logmgr:
         logmgr.close()
@@ -423,6 +458,8 @@ if __name__ == "__main__":
     import argparse
     casename = "doublemach"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -450,6 +487,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+         use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

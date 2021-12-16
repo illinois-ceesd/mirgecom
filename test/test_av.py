@@ -29,17 +29,24 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pytest
+
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
+
 from mirgecom.artificial_viscosity import (
-    av_operator,
+    av_laplacian_operator,
     smoothness_indicator
 )
+from mirgecom.fluid import make_conserved
+
 from grudge.eager import EagerDGDiscretization
+
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+
+from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
 
@@ -176,12 +183,12 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     zeros = discr.zeros(actx)
 
     class TestBoundary:
-        def soln_gradient_flux(self, disc, btag, soln, **kwargs):
-            soln_int = disc.project("vol", btag, soln)
+        def soln_gradient_flux(self, disc, btag, cv, **kwargs):
+            cv_int = disc.project("vol", btag, cv)
             from grudge.trace_pair import TracePair
             bnd_pair = TracePair(btag,
-                                 interior=soln_int,
-                                 exterior=soln_int)
+                                 interior=cv_int,
+                                 exterior=cv_int)
             nhat = thaw(actx, disc.normal(btag))
             from mirgecom.flux import gradient_flux_central
             flux_weak = gradient_flux_central(bnd_pair, normal=nhat)
@@ -189,11 +196,11 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
         def av_flux(self, disc, btag, diffusion, **kwargs):
             nhat = thaw(actx, disc.normal(btag))
-            grad_soln_minus = discr.project("vol", btag, diffusion)
-            grad_soln_plus = grad_soln_minus
+            diffusion_minus = discr.project("vol", btag, diffusion)
+            diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
-            bnd_grad_pair = TracePair(btag, interior=grad_soln_minus,
-                                      exterior=grad_soln_plus)
+            bnd_grad_pair = TracePair(btag, interior=diffusion_minus,
+                                      exterior=diffusion_plus)
             from mirgecom.flux import divergence_flux_central
             flux_weak = divergence_flux_central(bnd_grad_pair, normal=nhat)
             return disc.project(btag, "all_faces", flux_weak)
@@ -202,18 +209,42 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     # Uniform field return 0 rhs
     soln = zeros + 1.0
-    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
+    cv = make_conserved(
+        dim,
+        mass=soln,
+        energy=soln,
+        momentum=make_obj_array([soln for _ in range(dim)]),
+        species_mass=make_obj_array([soln for _ in range(dim)])
+    )
+    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Linear field return 0 rhs
     soln = nodes[0]
-    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
+    cv = make_conserved(
+        dim,
+        mass=soln,
+        energy=soln,
+        momentum=make_obj_array([soln for _ in range(dim)]),
+        species_mass=make_obj_array([soln for _ in range(dim)])
+    )
+    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
     # Quadratic field return constant 2
     soln = np.dot(nodes, nodes)
-    rhs = av_operator(discr, boundaries=boundaries, q=soln, alpha=1.0, s0=-np.inf)
+    cv = make_conserved(
+        dim,
+        mass=soln,
+        energy=soln,
+        momentum=make_obj_array([soln for _ in range(dim)]),
+        species_mass=make_obj_array([soln for _ in range(dim)])
+    )
+    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                cv=cv, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance

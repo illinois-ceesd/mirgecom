@@ -38,11 +38,16 @@ from grudge.eager import (
     EagerDGDiscretization,
     interior_trace_pair
 )
-from mirgecom.fluid import make_conserved
+from grudge.trace_pair import TracePair
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state,
+    project_fluid_state,
+    make_fluid_state_interior_trace_pair
+)
 logger = logging.getLogger(__name__)
 
 
@@ -69,9 +74,9 @@ def test_slipwall_identity(actx_factory, dim):
     order = 3
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-    eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
     nhat = thaw(actx, discr.normal(BTAG_ALL))
+    gas_model = GasModel(eos=IdealSingleGas())
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -85,12 +90,18 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
+            cv_minus = discr.project("vol", BTAG_ALL, uniform_state)
+            state_minus = make_fluid_state(cv=cv_minus, gas_model=gas_model)
 
             def bnd_norm(vec):
                 return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
-            bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
-                                          eos=eos, cv=uniform_state)
+            state_plus = \
+                wall.adiabatic_slip_state(discr, btag=BTAG_ALL, gas_model=gas_model,
+                                          state_minus=state_minus)
+
+            bnd_pair = TracePair(BTAG_ALL, interior=state_minus.cv,
+                                 exterior=state_plus.cv)
 
             # check that mass and energy are preserved
             mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
@@ -121,7 +132,7 @@ def test_slipwall_flux(actx_factory, dim, order):
     actx = actx_factory()
 
     wall = AdiabaticSlipBoundary()
-    eos = IdealSingleGas()
+    gas_model = GasModel(eos=IdealSingleGas())
 
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
@@ -153,8 +164,20 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, btag=BTAG_ALL,
-                                              eos=eos, cv=uniform_state)
+                fluid_state = make_fluid_state(uniform_state, gas_model)
+
+                interior_soln = project_fluid_state(discr, "vol", BTAG_ALL,
+                                                    state=fluid_state,
+                                                    gas_model=gas_model)
+
+                bnd_soln = wall.adiabatic_slip_state(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=interior_soln)
+
+                bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
+                                     exterior=bnd_soln.cv)
+                state_pair = TracePair(BTAG_ALL, interior=interior_soln,
+                                       exterior=bnd_soln)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
@@ -163,8 +186,11 @@ def test_slipwall_flux(actx_factory, dim, order):
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
                 from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, eos, cv_tpair=bnd_pair,
-                                                local=True)
+
+                bnd_flux = \
+                    inviscid_facial_flux(discr=discr, gas_model=gas_model,
+                                         state_pair=state_pair, local=True)
+
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 
@@ -203,11 +229,13 @@ def test_noslip(actx_factory, dim):
     sigma = 5.0
 
     from mirgecom.transport import SimpleTransport
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
-
     from mirgecom.boundary import IsothermalNoSlipBoundary
+
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+                         transport=SimpleTransport(viscosity=sigma,
+                                                   thermal_conductivity=kappa))
+
     wall = IsothermalNoSlipBoundary(wall_temperature=wall_temp)
-    eos = IdealSingleGas(transport_model=transport_model, gas_const=1.0)
 
     # from pytools.convergence import EOCRecorder
     # eoc = EOCRecorder()
@@ -251,29 +279,41 @@ def test_noslip(actx_factory, dim):
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
             initializer = Uniform(dim=dim, velocity=vel)
-            uniform_state = initializer(nodes, eos=eos)
+            uniform_cv = initializer(nodes, eos=gas_model.eos)
+            uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              uniform_state, gas_model)
+
             print(f"{uniform_state=}")
-            temper = eos.temperature(uniform_state)
+            temper = uniform_state.temperature
             print(f"{temper=}")
 
-            cv_int_tpair = interior_trace_pair(discr, uniform_state)
+            cv_int_tpair = interior_trace_pair(discr, uniform_state.cv)
+            state_pair = make_fluid_state_interior_trace_pair(discr, uniform_state,
+                                                             gas_model)
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
             print(f"{cv_flux_int=}")
+
             cv_flux_bc = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
-                                               eos=eos, cv=uniform_state)
+                                               gas_model=gas_model,
+                                               state_minus=state_minus)
             print(f"{cv_flux_bc=}")
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.t_gradient_flux(discr, btag=BTAG_ALL, eos=eos,
-                                             cv=uniform_state)
+            t_flux_bc = wall.temperature_gradient_flux(discr, btag=BTAG_ALL,
+                                                       gas_model=gas_model,
+                                                       state_minus=state_minus)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
-            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                      cv=uniform_state)
-            i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
+            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
+                                                      gas_model=gas_model,
+                                                      state_minus=state_minus)
+
+            i_flux_int = inviscid_facial_flux(discr=discr, gas_model=gas_model,
+                                              state_pair=state_pair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
             print(f"{cv_flux_bnd=}")
@@ -281,17 +321,25 @@ def test_noslip(actx_factory, dim):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            grad_cv = make_conserved(
-                dim, q=grad_operator(discr, uniform_state.join(), cv_flux_bnd.join())
-            )
-            grad_t = grad_operator(discr, temper, t_flux_bnd)
-            print(f"{grad_cv=}")
-            print(f"{grad_t=}")
+            from grudge.dof_desc import as_dofdesc
+            dd_vol = as_dofdesc("vol")
+            dd_faces = as_dofdesc("all_faces")
+            grad_cv_minus = \
+                discr.project("vol", BTAG_ALL,
+                              grad_operator(discr, dd_vol, dd_faces,
+                                            uniform_state.cv, cv_flux_bnd))
+            grad_t_minus = discr.project("vol", BTAG_ALL,
+                                         grad_operator(discr, dd_vol, dd_faces,
+                                                       temper, t_flux_bnd))
 
-            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                     cv=uniform_state,
-                                                     grad_cv=grad_cv, t=temper,
-                                                     grad_t=grad_t)
+            print(f"{grad_cv_minus=}")
+            print(f"{grad_t_minus=}")
+
+            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=state_minus,
+                                                     grad_cv_minus=grad_cv_minus,
+                                                     grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
 
@@ -331,9 +379,10 @@ def test_prescribedviscous(actx_factory, dim):
     # (*note): Most people will never change these as they are used internally
     #          to compute a DG gradient of Q and temperature.
 
-    from mirgecom.boundary import PrescribedViscousBoundary
-    wall = PrescribedViscousBoundary()
-    eos = IdealSingleGas(transport_model=transport_model, gas_const=1.0)
+    from mirgecom.boundary import PrescribedFluidBoundary
+    wall = PrescribedFluidBoundary()
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+                         transport=transport_model)
 
     npts_geom = 17
     a = 1.0
@@ -372,28 +421,38 @@ def test_prescribedviscous(actx_factory, dim):
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
             initializer = Uniform(dim=dim, velocity=vel)
-            cv = initializer(nodes, eos=eos)
+            cv = initializer(nodes, eos=gas_model.eos)
+            state = make_fluid_state(cv, gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              state, gas_model)
 
             print(f"{cv=}")
-            temper = eos.temperature(cv)
+            temper = state.temperature
             print(f"{temper=}")
 
             cv_int_tpair = interior_trace_pair(discr, cv)
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
             cv_flux_bc = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
-                                               eos=eos, cv=cv)
+                                               gas_model=gas_model,
+                                               state_minus=state_minus)
+
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.t_gradient_flux(discr, btag=BTAG_ALL, eos=eos,
-                                             cv=cv)
+            t_flux_bc = wall.temperature_gradient_flux(discr, btag=BTAG_ALL,
+                                                       gas_model=gas_model,
+                                                       state_minus=state_minus)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             from mirgecom.inviscid import inviscid_facial_flux
-            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                      cv=cv)
-            i_flux_int = inviscid_facial_flux(discr, eos=eos, cv_tpair=cv_int_tpair)
+            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
+                                                      gas_model=gas_model,
+                                                      state_minus=state_minus)
+            state_pair = make_fluid_state_interior_trace_pair(discr, state,
+                                                              gas_model)
+            i_flux_int = inviscid_facial_flux(discr, gas_model=gas_model,
+                                              state_pair=state_pair)
             i_flux_bnd = i_flux_bc + i_flux_int
 
             print(f"{cv_flux_bnd=}")
@@ -401,14 +460,20 @@ def test_prescribedviscous(actx_factory, dim):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            grad_cv = make_conserved(
-                dim, q=grad_operator(discr, cv.join(), cv_flux_bnd.join())
-            )
-            grad_t = grad_operator(discr, temper, t_flux_bnd)
-            print(f"{grad_cv=}")
-            print(f"{grad_t=}")
+            from grudge.dof_desc import as_dofdesc
+            dd_vol = as_dofdesc("vol")
+            dd_faces = as_dofdesc("all_faces")
+            grad_cv = grad_operator(discr, dd_vol, dd_faces, cv, cv_flux_bnd)
+            grad_t = grad_operator(discr, dd_vol, dd_faces, temper, t_flux_bnd)
+            grad_cv_minus = discr.project("vol", BTAG_ALL, grad_cv)
+            grad_t_minus = discr.project("vol", BTAG_ALL, grad_t)
 
-            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL, eos=eos,
-                                                     cv=cv, grad_cv=grad_cv,
-                                                     t=temper, grad_t=grad_t)
+            print(f"{grad_cv_minus=}")
+            print(f"{grad_t_minus=}")
+
+            v_flux_bc = wall.viscous_divergence_flux(discr=discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=state_minus,
+                                                     grad_cv_minus=grad_cv_minus,
+                                                     grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")

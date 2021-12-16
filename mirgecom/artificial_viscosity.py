@@ -67,7 +67,7 @@ Smoothness Indicator Evaluation
 AV RHS Evaluation
 ^^^^^^^^^^^^^^^^^
 
-.. autofunction:: av_operator
+.. autofunction:: av_laplacian_operator
 """
 
 __copyright__ = """
@@ -95,64 +95,31 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from mirgecom.fluid import make_conserved
 
 from pytools import memoize_in, keyed_memoize_in
-from pytools.obj_array import obj_array_vectorize
+
 from meshmode.dof_array import thaw, DOFArray
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
-from grudge.symbolic.primitives import TracePair
-from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
+
+from mirgecom.flux import gradient_flux_central, divergence_flux_central
+from mirgecom.operators import div_operator, grad_operator
+
+from grudge.trace_pair import (
+    TracePair,
+    interior_trace_pairs
+)
+from grudge.dof_desc import (
+    DOFDesc,
+    as_dofdesc,
+    DD_VOLUME_MODAL,
+    DD_VOLUME
+)
+
+import grudge.op as op
 
 
-# FIXME: Remove when get_array_container_context is added to meshmode
-def _get_actx(obj):
-    if isinstance(obj, TracePair):
-        return _get_actx(obj.int)
-    if isinstance(obj, np.ndarray):
-        return _get_actx(obj[0])
-    elif isinstance(obj, DOFArray):
-        return obj.array_context
-    else:
-        raise ValueError("Unknown type; can't retrieve array context.")
-
-
-# Tweak the behavior of np.outer to return a lower-dimensional object if either/both
-# of the arguments are scalars (np.outer always returns a matrix)
-def _outer(a, b):
-    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
-        return np.outer(a, b)
-    else:
-        return a*b
-
-
-def _facial_flux_q(discr, q_tpair):
-    """Compute facial flux for each scalar component of Q."""
-    actx = _get_actx(q_tpair)
-
-    normal = thaw(actx, discr.normal(q_tpair.dd))
-
-    # This uses a central scalar flux along nhat:
-    # flux = 1/2 * (Q- + Q+) * nhat
-    flux_out = _outer(q_tpair.avg, normal)
-
-    return discr.project(q_tpair.dd, "all_faces", flux_out)
-
-
-def _facial_flux_r(discr, r_tpair):
-    """Compute facial flux for vector component of grad(Q)."""
-    actx = _get_actx(r_tpair)
-
-    normal = thaw(actx, discr.normal(r_tpair.dd))
-
-    # This uses a central vector flux along nhat:
-    # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-    flux_out = r_tpair.avg @ normal
-
-    return discr.project(r_tpair.dd, "all_faces", flux_out)
-
-
-def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
+def av_laplacian_operator(discr, boundaries, cv, alpha,
+                          boundary_kwargs=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -163,16 +130,8 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
 
     Parameters
     ----------
-    q: :class:`~meshmode.dof_array.DOFArray` or :class:`~numpy.ndarray`
-
-        Single :class:`~meshmode.dof_array.DOFArray` for a scalar or an object array
-        (:class:`~numpy.ndarray`) for a vector of
-        :class:`~meshmode.dof_array.DOFArray` on which to operate.
-
-        When used with fluid solvers, *q* is expected to be the fluid state array
-        of the canonical conserved variables (mass, energy, momentum)
-        for the fluid along with a vector of species masses for multi-component
-        fluids.
+    cv: :class:`mirgecom.fluid.ConservedVars`
+        Fluid conserved state object with the conserved variables.
 
     boundaries: float
 
@@ -182,64 +141,123 @@ def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
 
         The maximum artificial viscosity coefficient to be applied
 
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
     boundary_kwargs: :class:`dict`
 
         dictionary of extra arguments to pass through to the boundary conditions
 
     Returns
     -------
-    numpy.ndarray
+    :class:`mirgecom.fluid.ConservedVars`
 
         The artificial viscosity operator applied to *q*.
     """
     if boundary_kwargs is None:
         boundary_kwargs = dict()
 
-    # Get smoothness indicator based on first component
-    indicator_field = q[0] if isinstance(q, np.ndarray) else q
-    indicator = smoothness_indicator(discr, indicator_field, **kwargs)
+    actx = cv.array_context
+    quadrature_tag = kwargs.get("quadrature_tag", None)
+    dd_vol = DOFDesc("vol", quadrature_tag)
+    dd_faces = DOFDesc("all_faces", quadrature_tag)
 
-    # R=Grad(Q) volume part
-    if isinstance(q, np.ndarray):
-        grad_q_vol = np.stack(obj_array_vectorize(discr.weak_grad, q), axis=0)
-    else:
-        grad_q_vol = discr.weak_grad(q)
+    def interp_to_vol_quad(u):
+        return op.project(discr, "vol", dd_vol, u)
 
-    # Total flux of fluid soln Q across element boundaries
-    q_bnd_flux = (_facial_flux_q(discr, q_tpair=interior_trace_pair(discr, q))
-                  + sum(_facial_flux_q(discr, q_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, q)))
-    q_bnd_flux2 = sum(bnd.soln_gradient_flux(discr, btag, soln=q, **boundary_kwargs)
-                      for btag, bnd in boundaries.items())
-    # if isinstance(q, np.ndarray):
-    #     q_bnd_flux2 = np.stack(q_bnd_flux2)
-    q_bnd_flux = q_bnd_flux + q_bnd_flux2
+    def interp_to_surf_quad(utpair):
+        local_dd = utpair.dd
+        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        return TracePair(
+            local_dd_quad,
+            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
+            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
+        )
 
-    # Compute R
-    r = discr.inverse_mass(
-        -alpha * indicator * (grad_q_vol - discr.face_mass(q_bnd_flux))
+    # Get smoothness indicator based on mass component
+    kappa = kwargs.get("kappa", 1.0)
+    s0 = kwargs.get("s0", -6.0)
+    indicator = smoothness_indicator(discr, cv.mass, kappa=kappa, s0=s0)
+
+    def central_flux(utpair):
+        dd = utpair.dd
+        normal = thaw(actx, discr.normal(dd))
+        return op.project(discr, dd, dd.with_dtag("all_faces"),
+                          # This uses a central scalar flux along nhat:
+                          # flux = 1/2 * (Q- + Q+) * nhat
+                          gradient_flux_central(utpair, normal))
+
+    cv_bnd = (
+        # Rank-local and cross-rank (across parallel partitions) contributions
+        + sum(central_flux(interp_to_surf_quad(tpair))
+              for tpair in interior_trace_pairs(discr, cv))
+        # Contributions from boundary fluxes
+        + sum(boundaries[btag].soln_gradient_flux(
+            discr,
+            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            cv=cv, **boundary_kwargs) for btag in boundaries)
     )
 
-    # RHS_av = div(R) volume part
-    div_r_vol = discr.weak_div(r)
+    # Compute R = alpha*grad(Q)
+    r = -alpha * indicator \
+        * grad_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(cv), cv_bnd)
+
+    def central_flux_div(utpair):
+        dd = utpair.dd
+        normal = thaw(actx, discr.normal(dd))
+        return op.project(discr, dd, dd.with_dtag("all_faces"),
+                          # This uses a central vector flux along nhat:
+                          # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
+                          divergence_flux_central(utpair, normal))
+
     # Total flux of grad(Q) across element boundaries
-    r_bnd_flux = (_facial_flux_r(discr, r_tpair=interior_trace_pair(discr, r))
-                  + sum(_facial_flux_r(discr, r_tpair=pb_tpair)
-                    for pb_tpair in cross_rank_trace_pairs(discr, r))
-                  + sum(bnd.av_flux(discr, btag, diffusion=r, **boundary_kwargs)
-                        for btag, bnd in boundaries.items()))
+    r_bnd = (
+        # Rank-local and cross-rank (across parallel partitions) contributions
+        + sum(central_flux_div(interp_to_surf_quad(tpair))
+              for tpair in interior_trace_pairs(discr, r))
+        # Contributions from boundary fluxes
+        + sum(boundaries[btag].av_flux(
+            discr,
+            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            diffusion=r, **boundary_kwargs) for btag in boundaries)
+    )
 
     # Return the AV RHS term
-    return discr.inverse_mass(-div_r_vol + discr.face_mass(r_bnd_flux))
+    return -div_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
 
 
 def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
-    """Interface :function:`av_operator` with backwards-compatible API."""
+    """Interface :function:`av_laplacian_operator` with backwards-compatible API."""
     from warnings import warn
-    warn("Do not call artificial_viscosity; it is now called av_operator. This"
-         "function will disappear in 2021", DeprecationWarning, stacklevel=2)
-    return av_operator(discr=discr, boundaries=boundaries,
-        boundary_kwargs={"t": t, "eos": eos}, q=q, alpha=alpha, **kwargs)
+    warn("Do not call artificial_viscosity; it is now called av_laplacian_operator."
+         " This function will disappear in 2022", DeprecationWarning, stacklevel=2)
+    from mirgecom.fluid import ConservedVars
+
+    if not isinstance(q, ConservedVars):
+        q = make_conserved(discr.dim, q=q)
+
+    return av_laplacian_operator(
+        discr=discr, cv=make_conserved(discr.dim, q=q), alpha=alpha,
+        boundaries=boundaries,
+        boundary_kwargs={"t": t, "eos": eos}, **kwargs).join()
+
+
+def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
+    """Interface :function:`av_laplacian_operator` with backwards-compatible API."""
+    from warnings import warn
+    warn("Do not call av_operator; it is now called av_laplacian_operator. This"
+         "function will disappear in 2022", DeprecationWarning, stacklevel=2)
+    from mirgecom.fluid import ConservedVars
+
+    if not isinstance(q, ConservedVars):
+        q = make_conserved(discr.dim, q=q)
+
+    return av_laplacian_operator(
+        discr=discr, cv=q, alpha=alpha,
+        boundaries=boundaries,
+        boundary_kwargs=boundary_kwargs, **kwargs).join()
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
