@@ -15,4 +15,5 @@ unique features they exercise are as follows:
 - `sod-mpi.py`: Sod's shock case: Fluid test case with strong shock
 - `vortex-mpi.py`: Isentropic vortex advection: outflow boundaries, verification
 - `hotplate-mpi.py`: Isothermal BC verification (prescribed exact soln)
+- `doublemach-mpi.py`: AV test case
 - `nsmix-mpi.py`: Viscous mixture w/Pyrometheus-based EOS
