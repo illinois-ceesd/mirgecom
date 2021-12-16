@@ -17,3 +17,4 @@ unique features they exercise are as follows:
 - `hotplate-mpi.py`: Isothermal BC verification (prescribed exact soln)
 - `doublemach-mpi.py`: AV test case
 - `nsmix-mpi.py`: Viscous mixture w/Pyrometheus-based EOS
+- `poiseuille-mpi.py`: Poiseuille flow verification case
