@@ -38,10 +38,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import numpy as np  # noqa
-from meshmode.dof_array import DOFArray  # noqa
+
 from dataclasses import dataclass
+
 from arraycontext import dataclass_array_container
+
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import (
     GasEOS,
@@ -53,6 +54,8 @@ from mirgecom.transport import (
     TransportModel,
     TransportDependentVars
 )
+
+from grudge.trace_pair import TracePair
 
 
 @dataclass(frozen=True)
@@ -318,6 +321,31 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
                             temperature_seed=temperature_seed)
 
 
+def make_entropy_projected_fluid_state(
+        discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
+
+    from grudge.interpolation import volume_and_surface_quadrature_interpolation
+
+    # Interpolate to the volume and surface (concatenated) quadrature
+    # discretizations: v = [v_vol, v_surf]
+    ev_quad = volume_and_surface_quadrature_interpolation(
+        discr, dd_vol, dd_faces, entropy_vars)
+
+    temperature_seed = None
+    if state.is_mixture:
+        temperature_seed = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, state.temperature)
+        gamma = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, gamma)
+
+    # Convert back to conserved varaibles and use to make the new fluid state
+    cv_modified = entropy_to_conservative_vars(gamma, ev_quad)
+
+    return make_fluid_state(cv=cv_modified,
+                            gas_model=gas_model,
+                            temperature_seed=temperature_seed)
+
+
 def _getattr_ish(obj, name):
     if obj is None:
         return None
@@ -402,3 +430,110 @@ def make_fluid_state_interior_trace_pair(discr, state, gas_model):
                                   _getattr_ish(tseed_pair, "int")),
         exterior=make_fluid_state(cv_tpair.ext, gas_model,
                                   _getattr_ish(tseed_pair, "ext")))
+
+
+def conservative_to_entropy_vars(gamma, state):
+    """Compute the entropy variables from conserved variables.
+    
+    Converts from conserved variables (density, momentum, total energy)
+    into entropy variables.
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        The full fluid conserved and thermal state
+
+    Returns
+    -------
+    ConservedVars
+        The entropy variables
+    """
+    from mirgecom.fluid import make_conserved
+
+    dim = state.dim
+    actx = state.array_context
+
+    rho = state.mass_density
+    u = state.velocity
+    p = state.pressure
+    rho_species = state.species_mass_density
+
+    u_square = sum(v ** 2 for v in u)
+    s = actx.np.log(p) - gamma*actx.np.log(rho)
+    rho_p = rho / p
+    rho_species_p = rho_species / p
+
+    return make_conserved(
+        dim,
+        mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
+        energy=-rho_p,
+        momentum=rho_p * u,
+        species_mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_species_p * u_square
+    )
+
+
+def entropy_to_conservative_vars(gamma, ev: ConservedVars):
+    """Compute the conserved variables from entropy variables *ev*.
+    
+    Converts from entropy variables into conserved variables
+    (density, momentum, total energy).
+
+    Parameters
+    ----------
+    ev: ConservedVars
+        The entropy variables
+
+    Returns
+    -------
+    ConservedVars
+        The fluid conserved variables
+    """
+    from mirgecom.fluid import make_conserved
+
+    dim = ev.dim
+    actx = ev.array_context
+    # See Hughes, Franca, Mallet (1986) A new finite element
+    # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+    inv_gamma_minus_one = 1/(gamma - 1)
+
+    # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+    ev_state = ev * (gamma - 1)
+    v1 = ev_state.mass
+    v234 = ev_state.momentum
+    v5 = ev_state.energy
+    v6ns = ev_state.species_mass
+
+    v_square = sum(v**2 for v in v234)
+    s = gamma - v1 + v_square/(2*v5)
+    rho_iota = (
+        ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    ) * actx.np.exp(-s * inv_gamma_minus_one)
+
+    return make_conserved(
+        dim,
+        mass=-rho_iota * v5,
+        energy=rho_iota * (1 - v_square/(2*v5)),
+        momentum=rho_iota * v234,
+        species_mass=-rho_iota * v6ns
+    )
+
+
+def conservative_to_primitive_vars(state):
+    """Compute the primitive variables from conserved variables *cv*.
+    
+    Converts from conserved variables (density, momentum, total energy)
+    into primitive variables (density, velocity, pressure).
+
+    Returns
+    -------
+    Tuple
+        A tuple containing the primitive variables:
+        (density, velocity, pressure)
+    """
+    rho = state.mass_density
+    u = state.velocity
+    p = state.pressure
+    y = state.species_mass_fractions
+
+    return (rho, u, p, y)

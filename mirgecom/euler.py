@@ -52,6 +52,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from arraycontext import map_array_container
+
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
@@ -62,12 +64,13 @@ from mirgecom.inviscid import (
 from mirgecom.operators import div_operator
 from mirgecom.gas_model import (
     project_fluid_state,
-    make_fluid_state_trace_pairs
-)
-from mirgecom.fluid import (
+    make_fluid_state_trace_pairs,
+    make_entropy_projected_fluid_state,
     conservative_to_entropy_vars,
     entropy_to_conservative_vars
 )
+
+from meshmode.dof_array import DOFArray
 
 from functools import partial
 
@@ -77,8 +80,6 @@ from grudge.trace_pair import (
 )
 from grudge.dof_desc import DOFDesc, as_dofdesc
 from grudge.projection import volume_quadrature_project
-from grudge.interpolation import \
-    volume_and_surface_quadrature_interpolation
 from grudge.flux_differencing import volume_flux_differencing
 
 import grudge.op as op
@@ -244,10 +245,46 @@ def entropy_stable_euler_operator(
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    eos = gas_model.eos
     dd_base = as_dofdesc("vol")
     dd_vol = DOFDesc("vol", quadrature_tag)
     dd_faces = DOFDesc("all_faces", quadrature_tag)
+    # NOTE: For single-gas this is just a fixed scalar.
+    # However, for mixtures, gamma is a DOFArray. For now,
+    # we are re-using gamma from here and *not* recomputing
+    # after applying entropy projections. It is unclear at this
+    # time whether it's strictly necessary or if this is good enough
+    gamma = gas_model.eos.gamma(state.cv, state.temperature)
+
+    # Interpolate state to vol quad grid
+    state_quad = project_fluid_state(discr, "vol", dd_vol, state, gas_model)
+
+    # Compute the projected (nodal) entropy variables
+    entropy_vars = volume_quadrature_project(
+        discr, dd_vol,
+        # Map to entropy variables
+        conservative_to_entropy_vars(gamma, state_quad))
+
+    modified_conserved_fluid_state = \
+        make_entropy_projected_fluid_state(discr, dd_vol, dd_faces,
+                                           state, entropy_vars, gamma, gas_model)
+
+    def _reshape(shape, ary):
+        if not isinstance(ary, DOFArray):
+            return map_array_container(partial(_reshape, shape), ary)
+
+        return DOFArray(ary.array_context, data=tuple(
+            subary.reshape(grp.nelements, *shape)
+            # Just need group for determining the number of elements
+            for grp, subary in zip(discr.discr_from_dd("vol").groups, ary)))
+
+    flux_matrices = entropy_conserving_flux_chandrashekar(
+        gas_model,
+        _reshape((1, -1), modified_conserved_fluid_state),
+        _reshape((-1, 1), modified_conserved_fluid_state))
+
+    # Compute volume derivatives using flux differencing
+    inviscid_flux_vol = \
+        -volume_flux_differencing(discr, dd_vol, dd_faces, flux_matrices)
 
     def interp_to_surf_quad(utpair):
         local_dd = utpair.dd
@@ -258,7 +295,20 @@ def entropy_stable_euler_operator(
             exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
         )
 
-    def interp_to_surf_modified_conservedvars(utpair):
+    tseed_interior_pairs = None
+    if state.is_mixture:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        tseed_interior_pairs = [
+            # Get the interior trace pairs onto the surface quadrature
+            # discretization (if any)
+            interp_to_surf_quad(tpair)
+            for tpair in interior_trace_pairs(discr, state.temperature)
+        ]
+
+    def interp_to_surf_modified_conservedvars(gamma, utpair):
         """Takes a trace pair containing the projected entropy variables
         and converts them into conserved variables on the quadrature grid.
         """
@@ -266,39 +316,21 @@ def entropy_stable_euler_operator(
         local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
         # Interpolate entropy variables to the surface quadrature grid
         vtilde_tpair = op.project(discr, local_dd, local_dd_quad, utpair)
+        if isinstance(gamma, DOFArray):
+            gamma = op.project(discr, dd_base, local_dd_quad, gamma)
         return TracePair(
             local_dd_quad,
             # Convert interior and exterior states to conserved variables
-            interior=entropy_to_conservative_vars(eos, vtilde_tpair.int),
-            exterior=entropy_to_conservative_vars(eos, vtilde_tpair.ext)
+            interior=entropy_to_conservative_vars(gamma, vtilde_tpair.int),
+            exterior=entropy_to_conservative_vars(gamma, vtilde_tpair.ext)
         )
-
-    def modified_conservedvars(proj_ev):
-        """Converts the projected entropy variables into
-        conserved variables on the quadrature (vol + surf) grid.
-        """
-        return entropy_to_conservative_vars(
-            eos,
-            # Interpolate projected entropy variables to
-            # volume + surface quadrature grids
-            volume_and_surface_quadrature_interpolation(
-                discr, dd_vol, dd_faces, proj_ev))
-
-    # Convert to projected entropy variables: ev_q = V_h P_q v(cv_q)
-    proj_entropy_vars = volume_quadrature_project(
-        discr, dd_vol,
-        # Map to entropy variables: v(u_q)
-        conservative_to_entropy_vars(
-            eos,
-            # Interpolate state to vol quad grid: cv_q = V_q cv
-            op.project(discr, dd_base, dd_vol, state.cv)))
 
     cv_interior_pairs = [
         # Compute interior trace pairs using modified conservative
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
-        interp_to_surf_modified_conservedvars(tpair)
-        for tpair in interior_trace_pairs(discr, proj_entropy_vars)
+        interp_to_surf_modified_conservedvars(gamma, tpair)
+        for tpair in interior_trace_pairs(discr, entropy_vars)
     ]
 
     boundary_states = {
@@ -313,32 +345,11 @@ def entropy_stable_euler_operator(
             state, gas_model) for btag in boundaries
     }
 
-    # TODO: Recompute state.temperature from the modified conserved vars?
-    tseed_interior_pairs = None
-    if state.is_mixture > 0:
-        # If this is a mixture, we need to exchange the temperature field because
-        # mixture pressure (used in the inviscid flux calculations) depends on
-        # temperature and we need to seed the temperature calculation for the
-        # (+) part of the partition boundary with the remote temperature data.
-        tseed_interior_pairs = [
-            # Get the interior trace pairs onto the surface quadrature
-            # discretization (if any)
-            interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(discr, state.temperature)
-        ]
-
     # Interior interface state pairs consisting of modified conservative
     # variables and the corresponding temperature seeds
     interior_states = make_fluid_state_trace_pairs(cv_interior_pairs,
                                                    gas_model,
                                                    tseed_interior_pairs)
-
-    # Compute volume derivatives using flux differencing
-    inviscid_flux_vol = -volume_flux_differencing(
-        discr,
-        partial(entropy_conserving_flux_chandrashekar, eos),
-        dd_vol, dd_faces,
-        modified_conservedvars(proj_entropy_vars))
 
     # Surface contributions
     inviscid_flux_bnd = (

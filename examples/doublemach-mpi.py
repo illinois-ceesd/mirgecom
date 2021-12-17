@@ -43,7 +43,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import euler_operator
+from mirgecom.euler import euler_operator, entropy_stable_euler_operator
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
@@ -158,7 +158,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Timestepping control
     current_step = 0
     timestepper = rk4_step
-    t_final = 1.0e-3
+    t_final = 0.2
     current_cfl = 0.1
     current_dt = 1.0e-4
     current_t = 0
@@ -166,9 +166,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Some i/o frequencies
     nstatus = 10
-    nviz = 100
+    nviz = 10
     nrestart = 100
-    nhealth = 1
+    nhealth = 5
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -237,7 +237,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     sigma_v = 1e-5
     # }}}
 
-    initializer = DoubleMachReflection()
+    initializer = DoubleMachReflection(shock_speed=10)
 
     from mirgecom.gas_model import GasModel, make_fluid_state
     transport_model = SimpleTransport(viscosity=sigma_v,
@@ -333,26 +333,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
-                   comm, op=MPI.LOR):
-            health_error = True
-            from grudge.op import nodal_max, nodal_min
-            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
-            logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
+        # if allsync(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
+        #            comm, op=MPI.LOR):
+        #     health_error = True
+        #     from grudge.op import nodal_max, nodal_min
+        #     p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
+        #     p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+        #     logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(discr, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(
-                check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.071e-2),
-                comm, op=MPI.LOR):
-            health_error = True
-            from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
-            logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
+        # if allsync(
+        #         check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.071e-2),
+        #         comm, op=MPI.LOR):
+        #     health_error = True
+        #     from grudge.op import nodal_max, nodal_min
+        #     t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
+        #     t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+        #     logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
 
@@ -414,6 +414,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return (
+            # entropy_stable_euler_operator(discr, state=fluid_state, time=t,
+            #                boundaries=boundaries,
+            #                gas_model=gas_model,
+            #                quadrature_tag=quadrature_tag)
             euler_operator(discr, state=fluid_state, time=t,
                            boundaries=boundaries,
                            gas_model=gas_model,
