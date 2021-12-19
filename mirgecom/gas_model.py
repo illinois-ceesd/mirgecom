@@ -56,7 +56,7 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import (
     TransportModel,
-    TransportDependentVars
+    GasTransportVars
 )
 
 
@@ -91,10 +91,6 @@ class FluidState:
 
         Fluid state-dependent quantities corresponding to the chosen equation of
         state.
-
-    .. attribute:: tv
-
-        Fluid state-dependent transport properties.
 
     .. autoattribute:: array_context
     .. autoattribute:: dim
@@ -224,7 +220,7 @@ class ViscousFluidState(FluidState):
     .. autoattribute:: thermal_conductivity
     """
 
-    tv: TransportDependentVars
+    tv: GasTransportVars
 
     @property
     def viscosity(self):
@@ -273,7 +269,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
     """
     dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
     if gas_model.transport is not None:
-        tv = gas_model.transport.dependent_vars(eos=gas_model.eos, cv=cv)
+        tv = gas_model.transport.transport_vars(eos=gas_model.eos, cv=cv)
         return ViscousFluidState(cv=cv, dv=dv, tv=tv)
     return FluidState(cv=cv, dv=dv)
 
