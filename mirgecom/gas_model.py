@@ -17,7 +17,6 @@ Fluid State Handling Utilities
 .. autofunction:: make_fluid_state
 .. autofunction:: project_fluid_state
 .. autofunction:: make_fluid_state_trace_pairs
-.. autofunction:: make_fluid_state_interior_trace_pair
 """
 
 __copyright__ = """
@@ -367,40 +366,3 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
         exterior=make_fluid_state(cv_pair.ext, gas_model,
                                   temperature_seed=_getattr_ish(tseed_pair, "ext")))
         for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
-
-
-def make_fluid_state_interior_trace_pair(discr, state, gas_model):
-    """Create a fluid state on interior faces using the volume state and gas model.
-
-    Parameters
-    ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
-
-        A discretization collection encapsulating the DG elements
-
-    state: :class:`~mirgecom.gas_model.FluidState`
-
-        The full fluid conserved and thermal state
-
-    gas_model: :class:`~mirgecom.gas_model.GasModel`
-
-        The physical model constructs for the gas_model
-
-    Returns
-    -------
-    :class:`~grudge.trace_pair.TracePair`
-
-        A tracepair of thermally consistent states
-        (:class:`~mirgecom.gas_model.FluidState`) on the interior faces
-    """
-    from grudge.eager import interior_trace_pair
-    from grudge.trace_pair import TracePair
-    cv_tpair = interior_trace_pair(discr, state.cv)
-    tseed_pair = interior_trace_pair(discr, state.dv.temperature) \
-        if state.is_mixture else None
-    return TracePair(
-        cv_tpair.dd,
-        interior=make_fluid_state(cv_tpair.int, gas_model,
-                                  _getattr_ish(tseed_pair, "int")),
-        exterior=make_fluid_state(cv_tpair.ext, gas_model,
-                                  _getattr_ish(tseed_pair, "ext")))
