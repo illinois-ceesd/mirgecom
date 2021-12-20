@@ -34,10 +34,8 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import (
-    EagerDGDiscretization,
-    interior_trace_pair
-)
+from grudge.eager import EagerDGDiscretization
+from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -46,7 +44,7 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state,
     project_fluid_state,
-    make_fluid_state_interior_trace_pair
+    make_fluid_state_trace_pairs
 )
 logger = logging.getLogger(__name__)
 
@@ -288,9 +286,10 @@ def test_noslip(actx_factory, dim):
             temper = uniform_state.temperature
             print(f"{temper=}")
 
-            cv_int_tpair = interior_trace_pair(discr, uniform_state.cv)
-            state_pair = make_fluid_state_interior_trace_pair(discr, uniform_state,
-                                                             gas_model)
+            cv_interior_pairs = interior_trace_pairs(discr, uniform_state.cv)
+            cv_int_tpair = cv_interior_pairs[0]
+            state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
+            state_pair = state_pairs[0]
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
             print(f"{cv_flux_int=}")
 
@@ -449,8 +448,9 @@ def test_prescribedviscous(actx_factory, dim):
             i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
-            state_pair = make_fluid_state_interior_trace_pair(discr, state,
-                                                              gas_model)
+            cv_int_pairs = interior_trace_pairs(discr, cv)
+            state_pairs = make_fluid_state_trace_pairs(cv_int_pairs, gas_model)
+            state_pair = state_pairs[0]
             i_flux_int = inviscid_facial_flux(discr, gas_model=gas_model,
                                               state_pair=state_pair)
             i_flux_bnd = i_flux_bc + i_flux_int
