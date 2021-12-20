@@ -160,8 +160,9 @@ class GasEOS(metaclass=ABCMeta):
     def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
         """Get the fluid internal energy from temperature and mass."""
 
-    def dependent_vars(self, cv: ConservedVars,
-                       temperature_seed: DOFArray = None) -> GasDependentVars:
+    def dependent_vars(
+            self, cv: ConservedVars,
+            temperature_seed: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -221,8 +222,9 @@ class MixtureEOS(GasEOS):
     def get_species_source_terms(self, cv: ConservedVars):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
 
-    def dependent_vars(self, cv: ConservedVars,
-                       temperature_seed: DOFArray = None) -> MixtureDependentVars:
+    def dependent_vars(
+            self, cv: ConservedVars,
+            temperature_seed: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)

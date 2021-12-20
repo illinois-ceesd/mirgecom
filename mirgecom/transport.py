@@ -9,7 +9,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
 
-.. autoclass:: TransportDependentVars
+.. autoclass:: GasTransportVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
@@ -59,7 +59,7 @@ class TransportModelError(Exception):
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class TransportDependentVars:
+class GasTransportVars:
     """State-dependent quantities for :class:`TransportModel`.
 
     Prefer individual methods for model use, use this
@@ -89,7 +89,7 @@ class TransportModel:
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
     .. automethod:: volume_viscosity
-    .. automethod:: dependent_vars
+    .. automethod:: transport_vars
     """
 
     def bulk_viscosity(self, eos: GasEOS, cv: ConservedVars):
@@ -112,9 +112,9 @@ class TransportModel:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
 
-    def dependent_vars(self, eos: GasEOS, cv: ConservedVars):
+    def transport_vars(self, eos: GasEOS, cv: ConservedVars):
         r"""Compute the transport properties from the conserved state."""
-        return TransportDependentVars(
+        return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(eos, cv),
             viscosity=self.viscosity(eos, cv),
             thermal_conductivity=self.thermal_conductivity(eos, cv),
