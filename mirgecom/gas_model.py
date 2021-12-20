@@ -450,6 +450,7 @@ def conservative_to_entropy_vars(gamma, state):
         The entropy variables
     """
     from mirgecom.fluid import make_conserved
+    from pytools.obj_array import make_obj_array
 
     dim = state.dim
     actx = state.array_context
@@ -460,7 +461,9 @@ def conservative_to_entropy_vars(gamma, state):
     rho_species = state.species_mass_density
 
     u_square = sum(v ** 2 for v in u)
-    s = actx.np.log(p) - gamma*actx.np.log(rho)
+    log_p = actx.np.log(p)
+    s = log_p - gamma*actx.np.log(rho)
+    s_species = log_p - gamma*actx.np.log(rho_species)
     rho_p = rho / p
     rho_species_p = rho_species / p
 
@@ -469,7 +472,9 @@ def conservative_to_entropy_vars(gamma, state):
         mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
         energy=-rho_p,
         momentum=rho_p * u,
-        species_mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_species_p * u_square
+        species_mass=(
+            ((gamma - s_species)/(gamma - 1)) - 0.5 * rho_species_p * u_square
+        )
     )
 
 
@@ -510,12 +515,17 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
         ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
     ) * actx.np.exp(-s * inv_gamma_minus_one)
 
+    s_species = gamma - v6ns + v_square/(2*v5)
+    rho_iota_species = (
+        ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    ) * actx.np.exp(-s_species * inv_gamma_minus_one)
+
     return make_conserved(
         dim,
         mass=-rho_iota * v5,
         energy=rho_iota * (1 - v_square/(2*v5)),
         momentum=rho_iota * v234,
-        species_mass=-rho_iota * v6ns
+        species_mass=-rho_iota_species * v6ns
     )
 
 
