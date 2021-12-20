@@ -310,25 +310,27 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
-
+        from grudge.trace_pair import interior_trace_pairs
+        cv_interior_pairs = interior_trace_pairs(discr, cv)
         # Check the boundary facial fluxes as called on an interior boundary
         # eos = IdealSingleGas()
         from mirgecom.gas_model import (
             GasModel,
-            make_fluid_state,
-            make_fluid_state_interior_trace_pair
+            make_fluid_state
         )
         gas_model = GasModel(eos=IdealSingleGas())
-        state_tpair = make_fluid_state_interior_trace_pair(
-            discr, make_fluid_state(cv, gas_model), gas_model
-        )
+
+        from mirgecom.gas_model import make_fluid_state_trace_pairs
+        state_tpairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
+        interior_state_pair = state_tpairs[0]
 
         from mirgecom.inviscid import (
             inviscid_facial_flux,
             inviscid_flux_rusanov
         )
         interior_face_flux = \
-            inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_tpair,
+            inviscid_facial_flux(discr, gas_model=gas_model,
+                                 state_pair=interior_state_pair,
                                  numerical_flux_func=inviscid_flux_rusanov)
 
         def inf_norm(data):
