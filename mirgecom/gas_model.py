@@ -201,7 +201,7 @@ class FluidState:
 
     @property
     def species_enthalpies(self):
-        """Return the fluid species diffusivities."""
+        """Return the fluid species enthalpies."""
         return self._get_mixture_property("species_enthalpies")
 
 
