@@ -481,23 +481,3 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
         momentum=rho_iota * v234,
         species_mass=-rho_iota * v6ns
     )
-
-
-def conservative_to_primitive_vars(state):
-    """Compute the primitive variables from conserved variables *cv*.
-    
-    Converts from conserved variables (density, momentum, total energy)
-    into primitive variables (density, velocity, pressure).
-
-    Returns
-    -------
-    Tuple
-        A tuple containing the primitive variables:
-        (density, velocity, pressure)
-    """
-    rho = state.mass_density
-    u = state.velocity
-    p = state.pressure
-    y = state.species_mass_fractions
-
-    return (rho, u, p, y)
