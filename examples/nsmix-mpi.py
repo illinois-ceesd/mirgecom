@@ -35,7 +35,7 @@ from meshmode.array_context import (
     SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from arraycontext import thaw, freeze
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -267,9 +267,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _get_temperature_update(cv, temperature):
         y = cv.species_mass_fractions
         e = gas_model.eos.internal_energy(cv) / cv.mass
-        return make_obj_array(
-            [pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y)]
-        )
+        return pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y)
 
     def _get_fluid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model,
@@ -346,8 +344,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if ((dv is not None) and (not log_dependent)):
             temp = dv.temperature
             press = dv.pressure
-            temp = thaw(freeze(temp, actx), actx)
-            press = thaw(freeze(press, actx), actx)
+
             from grudge.op import nodal_min_loc, nodal_max_loc
             tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
                            comm=comm, op=MPI.MIN)
@@ -431,10 +428,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # Note: The local max jig below works around a very long compile
         # in lazy mode.
         from grudge import op
-        temp_update, = compute_temperature_update(cv, dv.temperature)
-        temp_resid = thaw(freeze(temp_update, actx), actx) / dv.temperature
-        temp_resid = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
-        if temp_resid > 1e-8:
+        temp_resid = compute_temperature_update(cv, dv.temperature) / dv.temperature
+        temp_err = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
+        if temp_err > 1e-8:
             health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
