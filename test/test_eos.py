@@ -34,15 +34,20 @@ import pytest
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import thaw
-from meshmode.array_context import PyOpenCLArrayContext
+from meshmode.array_context import (  # noqa
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
 import cantera
-import pyrometheus as pyro
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
 from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
@@ -76,7 +81,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     nel_1d = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-
     mesh = generate_regular_rect_mesh(
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
@@ -194,6 +198,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
+    from meshmode.dof_array import thaw
     nodes = thaw(actx, discr.nodes())
 
     # Pyrometheus initialization
@@ -235,13 +240,15 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
               f"{pyro_p}, {pyro_t}, {pyro_e})")
 
         eos = PyrometheusMixture(prometheus_mechanism)
+        gas_model = GasModel(eos=eos)
         initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
                                          pressure=pyro_p, temperature=pyro_t,
                                          massfractions=y0s, velocity=velocity)
 
         cv = initializer(eos=eos, t=0, x_vec=nodes)
-        p = eos.pressure(cv)
-        temperature = eos.temperature(cv)
+        fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tguess)
+        p = fluid_state.pressure
+        temperature = fluid_state.temperature
         internal_energy = eos.get_internal_energy(temperature=tin,
                                                   species_mass_fractions=yin)
         y = cv.species_mass_fractions
@@ -298,7 +305,9 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
-    pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    # pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
+    pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
@@ -399,6 +408,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
+    from meshmode.dof_array import thaw
     nodes = thaw(actx, discr.nodes())
 
     # Init soln with Vortex
@@ -454,6 +464,7 @@ def test_idealsingle_vortex(ctx_factory):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
+    from meshmode.dof_array import thaw
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
     # Init soln with Vortex
