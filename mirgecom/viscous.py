@@ -167,10 +167,6 @@ def conductive_heat_flux(state, grad_t):
     """
     return _compute_conductive_heat_flux(grad_t, state.thermal_conductivity)
 
-# low level routine works with numpy arrays and can be tested without
-# a full grid + fluid state, etc
-def _compute_diffusive_heat_flux(j, h_alpha):
-    return sum(h_alpha.reshape(-1, 1) * j)
 
 # low level routine works with numpy arrays and can be tested without
 # a full grid + fluid state, etc
