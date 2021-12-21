@@ -247,7 +247,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info(init_message)
 
     def my_write_status(component_errors, dv=None):
-        from arraycontext import freeze
         from mirgecom.simutil import allsync
         status_msg = (
             "------- errors="
@@ -255,8 +254,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if ((dv is not None) and (not log_dependent)):
             temp = dv.temperature
             press = dv.pressure
-            temp = thaw(freeze(temp, actx), actx)
-            press = thaw(freeze(press, actx), actx)
+
             from grudge.op import nodal_min_loc, nodal_max_loc
             tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
                            comm=comm, op=MPI.MIN)
