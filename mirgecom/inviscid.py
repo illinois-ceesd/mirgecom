@@ -105,6 +105,17 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_minus=state_pair.int.cv,
                         q_plus=state_pair.ext.cv, lam=lam)
 
+        A CV object containing the inviscid flux vector for each
+        conservation equation.
+    """
+    mass_flux = state.momentum_density
+    energy_flux = state.velocity * (state.energy_density + state.pressure)
+    mom_flux = (
+        state.mass_density * np.outer(state.velocity, state.velocity)
+        + np.eye(state.dim)*state.pressure
+    )
+    species_mass_flux = \
+        state.velocity*state.species_mass_density.reshape(-1, 1)
 
 def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
