@@ -250,8 +250,16 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
             (y - x) / actx.np.log(y / x)
         )
 
-    rho_ll, u_ll, p_ll, rho_species_ll = conservative_to_primitive_vars(state_ll)
-    rho_rr, u_rr, p_rr, rho_species_rr = conservative_to_primitive_vars(state_rr)
+    # Primitive variables for left and right states
+    rho_ll = state_ll.mass_density
+    u_ll = state_ll.velocity
+    p_ll = state_ll.pressure
+    rho_species_ll = state_ll.species_mass_density
+
+    rho_rr = state_rr.mass_density
+    u_rr = state_rr.velocity
+    p_rr = state_rr.pressure
+    rho_species_rr = state_rr.species_mass_density
 
     beta_ll = 0.5 * rho_ll / p_ll
     beta_rr = 0.5 * rho_rr / p_rr
@@ -324,26 +332,6 @@ def entropy_stable_inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs
     dissipation = -0.5*lam*outer(state_pair.ext.cv - state_pair.int.cv, normal)
 
     return (flux + dissipation) @ normal
-
-
-def conservative_to_primitive_vars(state):
-    """Compute the primitive variables from conserved variables *cv*.
-    
-    Converts from conserved variables (density, momentum, total energy)
-    into primitive variables (density, velocity, pressure).
-
-    Returns
-    -------
-    Tuple
-        A tuple containing the primitive variables:
-        (density, velocity, pressure)
-    """
-    rho = state.mass_density
-    u = state.velocity
-    p = state.pressure
-    rho_species = state.species_mass_density
-
-    return (rho, u, p, rho_species)
 
 
 def get_inviscid_timestep(discr, state):
