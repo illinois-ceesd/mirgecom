@@ -57,7 +57,7 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw, freeze
+from arraycontext import thaw
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -283,9 +283,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def get_temperature_update(cv, temperature):
         y = cv.species_mass_fractions
         e = gas_model.eos.internal_energy(cv) / cv.mass
-        return make_obj_array(
-            [pyro_mechanism.get_temperature_update_energy(e, temperature, y)]
-        )
+        return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
 
     from mirgecom.gas_model import make_fluid_state
 
@@ -334,25 +332,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(eos=gas_model.eos, x_vec=nodes)
         temperature_seed = temperature_seed * ones
 
-    # This bit memoizes the initial state's temperature onto the initial state
-    # (assuming `initializer` just above didn't call eos.dv funcs.)
-    #
     # The temperature_seed going into this function is:
     # - At time 0: the initial temperature input data (maybe from Cantera)
-    # - On restart: the restarted temperature read from restart file
-    #
-    # Note that this means we *seed* the temperature calculation with the actual
-    # temperature from the run. The resulting temperature may be different from the
-    # seed (error commensurate with convergence of running temperature), potentially
-    # meaning non-deterministic temperature restarts (i.e. one where the code gets a
-    # slightly different answer for temperature than it would have without the
-    # restart). In the absense of restart, the running temperature is that which was
-    # computed with a temperature_seed that equals the running temperature from the
-    # last step.
-    # Potentially, we could move the restart writing to trigger at post_step_callback
-    # and instead of writing the *current* running temperature to the restart file,
-    # we could write the *temperature_seed*.  That could fix up the non-deterministic
-    # restart issue.
+    # - On restart: the restarted temperature seed from restart file (saving
+    #               the *seed* allows restarts to be deterministic
     current_fluid_state = construct_fluid_state(current_cv, temperature_seed)
     current_dv = current_fluid_state.dv
     temperature_seed = current_dv.temperature
@@ -392,10 +375,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if ((dv is not None) and (not log_dependent)):
+
             temp = dv.temperature
             press = dv.pressure
-            temp = thaw(freeze(temp, actx), actx)
-            press = thaw(freeze(press, actx), actx)
+
             from grudge.op import nodal_min_loc, nodal_max_loc
             tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
                            comm=comm, op=MPI.MIN)
@@ -441,8 +424,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         import grudge.op as op
         health_error = False
 
-        pressure = thaw(freeze(dv.pressure, actx), actx)
-        temperature = thaw(freeze(dv.temperature, actx), actx)
+        pressure = dv.pressure
+        temperature = dv.temperature
 
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(discr, "vol", pressure):
@@ -471,10 +454,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # convergence in Pyrometheus `get_temperature`.
         # Note: The local max jig below works around a very long compile
         # in lazy mode.
-        temp_update, = compute_temperature_update(cv, temperature)
-        temp_resid = thaw(freeze(temp_update, actx), actx) / temperature
-        temp_resid = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
-        if temp_resid > 1e-8:
+        temp_resid = compute_temperature_update(cv, temperature) / temperature
+        temp_err = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
+        if temp_err > 1e-8:
             health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
@@ -483,19 +465,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.inviscid import get_inviscid_timestep
 
     def get_dt(state):
-        return make_obj_array([get_inviscid_timestep(discr, state=state)])
+        return get_inviscid_timestep(discr, state=state)
 
     compute_dt = actx.compile(get_dt)
 
     from mirgecom.inviscid import get_inviscid_cfl
 
     def get_cfl(state, dt):
-        return make_obj_array([get_inviscid_cfl(discr, dt=dt, state=state)])
+        return get_inviscid_cfl(discr, dt=dt, state=state)
 
     compute_cfl = actx.compile(get_cfl)
 
     def get_production_rates(cv, temperature):
-        return make_obj_array([eos.get_production_rates(cv, temperature)])
+        return eos.get_production_rates(cv, temperature)
 
     compute_production_rates = actx.compile(get_production_rates)
 
@@ -505,14 +487,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if constant_cfl:
             ts_field = current_cfl * compute_dt(state)
-            ts_field = thaw(freeze(ts_field, actx), actx)
             from grudge.op import nodal_min_loc
             dt = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
                          comm=comm, op=MPI.MIN)
             cfl = current_cfl
         else:
             ts_field = compute_cfl(state, current_dt)
-            ts_field = thaw(freeze(ts_field, actx), actx)
             from grudge.op import nodal_max_loc
             cfl = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
                           comm=comm, op=MPI.MAX)
@@ -551,8 +531,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                  temperature_seed=tseed)
 
             if do_viz:
-                production_rates, = compute_production_rates(fluid_state.cv,
-                                                             fluid_state.temperature)
+                production_rates = compute_production_rates(fluid_state.cv,
+                                                            fluid_state.temperature)
                 my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
                              ts_field=ts_field, cfl=cfl)
@@ -610,7 +590,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_cv, tseed = current_state
     final_fluid_state = construct_fluid_state(final_cv, tseed)
     final_dv = final_fluid_state.dv
-    final_dm, = compute_production_rates(final_cv, final_dv.temperature)
+    final_dm = compute_production_rates(final_cv, final_dv.temperature)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=final_fluid_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
