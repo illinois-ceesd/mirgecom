@@ -377,8 +377,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
                                 exterior=make_fluid_state(dir_bc, gas_model))
         boundary_flux = inviscid_facial_flux(
             discr, gas_model=gas_model, state_pair=state_tpair,
-            numerical_flux_func=inviscid_flux_rusanov
-        )
+            numerical_flux_func=inviscid_flux_rusanov)
 
         assert inf_norm(boundary_flux.mass) < tolerance
         assert inf_norm(boundary_flux.energy) < tolerance

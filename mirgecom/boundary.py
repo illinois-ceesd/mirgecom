@@ -402,6 +402,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         cv_minus = state_minus.cv
         ext_mom = (cv_minus.momentum
                    - 2.0*np.dot(cv_minus.momentum, nhat)*nhat)
+
         # Form the external boundary solution with the new momentum
         ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
                                 momentum=ext_mom, species_mass=cv_minus.species_mass)
