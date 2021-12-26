@@ -26,5 +26,11 @@ rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
 
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+
+# mpi4py seems to ship with outdated cython files, this forces a source build
+# https://stackoverflow.com/a/65696724
+pip install cython
+pip install --global-option build --global-option --force mpi4py
+
 pip install -r requirements.txt
 python setup.py install
