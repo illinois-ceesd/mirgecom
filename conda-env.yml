@@ -18,7 +18,11 @@ dependencies:
 - pyopencl
 - pymetis
 - python=3.9
+
+# https://github.com/pypa/setuptools/issues/2969
+- setuptools!=60.1.0
 - pip
+
 - pytest
 - cantera
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
