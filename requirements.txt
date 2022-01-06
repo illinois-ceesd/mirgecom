@@ -19,6 +19,6 @@ pyyaml
 --editable git+https://github.com/inducer/arraycontext.git#egg=arraycontext
 --editable git+https://github.com/kaushikcfd/meshmode.git@pytato-array-context-transforms#egg=meshmode
 --editable git+https://github.com/inducer/grudge.git#egg=grudge
---editable git+https://github.com/kaushikcfd/pytato.git@pytato-array-context-transforms#egg=pytato
+--editable git+https://github.com/inducer/pytato.git#egg=pytato
 --editable git+https://github.com/ecisneros8/pyrometheus.git#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
