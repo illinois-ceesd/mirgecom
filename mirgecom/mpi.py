@@ -151,8 +151,8 @@ def mpi_entry_point(func):
 
         _check_gpu_oversubscription()
 
-        # Set this to 'if 1:' in order to debug mirgecom with pudb on rank 0.
-        # Connect to pudb on rank 0 with 'telnet 127.0.0.1 6899'
+        # Change this to 'if 1:' in order to debug mirgecom with pudb on rank 0.
+        # Connect to pudb on rank 0 with 'telnet 127.0.0.1 6899'.
         if 0:
             from pudb.remote import debug_remote_on_single_rank
             debug_remote_on_single_rank(MPI.COMM_WORLD, 0, func, *args, **kwargs)
