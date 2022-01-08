@@ -158,7 +158,7 @@ jobs:
             cd mirgecom/examples
             python -m mpi4py ./pulse-mpi.py
 
-    y1:
+    production:
         name: Production testing
         runs-on: ${{ matrix.os }}
         strategy:
@@ -173,7 +173,9 @@ jobs:
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
-            MIRGEDIR=$(pwd)
+
+            MIRGEDIR="$(pwd)"
+
             cat .ci-support/production-testing-env.sh
             . .ci-support/production-testing-env.sh
             cd ..
