@@ -14,6 +14,7 @@ set -x
 # PRODUCTION_FORK = The production fork (default=illinois-ceesd)
 #
 MIRGE_HOME=${1:-"."}
+
 PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"production"}
 PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
 
@@ -21,19 +22,21 @@ echo "MIRGE_HOME=${MIRGE_HOME}"
 echo "PRODUCTION_FORK=$PRODUCTION_FORK"
 echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 
-cd ${MIRGE_HOME}
+cd "${MIRGE_HOME}" || exit 1
 git status
 
-# This junk is needed to be able to execute git commands properly
-git config user.email "ci-runner@ci.machine.com"
-git config user.name "CI Runner"
+if [[ "$CI" == "true" ]]; then
+  # This is needed in order for git to create a merge commit
+  git config user.email "ci-runner@ci.machine.com"
+  git config user.name "CI Runner"
+fi
 
 # Making a dedicated production remote adds production forks
-git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
+git remote add production "https://github.com/${PRODUCTION_FORK}/mirgecom"
 git fetch production
 
 # Merge the production branch for testing the production drivers
-git merge production/${PRODUCTION_BRANCH} --no-edit
+git merge "production/${PRODUCTION_BRANCH}" --no-edit
 # Pick up any requirements.txt
 pip install -r requirements.txt
-cd -
+cd - || exit 1
