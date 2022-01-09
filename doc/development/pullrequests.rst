@@ -241,7 +241,7 @@ does for executing the production tests.
       $ git switch -c branch-name-production  # Optional production branch
 
 2. Set up the production environment and capability
-   
+
    .. code:: bash
 
       $ # Load the customizable production environment
@@ -250,9 +250,10 @@ does for executing the production tests.
       $ . .ci-support/merge-install-production-branch.sh .
 
    If Step 2 fails, i.e. if there are merge conflicts, then those must
-   be resolved. Push the merged result to CEESD or a fork, and indicate
-   that version in the PRODUCTION_FORK, and PRODUCTION_BRANCH env vars in
-   ``.ci-support/production-testing-env.sh``.
+   be resolved. Push the merged result to the main mirgecom repo or a fork,
+   and indicate that version via ``PRODUCTION_PR_MAIN_BRANCH`` and ``PRODUCTION_PR_FORK``
+   in ``.ci-support/production-testing-env.sh``. See the comments there. Note
+   that the branch must be called ``production-merge/base_branch``.
 
 3. Grab and run the production tests
 
@@ -283,14 +284,7 @@ If the PR development requires production environment customization in order to
 pass production tests, then care and coordination will be required to get these
 changes merged into the main mirgecom development.  PR reviewers will help
 with this process.  If the PR is accepted for merging to main, then mirgecom
-developers will update the production capabilities to be compatible with
-the changes before merging.
-
- .. important::
-
-    Any production environment customizations must be backed out before
-    merging the PR development to main. Never merge a PR development with
-    production environment customizations in-place.
+developers will update the production branch to track your proposed one.
 
 Merging a pull request
 ----------------------
