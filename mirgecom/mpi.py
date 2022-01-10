@@ -158,7 +158,6 @@ def mpi_entry_point(func):
 
 def dprint(*args, **kwargs):
     """Prepends the rank number to the print function."""
-
     from mpi4py import MPI
     out_str = f"[{MPI.COMM_WORLD.Get_rank()}]"
 
