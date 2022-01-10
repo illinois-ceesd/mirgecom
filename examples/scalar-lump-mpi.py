@@ -76,6 +76,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_overintegration=False, use_esdg=False,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive example."""
@@ -104,6 +105,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     actx = actx_class(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    if use_esdg and not actx.supports_nonscalar_broadcasting:
+        raise RuntimeError(
+            f"{actx} is not a suitable array context for using flux-differencing. "
+            "The underlying array context must be capable of performing basic "
+            "array broadcasting operations. Use PytatoPyOpenCLArrayContext instead."
+        )
 
     # timestepping control
     current_step = 0
@@ -164,7 +172,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     nodes = thaw(discr.nodes(), actx)
 
-    quadrature_tag = DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     vis_timer = None
 
@@ -211,6 +222,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     boundaries = {
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
     }
+
+    if use_esdg:
+        operator_rhs = entropy_stable_euler_operator
+    else:
+        operator_rhs = euler_operator
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -358,9 +374,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return entropy_stable_euler_operator(discr, state=fluid_state, time=t,
-                              boundaries=boundaries, gas_model=gas_model,
-                              quadrature_tag=quadrature_tag)
+        return operator_rhs(discr, state=fluid_state, time=t,
+                            boundaries=boundaries, gas_model=gas_model,
+                            quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -398,6 +414,10 @@ if __name__ == "__main__":
     import argparse
     casename = "lumpy-scalars"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -424,7 +444,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+    main(use_logmgr=args.log, use_overintegration=args.overintegration,
+         use_esdg=args.esdg, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
