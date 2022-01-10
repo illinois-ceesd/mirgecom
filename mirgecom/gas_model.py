@@ -470,14 +470,15 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
 
     v_square = sum(v**2 for v in v234)
     s = gamma - v1 + v_square/(2*v5)
-    rho_iota = (
-        ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
-    ) * actx.np.exp(-s * inv_gamma_minus_one)
+    s_species = gamma - v6ns + v_square/(2*v5)
+    iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
+    rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
 
     return make_conserved(
         dim,
         mass=-rho_iota * v5,
         energy=rho_iota * (1 - v_square/(2*v5)),
         momentum=rho_iota * v234,
-        species_mass=-rho_iota * v6ns
+        species_mass=-rho_iota_species * v5
     )
