@@ -1,6 +1,7 @@
 """MPI helper functionality.
 
 .. autofunction:: mpi_entry_point
+.. autofunction:: pudb_remote_debug_on_single_rank
 """
 
 __copyright__ = """
@@ -161,7 +162,19 @@ def pudb_remote_debug_on_single_rank(func: Callable):
     """
     Designate a function *func* to be debugged with :mod:`pudb` on rank 0.
 
-    Connect to pudb with 'telnet 127.0.0.1 6899'.
+    To use it, add this decorator to the main function that you want to debug,
+    after the :func:`mpi_entry_point` decorator:
+
+    .. code-block:: python
+
+        @mpi_entry_point
+        @pudb_remote_debug_on_single_rank
+        def main(...)
+
+
+    Then, you can connect to pudb on rank 0 by running
+    ``telnet 127.0.0.1 6899`` in a separate terminal and continue to use pudb
+    as normal.
     """
     @wraps(func)
     def wrapped_func(*args: Any, **kwargs: Any):
