@@ -59,8 +59,6 @@ from mirgecom.transport import (
     GasTransportVars
 )
 
-from grudge.trace_pair import TracePair
-
 
 @dataclass(frozen=True)
 class GasModel:
@@ -398,7 +396,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
 
 def conservative_to_entropy_vars(gamma, state):
     """Compute the entropy variables from conserved variables.
-    
+
     Converts from conserved variables (density, momentum, total energy)
     into entropy variables.
 
@@ -439,7 +437,7 @@ def conservative_to_entropy_vars(gamma, state):
 
 def entropy_to_conservative_vars(gamma, ev: ConservedVars):
     """Compute the conserved variables from entropy variables *ev*.
-    
+
     Converts from entropy variables into conserved variables
     (density, momentum, total energy).
 
