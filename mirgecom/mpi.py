@@ -32,6 +32,7 @@ import os
 import sys
 
 from contextlib import contextmanager
+from typing import Callable, Any
 
 
 @contextmanager
@@ -151,13 +152,22 @@ def mpi_entry_point(func):
 
         _check_gpu_oversubscription()
 
-        # Change this to 'if 1:' in order to debug mirgecom with pudb on rank 0.
-        # Connect to pudb on rank 0 with 'telnet 127.0.0.1 6899'.
-        if 0:
-            # pylint: disable=import-error
-            from pudb.remote import debug_remote_on_single_rank
-            debug_remote_on_single_rank(MPI.COMM_WORLD, 0, func, *args, **kwargs)
-        else:
-            func(*args, **kwargs)
+        func(*args, **kwargs)
+
+    return wrapped_func
+
+
+def pudb_remote_debug_on_single_rank(func: Callable):
+    """
+    Designate a function *func* to be debugged with :mod:`pudb` on rank 0.
+
+    Connect to pudb with 'telnet 127.0.0.1 6899'.
+    """
+    @wraps(func)
+    def wrapped_func(*args: Any, **kwargs: Any):
+        # pylint: disable=import-error
+        from pudb.remote import debug_remote_on_single_rank
+        from mpi4py import MPI
+        debug_remote_on_single_rank(MPI.COMM_WORLD, 0, func, *args, **kwargs)
 
     return wrapped_func
