@@ -129,7 +129,8 @@ def get_doublemach_mesh():
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, use_overintegration=False,
+         use_overintegration=False, use_esdg=False,
+         use_leap=False, use_profiling=False,
          casename=None, rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -155,10 +156,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
+    if use_esdg and not actx.supports_nonscalar_broadcasting:
+        raise RuntimeError(
+            f"{actx} is not a suitable array context for using flux-differencing. "
+            "The underlying array context must be capable of performing basic "
+            "array broadcasting operations. Use PytatoPyOpenCLArrayContext instead."
+        )
+
     # Timestepping control
     current_step = 0
     timestepper = rk4_step
-    t_final = 0.2
+    t_final = 1.0e-3
     current_cfl = 0.1
     current_dt = 1.0e-4
     current_t = 0
@@ -166,9 +174,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Some i/o frequencies
     nstatus = 10
-    nviz = 10
+    nviz = 100
     nrestart = 100
-    nhealth = 5
+    nhealth = 1
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -237,7 +245,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     sigma_v = 1e-5
     # }}}
 
-    initializer = DoubleMachReflection(shock_speed=10)
+    initializer = DoubleMachReflection()
 
     from mirgecom.gas_model import GasModel, make_fluid_state
     transport_model = SimpleTransport(viscosity=sigma_v,
@@ -262,6 +270,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
         DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
     }
+
+    if use_esdg:
+        euler_rhs = entropy_stable_euler_operator
+    else:
+        euler_rhs = euler_operator
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -333,26 +346,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         from mirgecom.simutil import allsync
-        # if allsync(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
-        #            comm, op=MPI.LOR):
-        #     health_error = True
-        #     from grudge.op import nodal_max, nodal_min
-        #     p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-        #     p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
-        #     logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
+        if allsync(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
+                   comm, op=MPI.LOR):
+            health_error = True
+            from grudge.op import nodal_max, nodal_min
+            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+            logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(discr, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        # if allsync(
-        #         check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.071e-2),
-        #         comm, op=MPI.LOR):
-        #     health_error = True
-        #     from grudge.op import nodal_max, nodal_min
-        #     t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-        #     t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
-        #     logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
+        if allsync(
+                check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.071e-2),
+                comm, op=MPI.LOR):
+            health_error = True
+            from grudge.op import nodal_max, nodal_min
+            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+            logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
 
@@ -414,13 +427,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return (
-            # entropy_stable_euler_operator(discr, state=fluid_state, time=t,
-            #                boundaries=boundaries,
-            #                gas_model=gas_model,
-            #                quadrature_tag=quadrature_tag)
-            euler_operator(discr, state=fluid_state, time=t,
-                           boundaries=boundaries,
-                           gas_model=gas_model, quadrature_tag=quadrature_tag)
+            euler_rhs(discr, state=fluid_state, time=t,
+                      boundaries=boundaries,
+                      gas_model=gas_model, quadrature_tag=quadrature_tag)
             + av_laplacian_operator(discr, fluid_state=fluid_state,
                                     boundaries=boundaries,
                                     boundary_kwargs={"time": t,
@@ -463,6 +472,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -490,7 +501,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration,
+         use_esdg=args.esdg, use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
