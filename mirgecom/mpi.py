@@ -160,7 +160,7 @@ def mpi_entry_point(func):
 
 def pudb_remote_debug_on_single_rank(func: Callable):
     """
-    Designate a function *func* to be debugged with :mod:`pudb` on rank 0.
+    Designate a function *func* to be debugged with ``pudb`` on rank 0.
 
     To use it, add this decorator to the main function that you want to debug,
     after the :func:`mpi_entry_point` decorator:
