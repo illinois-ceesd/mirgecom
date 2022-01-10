@@ -154,3 +154,17 @@ def mpi_entry_point(func):
         func(*args, **kwargs)
 
     return wrapped_func
+
+
+def dprint(*args, **kwargs):
+    """Prepends the rank number to the print function."""
+
+    from mpi4py import MPI
+    out_str = f"[{MPI.COMM_WORLD.Get_rank()}]"
+
+    __builtins__["oldprint"](out_str, *args, **kwargs)
+
+
+if "oldprint" not in __builtins__:
+    __builtins__["oldprint"] = __builtins__["print"]
+__builtins__["print"] = dprint
