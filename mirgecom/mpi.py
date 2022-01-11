@@ -2,6 +2,7 @@
 
 .. autofunction:: mpi_entry_point
 .. autofunction:: pudb_remote_debug_on_single_rank
+.. autofunction:: enable_rank_labeled_print
 """
 
 __copyright__ = """
@@ -184,3 +185,20 @@ def pudb_remote_debug_on_single_rank(func: Callable):
         debug_remote_on_single_rank(MPI.COMM_WORLD, 0, func, *args, **kwargs)
 
     return wrapped_func
+
+
+def enable_rank_labeled_print() -> None:
+    """Enable prepending the rank number to every message printed with print()."""
+    def rank_print(*args, **kwargs):
+        """Prepends the rank number to the print function."""
+        if "mpi4py.MPI" in sys.modules:
+            from mpi4py import MPI
+            out_str = f"[{MPI.COMM_WORLD.Get_rank()}]"
+        else:
+            out_str = "[ ]"
+
+        __builtins__["oldprint"](out_str, *args, **kwargs)
+
+    if "oldprint" not in __builtins__:
+        __builtins__["oldprint"] = __builtins__["print"]
+    __builtins__["print"] = rank_print
