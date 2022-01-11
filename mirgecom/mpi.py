@@ -186,17 +186,20 @@ def pudb_remote_debug_on_single_rank(func: Callable):
     return wrapped_func
 
 
-def rank_print(*args, **kwargs):
-    """Prepends the rank number to the print function."""
-    if "mpi4py.MPI" in sys.modules:
-        from mpi4py import MPI
-        out_str = f"[{MPI.COMM_WORLD.Get_rank()}]"
-    else:
-        out_str = "[ ]"
+# Change this to `if 1:` in order to prepend the rank number to every message
+# printed with print().
+if 0:
+    def rank_print(*args, **kwargs):
+        """Prepends the rank number to the print function."""
+        if "mpi4py.MPI" in sys.modules:
+            from mpi4py import MPI
+            out_str = f"[{MPI.COMM_WORLD.Get_rank()}]"
+        else:
+            out_str = "[ ]"
 
-    __builtins__["oldprint"](out_str, *args, **kwargs)
+        __builtins__["oldprint"](out_str, *args, **kwargs)
 
 
-if "oldprint" not in __builtins__:
-    __builtins__["oldprint"] = __builtins__["print"]
-__builtins__["print"] = rank_print
+    if "oldprint" not in __builtins__:
+        __builtins__["oldprint"] = __builtins__["print"]
+    __builtins__["print"] = rank_print
