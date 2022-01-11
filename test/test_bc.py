@@ -235,7 +235,6 @@ def test_noslip(actx_factory, dim):
 
     wall = IsothermalNoSlipBoundary(wall_temperature=wall_temp)
 
-
     npts_geom = 17
     a = 1.0
     b = 2.0
