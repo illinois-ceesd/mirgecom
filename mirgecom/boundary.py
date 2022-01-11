@@ -192,6 +192,10 @@ class PrescribedFluidBoundary(FluidBoundary):
                                               **kwargs)
         return boundary_state.temperature
 
+    def _temperature_for_interior_state(self, discr, btag, gas_model, state_minus,
+                                        **kwargs):
+        return state_minus.temperature
+
     def _identical_state(self, state_minus, **kwargs):
         return state_minus
 
@@ -374,6 +378,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         """Initialize AdiabaticSlipBoundary."""
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_slip_state,
+            boundary_temperature_func=self._temperature_for_interior_state,
             boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
 
@@ -406,10 +411,8 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         # Form the external boundary solution with the new momentum
         ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
                                 momentum=ext_mom, species_mass=cv_minus.species_mass)
-        t_seed = state_minus.temperature if state_minus.is_mixture else None
-
         return make_fluid_state(cv=ext_cv, gas_model=gas_model,
-                                temperature_seed=t_seed)
+                                temperature_seed=state_minus.temperature)
 
     def adiabatic_slip_grad_av(self, discr, btag, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
@@ -442,6 +445,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         """Initialize boundary device."""
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_noslip_state,
+            boundary_temperature_func=self._temperature_for_interior_state,
             boundary_grad_av_func=self.adiabatic_noslip_grad_av,
         )
         # Check wall_velocity (assumes dim is correct)
@@ -461,8 +465,8 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
                             energy=state_minus.energy_density,
                             momentum=ext_mom,
                             species_mass=state_minus.species_mass_density)
-        tseed = state_minus.temperature if state_minus.is_mixture else None
-        return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=tseed)
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
 
     def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
         """Get the exterior solution on the boundary."""
