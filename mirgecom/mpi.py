@@ -188,7 +188,7 @@ def pudb_remote_debug_on_single_rank(func: Callable):
 
 
 def enable_rank_labeled_print() -> None:
-    """Enables prepending the rank number to every message printed with print()."""
+    """Enable prepending the rank number to every message printed with print()."""
     def rank_print(*args, **kwargs):
         """Prepends the rank number to the print function."""
         if "mpi4py.MPI" in sys.modules:
