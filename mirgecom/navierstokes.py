@@ -168,7 +168,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     ]
 
     tseed_interior_pairs = None
-    if state.is_mixture > 0:
+    if state.is_mixture:
         # If this is a mixture, we need to exchange the temperature field because
         # mixture pressure (used in the flux calculations) depends on
         # temperature and we need to seed the temperature calculation for the

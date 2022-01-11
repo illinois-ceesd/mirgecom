@@ -235,24 +235,16 @@ def test_noslip(actx_factory, dim):
 
     wall = IsothermalNoSlipBoundary(wall_temperature=wall_temp)
 
-    # from pytools.convergence import EOCRecorder
-    # eoc = EOCRecorder()
 
-    #    for np1 in [4, 8, 12]:
     npts_geom = 17
     a = 1.0
     b = 2.0
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
-    #    boundaries = {BTAG_ALL: wall}
-    # for i in range(dim):
-    #     boundaries[DTAG_BOUNDARY("-"+str(i+1))] = 0
-    #     boundaries[DTAG_BOUNDARY("+"+str(i+1))] = 0
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
     nhat = thaw(actx, discr.normal(BTAG_ALL))
     print(f"{nhat=}")
-    # h = 1.0 / np1
 
     from mirgecom.flux import gradient_flux_central
 
