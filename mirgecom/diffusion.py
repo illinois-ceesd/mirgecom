@@ -271,7 +271,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
                 for btag, bdry in boundaries.items())
             + sum(
                 gradient_flux(discr, quad_tag, u_tpair)
-                for u_tpair in cross_rank_trace_pairs(discr, u, tag=_DiffusionStateTag))
+                for u_tpair in cross_rank_trace_pairs(discr, u,
+                                                      tag=_DiffusionStateTag))
             )
         )
 
