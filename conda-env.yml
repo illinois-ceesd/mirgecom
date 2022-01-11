@@ -13,6 +13,7 @@ dependencies:
 - conda-forge::numpy
 - pocl
 - clinfo
+- pudb
 - islpy
 - oct2py
 - pyopencl
