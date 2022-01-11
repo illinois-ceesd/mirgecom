@@ -6,6 +6,7 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_flux
 .. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_rusanov
+.. autofunction:: inviscid_flux_hll
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -139,8 +140,8 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     p_star = (0.5*(p_int + p_ext) + (1./8.)*(u_int - u_ext)
               * (rho_int + rho_ext) * (c_int + c_ext))
 
-    gamma_int = gas_model.eos.gamma(state_pair.int.cv)
-    gamma_ext = gas_model.eos.gamma(state_pair.ext.cv)
+    gamma_int = gas_model.eos.gamma(state_pair.int.cv, state_pair.int.temperature)
+    gamma_ext = gas_model.eos.gamma(state_pair.ext.cv, state_pair.ext.temperature)
 
     q_int = 1 + (gamma_int + 1)/(2*gamma_int)*(p_star/p_int - 1)
     q_ext = 1 + (gamma_ext + 1)/(2*gamma_ext)*(p_star/p_ext - 1)
