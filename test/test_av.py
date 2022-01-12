@@ -39,6 +39,12 @@ from mirgecom.artificial_viscosity import (
     smoothness_indicator
 )
 from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state,
+    project_fluid_state
+)
+from mirgecom.eos import IdealSingleGas
 
 from grudge.eager import EagerDGDiscretization
 
@@ -183,8 +189,10 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     zeros = discr.zeros(actx)
 
     class TestBoundary:
-        def soln_gradient_flux(self, disc, btag, cv, **kwargs):
-            cv_int = disc.project("vol", btag, cv)
+        def soln_gradient_flux(self, disc, btag, fluid_state, gas_model, **kwargs):
+            fluid_state_int = project_fluid_state(disc, "vol", btag, fluid_state,
+                                                  gas_model)
+            cv_int = fluid_state_int.cv
             from grudge.trace_pair import TracePair
             bnd_pair = TracePair(btag,
                                  interior=cv_int,
@@ -206,7 +214,6 @@ def test_artificial_viscosity(ctx_factory, dim, order):
             return disc.project(btag, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
-
     # Uniform field return 0 rhs
     soln = zeros + 1.0
     cv = make_conserved(
@@ -216,8 +223,12 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         momentum=make_obj_array([soln for _ in range(dim)]),
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
+    gas_model = GasModel(eos=IdealSingleGas())
+    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
+    boundary_kwargs = {"gas_model": gas_model}
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                cv=cv, alpha=1.0, s0=-np.inf)
+                                boundary_kwargs=boundary_kwargs,
+                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
@@ -230,8 +241,10 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         momentum=make_obj_array([soln for _ in range(dim)]),
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
+    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                cv=cv, alpha=1.0, s0=-np.inf)
+                                boundary_kwargs=boundary_kwargs,
+                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
 
@@ -244,7 +257,9 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         momentum=make_obj_array([soln for _ in range(dim)]),
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
+    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                cv=cv, alpha=1.0, s0=-np.inf)
+                                boundary_kwargs=boundary_kwargs,
+                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance

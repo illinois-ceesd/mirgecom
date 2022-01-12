@@ -95,7 +95,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.fluid import make_conserved
 
 from pytools import memoize_in, keyed_memoize_in
 
@@ -118,7 +117,7 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 
-def av_laplacian_operator(discr, boundaries, cv, alpha,
+def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
                           boundary_kwargs=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
@@ -130,15 +129,13 @@ def av_laplacian_operator(discr, boundaries, cv, alpha,
 
     Parameters
     ----------
-    cv: :class:`mirgecom.fluid.ConservedVars`
-        Fluid conserved state object with the conserved variables.
+    fluid_state: :class:`mirgecom.gas_model.FluidState`
+        Fluid state object with the conserved and thermal state.
 
     boundaries: float
-
         Dictionary of boundary functions, one for each valid boundary tag
 
     alpha: float
-
         The maximum artificial viscosity coefficient to be applied
 
     quadrature_tag
@@ -147,18 +144,17 @@ def av_laplacian_operator(discr, boundaries, cv, alpha,
         The default value is *None*.
 
     boundary_kwargs: :class:`dict`
-
         dictionary of extra arguments to pass through to the boundary conditions
 
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
-
         The artificial viscosity operator applied to *q*.
     """
     if boundary_kwargs is None:
         boundary_kwargs = dict()
 
+    cv = fluid_state.cv
     actx = cv.array_context
     quadrature_tag = kwargs.get("quadrature_tag", None)
     dd_vol = DOFDesc("vol", quadrature_tag)
@@ -197,7 +193,7 @@ def av_laplacian_operator(discr, boundaries, cv, alpha,
         + sum(boundaries[btag].soln_gradient_flux(
             discr,
             btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            cv=cv, **boundary_kwargs) for btag in boundaries)
+            fluid_state=fluid_state, **boundary_kwargs) for btag in boundaries)
     )
 
     # Compute R = alpha*grad(Q)
@@ -226,38 +222,6 @@ def av_laplacian_operator(discr, boundaries, cv, alpha,
 
     # Return the AV RHS term
     return -div_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
-
-
-def artificial_viscosity(discr, t, eos, boundaries, q, alpha, **kwargs):
-    """Interface :function:`av_laplacian_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call artificial_viscosity; it is now called av_laplacian_operator."
-         " This function will disappear in 2022", DeprecationWarning, stacklevel=2)
-    from mirgecom.fluid import ConservedVars
-
-    if not isinstance(q, ConservedVars):
-        q = make_conserved(discr.dim, q=q)
-
-    return av_laplacian_operator(
-        discr=discr, cv=make_conserved(discr.dim, q=q), alpha=alpha,
-        boundaries=boundaries,
-        boundary_kwargs={"t": t, "eos": eos}, **kwargs).join()
-
-
-def av_operator(discr, boundaries, q, alpha, boundary_kwargs=None, **kwargs):
-    """Interface :function:`av_laplacian_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call av_operator; it is now called av_laplacian_operator. This"
-         "function will disappear in 2022", DeprecationWarning, stacklevel=2)
-    from mirgecom.fluid import ConservedVars
-
-    if not isinstance(q, ConservedVars):
-        q = make_conserved(discr.dim, q=q)
-
-    return av_laplacian_operator(
-        discr=discr, cv=q, alpha=alpha,
-        boundaries=boundaries,
-        boundary_kwargs=boundary_kwargs, **kwargs).join()
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
