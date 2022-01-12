@@ -46,5 +46,5 @@ test/nodal-dg
 .run-pylint.py
 
 # Emacs backups
-.#*
+.\#*
 \#*
