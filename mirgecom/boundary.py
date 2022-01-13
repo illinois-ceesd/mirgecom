@@ -319,14 +319,15 @@ class PrescribedFluidBoundary(FluidBoundary):
     def _identical_grad_av(self, grad_av_minus, **kwargs):
         return grad_av_minus
 
-    def soln_gradient_flux(self, discr, btag, cv, gas_model, **kwargs):
+    def soln_gradient_flux(self, discr, btag, fluid_state, gas_model, **kwargs):
         """Get the flux for solution gradient with AV API."""
-        fluid_state = make_fluid_state(cv, gas_model=gas_model)
+        # project the conserved and thermal state to the boundary
         fluid_state_minus = project_fluid_state(discr=discr,
                                                 src="vol",
                                                 tgt=btag,
                                                 gas_model=gas_model,
                                                 state=fluid_state)
+        # get the boundary flux for the grad(CV)
         return self.cv_gradient_flux(discr=discr, btag=btag,
                                      gas_model=gas_model,
                                      state_minus=fluid_state_minus,
