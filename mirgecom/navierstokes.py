@@ -423,13 +423,14 @@ def entropy_stable_ns_operator(
     gamma = gas_model.eos.gamma(state.cv, state.temperature)
 
     # Interpolate state to vol quad grid
-    state_quad = project_fluid_state(discr, "vol", dd_vol, state, gas_model)
+    quadrature_state = \
+        project_fluid_state(discr, dd_base, dd_vol, state, gas_model)
 
     # Compute the projected (nodal) entropy variables
     entropy_vars = volume_quadrature_project(
         discr, dd_vol,
         # Map to entropy variables
-        conservative_to_entropy_vars(gamma, state_quad))
+        conservative_to_entropy_vars(gamma, quadrature_state))
 
     modified_conserved_fluid_state = \
         make_entropy_projected_fluid_state(discr, dd_vol, dd_faces,
@@ -570,7 +571,7 @@ def entropy_stable_ns_operator(
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     grad_cv = grad_operator(discr, dd_vol, dd_faces,
-                            modified_conserved_fluid_state.cv, cv_flux_bnd)
+                            quadrature_state.cv, cv_flux_bnd)
 
     grad_cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
@@ -607,7 +608,7 @@ def entropy_stable_ns_operator(
 
     # Fluxes in-hand, compute the gradient of temperature and mpi exchange it
     grad_t = grad_operator(discr, dd_vol, dd_faces,
-                           modified_conserved_fluid_state.temperature, t_flux_bnd)
+                           quadrature_state.temperature, t_flux_bnd)
 
     grad_t_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
@@ -640,7 +641,7 @@ def entropy_stable_ns_operator(
         )
 
     visc_vol_term = viscous_flux(
-        state=modified_conserved_fluid_state,
+        state=quadrature_state,
         # Interpolate gradients to the quadrature grid
         grad_cv=op.project(discr, dd_base, dd_vol, grad_cv),
         grad_t=op.project(discr, dd_base, dd_vol, grad_t))
