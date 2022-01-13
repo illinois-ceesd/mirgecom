@@ -30,9 +30,9 @@ import pyopencl.tools as cl_tools
 from pytools.obj_array import make_obj_array
 from functools import partial
 
-from meshmode.array_context import (
+from grudge.array_context import (
     PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    MPIPytatoPyOpenCLArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
@@ -113,8 +113,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
+    actx = actx_class(comm,
         queue,
+        mpi_base_tag=4200,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # timestepping control
