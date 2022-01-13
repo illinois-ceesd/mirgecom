@@ -87,6 +87,18 @@ from mirgecom.gas_model import (
 from arraycontext import thaw
 
 
+class _NSInteriorCVTag:
+    pass
+
+class _NSTseedTag:
+    pass
+
+class _NSGradCVTag:
+    pass
+
+class _NSGradIntTag:
+    pass
+
 def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                 inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
@@ -164,7 +176,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, state.cv)
+        for tpair in interior_trace_pairs(discr, state.cv, tag=_NSInteriorCVTag)
     ]
 
     tseed_interior_pairs = None
@@ -177,7 +189,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(discr, state.temperature)
+            for tpair in interior_trace_pairs(discr, state.temperature, tag=_NSTseedTag)
         ]
 
     quadrature_state = \
@@ -218,7 +230,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_cv)
+        for tpair in interior_trace_pairs(discr, grad_cv, tag=_NSGradCVTag)
     ]
 
     # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
@@ -255,7 +267,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_t)
+        for tpair in interior_trace_pairs(discr, grad_t, tag=_NSGradIntTag)
     ]
 
     # inviscid flux divergence-specific flux function for interior faces

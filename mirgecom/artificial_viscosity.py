@@ -118,6 +118,14 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 
+class _AVCVTag:
+    pass
+
+
+class _AVRTag:
+    pass
+
+
 def av_laplacian_operator(discr, boundaries, cv, alpha,
                           boundary_kwargs=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
@@ -192,7 +200,7 @@ def av_laplacian_operator(discr, boundaries, cv, alpha,
     cv_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
         + sum(central_flux(interp_to_surf_quad(tpair))
-              for tpair in interior_trace_pairs(discr, cv))
+              for tpair in interior_trace_pairs(discr, cv, tag=_AVCVTag))
         # Contributions from boundary fluxes
         + sum(boundaries[btag].soln_gradient_flux(
             discr,
@@ -216,7 +224,7 @@ def av_laplacian_operator(discr, boundaries, cv, alpha,
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
         + sum(central_flux_div(interp_to_surf_quad(tpair))
-              for tpair in interior_trace_pairs(discr, r))
+              for tpair in interior_trace_pairs(discr, r, tag=_AVRTag))
         # Contributions from boundary fluxes
         + sum(boundaries[btag].av_flux(
             discr,
