@@ -666,4 +666,4 @@ def entropy_stable_ns_operator(
                                 visc_vol_term, visc_bnd_term)
 
     # NS RHS
-    return viscous_term - inviscid_term
+    return viscous_term + inviscid_term
