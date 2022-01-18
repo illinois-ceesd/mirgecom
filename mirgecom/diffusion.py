@@ -207,7 +207,12 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 class _DiffusionGradTag:
     pass
 
+
 class _DiffusionDiffTag:
+    pass
+
+
+class _DiffusionStateTag:
     pass
 
 
