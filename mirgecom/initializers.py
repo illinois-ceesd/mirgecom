@@ -1224,3 +1224,60 @@ class PlanarPoiseuille:
         species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
         return make_conserved(2, mass=dmass, energy=denergy,
                               momentum=dmom, species_mass=species_mass)
+
+
+class InviscidTaylorGreenVortex:
+    """todo.
+    """
+
+    def __init__(
+            self, *, dim=3, mach_number=0.05, domain_lengthscale=1, v0=1, p0=1
+    ):
+        """Initialize vortex parameters."""
+        self._dim = dim
+        self._mach_number = mach_number
+        self._domain_lengthscale = domain_lengthscale
+        self._v0 = v0
+        self._p0 = p0
+
+    def __call__(self, x_vec, *, eos=None, **kwargs):
+        """
+        Create the 3D Taylor-Green initial profile at locations *x_vec*.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        if eos is None:
+            eos = IdealSingleGas()
+
+        length = self._domain_lengthscale
+        gamma = eos.gamma()
+        v0 = self._v0
+        p0 = self._p0
+        rho0 = gamma * self._mach_number ** 2
+
+        x, y, z = x_vec
+        zeros = 0 * z
+        actx = x.array_context
+
+        p = p0 + rho0 * (v0 ** 2) / 16 * (
+            actx.np.cos(2*x / length + actx.np.cos(2*y / length))
+        ) * actx.np.cos(2*z / length + 2)
+        u = (
+            v0 * actx.np.sin(x / length) * actx.np.cos(y / length)
+        ) * actx.np.cos(z / length)
+        v = (
+            -v0 * actx.np.cos(x / length) * actx.np.sin(y / length)
+        ) * actx.np.cos(z / length)
+        w = zeros
+        momentum = rho0 * make_obj_array([u, v, w])
+        energy = p / (gamma - 1) + rho0 / 2 * (u ** 2 + v ** 2 + w ** 2)
+
+        return make_conserved(dim=self._dim,
+                              mass=rho0 * (1 + zeros),
+                              energy=energy,
+                              momentum=momentum)

@@ -43,7 +43,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import euler_operator
+from mirgecom.euler import euler_operator, entropy_stable_euler_operator
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
@@ -129,7 +129,8 @@ def get_doublemach_mesh():
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, use_overintegration=False,
+         use_overintegration=False, use_esdg=False,
+         use_leap=False, use_profiling=False,
          casename=None, rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -154,6 +155,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     actx = actx_class(
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    if use_esdg and not actx.supports_nonscalar_broadcasting:
+        raise RuntimeError(
+            f"{actx} is not a suitable array context for using flux-differencing. "
+            "The underlying array context must be capable of performing basic "
+            "array broadcasting operations. Use PytatoPyOpenCLArrayContext instead."
+        )
 
     # Timestepping control
     current_step = 0
@@ -262,6 +270,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
         DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
     }
+
+    if use_esdg:
+        euler_rhs = entropy_stable_euler_operator
+    else:
+        euler_rhs = euler_operator
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -414,9 +427,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return (
-            euler_operator(discr, state=fluid_state, time=t,
-                           boundaries=boundaries,
-                           gas_model=gas_model, quadrature_tag=quadrature_tag)
+            euler_rhs(discr, state=fluid_state, time=t,
+                      boundaries=boundaries,
+                      gas_model=gas_model, quadrature_tag=quadrature_tag)
             + av_laplacian_operator(discr, fluid_state=fluid_state,
                                     boundaries=boundaries,
                                     boundary_kwargs={"time": t,
@@ -459,6 +472,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -486,7 +501,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration,
+         use_esdg=args.esdg, use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
