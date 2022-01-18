@@ -58,6 +58,10 @@ def _flux(discr, c, w_tpair):
     return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
 
 
+class _WaveTag:
+    pass
+
+
 def wave_operator(discr, c, w):
     """Compute the RHS of the wave equation.
 
@@ -96,7 +100,7 @@ def wave_operator(discr, c, w):
                     w_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc))
                 + sum(
                     _flux(discr, c=c, w_tpair=tpair)
-                    for tpair in cross_rank_trace_pairs(discr, w))
+                    for tpair in cross_rank_trace_pairs(discr, w, _WaveTag))
                 )
             )
         )

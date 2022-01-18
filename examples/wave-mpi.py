@@ -94,7 +94,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
     else:
         queue = cl.CommandQueue(cl_ctx)
         if actx_class == MPISingleGridWorkBalancingPytatoArrayContext:
-            actx = actx_class(comm, queue)
+            actx = actx_class(comm, queue, mpi_base_tag=1200)
         else:
             actx = actx_class(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
