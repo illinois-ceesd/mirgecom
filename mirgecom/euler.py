@@ -62,6 +62,14 @@ from grudge.trace_pair import interior_trace_pairs
 from mirgecom.operators import div_operator
 
 
+class _EulerCVTag:
+    pass
+
+
+class _EulerTseedTag:
+    pass
+
+
 def euler_operator(discr, state, gas_model, boundaries, time=0.0):
     r"""Compute RHS of the Euler flow equations.
 
@@ -107,13 +115,13 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0):
                        project_fluid_state(discr, "vol", btag, state, gas_model)
                        for btag in boundaries}
 
-    interior_cv = interior_trace_pairs(discr, state.cv)
+    interior_cv = interior_trace_pairs(discr, state.cv, tag=_EulerCVTag)
 
     # If this is a mixture, we need to exchange the temperature field because
     # mixture pressure (used in the inviscid flux calculations) depends on
     # temperature and we need to seed the temperature calculation for the
     # (+) part of the partition boundary with the remote temperature data.
-    tseed_interior_pairs = (interior_trace_pairs(discr, state.temperature)
+    tseed_interior_pairs = (interior_trace_pairs(discr, state.temperature, _EulerTseedTag)
                             if state.is_mixture else None)
 
     from mirgecom.gas_model import make_fluid_state_trace_pairs
