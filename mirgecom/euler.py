@@ -57,16 +57,12 @@ from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux
 )
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
+
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, state, gas_model, boundaries, time=0.0):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -81,47 +77,62 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
 
     Parameters
     ----------
-    cv: :class:`mirgecom.fluid.ConservedVars`
-        Fluid conserved state object with the conserved variables.
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state, and dependent
+        quantities.
 
     boundaries
+
         Dictionary of boundary functions, one for each valid btag
 
     time
+
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
 
     Returns
     -------
     numpy.ndarray
+
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
+    from mirgecom.gas_model import project_fluid_state
+    boundary_states = {btag:
+                       project_fluid_state(discr, "vol", btag, state, gas_model)
+                       for btag in boundaries}
+
+    interior_cv = interior_trace_pairs(discr, state.cv)
+
+    # If this is a mixture, we need to exchange the temperature field because
+    # mixture pressure (used in the inviscid flux calculations) depends on
+    # temperature and we need to seed the temperature calculation for the
+    # (+) part of the partition boundary with the remote temperature data.
+    tseed_interior_pairs = (interior_trace_pairs(discr, state.temperature)
+                            if state.is_mixture else None)
+
+    from mirgecom.gas_model import make_fluid_state_trace_pairs
+    interior_states = make_fluid_state_trace_pairs(interior_cv, gas_model,
+                                                   tseed_interior_pairs)
+
+    # Compute volume contributions
+    inviscid_flux_vol = inviscid_flux(state)
+    # Compute interface contributions
     inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=time)
-              for btag in boundaries)
+        # Interior faces
+        sum(inviscid_facial_flux(discr, pair) for pair in interior_states)
+        # Domain boundary faces
+        + sum(
+            boundaries[btag].inviscid_divergence_flux(
+                discr, btag, gas_model, state_minus=boundary_states[btag], time=time)
+            for btag in boundaries)
     )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
-
-
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
+    return -div_operator(discr, inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless
