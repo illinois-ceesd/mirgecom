@@ -48,7 +48,7 @@ from mirgecom.simutil import (
 )
 from mirgecom.io import make_init_message
 
-from mirgecom.integrators import rk4_step
+from mirgecom.integrators import ssprk43_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
@@ -60,6 +60,7 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
+from mirgecom.limiter import limiter_zhang_shu
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -117,7 +118,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = rk4_step
+        timestepper = ssprk43_step
     t_final = 0.1
     current_cfl = 1.0
     current_dt = .01
@@ -130,7 +131,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 10
     nhealth = 1
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -319,13 +320,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                               gas_model=gas_model,
                               quadrature_tag=quadrature_tag)
 
+    def my_limiter(state):
+        return limiter_zhang_shu(discr, state)
+
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
-                      post_step_callback=my_post_step, dt=current_dt,
+                      post_step_callback=my_post_step,
+                      limiter=my_limiter, dt=current_dt,
                       state=current_cv, t=current_t, t_final=t_final)
 
     # Dump the final data
