@@ -60,7 +60,7 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from mirgecom.limiter import limiter_zhang_shu
+from mirgecom.limiter import limiter_liu_osher
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -321,7 +321,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                               quadrature_tag=quadrature_tag)
 
     def my_limiter(state):
-        return limiter_zhang_shu(discr, state)
+        return limiter_liu_osher(discr, state)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)

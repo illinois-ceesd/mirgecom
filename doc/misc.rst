@@ -75,3 +75,5 @@ References
     `(DOI) <https://doi.org/10.2514/6.2006-112>`__
 .. [Woodward_1984] Woodward and Colella, Journal of Computational Physics, 54 \
     `(DOI) <https://doi.org/10.1006/jcph.1996.5572>`__
+.. [Zhang_2011] Zhang and Shu, Proceedings of The Royal Society, 467 \
+    `(DOI) <https://doi.org/10.1098/rspa.2011.0153>`__

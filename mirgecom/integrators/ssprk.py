@@ -31,7 +31,7 @@ from arraycontext import thaw, freeze
 
 
 def ssprk43_step(state, t, dt, rhs, limiter=None):
-    """An awesome docstring."""
+    """Take one step using an explicit 4-stage, 3rd-order, SSPRK method."""
     actx = state.array_context
 
     def rhs_update(t, y):
