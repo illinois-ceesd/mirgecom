@@ -75,6 +75,7 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
+                                limiter=None,
                                 logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
@@ -134,7 +135,8 @@ def _advance_state_stepper_func(rhs, timestepper,
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
+        state = timestepper(
+            state=state, t=t, dt=dt, rhs=compiled_rhs, limiter=limiter)
 
         t += dt
         istep += 1
@@ -156,6 +158,7 @@ def _advance_state_leap(rhs, timestepper, state,
                         t=0.0, istep=0,
                         pre_step_callback=None,
                         post_step_callback=None,
+                        limiter=None,
                         logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
@@ -276,6 +279,7 @@ def advance_state(rhs, timestepper, state, t_final,
                   t=0.0, istep=0, dt=0,
                   pre_step_callback=None,
                   post_step_callback=None,
+                  limiter=None,
                   logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
@@ -349,7 +353,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                component_id=component_id,
+                limiter=limiter, component_id=component_id,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim,
             )
     else:
@@ -359,6 +363,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
+                limiter=limiter,
                 istep=istep, logmgr=logmgr, eos=eos, dim=dim
             )
 

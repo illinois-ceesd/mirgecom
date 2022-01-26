@@ -1,7 +1,10 @@
-"""Time-integration module for Mirgecom."""
+"""Timestepping routines for strong-stability preserving Runge-Kutta methods.
+
+.. autofunction:: ssprk43_step
+"""
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2022 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -24,19 +27,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from .explicit_rk import rk4_step                          # noqa: F401
-from .lsrk import euler_step, lsrk54_step, lsrk144_step    # noqa: F401
-from .ssprk import ssprk43_step                            # noqa: F401
-
-__doc__ = """
-.. automodule:: mirgecom.integrators.explicit_rk
-.. automodule:: mirgecom.integrators.lsrk
-"""
+from arraycontext import thaw, freeze
 
 
-def lsrk4_step(state, t, dt, rhs, limiter=None):
-    """Call lsrk54_step with backwards-compatible interface."""
-    from warnings import warn
-    warn("Do not call lsrk4; it is now callled lsrk54_step. This function will "
-         "disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return lsrk54_step(state, t, dt, rhs, limiter=limiter)
+def ssprk43_step(state, t, dt, rhs, limiter=None):
+    """An awesome docstring."""
+    actx = state.array_context
+
+    def rhs_update(t, y):
+        return y + dt*rhs(t, y)
+
+    y1 = 1/2*state + 1/2*rhs_update(t, state)
+    if limiter is not None:
+        y1 = thaw(freeze(limiter(y1), actx), actx)
+
+    y2 = 1/2*y1 + 1/2*rhs_update(t + dt/2, y1)
+    if limiter is not None:
+        y2 = thaw(freeze(limiter(y2), actx), actx)
+
+    y3 = 2/3*state + 1/6*y2 + 1/6*rhs_update(t + dt, y2)
+    if limiter is not None:
+        y3 = thaw(freeze(limiter(y3), actx), actx)
+
+    result = 1/2*y3 + 1/2*rhs_update(t + dt/2, y3)
+    if limiter is not None:
+        result = thaw(freeze(limiter(result), actx), actx)
+
+    return result
