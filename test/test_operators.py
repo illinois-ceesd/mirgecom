@@ -143,6 +143,7 @@ def central_flux_boundary(actx, discr, soln_func, btag):
 
 # TODO: Generalize mirgecom.symbolic to work with array containers
 def sym_grad(dim, expr):
+    """Do symbolic grad."""
     if isinstance(expr, ConservedVars):
         return make_conserved(
             dim, q=sym_grad(dim, expr.join()))
@@ -235,7 +236,13 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
                                          test_data_int_tpair, boundaries)
 
         from mirgecom.operators import grad_operator
-        test_grad = grad_operator(discr, test_data, test_data_flux_bnd)
+        from grudge.dof_desc import as_dofdesc
+        dd_vol = as_dofdesc("vol")
+        dd_faces = as_dofdesc("all_faces")
+        test_grad = grad_operator(discr, dd_vol, dd_faces,
+                                  test_data, test_data_flux_bnd)
+
+        print(f"{test_grad=}")
         grad_err = \
             max(flatten(componentwise_norms(discr, test_grad - exact_grad, np.inf),
                         actx)) / err_scale
