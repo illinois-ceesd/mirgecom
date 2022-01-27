@@ -75,9 +75,10 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
     dd_faces: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the surface discrezation.
         This determines the type of quadrature to be used.
-    v: meshmode.DOFArray or numpy.ndarray
-        the vector-valued function (or container of functions) for which divergence
-        is to be calculated
+    v: numpy.ndarray
+        obj array of :class:`~meshmode.dof_array.DOFArray` (or container of such)
+        representing the vector-valued functions for which divergence is to be
+        calculated
     flux: numpy.ndarray
         the boundary flux for each function in v
 
