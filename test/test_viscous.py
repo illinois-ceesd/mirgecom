@@ -171,7 +171,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     def cv_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
         flux_weak = gradient_flux_central(int_tpair, normal)
-        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+        dd_all_faces = int_tpair.dd.with_dtag("all_faces")
+        return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
 
     def cv_flux_boundary(btag):
         boundary_discr = discr.discr_from_dd(btag)
@@ -181,7 +182,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(btag, interior=cv_bnd, exterior=cv_bnd)
         flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
-        return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
+        dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
+        return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
 
     for nfac in [1, 2, 4]:
 
