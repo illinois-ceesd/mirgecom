@@ -321,7 +321,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                               quadrature_tag=quadrature_tag)
 
     def my_limiter(state):
-        return limiter_liu_osher(discr, state)
+        return limiter_liu_osher(discr, state, quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)

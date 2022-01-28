@@ -36,7 +36,7 @@ from mirgecom.fluid import ConservedVars
 import grudge.op as op
 
 
-def limiter_liu_osher(dcoll: DiscretizationCollection, state):    
+def limiter_liu_osher(dcoll: DiscretizationCollection, state, quadrature_tag=None):
     """Implements the positivity-preserving limiter of Liu and Osher (1996).
 
     The limiter is summarized in the review paper [Zhang_2011]_, Section 2.3,
@@ -58,9 +58,16 @@ def limiter_liu_osher(dcoll: DiscretizationCollection, state):
     result: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the filtered field(s).
     """
+    from grudge.dof_desc import as_dofdesc
     from grudge.geometry import area_element
 
     actx = state.array_context
+
+    if not actx.supports_nonscalar_broadcasting:
+        raise RuntimeError("Can't use the limiter in eager-mode... yeah, I know.")
+
+    dd = as_dofdesc("vol")
+    dd_quad = dd.with_discr_tag(quadrature_tag)
 
     def compute_limited_field(field):
         if not isinstance(field, DOFArray):
@@ -68,27 +75,31 @@ def limiter_liu_osher(dcoll: DiscretizationCollection, state):
             return map_array_container(compute_limited_field, field)
 
         # Compute nodal and elementwise max/mins of the field
-        _mmax = op.nodal_max(dcoll, "banana", field)
-        _mmin = op.nodal_min(dcoll, "avocado", field)
-        _mmax_i = op.elementwise_max(dcoll, field)
-        _mmin_i = op.elementwise_min(dcoll, field)
+        # on the quadrature grid
+        field_quad = op.project(dcoll, dd, dd_quad, field)
+        mmax = op.nodal_max(dcoll, dd_quad, field_quad)
+        mmin = op.nodal_min(dcoll, dd_quad, field_quad)
+        mmax_i = op.elementwise_max(dcoll, dd_quad, field_quad)
+        mmin_i = op.elementwise_min(dcoll, dd_quad, field_quad)
 
         # Compute cell averages of the state
         inv_area_elements = 1./area_element(
-            actx, dcoll,
+            actx, dcoll, dd=dd_quad,
             _use_geoderiv_connection=actx.supports_nonscalar_broadcasting)
-        cell_avgs = \
-            inv_area_elements * op.elementwise_integral(dcoll, field)
+        field_cell_avgs = \
+            inv_area_elements * op.elementwise_integral(dcoll, dd_quad, field_quad)
 
         # Compute minmod factor (Eq. 2.9)
         theta = actx.np.minimum(
             1.,
             actx.np.minimum(
-                abs((_mmax - cell_avgs)/(_mmax_i - cell_avgs)),
-                abs((_mmin - cell_avgs)/(_mmin_i - cell_avgs))
+                abs((mmax - field_cell_avgs)/(mmax_i - field_cell_avgs)),
+                abs((mmin - field_cell_avgs)/(mmin_i - field_cell_avgs))
             )
         )
-        return theta*(field - cell_avgs) + cell_avgs
+
+        # import ipdb; ipdb.set_trace()
+        return theta*(field - field_cell_avgs) + field_cell_avgs
 
     return ConservedVars(
         mass=compute_limited_field(state.mass),
