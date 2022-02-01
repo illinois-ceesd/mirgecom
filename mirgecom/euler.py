@@ -120,6 +120,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
     dd_quad_vol = DOFDesc("vol", quadrature_tag)
     dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
 
+    # project pair to the quadrature discretization and update dd to quad
     def _interp_to_surf_quad(utpair):
         local_dd = utpair.dd
         local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
