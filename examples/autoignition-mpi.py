@@ -563,8 +563,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_limiter(cv):
         return \
-            cv.replace(species_mass=limiter_liu_osher(discr,
-                                                      cv.species_mass))
+            cv.replace(
+                species_mass=cv.mass*limiter_liu_osher(discr,
+                                                       cv.species_mass_fractions)
+            )
 
     def my_rhs(t, state):
         cv, tseed = state
