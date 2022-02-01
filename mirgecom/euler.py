@@ -117,9 +117,6 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
-
-        Agglomerated object array of DOF arrays representing the RHS of the Euler
-        flow equations.
     """
     dd_base_vol = DOFDesc("vol")
     dd_quad_vol = DOFDesc("vol", quadrature_tag)
