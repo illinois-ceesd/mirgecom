@@ -27,30 +27,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from arraycontext import thaw, freeze
 
-
-def ssprk43_step(state, t, dt, rhs, limiter=None):
+def ssprk43_step(state, t, dt, rhs):
     """Take one step using an explicit 4-stage, 3rd-order, SSPRK method."""
-    actx = state.array_context
 
     def rhs_update(t, y):
         return y + dt*rhs(t, y)
 
     y1 = 1/2*state + 1/2*rhs_update(t, state)
-    if limiter is not None:
-        y1 = thaw(freeze(limiter(y1), actx), actx)
-
     y2 = 1/2*y1 + 1/2*rhs_update(t + dt/2, y1)
-    if limiter is not None:
-        y2 = thaw(freeze(limiter(y2), actx), actx)
-
     y3 = 2/3*state + 1/6*y2 + 1/6*rhs_update(t + dt, y2)
-    if limiter is not None:
-        y3 = thaw(freeze(limiter(y3), actx), actx)
-
-    result = 1/2*y3 + 1/2*rhs_update(t + dt/2, y3)
-    if limiter is not None:
-        result = thaw(freeze(limiter(result), actx), actx)
-
-    return result
+    return 1/2*y3 + 1/2*rhs_update(t + dt/2, y3)
