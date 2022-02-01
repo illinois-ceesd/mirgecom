@@ -74,8 +74,8 @@ from mirgecom.gas_model import (
 
 
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
-                   quadrature_tag=None,
-                   inviscid_numerical_flux_func=inviscid_flux_rusanov):
+                   inviscid_numerical_flux_func=inviscid_flux_rusanov,
+                   quadrature_tag=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
