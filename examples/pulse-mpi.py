@@ -60,6 +60,7 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
+from mirgecom.limiter import limiter_liu_osher
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -130,7 +131,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 10
     nhealth = 1
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -312,8 +313,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
+    def my_limiter(cv):
+        return cv.replace(mass=limiter_liu_osher(discr, cv.mass))
+
     def my_rhs(t, state):
-        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+        fluid_state = make_fluid_state(cv=my_limiter(state), gas_model=gas_model)
         return euler_operator(discr, state=fluid_state, time=t,
                               boundaries=boundaries,
                               gas_model=gas_model,
@@ -325,7 +329,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
-                      post_step_callback=my_post_step, dt=current_dt,
+                      post_step_callback=my_post_step,
+                      dt=current_dt,
                       state=current_cv, t=current_t, t_final=t_final)
 
     # Dump the final data

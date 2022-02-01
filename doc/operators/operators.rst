@@ -7,3 +7,4 @@ Operators
    wave-eq
    diffusion
    gas-dynamics
+   limiters
