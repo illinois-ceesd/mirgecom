@@ -16,7 +16,7 @@ set -x
 # "fork/repo@branch". The defaults are provided below as an example. Provide custom
 # production drivers in this variable:
 #
-export PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@parallel-lazy-state-handling:illinois-ceesd/drivers_flame1d@state-handling:illinois-ceesd/drivers_y2-isolator@state-handling"
+export PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:illinois-ceesd/drivers_flame1d@main:illinois-ceesd/drivers_y2-isolator@main"
 #
 # Example:
 # PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"

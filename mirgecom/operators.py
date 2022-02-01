@@ -31,7 +31,7 @@ THE SOFTWARE.
 import grudge.op as op
 
 
-def grad_operator(discr, dd_vol, dd_faces, volume_fluxes, boundary_fluxes):
+def grad_operator(discr, dd_vol, dd_faces, u, flux):
     r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
@@ -44,23 +44,26 @@ def grad_operator(discr, dd_vol, dd_faces, volume_fluxes, boundary_fluxes):
     dd_faces: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the surface discrezation.
         This determines the type of quadrature to be used.
-    volume_fluxes: :class:`mirgecom.fluid.ConservedVars`
-        the vector-valued function for which divergence is to be calculated
-    boundary_fluxes: :class:`mirgecom.fluid.ConservedVars`
-        the boundary fluxes across the faces of the element
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the function (or container of functions) for which gradient is to be
+        calculated
+    flux: numpy.ndarray
+        the boundary flux across the faces of the element for each component
+        of *u*
+
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
     return -discr.inverse_mass(
-        op.weak_local_grad(discr, dd_vol, volume_fluxes)
-        - op.face_mass(discr, dd_faces, boundary_fluxes)
+        op.weak_local_grad(discr, dd_vol, u)
+        - op.face_mass(discr, dd_faces, flux)
     )
 
 
-def div_operator(discr, dd_vol, dd_faces, volume_fluxes, boundary_fluxes):
-    r"""Compute a DG divergence of vector-valued function *u* with flux given by *flux*.
+def div_operator(discr, dd_vol, dd_faces, v, flux):
+    r"""Compute a DG divergence of vector-valued function *v* with flux given by *flux*.
 
     Parameters
     ----------
@@ -72,16 +75,19 @@ def div_operator(discr, dd_vol, dd_faces, volume_fluxes, boundary_fluxes):
     dd_faces: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the surface discrezation.
         This determines the type of quadrature to be used.
-    volume_fluxes: :class:`mirgecom.fluid.ConservedVars`
-        the vector-valued function for which divergence is to be calculated
-    boundary_fluxes: :class:`mirgecom.fluid.ConservedVars`
-        the boundary fluxes across the faces of the element
+    v: numpy.ndarray
+        obj array of :class:`~meshmode.dof_array.DOFArray` (or container of such)
+        representing the vector-valued functions for which divergence is to be
+        calculated
+    flux: numpy.ndarray
+        the boundary flux for each function in v
+
     Returns
     -------
-    :class:`mirgecom.fluid.ConservedVars`
-        the dg divergence operator applied to vector-valued function *u*.
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        the dg divergence operator applied to vector-valued function(s) *v*.
     """
     return -discr.inverse_mass(
-        op.weak_local_div(discr, dd_vol, volume_fluxes)
-        - op.face_mass(discr, dd_faces, boundary_fluxes)
+        op.weak_local_div(discr, dd_vol, v)
+        - op.face_mass(discr, dd_faces, flux)
     )
