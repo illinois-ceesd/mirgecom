@@ -174,8 +174,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
     inviscid_flux_bnd = (
 
         # Interior faces
-        sum(inviscid_facial_flux(discr, gas_model, state_pair,
-                                 inviscid_numerical_flux_func)
+        sum(inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
+                                 numerical_flux_func=inviscid_numerical_flux_func)
             for state_pair in interior_states_quad)
 
         # Domain boundary faces
@@ -185,10 +185,6 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
                 state_minus=boundary_states_quad[btag], time=time)
             for btag in boundaries)
 
-        # Interior boundaries
-        + sum(inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
-                                   numerical_flux_func=inviscid_numerical_flux_func)
-              for state_pair in interior_states_quad)
     )
 
     return -div_operator(discr, dd_quad_vol, dd_quad_faces,
