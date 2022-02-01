@@ -48,7 +48,7 @@ from mirgecom.simutil import (
 )
 from mirgecom.io import make_init_message
 
-from mirgecom.integrators import ssprk43_step
+from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
@@ -118,7 +118,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = ssprk43_step
+        timestepper = rk4_step
     t_final = 0.1
     current_cfl = 1.0
     current_dt = .01
@@ -313,15 +313,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
+    def my_limiter(cv):
+        return cv.replace(mass=limiter_liu_osher(discr, cv.mass))
+
     def my_rhs(t, state):
-        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+        fluid_state = make_fluid_state(cv=my_limiter(state), gas_model=gas_model)
         return euler_operator(discr, state=fluid_state, time=t,
                               boundaries=boundaries,
                               gas_model=gas_model,
                               quadrature_tag=quadrature_tag)
-
-    def my_limiter(state):
-        return limiter_liu_osher(discr, state)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -330,7 +330,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step,
-                      limiter=my_limiter, dt=current_dt,
+                      dt=current_dt,
                       state=current_cv, t=current_t, t_final=t_final)
 
     # Dump the final data

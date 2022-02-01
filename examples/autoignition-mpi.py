@@ -559,11 +559,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array([cv, fluid_state.temperature]), dt
 
     from mirgecom.inviscid import inviscid_flux_rusanov
+    from mirgecom.limiter import limiter_liu_osher
+
+    def my_limiter(cv):
+        return \
+            cv.replace(species_mass=limiter_liu_osher(discr,
+                                                      cv.species_mass))
 
     def my_rhs(t, state):
         cv, tseed = state
         from mirgecom.gas_model import make_fluid_state
-        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
+        fluid_state = make_fluid_state(cv=my_limiter(cv), gas_model=gas_model,
                                        temperature_seed=tseed)
         return make_obj_array([
             euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
