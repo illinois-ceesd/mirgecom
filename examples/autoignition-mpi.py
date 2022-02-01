@@ -57,7 +57,7 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw
+from arraycontext import thaw, freeze
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -561,11 +561,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.limiter import limiter_liu_osher
 
     def my_limiter(cv):
-        return \
+        actx = cv.array_context
+        return thaw(freeze(
             cv.replace(
                 species_mass=cv.mass*limiter_liu_osher(discr,
                                                        cv.species_mass_fractions)
-            )
+            ), actx), actx)
 
     def my_rhs(t, state):
         cv, tseed = state

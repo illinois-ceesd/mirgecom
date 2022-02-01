@@ -36,7 +36,7 @@ from meshmode.array_context import (
     PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from arraycontext import thaw
+from arraycontext import thaw, freeze
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -314,7 +314,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_limiter(cv):
-        return cv.replace(mass=limiter_liu_osher(discr, cv.mass))
+        return thaw(freeze(cv.replace(mass=limiter_liu_osher(discr, cv.mass)), actx),
+                    actx)
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=my_limiter(state), gas_model=gas_model)
