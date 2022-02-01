@@ -105,7 +105,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         if "local" in kwargs:
             if kwargs["local"]:
                 return quantity
-        return discr.project(btag, "all_faces", quantity)
+        return discr.project(btag, btag.with_dtag("all_faces"), quantity)
 
     def inviscid_divergence_flux(self, discr, btag, gas_model, state_minus,
                                  **kwargs):
