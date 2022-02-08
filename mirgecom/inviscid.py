@@ -107,7 +107,6 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
-
 def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
@@ -115,11 +114,12 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     .. math::
 
-        f^{*}_{\mathtt{HLL}} = \frac{\left(s^+f^- - s^-f^+ + s^+s^-\left(q^+ - q^-\right)
+        f^{*}_{\mathtt{HLL}} = \frac{\left(s^+f^--s^-f^++s^+s^-\left(q^+-q^-\right)
         \right)}{\left(s^+ - s^-\right)}
 
-    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the states,
-    and the wavespeeds for the interior (-) and exterior (+) of the interface, respectively.
+    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
+    states, and the wavespeeds for the interior (-) and exterior (+) of the
+    interface respectively.
     """
     # calculate left/right wavespeeds
     actx = state_pair.int.array_context
@@ -164,7 +164,7 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     q_minus = state_pair.int.cv
     q_plus = state_pair.ext.cv
-    
+
     from mirgecom.flux import num_flux_hll
     return num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus)
 
