@@ -53,7 +53,7 @@ def num_flux_central(f_minus, f_plus, **kwargs):
 def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
     r"""HLL low-level numerical flux.
 
-    The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
+    The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:
 
     .. math::
 
@@ -63,6 +63,9 @@ def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
     where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
     states, and the wavespeeds for the interior (-) and exterior (+) of the
     interface, respectively.
+
+    Details about this approximate Riemann solver can be found in Section 10.3 of
+    [Toro_2009]_.
     """
     actx = q_minus.array_context
     f_star = (s_plus*f_minus - s_minus*f_plus

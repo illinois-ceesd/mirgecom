@@ -120,6 +120,9 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
     states, and the wavespeeds for the interior (-) and exterior (+) of the
     interface respectively.
+
+    Details about how the parameters and fluxes are calculated can be found in
+    Section 10.3 of [Toro_2009]_.
     """
     # calculate left/right wavespeeds
     actx = state_pair.int.array_context
