@@ -5,11 +5,7 @@ Low-level interfaces
 
 .. autofunction:: num_flux_lfr
 .. autofunction:: num_flux_central
-
-State-to-flux drivers
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: hll_flux_driver
+.. autofunction:: num_flux_hll
 
 Flux pair interfaces for operators
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -54,22 +50,30 @@ def num_flux_central(f_minus, f_plus, **kwargs):
     return (f_plus + f_minus)/2
 
 
-def hll_flux_driver(state_pair, physical_flux_func,
-                    s_minus, s_plus, normal):
-    """State-to-flux driver for hll numerical fluxes."""
-    actx = state_pair.int.array_context
-    zeros = 0.*state_pair.int.mass_density
+def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
+    r"""HLL low-level numerical flux.
 
-    f_minus = physical_flux_func(state_pair.int)@normal
-    f_plus = physical_flux_func(state_pair.ext)@normal
-    q_minus = state_pair.int.cv
-    q_plus = state_pair.ext.cv
+    The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:
+
+    .. math::
+
+        f^{*}_{\mathtt{HLL}} = \frac{\left(s^+f^--s^-f^++s^+s^-\left(q^+-q^-\right)
+        \right)}{\left(s^+ - s^-\right)}
+
+    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
+    states, and the wavespeeds for the interior (-) and exterior (+) of the
+    interface, respectively.
+
+    Details about this approximate Riemann solver can be found in Section 10.3 of
+    [Toro_2009]_.
+    """
+    actx = q_minus.array_context
     f_star = (s_plus*f_minus - s_minus*f_plus
               + s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
 
     # choose the correct f contribution based on the wave speeds
-    f_check_minus = actx.np.greater_equal(s_minus, zeros)*(0*f_minus + 1.0)
-    f_check_plus = actx.np.less_equal(s_plus, zeros)*(0*f_minus + 1.0)
+    f_check_minus = actx.np.greater_equal(s_minus, 0*s_minus)*(0*f_minus + 1.0)
+    f_check_plus = actx.np.less_equal(s_plus, 0*s_plus)*(0*f_minus + 1.0)
 
     f = f_star
     f = actx.np.where(f_check_minus, f_minus, f)
