@@ -7,6 +7,7 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_rusanov
 .. autofunction:: inviscid_flux_hll
+.. autofunction:: inviscid_boundary_flux_for_divergence_operator
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -212,6 +213,68 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
     dd = state_pair.dd
     dd_allfaces = dd.with_dtag("all_faces")
     return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+
+
+def inviscid_boundary_flux_for_divergence_operator(
+        discr, gas_model, boundaries, interior_boundary_states,
+        domain_boundary_states, quadrature_tag=None,
+        numerical_flux_func=inviscid_flux_rusanov, time=0.0):
+    """Compute the inviscid boundary fluxes for the divergence operator.
+
+    This routine encapsulates the computation of the inviscid contributions
+    to the boundary fluxes for use by the divergence operator. Its existence
+    is intended to allow multiple operators (e.g. Euler and Navier-Stokes) to
+    perform the computation without duplicating code.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model constructs for the gas_model
+
+    boundaries
+        Dictionary of boundary functions, one for each valid btag
+
+    interior_boundary_states
+        A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
+
+    domain_boundary_states
+       A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
+       keyed by btags in *boundaries*.
+
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
+    numerical_flux_func
+        The numerical flux function to use in computing the boundary flux.
+
+    time: float
+        Time
+    """
+    from grudge.dof_desc import as_dofdesc
+
+    # Compute interface contributions
+    inviscid_flux_bnd = (
+
+        # Interior faces
+        sum(inviscid_facial_flux(discr, gas_model, state_pair,
+                                 numerical_flux_func)
+            for state_pair in interior_boundary_states)
+
+        # Domain boundary faces
+        + sum(
+            boundaries[btag].inviscid_divergence_flux(
+                discr, as_dofdesc(btag).with_discr_tag(quadrature_tag), gas_model,
+                state_minus=domain_boundary_states[btag],
+                numerical_flux_func=numerical_flux_func, time=time)
+            for btag in boundaries)
+    )
+
+    return inviscid_flux_bnd
 
 
 def get_inviscid_timestep(discr, state):
