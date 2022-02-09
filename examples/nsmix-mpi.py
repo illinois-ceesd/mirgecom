@@ -41,7 +41,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.transport import SimpleTransport
-from mirgecom.simutil import get_sim_timestep, allsync
+from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
 
 from mirgecom.io import make_init_message
@@ -95,6 +95,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     nparts = comm.Get_size()
+
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
@@ -346,14 +349,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MIN)
-            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MAX)
-            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MIN)
-            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MAX)
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                                 op="min")
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                                 op="max")
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                                 op="min")
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                                 op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
@@ -395,9 +398,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.06e5),
-                   comm, op=MPI.LOR):
+        if global_reduce(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.06e5),
+                         op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
@@ -408,8 +410,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(check_range_local(discr, "vol", dv.temperature, 1450, 1570),
-                   comm, op=MPI.LOR):
+        if global_reduce(check_range_local(discr, "vol", dv.temperature, 1450, 1570),
+                         op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
@@ -452,9 +454,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step, interval=nstatus)
 
             if do_health:
-                from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(cv, dv), comm,
-                                        op=MPI.LOR)
+                health_errors = global_reduce(my_health_check(cv, dv), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
