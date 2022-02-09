@@ -114,13 +114,15 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     .. math::
 
-        F^{*}_{\mathtt{HLL}} = \frac{1}{2}(\mathbf{F}(q^-)
-        +\mathbf{F}(q^+)) \cdot \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
+        f^{*}_{\mathtt{HLL}} = \frac{\left(s^+f^--s^-f^++s^+s^-\left(q^+-q^-\right)
+        \right)}{\left(s^+ - s^-\right)}
 
-    where $q^-, q^+$ are the fluid solution state on the interior and the
-    exterior of the face on which the flux is to be calculated, $\mathbf{F}$ is
-    the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
-    *local* maximum fluid wavespeed.
+    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
+    states, and the wavespeeds for the interior (-) and exterior (+) of the
+    interface respectively.
+
+    Details about how the parameters and fluxes are calculated can be found in
+    Section 10.3 of [Toro_2009]_.
     """
     # calculate left/right wavespeeds
     actx = state_pair.int.array_context
@@ -157,12 +159,17 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     # left (internal), and right (external) wave speed estimates
     # can alternatively use the roe estimated states to find the wave speeds
-    wavespeed_int = u_int - c_int*q_int
-    wavespeed_ext = u_ext + c_ext*q_ext
+    s_minus = u_int - c_int*q_int
+    s_plus = u_ext + c_ext*q_ext
 
-    from mirgecom.flux import hll_flux_driver
-    return hll_flux_driver(state_pair, inviscid_flux,
-                           wavespeed_int, wavespeed_ext, normal)
+    f_minus = inviscid_flux(state_pair.int)@normal
+    f_plus = inviscid_flux(state_pair.ext)@normal
+
+    q_minus = state_pair.int.cv
+    q_plus = state_pair.ext.cv
+
+    from mirgecom.flux import num_flux_hll
+    return num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
