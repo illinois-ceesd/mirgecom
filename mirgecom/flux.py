@@ -88,7 +88,7 @@ def num_flux_central(f_minus, f_plus, **kwargs):
     The central flux is calculated as:
 
     .. math::
-        f_{\text{central}} = \frac{\left(f^++f^-)}{2}
+        f_{\text{central}} = \frac{\left(f^++f^-\right)}{2}
 
     Parameters
     ----------

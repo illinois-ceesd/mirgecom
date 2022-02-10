@@ -45,7 +45,12 @@ from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-from mirgecom.inviscid import inviscid_flux
+from mirgecom.inviscid import (
+    inviscid_flux,
+    inviscid_facial_flux,
+    inviscid_flux_rusanov,
+    inviscid_flux_hll
+)
 
 logger = logging.getLogger(__name__)
 
@@ -265,7 +270,9 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_facial_flux(actx_factory, nspecies, order, dim):
+@pytest.mark.parametrize("num_flux", [inviscid_flux_rusanov,
+                                      inviscid_flux_hll])
+def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
     """Check the flux across element faces.
 
     The flux is checked by prescribing states (q) with known fluxes. Only uniform
@@ -324,14 +331,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
         state_tpairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
         interior_state_pair = state_tpairs[0]
 
-        from mirgecom.inviscid import (
-            inviscid_facial_flux,
-            inviscid_flux_rusanov
-        )
         interior_face_flux = \
             inviscid_facial_flux(discr, gas_model=gas_model,
                                  state_pair=interior_state_pair,
-                                 numerical_flux_func=inviscid_flux_rusanov)
+                                 numerical_flux_func=num_flux)
 
         def inf_norm(data):
             if len(data) > 0:
@@ -377,7 +380,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim):
                                 exterior=make_fluid_state(dir_bc, gas_model))
         boundary_flux = inviscid_facial_flux(
             discr, gas_model=gas_model, state_pair=state_tpair,
-            numerical_flux_func=inviscid_flux_rusanov)
+            numerical_flux_func=num_flux
+        )
 
         assert inf_norm(boundary_flux.mass) < tolerance
         assert inf_norm(boundary_flux.energy) < tolerance
