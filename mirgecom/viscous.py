@@ -10,6 +10,7 @@ Viscous Flux Calculation
 .. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux
 .. autofunction:: viscous_flux_central
+.. autofunction:: viscous_boundary_flux_for_divergence_operator
 
 Viscous Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -373,6 +374,114 @@ def viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair, grad_t_pair,
     dd = state_pair.dd
     dd_allfaces = dd.with_dtag("all_faces")
     return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+
+
+def viscous_boundary_flux_for_divergence_operator(
+        discr, gas_model, boundaries, interior_boundary_states,
+        domain_boundary_states, grad_cv, interior_grad_cv,
+        grad_t, interior_grad_t, quadrature_tag=None,
+        numerical_flux_func=viscous_flux_central, time=0.0):
+    """Compute the inviscid boundary fluxes for the divergence operator.
+
+    This routine encapsulates the computation of the inviscid contributions
+    to the boundary fluxes for use by the divergence operator. Its existence
+    is intended to allow multiple operators (e.g. Euler and Navier-Stokes) to
+    perform the computation without duplicating code.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model constructs for the gas_model
+
+    boundaries
+        Dictionary of boundary functions, one for each valid btag
+
+    interior_boundary_states
+        A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
+
+    domain_boundary_states
+       A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
+       keyed by btags in *boundaries*.
+
+    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
+       The gradient of the fluid conserved quantities.
+
+    interior_grad_cv
+       Trace pairs of :class:`~mirgecom.fluid.ConservedVars` for the interior faces
+
+    grad_t
+       Object array of :class:`~meshmode.dof_array.DOFArray` with the components of
+       the gradient of the fluid temperature
+
+    interior_grad_t
+       Trace pairs for the temperature gradient on interior faces
+
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
+    numerical_flux_func
+        The numerical flux function to use in computing the boundary flux.
+
+    time: float
+        Time
+    """
+    from grudge.dof_desc import as_dofdesc
+    from grudge.op import project
+
+    dd_base = as_dofdesc("vol")
+
+    # {{{ - Viscous flux helpers -
+
+    # viscous fluxes across interior faces (including partition and periodic bnd)
+    def fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
+        return viscous_facial_flux(discr=discr, gas_model=gas_model,
+                                   state_pair=state_pair, grad_cv_pair=grad_cv_pair,
+                                   grad_t_pair=grad_t_pair,
+                                   numerical_flux_func=numerical_flux_func)
+
+    # viscous part of bcs applied here
+    def fvisc_divergence_flux_boundary(btag, boundary_state):
+        # Make sure we fields on the quadrature grid
+        # restricted to the tag *btag*
+        dd_btag = as_dofdesc(btag).with_discr_tag(quadrature_tag)
+        return boundaries[btag].viscous_divergence_flux(
+            discr=discr,
+            btag=dd_btag,
+            gas_model=gas_model,
+            state_minus=boundary_state,
+            grad_cv_minus=project(discr, dd_base, dd_btag, grad_cv),
+            grad_t_minus=project(discr, dd_base, dd_btag, grad_t),
+            time=time,
+            numerical_flux_func=numerical_flux_func
+        )
+
+    # }}} viscous flux helpers
+
+    # Compute the boundary terms for the divergence operator
+    bnd_term = (
+
+        # All surface contributions from the viscous fluxes
+        (
+            # Domain boundary contributions for the viscous terms
+            sum(fvisc_divergence_flux_boundary(btag,
+                                               domain_boundary_states[btag])
+                for btag in boundaries)
+
+            # Interior interface contributions for the viscous terms
+            + sum(
+                fvisc_divergence_flux_interior(q_p, dq_p, dt_p)
+                for q_p, dq_p, dt_p in zip(interior_boundary_states,
+                                           interior_grad_cv,
+                                           interior_grad_t))
+        )
+    )
+
+    return bnd_term
 
 
 def get_viscous_timestep(discr, state):
