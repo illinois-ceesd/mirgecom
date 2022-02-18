@@ -29,7 +29,7 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import (
+from grudge.array_context import (
     PyOpenCLArrayContext,
     MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
