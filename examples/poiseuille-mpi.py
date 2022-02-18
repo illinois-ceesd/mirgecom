@@ -104,6 +104,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
+
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
@@ -340,9 +343,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, 9.999e4, 1.00101e5),
-                  comm, op=MPI.LOR):
+        if global_reduce(check_range_local(discr, "vol", dv.pressure, 9.999e4,
+                                           1.00101e5), op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
@@ -353,8 +355,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(check_range_local(discr, "vol", dv.temperature, 348, 350),
-                   comm, op=MPI.LOR):
+        if global_reduce(check_range_local(discr, "vol", dv.temperature, 348, 350),
+                         op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
@@ -387,11 +389,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 from mirgecom.simutil import compare_fluid_solutions
                 component_errors = compare_fluid_solutions(discr, state, exact)
-                from mirgecom.simutil import allsync
-                health_errors = allsync(
-                    my_health_check(state, dv, component_errors), comm,
-                    op=MPI.LOR
-                )
+                health_errors = global_reduce(
+                    my_health_check(state, dv, component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")

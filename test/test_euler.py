@@ -60,7 +60,11 @@ from meshmode.array_context import (  # noqa
 from mirgecom.simutil import max_component_norm
 
 from grudge.shortcuts import make_visualizer
-from mirgecom.inviscid import get_inviscid_timestep
+from mirgecom.inviscid import (
+    get_inviscid_timestep,
+    inviscid_flux_rusanov,
+    inviscid_flux_hll
+)
 
 from mirgecom.integrators import rk4_step
 
@@ -70,7 +74,11 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_uniform_rhs(actx_factory, nspecies, dim, order):
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_flux_rusanov, inviscid_flux_hll])
+def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
+                     numerical_flux_func):
     """Test the inviscid rhs using a trivial constant/uniform state.
 
     This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
@@ -94,7 +102,24 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+            default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: default_simplex_group_factory(
+                    base_dim=dim, order=order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+            }
+        )
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
         zeros = discr.zeros(actx)
         ones = zeros + 1.0
 
@@ -122,11 +147,12 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
                                    for i in range(num_equations)])
         )
 
-        from mirgecom.inviscid import inviscid_flux_rusanov
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(
-            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
+        inviscid_rhs = \
+            euler_operator(discr, state=fluid_state, gas_model=gas_model,
+                           boundaries=boundaries, time=0.0,
+                           quadrature_tag=quadrature_tag,
+                           inviscid_numerical_flux_func=numerical_flux_func)
 
         rhs_resid = inviscid_rhs - expected_rhs
 
@@ -173,7 +199,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -208,7 +234,10 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_vortex_rhs(actx_factory, order):
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_flux_rusanov, inviscid_flux_hll])
+def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_func):
     """Test the inviscid rhs using the non-trivial 2D isentropic vortex.
 
     The case is configured to yield rhs = 0. Checks several different orders
@@ -233,7 +262,24 @@ def test_vortex_rhs(actx_factory, order):
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+            default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: default_simplex_group_factory(
+                    base_dim=dim, order=order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+            }
+        )
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
         nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Vortex and expected RHS = 0
@@ -252,10 +298,10 @@ def test_vortex_rhs(actx_factory, order):
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
 
-        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov)
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag)
 
         err_max = max_component_norm(discr, inviscid_rhs, np.inf)
 
@@ -274,7 +320,11 @@ def test_vortex_rhs(actx_factory, order):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lump_rhs(actx_factory, dim, order):
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_flux_rusanov, inviscid_flux_hll])
+def test_lump_rhs(actx_factory, dim, order, use_overintegration,
+                  numerical_flux_func):
     """Test the inviscid rhs using the non-trivial mass lump case.
 
     The case is tested against the analytic expressions of the RHS.
@@ -300,7 +350,24 @@ def test_lump_rhs(actx_factory, dim, order):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+            default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: default_simplex_group_factory(
+                    base_dim=dim, order=order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+            }
+        )
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
         nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Lump and expected RHS = 0
@@ -322,10 +389,10 @@ def test_lump_rhs(actx_factory, dim, order):
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_lump_boundary)
         }
 
-        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
@@ -350,7 +417,11 @@ def test_lump_rhs(actx_factory, dim, order):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
-def test_multilump_rhs(actx_factory, dim, order, v0):
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_flux_rusanov, inviscid_flux_hll])
+def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
+                       numerical_flux_func):
     """Test the Euler rhs using the non-trivial 1, 2, and 3D mass lump case.
 
     The case is tested against the analytic expressions of the RHS. Checks several
@@ -376,7 +447,24 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+            default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: default_simplex_group_factory(
+                    base_dim=dim, order=order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+            }
+        )
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
         nodes = thaw(discr.nodes(), actx)
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
@@ -405,10 +493,10 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
         }
 
-        from mirgecom.inviscid import inviscid_flux_rusanov
         inviscid_rhs = euler_operator(
             discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, inviscid_numerical_flux_func=inviscid_flux_rusanov
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
@@ -452,6 +540,8 @@ def _euler_flow_stepper(actx, parameters):
     dt = parameters["dt"]
     constantcfl = parameters["constantcfl"]
     nstepstatus = parameters["nstatus"]
+    use_overintegration = parameters["use_overintegration"]
+    numerical_flux_func = parameters["numerical_flux_func"]
 
     if t_final <= t:
         return(0.0)
@@ -460,7 +550,24 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+    discr = EagerDGDiscretization(
+        actx, mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        }
+    )
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
+
     nodes = thaw(discr.nodes(), actx)
 
     cv = initializer(nodes)
@@ -510,13 +617,12 @@ def _euler_flow_stepper(actx, parameters):
 
         return maxerr
 
-    from mirgecom.inviscid import inviscid_flux_rusanov
-
     def rhs(t, q):
         fluid_state = make_fluid_state(q, gas_model)
         return euler_operator(discr, fluid_state, boundaries=boundaries,
                               gas_model=gas_model, time=t,
-                              inviscid_numerical_flux_func=inviscid_flux_rusanov)
+                              inviscid_numerical_flux_func=numerical_flux_func,
+                              quadrature_tag=quadrature_tag)
 
     filter_order = 8
     eta = .5
@@ -568,7 +674,11 @@ def _euler_flow_stepper(actx, parameters):
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_isentropic_vortex(actx_factory, order):
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_flux_rusanov, inviscid_flux_hll])
+def test_isentropic_vortex(actx_factory, order, use_overintegration,
+                           numerical_flux_func):
     """Advance the 2D isentropic vortex case in time with non-zero velocities.
 
     This test uses an RK4 timestepping scheme, and checks the advanced field values
@@ -618,7 +728,9 @@ def test_isentropic_vortex(actx_factory, order):
                       "boundaries": boundaries, "initializer": initializer,
                       "eos": eos, "casename": casename, "mesh": mesh,
                       "tfinal": t_final, "exittol": exittol, "cfl": cfl,
-                      "constantcfl": False, "nstatus": 0}
+                      "constantcfl": False, "nstatus": 0,
+                      "use_overintegration": use_overintegration,
+                      "numerical_flux_func": numerical_flux_func}
         maxerr = _euler_flow_stepper(actx, flowparams)
         eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 

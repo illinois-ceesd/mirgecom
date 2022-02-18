@@ -17,6 +17,7 @@ Fluid State Handling Utilities
 .. autofunction:: make_fluid_state
 .. autofunction:: project_fluid_state
 .. autofunction:: make_fluid_state_trace_pairs
+.. autofunction:: make_operator_fluid_states
 """
 
 __copyright__ = """
@@ -57,6 +58,12 @@ from mirgecom.transport import (
     TransportModel,
     GasTransportVars
 )
+from grudge.dof_desc import DOFDesc, as_dofdesc
+from grudge.trace_pair import (
+    TracePair,
+    interior_trace_pairs
+)
+import grudge.op as op
 
 
 @dataclass(frozen=True)
@@ -366,3 +373,111 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
         exterior=make_fluid_state(cv_pair.ext, gas_model,
                                   temperature_seed=_getattr_ish(tseed_pair, "ext")))
         for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
+
+
+class _FluidCVTag:
+    pass
+
+
+class _FluidTemperatureTag:
+    pass
+
+
+def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
+                               quadrature_tag=None):
+    """Prepare gas model-consistent fluid states for use in fluid operators.
+
+    This routine prepares a model-constistent fluid state for each of the volume and
+    all interior and domain boundaries using the quadrature representation if
+    one is given. The input *volume_state* is projected to the quadrature domain
+    (if any), along with the model-consistent dependent quantities.
+
+    .. note::
+
+        When running MPI-distributed, volume state conserved quantities
+        (ConservedVars), and for mixtures, temperatures will be communicated over
+        partition boundaries inside this routine. Note the use of
+        :func:`~grudge.trace_pair.interior_trace_pairs`.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
+        A discretization collection encapsulating the DG elements
+
+    volume_state: :class:`~mirgecom.gas_model.FluidState`
+
+        The full fluid conserved and thermal state
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        The physical model constructs for the gas_model
+
+    boundaries
+        Dictionary of boundary functions, one for each valid btag
+
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
+    Returns
+    -------
+    :class:`~mirgecom.gas_model.FluidState`
+
+        Thermally consistent fluid state for the volume, fluid state trace pairs
+        for the internal boundaries, and a dictionary of fluid states keyed by
+        valid btag in boundaries, all on the quadrature grid (if specified).
+    """
+    dd_base_vol = DOFDesc("vol")
+    dd_quad_vol = DOFDesc("vol", quadrature_tag)
+
+    # project pair to the quadrature discretization and update dd to quad
+    def _interp_to_surf_quad(utpair):
+        local_dd = utpair.dd
+        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        return TracePair(
+            local_dd_quad,
+            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
+            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
+        )
+
+    domain_boundary_states_quad = {
+        btag: project_fluid_state(discr, dd_base_vol,
+                                  as_dofdesc(btag).with_discr_tag(quadrature_tag),
+                                  volume_state, gas_model)
+        for btag in boundaries
+    }
+
+    # performs MPI communication of CV if needed
+    cv_interior_pairs = [
+        # Get the interior trace pairs onto the surface quadrature
+        # discretization (if any)
+        _interp_to_surf_quad(tpair)
+        for tpair in interior_trace_pairs(discr, volume_state.cv, tag=_FluidCVTag)
+    ]
+
+    tseed_interior_pairs = None
+    if volume_state.is_mixture:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        tseed_interior_pairs = [
+            # Get the interior trace pairs onto the surface quadrature
+            # discretization (if any)
+            _interp_to_surf_quad(tpair)
+            for tpair in interior_trace_pairs(discr, volume_state.temperature,
+                                              tag=_FluidTemperatureTag)]
+
+    interior_boundary_states_quad = \
+        make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
+                                     tseed_interior_pairs)
+
+    # Interpolate the fluid state to the volume quadrature grid
+    # (this includes the conserved and dependent quantities)
+    volume_state_quad = project_fluid_state(discr, dd_base_vol, dd_quad_vol,
+                                            volume_state, gas_model)
+
+    return \
+        volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad

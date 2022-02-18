@@ -52,32 +52,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np  # noqa
+
+from grudge.dof_desc import DOFDesc
+
+from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux,
-    inviscid_flux_rusanov
+    inviscid_flux_rusanov,
+    inviscid_boundary_flux_for_divergence_operator
 )
 from mirgecom.operators import div_operator
-from mirgecom.gas_model import (
-    project_fluid_state,
-    make_fluid_state_trace_pairs
-)
-from grudge.trace_pair import (
-    TracePair,
-    interior_trace_pairs
-)
-from grudge.dof_desc import DOFDesc, as_dofdesc
 
-import grudge.op as op
-
-
-
-class _EulerCVTag:
-    pass
-
-
-class _EulerTseedTag:
-    pass
 
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_flux_rusanov,
@@ -115,6 +101,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
         and kinetic properties as required by fluid state
 
     quadrature_tag
+
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
         The default value is *None*.
@@ -122,82 +109,24 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
-
-        Agglomerated object array of DOF arrays representing the RHS of the Euler
-        flow equations.
     """
-    dd_base = as_dofdesc("vol")
-    dd_vol = DOFDesc("vol", quadrature_tag)
-    dd_faces = DOFDesc("all_faces", quadrature_tag)
+    dd_quad_vol = DOFDesc("vol", quadrature_tag)
+    dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
 
-    def interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
-        return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
-        )
+    volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
+        make_operator_fluid_states(discr, state, gas_model, boundaries,
+                                    quadrature_tag)
 
-    boundary_states = {
-        btag: project_fluid_state(
-            discr, dd_base,
-            # Make sure we get the state on the quadrature grid
-            # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            state, gas_model) for btag in boundaries
-    }
+    # Compute volume contributions
+    inviscid_flux_vol = inviscid_flux(volume_state_quad)
 
-    cv_interior_pairs = [
-        # Get the interior trace pairs onto the surface quadrature
-        # discretization (if any)
-        interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, state.cv, tag=_EulerCVTag)
-    ]
+    # Compute interface contributions
+    inviscid_flux_bnd = inviscid_boundary_flux_for_divergence_operator(
+        discr, gas_model, boundaries, interior_boundary_states_quad,
+        domain_boundary_states_quad, quadrature_tag=quadrature_tag,
+        numerical_flux_func=inviscid_numerical_flux_func, time=time)
 
-    tseed_interior_pairs = None
-    if state.is_mixture > 0:
-        # If this is a mixture, we need to exchange the temperature field because
-        # mixture pressure (used in the inviscid flux calculations) depends on
-        # temperature and we need to seed the temperature calculation for the
-        # (+) part of the partition boundary with the remote temperature data.
-        tseed_interior_pairs = [
-            # Get the interior trace pairs onto the surface quadrature
-            # discretization (if any)
-            interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(discr, state.temperature, tag=_EulerTseedTag)
-        ]
-
-    interior_states = make_fluid_state_trace_pairs(cv_interior_pairs,
-                                                   gas_model,
-                                                   tseed_interior_pairs)
-
-    # Interpolate the fluid state to the volume quadrature grid
-    # (conserved vars and derived vars if applicable)
-    state_quad = project_fluid_state(discr, dd_base, dd_vol, state, gas_model)
-
-    inviscid_flux_vol = inviscid_flux(state_quad)
-    inviscid_flux_bnd = (
-
-        # Domain boundaries
-        sum(boundaries[btag].inviscid_divergence_flux(
-            discr,
-            # Make sure we get the state on the quadrature grid
-            # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            gas_model,
-            state_minus=boundary_states[btag],
-            time=time,
-            numerical_flux_func=inviscid_numerical_flux_func)
-            for btag in boundaries)
-
-        # Interior boundaries
-        + sum(inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
-                                   numerical_flux_func=inviscid_numerical_flux_func)
-              for state_pair in interior_states)
-    )
-
-    return -div_operator(discr, dd_vol, dd_faces,
+    return -div_operator(discr, dd_quad_vol, dd_quad_faces,
                          inviscid_flux_vol, inviscid_flux_bnd)
 
 

@@ -126,7 +126,8 @@ def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
     normal = thaw(actx, discr.normal(int_tpair.dd))
     flux_weak = gradient_flux_central(int_tpair, normal)
-    return discr.project(int_tpair.dd, "all_faces", flux_weak)
+    dd_all_faces = int_tpair.dd.with_dtag("all_faces")
+    return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
 
 
 def central_flux_boundary(actx, discr, soln_func, btag):
@@ -138,7 +139,8 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
     flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
-    return discr.project(bnd_tpair.dd, "all_faces", flux_weak)
+    dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
+    return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
 
 
 # TODO: Generalize mirgecom.symbolic to work with array containers

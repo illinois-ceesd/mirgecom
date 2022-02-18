@@ -5,11 +5,7 @@ Low-level interfaces
 
 .. autofunction:: num_flux_lfr
 .. autofunction:: num_flux_central
-
-State-to-flux drivers
-^^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: hll_flux_driver
+.. autofunction:: num_flux_hll
 
 Flux pair interfaces for operators
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -45,31 +41,130 @@ import numpy as np  # noqa
 
 
 def num_flux_lfr(f_minus, f_plus, q_minus, q_plus, lam, **kwargs):
-    """Lax-Friedrichs/Rusanov low-level numerical flux."""
+    r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
+
+    The Lax-Friedrichs/Rusanov flux is calculated as:
+
+    .. math::
+        f_{\text{LFR}}=\frac{1}{2}\left(f^-+f^+-\lambda\left(q^--q^+\right)\right)
+
+    where $f^{\mp}$ and $q^{\mp}$ are the normal flux components and state components
+    on the interior and the exterior of the face over which the LFR flux is to be
+    calculated. $\lambda$ is the user-supplied dissipation/penalty coefficient.
+
+    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
+    it is the max eigenvalue of the flux jacobian.
+
+    Parameters
+    ----------
+    f_minus
+        Normal component of physical flux interior to (left of) interface
+
+    f_plus
+        Normal component of physical flux exterior to (right of) interface
+
+    q_minus
+        Physical state on interior of interface
+
+    q_plus
+        Physical state on exterior of interface
+
+    lam: :class:`~meshmode.dof_array.DOFArray`
+        State jump penalty parameter for dissipation term
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        Lax-Friedrichs/Rusanov numerical flux.
+    """
     return (f_minus + f_plus - lam*(q_plus - q_minus))/2
 
 
 def num_flux_central(f_minus, f_plus, **kwargs):
-    """Central low-level numerical flux."""
+    r"""Central low-level numerical flux.
+
+    The central flux is calculated as:
+
+    .. math::
+        f_{\text{central}} = \frac{\left(f^++f^-\right)}{2}
+
+    Parameters
+    ----------
+    f_minus
+        Normal component of physical flux interior to (left of) interface
+
+    f_plus
+        Normal component of physical flux exterior to (right of) interface
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        central numerical flux.
+    """
     return (f_plus + f_minus)/2
 
 
-def hll_flux_driver(state_pair, physical_flux_func,
-                    s_minus, s_plus, normal):
-    """State-to-flux driver for hll numerical fluxes."""
-    actx = state_pair.int.array_context
-    zeros = 0.*state_pair.int.mass_density
+def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
+    r"""HLL low-level numerical flux.
 
-    f_minus = physical_flux_func(state_pair.int)@normal
-    f_plus = physical_flux_func(state_pair.ext)@normal
-    q_minus = state_pair.int.cv
-    q_plus = state_pair.ext.cv
+    The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:
+
+    .. math::
+
+        f^{*}_{\text{HLL}} = \frac{\left(s^+f^--s^-f^++s^+s^-\left(q^+-q^-\right)
+        \right)}{\left(s^+ - s^-\right)}
+
+    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
+    states, and the wavespeeds for the interior (-) and exterior (+) of the
+    interface, respectively.
+
+    Details about this approximate Riemann solver can be found in Section 10.3 of
+    [Toro_2009]_.
+
+    Parameters
+    ----------
+    f_minus
+        Normal component of physical flux interior to (left of) interface
+
+    f_plus
+        Normal component of physical flux exterior to (right of) interface
+
+    q_minus
+        Physical state on interior of interface
+
+    q_plus
+        Physical state on exterior of interface
+
+    q_minus
+        Physical state on interior of interface
+
+    q_plus
+        Physical state on exterior of interface
+
+    s_minus: :class:`~meshmode.dof_array.DOFArray`
+        Interface wave-speed parameter for interior of interface
+
+    s_plus: :class:`~meshmode.dof_array.DOFArray`
+        Interface wave-speed parameter for exterior of interface
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLL numerical flux.
+    """
+    actx = q_minus.array_context
     f_star = (s_plus*f_minus - s_minus*f_plus
               + s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
 
     # choose the correct f contribution based on the wave speeds
-    f_check_minus = actx.np.greater_equal(s_minus, zeros)*(0*f_minus + 1.0)
-    f_check_plus = actx.np.less_equal(s_plus, zeros)*(0*f_minus + 1.0)
+    f_check_minus = actx.np.greater_equal(s_minus, 0*s_minus)*(0*f_minus + 1.0)
+    f_check_plus = actx.np.less_equal(s_plus, 0*s_plus)*(0*f_minus + 1.0)
 
     f = f_star
     f = actx.np.where(f_check_minus, f_minus, f)

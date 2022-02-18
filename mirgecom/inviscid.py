@@ -7,6 +7,7 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_rusanov
 .. autofunction:: inviscid_flux_hll
+.. autofunction:: inviscid_boundary_flux_for_divergence_operator
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -114,13 +115,15 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     .. math::
 
-        F^{*}_{\mathtt{HLL}} = \frac{1}{2}(\mathbf{F}(q^-)
-        +\mathbf{F}(q^+)) \cdot \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
+        f^{*}_{\mathtt{HLL}} = \frac{\left(s^+f^--s^-f^++s^+s^-\left(q^+-q^-\right)
+        \right)}{\left(s^+ - s^-\right)}
 
-    where $q^-, q^+$ are the fluid solution state on the interior and the
-    exterior of the face on which the flux is to be calculated, $\mathbf{F}$ is
-    the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
-    *local* maximum fluid wavespeed.
+    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
+    states, and the wavespeeds for the interior (-) and exterior (+) of the
+    interface respectively.
+
+    Details about how the parameters and fluxes are calculated can be found in
+    Section 10.3 of [Toro_2009]_.
     """
     # calculate left/right wavespeeds
     actx = state_pair.int.array_context
@@ -157,12 +160,17 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     # left (internal), and right (external) wave speed estimates
     # can alternatively use the roe estimated states to find the wave speeds
-    wavespeed_int = u_int - c_int*q_int
-    wavespeed_ext = u_ext + c_ext*q_ext
+    s_minus = u_int - c_int*q_int
+    s_plus = u_ext + c_ext*q_ext
 
-    from mirgecom.flux import hll_flux_driver
-    return hll_flux_driver(state_pair, inviscid_flux,
-                           wavespeed_int, wavespeed_ext, normal)
+    f_minus = inviscid_flux(state_pair.int)@normal
+    f_plus = inviscid_flux(state_pair.ext)@normal
+
+    q_minus = state_pair.int.cv
+    q_plus = state_pair.ext.cv
+
+    from mirgecom.flux import num_flux_hll
+    return num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
@@ -205,6 +213,68 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
     dd = state_pair.dd
     dd_allfaces = dd.with_dtag("all_faces")
     return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+
+
+def inviscid_boundary_flux_for_divergence_operator(
+        discr, gas_model, boundaries, interior_boundary_states,
+        domain_boundary_states, quadrature_tag=None,
+        numerical_flux_func=inviscid_flux_rusanov, time=0.0):
+    """Compute the inviscid boundary fluxes for the divergence operator.
+
+    This routine encapsulates the computation of the inviscid contributions
+    to the boundary fluxes for use by the divergence operator. Its existence
+    is intended to allow multiple operators (e.g. Euler and Navier-Stokes) to
+    perform the computation without duplicating code.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model constructs for the gas_model
+
+    boundaries
+        Dictionary of boundary functions, one for each valid btag
+
+    interior_boundary_states
+        A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
+
+    domain_boundary_states
+       A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
+       keyed by btags in *boundaries*.
+
+    quadrature_tag
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
+
+    numerical_flux_func
+        The numerical flux function to use in computing the boundary flux.
+
+    time: float
+        Time
+    """
+    from grudge.dof_desc import as_dofdesc
+
+    # Compute interface contributions
+    inviscid_flux_bnd = (
+
+        # Interior faces
+        sum(inviscid_facial_flux(discr, gas_model, state_pair,
+                                 numerical_flux_func)
+            for state_pair in interior_boundary_states)
+
+        # Domain boundary faces
+        + sum(
+            boundaries[btag].inviscid_divergence_flux(
+                discr, as_dofdesc(btag).with_discr_tag(quadrature_tag), gas_model,
+                state_minus=domain_boundary_states[btag],
+                numerical_flux_func=numerical_flux_func, time=time)
+            for btag in boundaries)
+    )
+
+    return inviscid_flux_bnd
 
 
 def get_inviscid_timestep(discr, state):
