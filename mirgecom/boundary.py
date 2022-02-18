@@ -498,9 +498,7 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         mass_frac_plus = state_minus.species_mass_fractions
 
         internal_energy_plus = gas_model.eos.get_internal_energy(
-            temperature=temperature_wall, species_mass_fractions=mass_frac_plus,
-            mass=state_minus.mass_density
-        )
+            temperature=temperature_wall, species_mass_fractions=mass_frac_plus)
 
         total_energy_plus = state_minus.mass_density*(internal_energy_plus
                                            + .5*np.dot(velocity_plus, velocity_plus))
