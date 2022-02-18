@@ -30,12 +30,11 @@ import pyopencl.tools as cl_tools
 from functools import partial
 
 from grudge.array_context import (
-    MPIPytatoPyOpenCLArrayContext as PytatoPyOpenCLArrayContext
+    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 
 from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    # SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    PyOpenCLArrayContext
 )
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext

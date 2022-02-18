@@ -32,7 +32,7 @@ from functools import partial
 
 from grudge.array_context import (
     PyOpenCLArrayContext,
-    MPIPytatoPyOpenCLArrayContext as PytatoPyOpenCLArrayContext
+    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
@@ -116,10 +116,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(comm,
-        queue,
-        mpi_base_tag=4200,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if actx_class == PytatoPyOpenCLArrayContext:
+        actx = actx_class(
+            comm, queue, mpi_base_tag=4200,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+        )
+    else:
+        actx = actx_class(
+            queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+        )
 
     # timestepping control
     timestepper = rk4_step

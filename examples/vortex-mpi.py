@@ -29,8 +29,10 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from grudge.array_context import (PyOpenCLArrayContext,
-    MPIPytatoPyOpenCLArrayContext)
+from grudge.array_context import (
+    PyOpenCLArrayContext,
+    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+)
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
@@ -100,7 +102,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    if actx_class == MPIPytatoPyOpenCLArrayContext:
+    if actx_class == PytatoPyOpenCLArrayContext:
         actx = actx_class(comm, queue, mpi_base_tag=1300)
     else:
         actx = actx_class(queue,
@@ -414,7 +416,7 @@ if __name__ == "__main__":
             raise ValueError("Can't use lazy and profiling together.")
         actx_class = PyOpenCLProfilingArrayContext
     else:
-        actx_class = MPIPytatoPyOpenCLArrayContext if args.lazy \
+        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
             else PyOpenCLArrayContext
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
