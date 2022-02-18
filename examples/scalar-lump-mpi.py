@@ -103,7 +103,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue = cl.CommandQueue(cl_ctx)
 
     if actx_class == PytatoPyOpenCLArrayContext:
-        actx = actx_class(comm, queue)
+        actx = actx_class(comm, queue, mpi_base_tag=12000)
     else:
         actx = actx_class(queue,
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
