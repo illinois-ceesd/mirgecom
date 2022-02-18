@@ -29,9 +29,9 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import (
+from grudge.array_context import (
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
@@ -100,9 +100,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if actx_class == PytatoPyOpenCLArrayContext:
+        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    else:
+        actx = actx_class(queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # timestepping control
     if use_leap:
@@ -335,7 +337,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        fluid_state = make_fluid_state(state, gas_model)
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
         return euler_operator(discr, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model)
 

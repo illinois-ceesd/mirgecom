@@ -29,10 +29,14 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+from grudge.array_context import (
+    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
+
+from meshmode.array_context import (
+    PyOpenCLArrayContext
+)
+
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -107,9 +111,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if actx_class == PytatoPyOpenCLArrayContext:
+        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    else:
+        actx = actx_class(
+            queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # Some discretization parameters
     dim = 2

@@ -65,6 +65,14 @@ from mirgecom.inviscid import (
 from mirgecom.operators import div_operator
 
 
+class _EulerCVTag:
+    pass
+
+
+class _EulerTseedTag:
+    pass
+
+
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_flux_rusanov,
                    quadrature_tag=None):
