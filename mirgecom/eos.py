@@ -162,7 +162,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the density from pressure, and temperature."""
 
     @abstractmethod
-    def get_internal_energy(self, temperature, species_mass_fractions):
+    def get_internal_energy(self, temperature, species_mass_fractions=None,
+                            mass=None):
         """Get the fluid internal energy from temperature."""
 
     def dependent_vars(
@@ -474,7 +475,8 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
-    def get_internal_energy(self, temperature, species_mass_fractions=None):
+    def get_internal_energy(self, temperature, species_mass_fractions=None,
+                            mass=None):
         r"""Get the gas thermal energy from temperature.
 
         The gas internal energy $e$ is calculated from:
@@ -700,7 +702,7 @@ class PyrometheusMixture(MixtureEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_mass_fractions)
 
-    def get_internal_energy(self, temperature, species_mass_fractions):
+    def get_internal_energy(self, temperature, species_mass_fractions, mass=None):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
