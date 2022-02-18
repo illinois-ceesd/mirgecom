@@ -314,20 +314,23 @@ def viscous_facial_flux(discr, state_tpair, grad_cv_tpair, grad_t_tpair,
         local to the sub-discretization depending on *local* input parameter
     """
     actx = state_tpair.int.array_context
-    normal = thaw(actx, discr.normal(state_tpair.dd))
+    dd = state_tpair.dd
+    dd_all_faces = dd.with_dtag("all_faces")
+
+    normal = thaw(actx, discr.normal(dd))
 
     f_int = viscous_flux(state_tpair.int, grad_cv_tpair.int,
                          grad_t_tpair.int)
     f_ext = viscous_flux(state_tpair.ext, grad_cv_tpair.ext,
                          grad_t_tpair.ext)
-    f_tpair = TracePair(state_tpair.dd, interior=f_int, exterior=f_ext)
+    f_tpair = TracePair(dd, interior=f_int, exterior=f_ext)
 
     # todo: user-supplied flux routine
     # note: Hard-code central flux here for BR1
     flux_weak = divergence_flux_central(f_tpair, normal)
 
     if not local:
-        return discr.project(state_tpair.dd, "all_faces", flux_weak)
+        return discr.project(dd, dd_all_faces, flux_weak)
     return flux_weak
 
 

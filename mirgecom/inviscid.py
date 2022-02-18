@@ -129,7 +129,10 @@ def inviscid_facial_flux(discr, state_tpair, local=False):
         are being computed.
     """
     actx = state_tpair.int.array_context
-    flux_tpair = TracePair(state_tpair.dd,
+    dd = state_tpair.dd
+    dd_all_faces = dd.with_dtag("all_faces")
+
+    flux_tpair = TracePair(dd,
                            interior=inviscid_flux(state_tpair.int),
                            exterior=inviscid_flux(state_tpair.ext))
 
@@ -139,8 +142,8 @@ def inviscid_facial_flux(discr, state_tpair, local=False):
     w_ext = state_tpair.ext.speed_of_sound + state_tpair.ext.speed
     lam = actx.np.maximum(w_int, w_ext)
 
-    normal = thaw(actx, discr.normal(state_tpair.dd))
-    cv_tpair = TracePair(state_tpair.dd,
+    normal = thaw(actx, discr.normal(dd))
+    cv_tpair = TracePair(dd,
                          interior=state_tpair.int.cv,
                          exterior=state_tpair.ext.cv)
 
@@ -148,7 +151,7 @@ def inviscid_facial_flux(discr, state_tpair, local=False):
     flux_weak = divergence_flux_lfr(cv_tpair, flux_tpair, normal=normal, lam=lam)
 
     if local is False:
-        return discr.project(cv_tpair.dd, "all_faces", flux_weak)
+        return discr.project(dd, dd_all_faces, flux_weak)
 
     return flux_weak
 

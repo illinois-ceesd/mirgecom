@@ -28,45 +28,66 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import grudge.op as op
 
-def grad_operator(discr, u, flux):
+
+def grad_operator(discr, dd_vol, dd_faces, u, flux):
     r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
+    dd_vol: grudge.dof_desc.DOFDesc
+        the degree-of-freedom tag associated with the volume discrezation.
+        This determines the type of quadrature to be used.
+    dd_faces: grudge.dof_desc.DOFDesc
+        the degree-of-freedom tag associated with the surface discrezation.
+        This determines the type of quadrature to be used.
     u: meshmode.dof_array.DOFArray or numpy.ndarray
-        the DOF array (or object array of DOF arrays) to which the operator should be
-        applied
+        the function (or container of functions) for which gradient is to be
+        calculated
     flux: numpy.ndarray
-        the boundary fluxes across the faces of the element
+        the boundary flux across the faces of the element for each component
+        of *u*
+
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
-    from grudge.op import weak_local_grad
-    return -discr.inverse_mass(weak_local_grad(discr, u, nested=False)
-                               - discr.face_mass(flux))
+    return -discr.inverse_mass(
+        op.weak_local_grad(discr, dd_vol, u)
+        - op.face_mass(discr, dd_faces, flux)
+    )
 
 
-def div_operator(discr, u, flux):
-    r"""Compute a DG divergence of vector-valued function *u* with flux given by *flux*.
+def div_operator(discr, dd_vol, dd_faces, v, flux):
+    r"""Compute a DG divergence of vector-valued function *v* with flux given by *flux*.
 
     Parameters
     ----------
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
-    u: numpy.ndarray
-        the vector-valued function for which divergence is to be calculated
+    dd_vol: grudge.dof_desc.DOFDesc
+        the degree-of-freedom tag associated with the volume discrezation.
+        This determines the type of quadrature to be used.
+    dd_faces: grudge.dof_desc.DOFDesc
+        the degree-of-freedom tag associated with the surface discrezation.
+        This determines the type of quadrature to be used.
+    v: numpy.ndarray
+        obj array of :class:`~meshmode.dof_array.DOFArray` (or container of such)
+        representing the vector-valued functions for which divergence is to be
+        calculated
     flux: numpy.ndarray
-        the boundary fluxes across the faces of the element
+        the boundary flux for each function in v
+
     Returns
     -------
     meshmode.dof_array.DOFArray or numpy.ndarray
-        the dg divergence operator applied to vector-valued function *u*.
+        the dg divergence operator applied to vector-valued function(s) *v*.
     """
-    from grudge.op import weak_local_div
-    return -discr.inverse_mass(weak_local_div(discr, u)
-                               - discr.face_mass(flux))
+    return -discr.inverse_mass(
+        op.weak_local_div(discr, dd_vol, v)
+        - op.face_mass(discr, dd_faces, flux)
+    )
