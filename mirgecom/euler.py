@@ -163,7 +163,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             _interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(discr, state.temperature, tag=_EulerTseedTag)]
+            for tpair in interior_trace_pairs(discr, state.temperature,
+                                              tag=_EulerTseedTag)]
 
     interior_states_quad = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
                                                         tseed_interior_pairs)
