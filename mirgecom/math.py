@@ -1,5 +1,29 @@
 """Utilities and functions for math.
 
+Functions not explicitly defined here fall back to the appropriate numpy-like math
+function for the provided inputs (if one exists), through :func:`__getattr__`.
+The inputs can be :mod:`numpy` arrays, :mod:`arraycontext` arrays, or :mod:`pymbolic`
+expressions.
+
+:example::
+
+    With :mod:`numpy` input data::
+
+        import mirgecom.math as mm
+
+        x_np = np.array([0, np.pi/2, np.pi])
+        s_np = mm.sin(x_np)  # Calls np.sin
+
+    or :mod:`arraycontext` input data::
+
+        x_device = actx.from_numpy(x_np)
+        s_device = mm.sin(x_device)  # Calls actx.np.sin
+
+    or :mod:`pymbolic` input expression::
+
+        x_sym = pmbl.var("x")
+        s_sym = mm.sin(x_sym)  # Creates an expression pmbl.var("sin")(x_sym)
+
 .. autofunction:: __getattr__
 """
 
