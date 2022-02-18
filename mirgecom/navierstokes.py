@@ -84,6 +84,14 @@ from mirgecom.gas_model import make_operator_fluid_states
 from arraycontext import thaw
 
 
+class _NSGradCVTag:
+    pass
+
+
+class _NSGradTemperatureTag:
+    pass
+
+
 def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                 inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
@@ -204,7 +212,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_cv)
+        for tpair in interior_trace_pairs(discr, grad_cv, tag=_NSGradCVTag)
     ]
 
     # }}} Compute grad(CV)
@@ -246,7 +254,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_t)
+        for tpair in interior_trace_pairs(discr, grad_t, tag=_NSGradTemperatureTag)
     ]
 
     # }}} compute grad(temperature)

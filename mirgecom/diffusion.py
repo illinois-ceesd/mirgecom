@@ -204,6 +204,18 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
 
 
+class _DiffusionGradTag:
+    pass
+
+
+class _DiffusionDiffTag:
+    pass
+
+
+class _DiffusionStateTag:
+    pass
+
+
 def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=False):
     r"""
     Compute the diffusion operator.
@@ -267,7 +279,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
                 for btag, bdry in boundaries.items())
             + sum(
                 gradient_flux(discr, quad_tag, u_tpair)
-                for u_tpair in cross_rank_trace_pairs(discr, u))
+                for u_tpair in cross_rank_trace_pairs(discr, u,
+                                                      tag=_DiffusionGradTag))
             )
         )
 
@@ -287,8 +300,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
             + sum(
                 diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair)
                 for alpha_tpair, grad_u_tpair in zip(
-                    cross_rank_trace_pairs(discr, alpha),
-                    cross_rank_trace_pairs(discr, grad_u)))
+                    cross_rank_trace_pairs(discr, alpha, tag=_DiffusionDiffTag),
+                    cross_rank_trace_pairs(discr, grad_u, tag=_DiffusionStateTag)))
             )
         )
 

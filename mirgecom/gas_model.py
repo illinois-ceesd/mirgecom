@@ -375,6 +375,14 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
         for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
 
 
+class _FluidCVTag:
+    pass
+
+
+class _FluidTemperatureTag:
+    pass
+
+
 def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
                                quadrature_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
@@ -446,7 +454,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, volume_state.cv)
+        for tpair in interior_trace_pairs(discr, volume_state.cv, tag=_FluidCVTag)
     ]
 
     tseed_interior_pairs = None
@@ -459,7 +467,8 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             _interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(discr, volume_state.temperature)]
+            for tpair in interior_trace_pairs(discr, volume_state.temperature,
+                                              tag=_FluidTemperatureTag)]
 
     interior_boundary_states_quad = \
         make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
