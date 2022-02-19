@@ -26,8 +26,12 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-from pymbolic.primitives import Expression
-import mirgecom.symbolic as sym
+from mirgecom.symbolic import (
+    diff as sym_diff,
+    grad as sym_grad,
+    div as sym_div,
+    evaluate)
+import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -45,40 +49,6 @@ from numbers import Number
 
 import logging
 logger = logging.getLogger(__name__)
-
-
-def _np_like_for(val):
-    from arraycontext import get_container_context_recursively
-    actx = get_container_context_recursively(val)
-    if actx is None:
-        return np
-    else:
-        return actx.np
-
-
-def _cos(val):
-    if isinstance(val, Expression):
-        return pmbl.var("cos")(val)
-    else:
-        return _np_like_for(val).cos(val)
-
-
-def _sin(val):
-    if isinstance(val, Expression):
-        return pmbl.var("sin")(val)
-    else:
-        return _np_like_for(val).sin(val)
-
-
-def _exp(val):
-    if isinstance(val, Expression):
-        return pmbl.var("exp")(val)
-    else:
-        return _np_like_for(val).exp(val)
-
-
-def _sym_eval(expr, **kwargs):
-    return sym.EvaluationMapper(kwargs)(expr)
 
 
 class HeatProblem(metaclass=ABCMeta):
@@ -148,10 +118,10 @@ class DecayingTrig(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _exp(-self.dim*self._alpha*t)
+        u = mm.exp(-self.dim*self._alpha*t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -186,10 +156,10 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.25*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _exp(-self.dim*self._alpha*t)
+        u = mm.exp(-self.dim*self._alpha*t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -201,8 +171,8 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         sym_exact_u = self.get_solution(
             pmbl.make_sym_vector("x", self.dim), pmbl.var("t"))
 
-        exact_u = _sym_eval(sym_exact_u, x=nodes, t=t)
-        exact_grad_u = _sym_eval(sym.grad(self.dim, sym_exact_u), x=nodes, t=t)
+        exact_u = evaluate(sym_exact_u, x=nodes, t=t)
+        exact_grad_u = evaluate(sym_grad(self.dim, sym_exact_u), x=nodes, t=t)
 
         boundaries = {}
 
@@ -238,16 +208,16 @@ class OscillatingTrigVarDiff(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _cos(t)
+        u = mm.cos(t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
         alpha = 1
         for i in range(self.dim):
-            alpha = alpha * _cos(3.*x[i])
+            alpha = alpha * mm.cos(3.*x[i])
         alpha = 1 + 0.2*alpha
         return alpha
 
@@ -280,10 +250,10 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = _cos(t)
+        u = mm.cos(t)
         for i in range(self.dim-1):
-            u = u * _sin(x[i])
-        u = u * _cos(x[self.dim-1])
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(x[self.dim-1])
         return u
 
     def get_alpha(self, x, t, u):
@@ -308,7 +278,7 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
 def sym_diffusion(dim, sym_alpha, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
-    return sym.div(sym_alpha * sym.grad(dim, sym_u))
+    return sym_div(sym_alpha * sym_grad(dim, sym_u))
 
 
 # Note: Must integrate in time for a while in order to achieve expected spatial
@@ -346,7 +316,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
     # In order to support manufactured solutions, we modify the heat equation
     # to add a source term f. If the solution is exact, this term should be 0.
-    sym_f = sym.diff(sym_t)(sym_u) - sym_diffusion_u
+    sym_f = sym_diff(sym_t)(sym_u) - sym_diffusion_u
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
@@ -376,7 +346,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
                 discr_tag = DISCR_TAG_BASE
             return (diffusion_operator(discr, quad_tag=discr_tag, alpha=alpha,
                     boundaries=p.get_boundaries(discr, actx, t), u=u)
-                + _sym_eval(sym_f, x=nodes, t=t))
+                + evaluate(sym_f, x=nodes, t=t))
 
         t = 0.
 
@@ -573,7 +543,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
                         / inf_norm(diffusion_u_ndg))
 
             if print_err:
-                diffusion_u_exact = _sym_eval(sym_diffusion_u, x=nodes_mirgecom, t=t)
+                diffusion_u_exact = evaluate(sym_diffusion_u, x=nodes_mirgecom, t=t)
                 err_exact = (inf_norm(diffusion_u_mirgecom-diffusion_u_exact)
                             / inf_norm(diffusion_u_exact))
                 print(err, err_exact)
@@ -636,7 +606,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     assert isinstance(diffusion_u1, DOFArray)
 
-    expected_diffusion_u1 = _sym_eval(sym_diffusion_u1, x=nodes, t=t)
+    expected_diffusion_u1 = evaluate(sym_diffusion_u1, x=nodes, t=t)
     rel_linf_err = actx.to_numpy(
         discr.norm(diffusion_u1 - expected_diffusion_u1, np.inf)
         / discr.norm(expected_diffusion_u1, np.inf))
@@ -654,8 +624,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     assert diffusion_u_vector.shape == (2,)
 
     expected_diffusion_u_vector = make_obj_array([
-        _sym_eval(sym_diffusion_u1, x=nodes, t=t),
-        _sym_eval(sym_diffusion_u2, x=nodes, t=t)
+        evaluate(sym_diffusion_u1, x=nodes, t=t),
+        evaluate(sym_diffusion_u2, x=nodes, t=t)
     ])
     rel_linf_err = actx.to_numpy(
         discr.norm(diffusion_u_vector - expected_diffusion_u_vector, np.inf)
