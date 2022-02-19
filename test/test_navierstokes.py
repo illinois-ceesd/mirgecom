@@ -24,6 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABCMeta, abstractmethod
 import numpy as np
 import numpy.random
 import numpy.linalg as la  # noqa
@@ -41,6 +42,14 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 from mirgecom.fluid import make_conserved
 from grudge.dof_desc import DTAG_BOUNDARY
+
+import pymbolic as pmbl
+from mirgecom.symbolic import (
+    diff as sym_diff,
+    grad as sym_grad,
+    div as sym_div,
+    evaluate)
+import mirgecom.math as mm
 
 from mirgecom.boundary import (
     DummyBoundary,
@@ -201,14 +210,17 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None):
+def _get_box_mesh(dim, a, b, n, t=None, periodic=None):
+    if periodic is None:
+        periodic = (False,)*dim
     dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
+    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t,
+               periodic=periodic)
 
 
 @pytest.mark.parametrize("order", [2, 3])
@@ -350,3 +362,240 @@ def test_poiseuille_rhs(actx_factory, order):
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < tol_fudge
     )
+
+
+class FluidCase(metaclass=ABCMeta):
+    """
+    A manufactured fluid solution on a mesh.
+
+    .. autoproperty:: dim
+    .. automethod:: get_mesh
+    .. automethod:: get_solution
+    .. automethod:: get_boundaries
+    """
+
+    def __init__(self, dim):
+        """Init it."""
+        self._dim = dim
+
+    @property
+    def dim(self):
+        """Return the solution ambient dimension."""
+        return self._dim
+
+    @abstractmethod
+    def get_mesh(self, n):
+        """Generate and return a mesh of some given characteristic size *n*."""
+        pass
+
+    @abstractmethod
+    def get_solution(self, x, t):
+        """Return the solution for coordinates *x* and time *t*."""
+        pass
+
+    @abstractmethod
+    def get_boundaries(self, discr, actx, t):
+        """Return :class:`dict` mapping boundary tags to bc at time *t*."""
+        pass
+
+
+class RoyManufacturedSolution(FluidCase):
+    """CNS manufactured solution from [Roy_2017]__."""
+
+    def __init__(self, dim, alpha):
+        """Initialize it."""
+        super().__init__(dim)
+        self._alpha = alpha
+
+    def get_mesh(self, n):
+        """Return the mesh."""
+        return _get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
+
+    def get_solution(self, x, t):
+        """Return the symbolically-compatible solution."""
+        c = self._q_coeff[0]
+        ar = self._x_coeff[0]
+        lx = self._lx
+        omega_x = [np.pi*x[i]/lx[i] for i in range(self._dim)]
+
+        # rho = rho_0 + rho_x*sin(ar_x*pi*x/L_x) + rho_y*cos(ar_y*pi*y/L_y)
+        #       + rho_z*sin(ar_z*pi*z/L_z)
+        density = (c[0] + c[1]*mm.sin(ar[0]*omega_x[0]))
+        if self._dim > 1:
+            density = density + c[2]*mm.cos(ar[1]*omega_x[1])
+        if self._dim > 2:
+            density = density + c[3]*mm.sin(ar[2]*omega_x[2])
+
+        # p = p_0 + p_x*cos(ap_x*pi*x/L_x) + p_y*sin(ap_y*pi*y/L_y)
+        #     + p_z*cos(ap_z*pi*z/L_z)
+        c = self._q_coeff[1]
+        ap = self._x_coeff[1]
+        press = c[0] + c[1]*mm.cos(ap[0]*omega_x[1])
+        if self._dim > 1:
+            press = press + c[2]*mm.sin(ap[1]*omega_x[2])
+        if self._dim > 2:
+            press = press + c[3]*mm.cos(ap[2]*omega_x[3])
+
+        c = self._q_coeff[2]
+        au = self._x_coeff[2]
+        # u = u_0 + u_x*sin(au_x*pi*x/L_x) + u_y*cos(au_y*pi*y/L_y)
+        #       + u_z*cos(au_z*pi*z/L_z)
+        u = (c[0] + c[1]*mm.sin(au[0]*omega_x[0]))
+        if self._dim > 1:
+            u = u + c[2]*mm.cos(au[1]*omega_x[1])
+        if self._dim > 2:
+            u = u + c[3]*mm.cos(au[2]*omega_x[2])
+
+        if self._dim > 1:
+            c = self._q_coeff[3]
+            av = self._x_coeff[3]
+            # v = v_0 + v_x*cos(av_x*pi*x/L_x) + v_y*sin(av_y*pi*y/L_y)
+            #       + v_z*sin(av_z*pi*z/L_z)
+            v = (c[0] + c[1]*mm.cos(av[0]*omega_x[0])
+                 + c[2]*mm.sin(av[1]*omega_x[1]))
+            if self._dim > 2:
+                v = v + c[3]*mm.sin(av[2]*omega_x[2])
+            if self._dim > 2:
+                c = self._q_coeff[4]
+                aw = self._x_coeff[4]
+                # w = w_0 + w_x*sin(aw_x*pi*x/L_x) + w_y*sin(aw_y*pi*y/L_y)
+                #       + w_z*cos(aw_z*pi*z/L_z)
+                w = (c[0] + c[1]*mm.sin(aw[0]*omega_x[0])
+                     + c[2]*mm.sin(aw[1]*omega_x[1])
+                     + c[3]*mm.cos(aw[2]*omega_x[2]))
+
+        if self._dim == 1:
+            velocity = make_obj_array([u])
+        if self._dim == 2:
+            velocity = make_obj_array([u, v])
+        if self._dim == 3:
+            velocity = make_obj_array([u, v, w])
+
+        mom = density*velocity
+        energy = press/(self._gamma - 1) + density*np.dot(velocity, velocity)
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=energy)
+
+    def get_alpha(self, x, t, u):
+        return self._alpha
+
+    def get_boundaries(self, discr, actx, t):
+        boundaries = {}
+
+        for i in range(self.dim-1):
+            lower_btag = DTAG_BOUNDARY("-"+str(i))
+            upper_btag = DTAG_BOUNDARY("+"+str(i))
+            boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
+            boundaries[upper_btag] = NeumannDiffusionBoundary(0.)
+        lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
+        upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
+        boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
+        boundaries[upper_btag] = DirichletDiffusionBoundary(0.)
+
+        return boundaries
+
+def sym_diffusion(dim, sym_alpha, sym_u):
+    """Return a symbolic expression for the diffusion operator applied to a function.
+    """
+    return sym_div(sym_alpha * sym_grad(dim, sym_u))
+
+
+# Note: Must integrate in time for a while in order to achieve expected spatial
+# accuracy. Checking the RHS alone will give lower numbers.
+#
+# Working hypothesis: RHS lives in lower order polynomial space and thus doesn't
+# attain full-order convergence.
+@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
+    [
+        (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24]),
+        (DecayingTrigTruncatedDomain(2, 2.), 50, 5.e-5, [8, 12, 16]),
+        (DecayingTrigTruncatedDomain(3, 2.), 50, 5.e-5, [8, 10, 12]),
+        (OscillatingTrigVarDiff(1), 50, 5.e-5, [8, 16, 24]),
+        (OscillatingTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
+        (OscillatingTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
+        (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
+    ])
+def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
+            visualize=False):
+    """
+    Checks the accuracy of the diffusion operator by solving the heat equation for a
+    given problem setup.
+    """
+    actx = actx_factory()
+
+    p = problem
+
+    sym_x = pmbl.make_sym_vector("x", p.dim)
+    sym_t = pmbl.var("t")
+    sym_u = p.get_solution(sym_x, sym_t)
+    sym_alpha = p.get_alpha(sym_x, sym_t, sym_u)
+
+    sym_diffusion_u = sym_diffusion(p.dim, sym_alpha, sym_u)
+
+    # In order to support manufactured solutions, we modify the heat equation
+    # to add a source term f. If the solution is exact, this term should be 0.
+    sym_f = sym_diff(sym_t)(sym_u) - sym_diffusion_u
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec = EOCRecorder()
+
+    for n in scales:
+        mesh = p.get_mesh(n)
+
+        from grudge.eager import EagerDGDiscretization
+        from meshmode.discretization.poly_element import \
+                QuadratureSimplexGroupFactory, \
+                PolynomialWarpAndBlendGroupFactory
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
+            }
+        )
+
+        nodes = thaw(actx, discr.nodes())
+
+        def get_rhs(t, u):
+            alpha = p.get_alpha(nodes, t, u)
+            if isinstance(alpha, DOFArray):
+                discr_tag = DISCR_TAG_QUAD
+            else:
+                discr_tag = DISCR_TAG_BASE
+            return (diffusion_operator(discr, quad_tag=discr_tag, alpha=alpha,
+                    boundaries=p.get_boundaries(discr, actx, t), u=u)
+                + evaluate(sym_f, x=nodes, t=t))
+
+        t = 0.
+
+        u = p.get_solution(nodes, t)
+
+        from mirgecom.integrators import rk4_step
+
+        for _ in range(nsteps):
+            u = rk4_step(u, t, dt, get_rhs)
+            t += dt
+
+        expected_u = p.get_solution(nodes, t)
+
+        rel_linf_err = actx.to_numpy(
+            discr.norm(u - expected_u, np.inf)
+            / discr.norm(expected_u, np.inf))
+        eoc_rec.add_data_point(1./n, rel_linf_err)
+
+        if visualize:
+            from grudge.shortcuts import make_visualizer
+            vis = make_visualizer(discr, discr.order+3)
+            vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
+                order=order, n=n), [
+                    ("u", u),
+                    ("expected_u", expected_u),
+                    ])
+
+    print("L^inf error:")
+    print(eoc_rec)
+    # Expected convergence rates from Hesthaven/Warburton book
+    expected_order = order+1 if order % 2 == 0 else order
+    assert(eoc_rec.order_estimate() >= expected_order - 0.5
+                or eoc_rec.max_error() < 1e-11)
