@@ -402,21 +402,23 @@ class FluidCase(metaclass=ABCMeta):
 class RoyManufacturedSolution(FluidCase):
     """CNS manufactured solution from [Roy_2017]__."""
 
-    def __init__(self, dim, gas_model):
+    def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
+                 gamma=1.4, gas_const=287.):
         """Initialize it."""
         super().__init__(dim)
-
-    def get_mesh(self, n=2, nx=None, lx=None, periodic=None):
-        """Return the mesh."""
         if lx is None:
             lx = (2*np.pi,)*self._dim
         if len(lx) != self._dim:
             raise ValueError("Improper dimension for lx.")
-        if nx is None:
-            nx = (n,)*self._dim
-        if len(nx) != self._dim:
-            raise ValueError("Improper dimension for nx.")
+        self._gamma = gamma
+        self._gas_const = gas_const
+        self._q_coeff = q_coeff
+        self._x_coeff = x_coeff
         self._lx = lx
+
+    def get_mesh(self, n=2, periodic=None):
+        """Return the mesh."""
+        nx = (n,)*self._dim
         a = -self._lx/2
         b = self._lx/2
         return _get_box_mesh(self.dim, a, b, nx, periodic)
@@ -482,11 +484,13 @@ class RoyManufacturedSolution(FluidCase):
             velocity = make_obj_array([u, v, w])
 
         mom = density*velocity
+        temperature = press/(density*self._gas_const)
         energy = press/(self._gamma - 1) + density*np.dot(velocity, velocity)
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
-                              energy=energy)
+                              energy=energy), press, temperature
 
     def get_boundaries(self, discr, actx, t):
+        from mirgecom.gas_model import make_fluid_state
 
         def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
@@ -499,120 +503,92 @@ class RoyManufacturedSolution(FluidCase):
                 PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)}
 
 
-def sym_ns(sym_cv):
+def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_const=287.,
+           prandtl=1.0):
     """Return symbolic expression for the NS operator applied to a fluid state."""
     dim = sym_cv.dim
     rho = sym_cv.mass
     mom = sym_cv.momentum
     nrg = sym_cv.energy
+    prs = sym_pressure
+    tmp = sym_temperature
 
     vel = mom/rho
-    pressure = (gamma-1)*(nrg - rho*np.dot(vel, vel)/2)
+    dvel = sym_grad(dim, vel)
+    dtmp = sym_grad(dim, tmp)
 
+    # pressure = (gamma-1)*(nrg - rho*np.dot(vel, vel)/2)
+
+    # inviscid fluxes
     f_m_i = mom
-    f_p_i = rho*(np.outer(vel, vel)) + pressure*np.eye(dim)
-    f_e_i = (nrg + pressure)*vel
+    f_p_i = rho*(np.outer(vel, vel)) + prs*np.eye(dim)
+    f_e_i = (nrg + prs)*vel
+    f_i = make_obj_array([f_m_i, f_e_i, f_p_i])
 
-    gv = sim_grad(dim, vel)
-    return sym_div(sym_alpha * sym_grad(dim, sym_u))
+    # viscous stress tensor
+    tau = 2*mu/3*((dvel + dvel.T) - (dvel.trace))
+
+    # heat flux
+    kappa = gamma * gas_const * mu / (prandtl * (gamma - 1))
+    q_heat = -kappa * dtmp
+
+    # viscous fluxes
+    f_m_v = 0
+    f_p_v = tau
+    f_e_v = np.dot(tau, vel) - q_heat
+    f_v = make_obj_array([f_m_v, f_e_v, f_p_v])
+
+    return sym_div(f_v - f_i)
 
 
-# Note: Must integrate in time for a while in order to achieve expected spatial
-# accuracy. Checking the RHS alone will give lower numbers.
-#
-# Working hypothesis: RHS lives in lower order polynomial space and thus doesn't
-# attain full-order convergence.
-@pytest.mark.parametrize("order", [2, 3])
-@pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
-    [
-        (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24]),
-        (DecayingTrigTruncatedDomain(2, 2.), 50, 5.e-5, [8, 12, 16]),
-        (DecayingTrigTruncatedDomain(3, 2.), 50, 5.e-5, [8, 10, 12]),
-        (OscillatingTrigVarDiff(1), 50, 5.e-5, [8, 16, 24]),
-        (OscillatingTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
-        (OscillatingTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
-        (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
-    ])
-def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
-            visualize=False):
-    """
-    Checks the accuracy of the diffusion operator by solving the heat equation for a
-    given problem setup.
-    """
+def test_ns_mms(actx_factory):
+    """CNS manufactured solution tests."""
     actx = actx_factory()
 
-    p = problem
+    dim = 2
+    q_coeff = ()
+    x_coeff = ()
+    man_soln = RoyManufacturedSolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff)
 
-    sym_x = pmbl.make_sym_vector("x", p.dim)
+    sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
-    sym_u = p.get_solution(sym_x, sym_t)
-    sym_alpha = p.get_alpha(sym_x, sym_t, sym_u)
+    sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
 
-    sym_diffusion_u = sym_diffusion(p.dim, sym_alpha, sym_u)
+    sym_source = sym_ns(sym_cv, sym_prs, sym_tmp)
 
-    # In order to support manufactured solutions, we modify the heat equation
-    # to add a source term f. If the solution is exact, this term should be 0.
-    sym_f = sym_diff(sym_t)(sym_u) - sym_diffusion_u
+    mesh = man_soln.get_mesh(n)
 
-    from pytools.convergence import EOCRecorder
-    eoc_rec = EOCRecorder()
+    from grudge.eager import EagerDGDiscretization
+    from meshmode.discretization.poly_element import \
+        QuadratureSimplexGroupFactory, \
+        PolynomialWarpAndBlendGroupFactory
+    discr = EagerDGDiscretization(
+        actx, mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
+        }
+    )
 
-    for n in scales:
-        mesh = p.get_mesh(n)
+    nodes = thaw(actx, discr.nodes())
 
-        from grudge.eager import EagerDGDiscretization
-        from meshmode.discretization.poly_element import \
-                QuadratureSimplexGroupFactory, \
-                PolynomialWarpAndBlendGroupFactory
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
-            }
-        )
+    def get_rhs(t, u):
+        # Hrm, need fluid state for this part....
+        fluid_state = make_fluid_state(...)   # uh
+        return (ns_operator(
+            discr, boundaries=man_soln.get_boundaries(discr, actx, t),
+            state=fluid_state)
+                + evaluate(sym_source, x=nodes, t=t))
 
-        nodes = thaw(actx, discr.nodes())
+    t = 0.
+    from mirgecom.integrators import rk4_step
+    dt = 1e-9
+    # cv = man_soln.get_solution()
+    nsteps = 1
 
-        def get_rhs(t, u):
-            alpha = p.get_alpha(nodes, t, u)
-            if isinstance(alpha, DOFArray):
-                discr_tag = DISCR_TAG_QUAD
-            else:
-                discr_tag = DISCR_TAG_BASE
-            return (diffusion_operator(discr, quad_tag=discr_tag, alpha=alpha,
-                    boundaries=p.get_boundaries(discr, actx, t), u=u)
-                + evaluate(sym_f, x=nodes, t=t))
+    for _ in range(nsteps):
+        cv = rk4_step(cv, t, dt, get_rhs)
+        t += dt
 
-        t = 0.
+    expected_cv = sym_cv
 
-        u = p.get_solution(nodes, t)
-
-        from mirgecom.integrators import rk4_step
-
-        for _ in range(nsteps):
-            u = rk4_step(u, t, dt, get_rhs)
-            t += dt
-
-        expected_u = p.get_solution(nodes, t)
-
-        rel_linf_err = actx.to_numpy(
-            discr.norm(u - expected_u, np.inf)
-            / discr.norm(expected_u, np.inf))
-        eoc_rec.add_data_point(1./n, rel_linf_err)
-
-        if visualize:
-            from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order+3)
-            vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
-                order=order, n=n), [
-                    ("u", u),
-                    ("expected_u", expected_u),
-                    ])
-
-    print("L^inf error:")
-    print(eoc_rec)
-    # Expected convergence rates from Hesthaven/Warburton book
-    expected_order = order+1 if order % 2 == 0 else order
-    assert(eoc_rec.order_estimate() >= expected_order - 0.5
-                or eoc_rec.max_error() < 1e-11)
