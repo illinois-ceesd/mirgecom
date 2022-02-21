@@ -318,7 +318,7 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
 
         Thermally consistent fluid state
     """
-    cv_sd = discr.project(src, tgt, state.cv)
+    cv_sd = op.project(discr, src, tgt, state.cv)
     temperature_seed = None
     if state.is_mixture:
         temperature_seed = discr.project(src, tgt, state.dv.temperature)

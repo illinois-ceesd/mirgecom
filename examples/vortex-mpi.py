@@ -37,7 +37,7 @@ from grudge.array_context import (
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+from grudge.discretization import DiscretizationCollection
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
@@ -155,7 +155,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 3
-    discr = EagerDGDiscretization(
+    discr = DiscretizationCollection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)

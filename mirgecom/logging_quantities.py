@@ -46,6 +46,7 @@ from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
+import grudge.op as op
 
 from typing import Optional, Callable
 import numpy as np
@@ -262,13 +263,14 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     Possible rank aggregation operations (``op``) are: min, max, L2_norm.
     """
 
-    def __init__(self, discr: Discretization, quantity: str, op: str,
+    def __init__(self, discr: Discretization, quantity: str, operation: str,
                  extract_vars_for_logging, units_logging, name: str = None,
                  axis: Optional[int] = None):
         unit = units_logging(quantity)
 
         if name is None:
-            name = f"{op}_{quantity}" + (str(axis) if axis is not None else "")
+            name = (f"{operation}_{quantity}"
+                    + (str(axis) if axis is not None else ""))
 
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self, extract_vars_for_logging)
@@ -280,14 +282,14 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
         from functools import partial
 
-        if op == "min":
-            self._discr_reduction = partial(self.discr.nodal_min, "vol")
+        if operation == "min":
+            self._discr_reduction = partial(op.nodal_min, discr, "vol")
             self.rank_aggr = min
-        elif op == "max":
-            self._discr_reduction = partial(self.discr.nodal_max, "vol")
+        elif operation == "max":
+            self._discr_reduction = partial(op.nodal_max, discr, "vol")
             self.rank_aggr = max
-        elif op == "L2_norm":
-            self._discr_reduction = partial(self.discr.norm, p=2)
+        elif operation == "L2_norm":
+            self._discr_reduction = partial(op.norm, discr, p=2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")

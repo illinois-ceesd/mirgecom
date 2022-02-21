@@ -87,7 +87,7 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg divergence operator applied to vector-valued function(s) *v*.
     """
-    return -discr.inverse_mass(
+    return -op.inverse_mass(discr,
         op.weak_local_div(discr, dd_vol, v)
         - op.face_mass(discr, dd_faces, flux)
     )

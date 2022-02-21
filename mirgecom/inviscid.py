@@ -41,6 +41,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+import grudge.op as op
 from mirgecom.fluid import make_conserved
 
 
@@ -212,7 +213,7 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
     num_flux = numerical_flux_func(state_pair, gas_model, normal)
     dd = state_pair.dd
     dd_allfaces = dd.with_dtag("all_faces")
-    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+    return num_flux if local else op.project(discr, dd, dd_allfaces, num_flux)
 
 
 def inviscid_boundary_flux_for_divergence_operator(

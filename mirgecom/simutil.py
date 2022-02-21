@@ -311,7 +311,7 @@ def componentwise_norms(discr, fields, order=np.inf):
     if not isinstance(fields, DOFArray):
         return map_array_container(
             partial(componentwise_norms, discr, order=order), fields)
-    return discr.norm(fields, order)
+    return op.norm(discr, fields, order)
 
 
 def max_component_norm(discr, fields, order=np.inf):
