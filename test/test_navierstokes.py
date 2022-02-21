@@ -402,14 +402,24 @@ class FluidCase(metaclass=ABCMeta):
 class RoyManufacturedSolution(FluidCase):
     """CNS manufactured solution from [Roy_2017]__."""
 
-    def __init__(self, dim, alpha):
+    def __init__(self, dim, gas_model):
         """Initialize it."""
         super().__init__(dim)
-        self._alpha = alpha
 
-    def get_mesh(self, n):
+    def get_mesh(self, n=2, nx=None, lx=None, periodic=None):
         """Return the mesh."""
-        return _get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
+        if lx is None:
+            lx = (2*np.pi,)*self._dim
+        if len(lx) != self._dim:
+            raise ValueError("Improper dimension for lx.")
+        if nx is None:
+            nx = (n,)*self._dim
+        if len(nx) != self._dim:
+            raise ValueError("Improper dimension for nx.")
+        self._lx = lx
+        a = -self._lx/2
+        b = self._lx/2
+        return _get_box_mesh(self.dim, a, b, nx, periodic)
 
     def get_solution(self, x, t):
         """Return the symbolically-compatible solution."""
@@ -476,27 +486,34 @@ class RoyManufacturedSolution(FluidCase):
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=energy)
 
-    def get_alpha(self, x, t, u):
-        return self._alpha
-
     def get_boundaries(self, discr, actx, t):
-        boundaries = {}
 
-        for i in range(self.dim-1):
-            lower_btag = DTAG_BOUNDARY("-"+str(i))
-            upper_btag = DTAG_BOUNDARY("+"+str(i))
-            boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
-            boundaries[upper_btag] = NeumannDiffusionBoundary(0.)
-        lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
-        upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
-        boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
-        boundaries[upper_btag] = DirichletDiffusionBoundary(0.)
+        def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            # need to evaluate symbolic soln for this part
+            return make_fluid_state(self.get_solution(x=nodes, t=t), gas_model)
 
-        return boundaries
+        return {BTAG_ALL :
+                PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)}
 
-def sym_diffusion(dim, sym_alpha, sym_u):
-    """Return a symbolic expression for the diffusion operator applied to a function.
-    """
+
+def sym_ns(sym_cv):
+    """Return symbolic expression for the NS operator applied to a fluid state."""
+    dim = sym_cv.dim
+    rho = sym_cv.mass
+    mom = sym_cv.momentum
+    nrg = sym_cv.energy
+
+    vel = mom/rho
+    pressure = (gamma-1)*(nrg - rho*np.dot(vel, vel)/2)
+
+    f_m_i = mom
+    f_p_i = rho*(np.outer(vel, vel)) + pressure*np.eye(dim)
+    f_e_i = (nrg + pressure)*vel
+
+    gv = sim_grad(dim, vel)
     return sym_div(sym_alpha * sym_grad(dim, sym_u))
 
 
