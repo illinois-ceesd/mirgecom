@@ -13,6 +13,9 @@ Boundary Conditions
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
 .. autoclass:: IsothermalNoSlipBoundary
+.. autoclass:: FarfieldBoundary
+.. autoclass:: InflowBoundary
+.. autoclass:: OutflowBoundary
 """
 
 __copyright__ = """
@@ -515,3 +518,261 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value to weakly prescribe wall bc."""
         return 2*self._wall_temp - state_minus.temperature
+
+
+class FarfieldBoundary(PrescribedFluidBoundary):
+    r"""Farfield boundary treatment.
+
+    This class implements a farfield boundary as described by
+    [Mengaldo_2014]_.  The boundary condition is implemented
+    as:
+    $q_bc = q_\inf$
+    """
+
+    def __init__(self, numdim, numspecies, free_stream_temperature=300,
+                 free_stream_pressure=101325, free_stream_velocity=None,
+                 free_stream_mass_fractions=None):
+        """Initialize the boundary condition object."""
+        if free_stream_velocity is None:
+            free_stream_velocity = np.zeros(numdim)
+        if len(free_stream_velocity) != numdim:
+            raise ValueError("Free-stream velocity must be of ambient dimension.")
+        if numspecies > 0:
+            if free_stream_mass_fractions is None:
+                raise ValueError("Free-stream species mixture fractions must be"
+                                 " given.")
+            if len(free_stream_mass_fractions) != numspecies:
+                raise ValueError("Free-stream species mixture fractions of improper"
+                                 " size.")
+
+        self._temperature = free_stream_temperature
+        self._pressure = free_stream_pressure
+        self._species_mass_fractions = free_stream_mass_fractions
+        self._velocity = free_stream_velocity
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.farfield_state,
+            boundary_temperature_func=self.temperature_bc
+        )
+
+    def farfield_state(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary."""
+        free_stream_mass_fractions = (0*state_minus.species_mass_fractions
+                                      + self._species_mass_fractions)
+        free_stream_temperature = 0*state_minus.temperature + self._temperature
+        free_stream_pressure = 0*state_minus.pressure + self._pressure
+        free_stream_density = gas_model.eos.get_density(
+            pressure=free_stream_pressure, temperature=free_stream_temperature,
+            mass_fractions=free_stream_mass_fractions)
+        free_stream_velocity = 0*state_minus.velocity + self._velocity
+        free_stream_internal_energy = gas_model.eos.get_internal_energy(
+            temperature=free_stream_temperature,
+            mass_fractions=free_stream_mass_fractions)
+
+        free_stream_total_energy = \
+            free_stream_density*(free_stream_internal_energy
+                                 + .5*np.dot(free_stream_velocity,
+                                             free_stream_velocity))
+        free_stream_spec_mass = free_stream_density * free_stream_mass_fractions
+
+        cv_infinity = make_conserved(
+            state_minus.dim, mass=free_stream_density,
+            energy=free_stream_total_energy,
+            momentum=free_stream_density*free_stream_velocity,
+            species_mass=free_stream_spec_mass
+        )
+
+        return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
+                                temperature_seed=free_stream_temperature)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Get temperature value to weakly prescribe wall bc."""
+        return 0*state_minus.temperature + self._temperature
+
+
+class OutflowBoundary(PrescribedFluidBoundary):
+    r"""Outflow boundary treatment.
+
+    This class implements an outflow boundary as described by
+    [Mengaldo_2014]_.  The boundary condition is implemented
+    as:
+
+    .. math:
+
+        \rho^+ &= \rho^-
+        \rho\mathbf{Y}^+ &= \rho\mathbf{Y}^-
+        \rho\mathbf{V}^+ &= \rho^\mathbf{V}^-
+
+    Total energy for the flow is computed as follows:
+
+
+    When the flow is super-sonic, i.e. when:
+
+    .. math:
+
+       \rho\mathbf{V} \cdot \hat\mathbf{n} \ge c,
+
+    then the internal solution is used outright:
+
+    .. math:
+
+        \rho{E}^+ &= \rho{E}^-
+
+    otherwise the flow is sub-sonic, and the prescribed boundary pressure,
+    $P^+$, is used to compute the energy:
+
+    .. math:
+
+        \rho{E}^+ &= \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
+        + \frac{1}{2\rho^+}\left(\rho\mathbf{V}^+\cdot\rho\mathbf{V}^+\right).
+    """
+
+    def __init__(self, boundary_pressure=101325):
+        """Initialize the boundary condition object."""
+        self._pressure = boundary_pressure
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.outflow_state
+        )
+
+    def outflow_state(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
+
+        This is the partially non-reflective boundary state described by
+        [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
+        """
+        actx = state_minus.array_context
+        nhat = thaw(discr.normal(btag), actx)
+        # boundary-normal velocity
+        boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
+        boundary_speed = actx.np.sqrt(np.dot(boundary_vel, boundary_vel))
+        speed_of_sound = state_minus.speed_of_sound
+        kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
+        gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
+        external_pressure = 2*self._pressure - state_minus.pressure
+        boundary_pressure = actx.np.where(boundary_speed >= speed_of_sound,
+                                          state_minus.pressure, external_pressure)
+        internal_energy = boundary_pressure / (gamma - 1)
+        total_energy = internal_energy + kinetic_energy
+        cv_outflow = state_minus.cv.replace(energy=total_energy)
+
+        return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+
+class InflowBoundary(PrescribedFluidBoundary):
+    r"""Inflow boundary treatment.
+
+    This class implements an outflow boundary as described by
+    [Mengaldo_2014]_.  The boundary condition is implemented
+    as:
+
+    .. math:
+
+        \rho^+ &= \rho^-
+        \rho\mathbf{Y}^+ &= \rho\mathbf{Y}^-
+        \rho\mathbf{V}^+ &= \rho^\mathbf{V}^-
+
+    Total energy for the flow is computed as follows:
+
+
+    When the flow is super-sonic, i.e. when:
+
+    .. math:
+
+       \rho\mathbf{V} \cdot \hat\mathbf{n} \ge c,
+
+    then the internal solution is used outright:
+
+    .. math:
+
+        \rho{E}^+ &= \rho{E}^-
+
+    otherwise the flow is sub-sonic, and the prescribed boundary pressure,
+    $P^+$, is used to compute the energy:
+
+    .. math:
+
+        \rho{E}^+ &= \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
+        + \frac{1}{2\rho^+}\left(\rho\mathbf{V}^+\cdot\rho\mathbf{V}^+\right).
+    """
+
+    def __init__(self, dim, free_stream_pressure=None, free_stream_temperature=None,
+                 free_stream_density=None, free_stream_velocity=None,
+                 free_stream_mass_fractions=None, gas_model=None):
+        """Initialize the boundary condition object."""
+        if free_stream_velocity is None:
+            raise ValueError("InflowBoundary requires *free_stream_velocity*.")
+
+        from mirgecom.initializers import initialize_fluid_state
+        self._free_stream_state = initialize_fluid_state(
+            dim, gas_model, density=free_stream_density,
+            velocity=free_stream_velocity,
+            mass_fractions=free_stream_mass_fractions, pressure=free_stream_pressure,
+            temperature=free_stream_temperature)
+
+        self._gamma = gas_model.eos.gamma(
+            self._free_stream_state.cv,
+            temperature=self._free_stream_state.temperature
+        )
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.inflow_state
+        )
+
+    def inflow_state(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
+
+        This is the partially non-reflective boundary state described by
+        [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
+        """
+        actx = state_minus.array_context
+        nhat = thaw(discr.normal(btag), actx)
+
+        v_plus = np.dot(self._free_stream_state.velocity, nhat)
+        rho_plus = self._free_stream_state.mass_density
+        c_plus = self._free_stream_state.speed_of_sound
+        gamma_plus = self._gamma
+
+        v_minus = np.dot(state_minus.velocity, nhat)
+        gamma_minus = gas_model.eos.gamma(state_minus.cv,
+                                          temperature=state_minus.temperature)
+        c_minus = state_minus.speed_of_sound
+
+        ones = 0*v_minus + 1
+        r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
+        r_plus_supersonic = (v_plus + 2*c_plus/(gamma_plus - 1))*ones
+        r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
+        r_plus = actx.np.where(v_minus >= c_minus, r_plus_supersonic,
+                               r_plus_subsonic)
+
+        velocity_boundary = (r_minus + r_plus)/2
+        velocity_boundary = (
+            self._free_stream_state.velocity + (velocity_boundary - v_plus)*nhat
+        )
+
+        c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
+        c_boundary2 = c_boundary**2
+        entropy_boundary = c_plus*c_plus/(gamma_plus*rho_plus**(gamma_plus-1))
+        rho_boundary = c_boundary*c_boundary/(gamma_plus * entropy_boundary)
+        pressure_boundary = rho_boundary * c_boundary2 / gamma_plus
+        energy_boundary = (
+            pressure_boundary / (gamma_plus - 1)
+            + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+        )
+        species_mass_boundary = None
+        if self._free_stream_state.is_mixture:
+            species_mass_boundary = (
+                rho_boundary * self._free_stream_state.species_mass_fractions
+            )
+
+        boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
+                                     energy=energy_boundary,
+                                     momentum=rho_boundary * velocity_boundary,
+                                     species_mass=species_mass_boundary)
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+        def temperature_bc(self, state_minus, **kwargs):
+            """Get temperature value to weakly prescribe wall bc."""
+            return 0*state_minus.temperature + self._free_stream_temperature
