@@ -21,6 +21,7 @@ dependencies:
 - python=3.9
 - pip
 - pytest
+- pylint
 - pydocstyle
 - cantera
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
