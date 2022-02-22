@@ -526,6 +526,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     This class implements a farfield boundary as described by
     [Mengaldo_2014]_.  The boundary condition is implemented
     as:
+
     $q_bc = q_\inf$
     """
 
@@ -586,7 +587,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
                                 temperature_seed=free_stream_temperature)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Get temperature value to weakly prescribe wall bc."""
+        """Get temperature value to weakly prescribe flow temperature at boundary."""
         return 0*state_minus.temperature + self._temperature
 
 
@@ -662,38 +663,8 @@ class OutflowBoundary(PrescribedFluidBoundary):
 class InflowBoundary(PrescribedFluidBoundary):
     r"""Inflow boundary treatment.
 
-    This class implements an outflow boundary as described by
-    [Mengaldo_2014]_.  The boundary condition is implemented
-    as:
-
-    .. math:
-
-        \rho^+ &= \rho^-
-        \rho\mathbf{Y}^+ &= \rho\mathbf{Y}^-
-        \rho\mathbf{V}^+ &= \rho^\mathbf{V}^-
-
-    Total energy for the flow is computed as follows:
-
-
-    When the flow is super-sonic, i.e. when:
-
-    .. math:
-
-       \rho\mathbf{V} \cdot \hat\mathbf{n} \ge c,
-
-    then the internal solution is used outright:
-
-    .. math:
-
-        \rho{E}^+ &= \rho{E}^-
-
-    otherwise the flow is sub-sonic, and the prescribed boundary pressure,
-    $P^+$, is used to compute the energy:
-
-    .. math:
-
-        \rho{E}^+ &= \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
-        + \frac{1}{2\rho^+}\left(\rho\mathbf{V}^+\cdot\rho\mathbf{V}^+\right).
+    This class implements an inflow boundary as described by
+    [Mengaldo_2014]_.
     """
 
     def __init__(self, dim, free_stream_pressure=None, free_stream_temperature=None,
@@ -774,5 +745,5 @@ class InflowBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
         def temperature_bc(self, state_minus, **kwargs):
-            """Get temperature value to weakly prescribe wall bc."""
-            return 0*state_minus.temperature + self._free_stream_temperature
+            """Temperature value that prescribes the desired temperature."""
+            return -state_minus.temperature + 2.0*self._free_stream_temperature
