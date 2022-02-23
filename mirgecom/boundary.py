@@ -527,7 +527,8 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     [Mengaldo_2014]_.  The boundary condition is implemented
     as:
 
-    $q_bc = q_\inf$
+    .. math::
+        q_bc = q_\infty
     """
 
     def __init__(self, numdim, numspecies, free_stream_temperature=300,
