@@ -18,3 +18,4 @@ unique features they exercise are as follows:
 - `doublemach-mpi.py`: AV test case
 - `nsmix-mpi.py`: Viscous mixture w/Pyrometheus-based EOS
 - `poiseuille-mpi.py`: Poiseuille flow verification case
+- `poiseuille-multispecies-mpi.py`: Poiseuille flow with passive scalars
