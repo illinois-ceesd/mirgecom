@@ -510,7 +510,7 @@ def get_viscous_timestep(discr, state):
     nu = 0
     d_alpha_max = 0
     if state.is_viscous:
-        nu = state.viscosity / state.density
+        nu = state.viscosity / state.mass_density
         d_alpha_max = \
             get_local_max_species_diffusivity(
                 state.array_context,
