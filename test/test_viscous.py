@@ -489,8 +489,9 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("mu", [-1, 0, 1, 2])
-@pytest.mark.parametrize("vel", [0, 1])
-def test_viscous_timestep(actx_factory, dim, mu, vel):
+@pytest.mark.parametrize("vel_val", [0, 1, 2])
+@pytest.mark.parametrize("mass_val", [1, 2])
+def test_viscous_timestep(actx_factory, dim, mu, vel_val, mass_val):
     """Test timestep size."""
     actx = actx_factory()
     nel_1d = 4
@@ -502,35 +503,43 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
     )
 
     order = 1
-
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    zeros = discr.zeros(actx)
-    ones = zeros + 1.0
-
-    velocity = make_obj_array([zeros+vel for _ in range(dim)])
-
-    massval = 1
-    mass = massval*ones
-
-    # I *think* this energy should yield c=1.0
-    energy = zeros + 1.0 / (1.4*.4)
-    mom = mass * velocity
-    species_mass = None
-
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                        species_mass=species_mass)
-
-    from grudge.dt_utils import characteristic_lengthscales
-    chlen = characteristic_lengthscales(actx, discr)
-    from grudge.op import nodal_min
-    chlen_min = nodal_min(discr, "vol", chlen)
-
-    mu = mu*chlen_min
+    gamma = 1.4
     if mu < 0:
         mu = 0
         tv_model = None
     else:
         tv_model = SimpleTransport(viscosity=mu)
+
+    discr = EagerDGDiscretization(actx, mesh, order=order)
+    zeros = discr.zeros(actx)
+    ones = zeros + 1.0
+
+    vel_mag = np.sqrt(dim*vel_val**2)
+    pressure = mass_val / gamma
+    ke_val = mass_val * vel_mag * vel_mag/2.
+    ie_val = pressure/(gamma - 1)
+    energy_total_val = ie_val + ke_val
+    wavespeed_val = vel_mag + 1.0
+    nu = mu / mass_val
+
+    # we assume "chlen" in these tests is correct
+    from grudge.dt_utils import characteristic_lengthscales
+    chlen = characteristic_lengthscales(actx, discr)
+    # from grudge.op import nodal_min
+    # chlen_min = nodal_min(discr, "vol", chlen)
+
+    dt_expected = chlen / (wavespeed_val + (nu / chlen))
+    print(f"{dt_expected=}")
+    tol = 1e-12
+
+    mass = mass_val*ones
+    energy = zeros + energy_total_val
+    velocity = make_obj_array([zeros+vel_val for _ in range(dim)])
+    mom = mass * velocity
+    species_mass = None
+
+    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
+                        species_mass=species_mass)
 
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=tv_model)
@@ -538,9 +547,7 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
 
     from mirgecom.viscous import get_viscous_timestep
     dt_field = get_viscous_timestep(discr, fluid_state)
+    print(f"{dt_field=}")
 
-    speed_total = fluid_state.wavespeed
-    dt_expected = chlen / (speed_total + (mu / chlen))
-
-    error = (dt_expected - dt_field) / dt_expected
-    assert actx.to_numpy(discr.norm(error, np.inf)) == 0
+    error = (dt_field - dt_expected) / dt_expected
+    assert actx.to_numpy(discr.norm(error, np.inf)) < tol
