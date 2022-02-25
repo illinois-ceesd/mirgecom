@@ -507,10 +507,10 @@ def get_viscous_timestep(discr, state):
 
     length_scales = characteristic_lengthscales(state.array_context, discr)
 
-    mu = 0
+    nu = 0
     d_alpha_max = 0
     if state.is_viscous:
-        mu = state.viscosity
+        nu = state.viscosity / state.density
         d_alpha_max = \
             get_local_max_species_diffusivity(
                 state.array_context,
@@ -519,7 +519,7 @@ def get_viscous_timestep(discr, state):
 
     return(
         length_scales / (state.wavespeed
-        + ((mu + d_alpha_max) / length_scales))
+        + ((nu + d_alpha_max) / length_scales))
     )
 
 
