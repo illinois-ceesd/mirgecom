@@ -402,8 +402,7 @@ class FluidCase(metaclass=ABCMeta):
 class FluidManufacturedSolution(FluidCase):
     """Generic fluid manufactured solution for fluid."""
 
-    def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
-                 gamma=1.4, gas_const=287.):
+    def __init__(self, dim, n=2, lx=None, nx=None, gamma=1.4, gas_const=287.):
         """Initialize it."""
         super().__init__(dim)
         if lx is None:
@@ -416,10 +415,16 @@ class FluidManufacturedSolution(FluidCase):
 
     @abstractmethod
     def get_mesh(self, n=2, periodic=None):
-        """Return the mesh."""
+        """Return the mesh: [-pi, pi] by default."""
         nx = (n,)*self._dim
-        a = -self._lx/2
-        b = self._lx/2
+        a = (-self._lx[0]/2,)
+        b = (self._lx[0]/2,)
+        if self._dim == 2:
+            a = (a[0], -self._lx[1]/2)
+            b = (b[0], self._lx[1]/2)
+        if self._dim == 3:
+            a = (a[0], -self._lx[1]/2, -self._lx[2]/2)
+            b = (b[0], self._lx[1]/2, self._lx[2]/2)
         return _get_box_mesh(self.dim, a, b, nx, periodic)
 
     @abstractmethod
@@ -429,7 +434,7 @@ class FluidManufacturedSolution(FluidCase):
 
     @abstractmethod
     def get_boundaries(self, discr, actx, t):
-        """Get the boundary condition dictionary for the solution."""
+        """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
 
         def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
@@ -504,9 +509,12 @@ class RoyManufacturedSolution(FluidManufacturedSolution):
                               energy=energy), press, temperature
 
 
+# ==== Some trivial and known/exact solutions ===
 class UniformSolution(FluidManufacturedSolution):
     """Trivial manufactured solution."""
+
     def __init__(self, dim=2, density=1, pressure=1, velocity=None):
+        """Init the man soln."""
         super().__init__(dim)
         if velocity is None:
             velocity = make_obj_array([0 for _ in range(dim)])
@@ -515,21 +523,141 @@ class UniformSolution(FluidManufacturedSolution):
         self._rho = density
         self._pressure = pressure
 
+    def get_mesh(self, n):
+        """Get the mesh."""
+        return super().get_mesh(n)
+
+    def get_boundaries(self, discr, actx, t):
+        """Get the boundaries."""
+        return super().get_boundaries(discr, actx, t)
+
     def get_solution(self, x, t):
         """Return sym soln."""
         zeros = 0*x[0]
         ones = zeros + 1.
+
         density = self._rho*ones
-        velocity = make_obj_array([self._velocity[i]*ones
+        velocity = make_obj_array([self._vel[i]*ones
                                    for i in range(self._dim)])
+
         mom = density*velocity
         ie = self._pressure / (self._gamma - 1)
         pressure = self._pressure*ones
         ke = .5*density*np.dot(velocity, velocity)
         total_energy = ie + ke
         temperature = pressure / (self._gas_const * density)
+
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=total_energy), pressure, temperature
+
+
+class ShearFlow(FluidManufacturedSolution):
+    """Trivial manufactured solution."""
+
+    def __init__(self, dim=2, density=1, pressure=1, velocity=None):
+        """Init the solution object."""
+        super().__init__(dim)
+        # if velocity is None:
+        #     velocity = make_obj_array([0 for _ in range(dim)])
+        # assert len(velocity) == dim
+        # self._vel = velocity
+        # self._rho = density
+        # self._pressure = pressure
+
+    def get_mesh(self, n):
+        """Get the mesh."""
+        return super().get_mesh(n)
+
+    def get_boundaries(self, discr, actx, t):
+        """Get the boundaries."""
+        return super().get_boundaries(discr, actx, t)
+
+    def get_solution(self, x, t):
+        """Return sym soln."""
+        x = x[0]
+        y = x[1]
+        zeros = 0*x
+        ones = zeros + 1.
+        v_x = y*y
+        v_y = 0*ones
+        density = 1*ones
+        velocity = make_obj_array([v_x, v_y])
+        mom = density*velocity
+        mu = 1
+        pressure = 2*mu*x+10
+        ie = pressure/(self._gamma - 1)
+        ke = y*y*y*y/2
+        total_energy = ie + ke
+        temperature = pressure / (self._gas_const * density)
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=total_energy), pressure, temperature
+
+
+class IsentropicVortex(FluidManufacturedSolution):
+    """Isentropic vortex from [Hesthaven_2008]_."""
+
+    def __init__(
+            self, dim, *, beta=5, center=(0, 0), velocity=(0, 0),
+            gas_constant=287.
+    ):
+        """Initialize vortex parameters.
+
+        Parameters
+        ----------
+        beta: float
+            vortex amplitude
+        center: numpy.ndarray
+            center of vortex, shape ``(2,)``
+        velocity: numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0, shape ``(2,)``
+        """
+        super().__init__(dim)
+        self._beta = beta
+        self._center = np.array(center)
+        self._velocity = np.array(velocity)
+        self._gas_const = gas_constant
+
+    def get_solution(self, x, t):
+        """
+        Create the isentropic vortex solution at time *t* at locations *x_vec*.
+
+        The solution at time *t* is created by advecting the vortex under the
+        assumption of user-supplied constant, uniform velocity
+        (``Vortex2D._velocity``).
+
+        Parameters
+        ----------
+        t: float
+            Current time at which the solution is desired.
+        x: numpy.ndarray
+            Coordinates for points at which solution is desired.
+        eos: mirgecom.eos.IdealSingleGas
+            Equation of state class to supply method for gas *gamma*.
+        """
+        # if eos is None:
+        #    eos = IdealSingleGas()
+        vortex_loc = self._center + t * self._velocity
+
+        # coordinates relative to vortex center
+        x_rel = x[0] - vortex_loc[0]
+        y_rel = x[1] - vortex_loc[1]
+        actx = x_rel.array_context
+
+        gamma = 1.4  # eos.gamma()
+        r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
+        expterm = self._beta * actx.np.exp(1 - r ** 2)
+        u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
+        v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
+        velocity = make_obj_array([u, v])
+        mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
+                * expterm ** 2) ** (1 / (gamma - 1))
+        momentum = mass * velocity
+        p = mass ** gamma
+
+        energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
+        temperature = p / (mass*self._gas_const)
+        return make_conserved(dim=2, mass=mass, energy=energy,
+                              momentum=momentum), p, temperature
 
 
 class TrigSolution1(FluidManufacturedSolution):
@@ -554,12 +682,38 @@ class TrigSolution1(FluidManufacturedSolution):
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=energy), press, temperature
 
+    def get_mesh(self, x, t):
+        """Get the mesh."""
+        return super().get_mesh(x, t)
+
+    def get_boundaries(self):
+        """Get the boundaries."""
+        return super().get_boundaries()
+
 
 def _compute_mms_source(sym_operator, sym_soln, sym_t):
     return sym_diff(sym_soln)(sym_t) - sym_operator(sym_soln)
 
 
-def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_const=287.,
+def sym_euler(sym_cv, sym_pressure, gamma=1.4, gas_constant=287.):
+    """Return symbolic expression for the NS operator applied to a fluid state."""
+    dim = sym_cv.dim
+    rho = sym_cv.mass
+    mom = sym_cv.momentum
+    nrg = sym_cv.energy
+    prs = sym_pressure
+    vel = mom / rho
+
+    # inviscid fluxes
+    f_m_i = mom
+    f_p_i = rho*(np.outer(vel, vel)) + prs*np.eye(dim)
+    f_e_i = (nrg + prs)*vel
+    f_i = make_obj_array([f_m_i, f_e_i, f_p_i])
+
+    return -sym_div(f_i)
+
+
+def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_constant=287.,
            prandtl=1.0):
     """Return symbolic expression for the NS operator applied to a fluid state."""
     dim = sym_cv.dim
@@ -585,7 +739,7 @@ def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_const=287
     tau = 2*mu/3*((dvel + dvel.T) - (dvel.trace))
 
     # heat flux
-    kappa = gamma * gas_const * mu / (prandtl * (gamma - 1))
+    kappa = gamma * gas_constant * mu / (prandtl * (gamma - 1))
     q_heat = -kappa * dtmp
 
     # viscous fluxes
@@ -608,12 +762,13 @@ def test_ns_mms(actx_factory):
     # x_coeff = ()
     # man_soln = RoyManufacturedSolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff)
     man_soln = UniformSolution()
+
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
-
-    sym_source = -sym_ns(sym_cv, sym_prs, sym_tmp)
     print(f"{sym_cv=}")
-    print(f"{sym_source=}")
 
+    sym_source = -sym_euler(sym_cv, sym_prs)
+    # sym_source = -sym_ns(sym_cv, sym_prs, sym_tmp)
+    print(f"{sym_source=}")
     n = 2
     mesh = man_soln.get_mesh(n)
 
@@ -631,16 +786,25 @@ def test_ns_mms(actx_factory):
         }
     )
 
-    # nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
+    print(f"{nodes=}")
+    source_eval = evaluate(sym_source, x=nodes, t=0)
+    print(f"{source_eval=}")
+
+    cv_eval = evaluate(sym_cv, x=nodes, t=0)
+    print(f"{cv_eval=}")
+
+    assert False
 
     # def get_rhs(t, u):
     #    # Hrm, need fluid state for this part....
+    #    from mirgecom.gas_model import make_fluid_state
     #    fluid_state = make_fluid_state(...)   # uh
     #    return (ns_operator(
     #        discr, boundaries=man_soln.get_boundaries(discr, actx, t),
     #        state=fluid_state)
     #            + evaluate(sym_source, x=nodes, t=t))
-    # 
+    #
     # t = 0.
     # from mirgecom.integrators import rk4_step
     # dt = 1e-9
@@ -652,4 +816,3 @@ def test_ns_mms(actx_factory):
     #     t += dt
 
     # expected_cv = sym_cv
-
