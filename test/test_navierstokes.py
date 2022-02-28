@@ -399,23 +399,22 @@ class FluidCase(metaclass=ABCMeta):
         pass
 
 
-class RoyManufacturedSolution(FluidCase):
-    """CNS manufactured solution from [Roy_2017]__."""
+class FluidManufacturedSolution(FluidCase):
+    """Generic fluid manufactured solution for fluid."""
 
     def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
                  gamma=1.4, gas_const=287.):
         """Initialize it."""
         super().__init__(dim)
         if lx is None:
-            lx = (2*np.pi,)*self._dim
+            lx = (2.*np.pi,)*self._dim
         if len(lx) != self._dim:
             raise ValueError("Improper dimension for lx.")
         self._gamma = gamma
         self._gas_const = gas_const
-        self._q_coeff = q_coeff
-        self._x_coeff = x_coeff
         self._lx = lx
 
+    @abstractmethod
     def get_mesh(self, n=2, periodic=None):
         """Return the mesh."""
         nx = (n,)*self._dim
@@ -423,58 +422,73 @@ class RoyManufacturedSolution(FluidCase):
         b = self._lx/2
         return _get_box_mesh(self.dim, a, b, nx, periodic)
 
+    @abstractmethod
+    def get_solution(self, x, t):
+        """Return the symbolically-compatible solution."""
+        pass
+
+    @abstractmethod
+    def get_boundaries(self, discr, actx, t):
+        """Get the boundary condition dictionary for the solution."""
+        from mirgecom.gas_model import make_fluid_state
+
+        def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            # need to evaluate symbolic soln for this part
+            return make_fluid_state(self.get_solution(x=nodes, t=t), gas_model)
+
+        return {BTAG_ALL:
+                PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)}
+
+
+class RoyManufacturedSolution(FluidManufacturedSolution):
+    """CNS manufactured solution from [Roy_2017]__."""
+
+    def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
+                 gamma=1.4, gas_const=287.):
+        """Initialize it."""
+        super().__init__(dim, lx, gamma, gas_const)
+        self._q_coeff = q_coeff
+        self._x_coeff = x_coeff
+
     def get_solution(self, x, t):
         """Return the symbolically-compatible solution."""
         c = self._q_coeff[0]
-        ar = self._x_coeff[0]
+        ax = self._x_coeff[0]
         lx = self._lx
         omega_x = [np.pi*x[i]/lx[i] for i in range(self._dim)]
 
-        # rho = rho_0 + rho_x*sin(ar_x*pi*x/L_x) + rho_y*cos(ar_y*pi*y/L_y)
-        #       + rho_z*sin(ar_z*pi*z/L_z)
-        density = (c[0] + c[1]*mm.sin(ar[0]*omega_x[0]))
-        if self._dim > 1:
-            density = density + c[2]*mm.cos(ar[1]*omega_x[1])
-        if self._dim > 2:
-            density = density + c[3]*mm.sin(ar[2]*omega_x[2])
+        funcs = [mm.sin, mm.cos, mm.sin]
+        density = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
+                             for i in range(self._dim))
 
-        # p = p_0 + p_x*cos(ap_x*pi*x/L_x) + p_y*sin(ap_y*pi*y/L_y)
-        #     + p_z*cos(ap_z*pi*z/L_z)
         c = self._q_coeff[1]
-        ap = self._x_coeff[1]
-        press = c[0] + c[1]*mm.cos(ap[0]*omega_x[1])
-        if self._dim > 1:
-            press = press + c[2]*mm.sin(ap[1]*omega_x[2])
-        if self._dim > 2:
-            press = press + c[3]*mm.cos(ap[2]*omega_x[3])
+        ax = self._x_coeff[1]
+        funcs = [mm.cos, mm.sin, mm.cos]
+        press = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
+                           for i in range(self._dim))
 
         c = self._q_coeff[2]
-        au = self._x_coeff[2]
-        # u = u_0 + u_x*sin(au_x*pi*x/L_x) + u_y*cos(au_y*pi*y/L_y)
-        #       + u_z*cos(au_z*pi*z/L_z)
-        u = (c[0] + c[1]*mm.sin(au[0]*omega_x[0]))
-        if self._dim > 1:
-            u = u + c[2]*mm.cos(au[1]*omega_x[1])
-        if self._dim > 2:
-            u = u + c[3]*mm.cos(au[2]*omega_x[2])
+        ax = self._x_coeff[2]
+        funcs = [mm.sin, mm.cos, mm.cos]
+        u = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
+                       for i in range(self._dim))
 
         if self._dim > 1:
             c = self._q_coeff[3]
-            av = self._x_coeff[3]
-            # v = v_0 + v_x*cos(av_x*pi*x/L_x) + v_y*sin(av_y*pi*y/L_y)
-            #       + v_z*sin(av_z*pi*z/L_z)
-            v = (c[0] + c[1]*mm.cos(av[0]*omega_x[0])
-                 + c[2]*mm.sin(av[1]*omega_x[1]))
-            if self._dim > 2:
-                v = v + c[3]*mm.sin(av[2]*omega_x[2])
-            if self._dim > 2:
-                c = self._q_coeff[4]
-                aw = self._x_coeff[4]
-                # w = w_0 + w_x*sin(aw_x*pi*x/L_x) + w_y*sin(aw_y*pi*y/L_y)
-                #       + w_z*cos(aw_z*pi*z/L_z)
-                w = (c[0] + c[1]*mm.sin(aw[0]*omega_x[0])
-                     + c[2]*mm.sin(aw[1]*omega_x[1])
-                     + c[3]*mm.cos(aw[2]*omega_x[2]))
+            ax = self._x_coeff[3]
+            funcs = [mm.cos, mm.sin, mm.sin]
+            v = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
+                           for i in range(self._dim))
+
+        if self._dim > 2:
+            c = self._q_coeff[4]
+            ax = self._x_coeff[4]
+            funcs = [mm.sin, mm.sin, mm.cos]
+            w = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
+                           for i in range(self._dim))
 
         if self._dim == 1:
             velocity = make_obj_array([u])
@@ -489,18 +503,60 @@ class RoyManufacturedSolution(FluidCase):
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=energy), press, temperature
 
-    def get_boundaries(self, discr, actx, t):
-        from mirgecom.gas_model import make_fluid_state
 
-        def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
-            actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
-            # need to evaluate symbolic soln for this part
-            return make_fluid_state(self.get_solution(x=nodes, t=t), gas_model)
+class UniformSolution(FluidManufacturedSolution):
+    """Trivial manufactured solution."""
+    def __init__(self, dim=2, density=1, pressure=1, velocity=None):
+        super().__init__(dim)
+        if velocity is None:
+            velocity = make_obj_array([0 for _ in range(dim)])
+        assert len(velocity) == dim
+        self._vel = velocity
+        self._rho = density
+        self._pressure = pressure
 
-        return {BTAG_ALL :
-                PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)}
+    def get_solution(self, x, t):
+        """Return sym soln."""
+        zeros = 0*x[0]
+        ones = zeros + 1.
+        density = self._rho*ones
+        velocity = make_obj_array([self._velocity[i]*ones
+                                   for i in range(self._dim)])
+        mom = density*velocity
+        ie = self._pressure / (self._gamma - 1)
+        pressure = self._pressure*ones
+        ke = .5*density*np.dot(velocity, velocity)
+        total_energy = ie + ke
+        temperature = pressure / (self._gas_const * density)
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=total_energy), pressure, temperature
+
+
+class TrigSolution1(FluidManufacturedSolution):
+    """CNS manufactured solution designed to vanish on the domain boundary."""
+
+    def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
+                 gamma=1.4, gas_const=287.):
+        """Initialize it."""
+        super().__init__(dim, lx, gamma, gas_const)
+        self._q_coeff = q_coeff
+        # self._x_coeff = x_coeff
+
+    def get_solution(self, x, t):
+        """Return the symbolically-compatible solution."""
+        velocity = 0
+        press = 1
+        density = 1
+
+        mom = density*velocity
+        temperature = press/(density*self._gas_const)
+        energy = press/(self._gamma - 1) + density*np.dot(velocity, velocity)
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=energy), press, temperature
+
+
+def _compute_mms_source(sym_operator, sym_soln, sym_t):
+    return sym_diff(sym_soln)(sym_t) - sym_operator(sym_soln)
 
 
 def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_const=287.,
@@ -546,18 +602,23 @@ def test_ns_mms(actx_factory):
     actx = actx_factory()
 
     dim = 2
-    q_coeff = ()
-    x_coeff = ()
-    man_soln = RoyManufacturedSolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff)
-
     sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
+    # q_coeff = ()
+    # x_coeff = ()
+    # man_soln = RoyManufacturedSolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff)
+    man_soln = UniformSolution()
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
 
-    sym_source = sym_ns(sym_cv, sym_prs, sym_tmp)
+    sym_source = -sym_ns(sym_cv, sym_prs, sym_tmp)
+    print(f"{sym_cv=}")
+    print(f"{sym_source=}")
 
+    n = 2
     mesh = man_soln.get_mesh(n)
 
+    order = 1
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.eager import EagerDGDiscretization
     from meshmode.discretization.poly_element import \
         QuadratureSimplexGroupFactory, \
@@ -570,25 +631,25 @@ def test_ns_mms(actx_factory):
         }
     )
 
-    nodes = thaw(actx, discr.nodes())
+    # nodes = thaw(actx, discr.nodes())
 
-    def get_rhs(t, u):
-        # Hrm, need fluid state for this part....
-        fluid_state = make_fluid_state(...)   # uh
-        return (ns_operator(
-            discr, boundaries=man_soln.get_boundaries(discr, actx, t),
-            state=fluid_state)
-                + evaluate(sym_source, x=nodes, t=t))
-
-    t = 0.
-    from mirgecom.integrators import rk4_step
-    dt = 1e-9
+    # def get_rhs(t, u):
+    #    # Hrm, need fluid state for this part....
+    #    fluid_state = make_fluid_state(...)   # uh
+    #    return (ns_operator(
+    #        discr, boundaries=man_soln.get_boundaries(discr, actx, t),
+    #        state=fluid_state)
+    #            + evaluate(sym_source, x=nodes, t=t))
+    # 
+    # t = 0.
+    # from mirgecom.integrators import rk4_step
+    # dt = 1e-9
     # cv = man_soln.get_solution()
-    nsteps = 1
+    # nsteps = 1
 
-    for _ in range(nsteps):
-        cv = rk4_step(cv, t, dt, get_rhs)
-        t += dt
+    # for _ in range(nsteps):
+    #     cv = rk4_step(cv, t, dt, get_rhs)
+    #     t += dt
 
-    expected_cv = sym_cv
+    # expected_cv = sym_cv
 
