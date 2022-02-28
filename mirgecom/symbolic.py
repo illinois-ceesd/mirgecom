@@ -74,6 +74,17 @@ class EvaluationMapper(BaseEvaluationMapper):
     Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
     """
 
+    def __init__(self, context=None, zeros_factory=None):
+        super().__init__(context)
+        self.zeros_factory = zeros_factory
+
+    def map_constant(self, expr):
+        value = super().map_constant(expr)
+        if self.zeros_factory is None:
+            return value
+        else:
+            return value + self.zeros_factory()
+
     def map_call(self, expr):
         """Map a symbolic code expression to actual function call."""
         from pymbolic.primitives import Variable
@@ -82,6 +93,21 @@ class EvaluationMapper(BaseEvaluationMapper):
         return getattr(mm, expr.function.name)(self.rec(par))
 
 
-def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
+def evaluate(expr, eval_mapper):
     """Evaluate a symbolic expression using a specified mapper."""
-    return mapper_type(kwargs)(expr)
+
+    if eval_mapper is None:
+        eval_mapper = EvaluationMapper()
+
+    from arraycontext.container import serialize_container, NotAnArrayContainerError
+    from arraycontext.container.traversal import map_array_container
+    from functools import partial
+    try:
+        serialize_container(expr)
+    except NotAnArrayContainerError:
+        pass
+    else:
+        return map_array_container(
+            partial(evaluate, eval_mapper=eval_mapper), expr)
+
+    return eval_mapper(expr)

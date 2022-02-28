@@ -24,6 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from functools import partial
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import numpy.random
@@ -48,6 +49,7 @@ from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
     div as sym_div,
+    EvaluationMapper,
     evaluate)
 import mirgecom.math as mm
 
@@ -788,10 +790,15 @@ def test_ns_mms(actx_factory):
 
     nodes = thaw(discr.nodes(), actx)
     print(f"{nodes=}")
-    source_eval = evaluate(sym_source, x=nodes, t=0)
+    eval_mapper = EvaluationMapper(
+            context=dict(x=nodes, t=0),
+            zeros_factory=partial(discr.zeros, actx))
+
+    source_eval = evaluate(sym_source, eval_mapper)
     print(f"{source_eval=}")
 
-    cv_eval = evaluate(sym_cv, x=nodes, t=0)
+    pu.db
+    cv_eval = evaluate(sym_cv, eval_mapper)
     print(f"{cv_eval=}")
 
     assert False
