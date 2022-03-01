@@ -93,7 +93,7 @@ class EvaluationMapper(BaseEvaluationMapper):
         return getattr(mm, expr.function.name)(self.rec(par))
 
 
-def evaluate(expr, eval_mapper):
+def evaluate(expr, eval_mapper=None):
     """Evaluate a symbolic expression using a specified mapper."""
 
     if eval_mapper is None:
