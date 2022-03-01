@@ -588,7 +588,7 @@ class ShearFlow(FluidManufacturedSolution):
         mu = 1
         pressure = 2*mu*x+10
         ie = pressure/(self._gamma - 1)
-        ke = y*y*y*y/2
+        ke = density*y*y*y*y/2
         total_energy = ie + ke
         temperature = pressure / (self._gas_const * density)
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
@@ -599,8 +599,8 @@ class IsentropicVortex(FluidManufacturedSolution):
     """Isentropic vortex from [Hesthaven_2008]_."""
 
     def __init__(
-            self, dim, *, beta=5, center=(0, 0), velocity=(0, 0),
-            gas_constant=287.
+            self, dim=2, *, beta=5, center=(0, 0), velocity=(0, 0),
+            gamma=1.4, gas_constant=287.
     ):
         """Initialize vortex parameters.
 
@@ -618,6 +618,15 @@ class IsentropicVortex(FluidManufacturedSolution):
         self._center = np.array(center)
         self._velocity = np.array(velocity)
         self._gas_const = gas_constant
+        self._gamma = gamma
+
+    def get_mesh(self, n):
+        """Get the mesh."""
+        return super().get_mesh(n)
+
+    def get_boundaries(self, discr, actx, t):
+        """Get the boundaries."""
+        return super().get_boundaries(discr, actx, t)
 
     def get_solution(self, x, t):
         """
@@ -636,21 +645,20 @@ class IsentropicVortex(FluidManufacturedSolution):
         eos: mirgecom.eos.IdealSingleGas
             Equation of state class to supply method for gas *gamma*.
         """
-        # if eos is None:
-        #    eos = IdealSingleGas()
+        gamma = self._gamma
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
         x_rel = x[0] - vortex_loc[0]
         y_rel = x[1] - vortex_loc[1]
-        actx = x_rel.array_context
 
-        gamma = 1.4  # eos.gamma()
-        r = actx.np.sqrt(x_rel ** 2 + y_rel ** 2)
-        expterm = self._beta * actx.np.exp(1 - r ** 2)
+        r2 = (x_rel ** 2 + y_rel ** 2)
+        expterm = self._beta * mm.exp(1 - r2)
+
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
         velocity = make_obj_array([u, v])
+
         mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
                 * expterm ** 2) ** (1 / (gamma - 1))
         momentum = mass * velocity
@@ -658,6 +666,7 @@ class IsentropicVortex(FluidManufacturedSolution):
 
         energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
         temperature = p / (mass*self._gas_const)
+
         return make_conserved(dim=2, mass=mass, energy=energy,
                               momentum=momentum), p, temperature
 
@@ -693,11 +702,44 @@ class TrigSolution1(FluidManufacturedSolution):
         return super().get_boundaries()
 
 
+class TestSolution(FluidManufacturedSolution):
+    """Trivial manufactured solution."""
+
+    def __init__(self, dim=2, density=1, pressure=1, velocity=None):
+        """Init the man soln."""
+        super().__init__(dim)
+        if velocity is None:
+            velocity = make_obj_array([0 for _ in range(dim)])
+        assert len(velocity) == dim
+        self._vel = velocity
+        self._rho = density
+        self._pressure = pressure
+
+    def get_mesh(self, n):
+        """Get the mesh."""
+        return super().get_mesh(n)
+
+    def get_boundaries(self, discr, actx, t):
+        """Get the boundaries."""
+        return super().get_boundaries(discr, actx, t)
+
+    def get_solution(self, x, t):
+        """Return sym soln."""
+        density = 1*x[0]
+        energy = 2*x[1]**2
+        mom = make_obj_array([i*x[0]*x[1] for i in range(self._dim)])
+        pressure = x[0]*x[0]*x[0]
+        temperature = x[1]*x[1]*x[1]
+
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=energy), pressure, temperature
+
+
 def _compute_mms_source(sym_operator, sym_soln, sym_t):
     return sym_diff(sym_soln)(sym_t) - sym_operator(sym_soln)
 
 
-def sym_euler(sym_cv, sym_pressure, gamma=1.4, gas_constant=287.):
+def sym_euler(sym_cv, sym_pressure, gamma=1.4, gas_constant=287., nspecies=0):
     """Return symbolic expression for the NS operator applied to a fluid state."""
     dim = sym_cv.dim
     rho = sym_cv.mass
@@ -710,9 +752,20 @@ def sym_euler(sym_cv, sym_pressure, gamma=1.4, gas_constant=287.):
     f_m_i = mom
     f_p_i = rho*(np.outer(vel, vel)) + prs*np.eye(dim)
     f_e_i = (nrg + prs)*vel
-    f_i = make_obj_array([f_m_i, f_e_i, f_p_i])
+    spec_rhs = None
+    if nspecies:
+        rhy = sym_cv.species_mass
+        f_y_i = rhy*vel
+        spec_rhs = -sym_div(f_y_i)
 
-    return -sym_div(f_i)
+    # f_i = make_obj_array([f_m_i, f_e_i, f_p_i])
+
+    mass_rhs = -sym_div(f_m_i)
+    energy_rhs = -sym_div(f_e_i)
+    # make_obj_array([-sym_div(f_p_i for i in range(dim)])
+    momentum_rhs = -sym_div(f_p_i)
+    return make_conserved(dim=dim, mass=mass_rhs, energy=energy_rhs,
+                          momentum=momentum_rhs, species_mass=spec_rhs)
 
 
 def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_constant=287.,
@@ -753,17 +806,24 @@ def sym_ns(sym_cv, sym_temperature, sym_pressure, mu=1, gamma=1.4, gas_constant=
     return sym_div(f_v - f_i)
 
 
-def test_ns_mms(actx_factory):
+# @pytest.mark.parametrize("nspecies", [0, 10])
+@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize(("dim", "manufactured_soln", "use_zfac"),
+                         [(1, UniformSolution(dim=1), 1),
+                          (2, UniformSolution(dim=2), 1),
+                          (3, UniformSolution(dim=3), 1),
+                          (2, IsentropicVortex(), 0),
+                          (2, ShearFlow(), 0)])
+def test_exact_mms(actx_factory, order, dim, manufactured_soln, use_zfac):
     """CNS manufactured solution tests."""
     actx = actx_factory()
 
-    dim = 2
     sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     # q_coeff = ()
     # x_coeff = ()
     # man_soln = RoyManufacturedSolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff)
-    man_soln = UniformSolution()
+    man_soln = manufactured_soln
 
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
     print(f"{sym_cv=}")
@@ -773,7 +833,7 @@ def test_ns_mms(actx_factory):
     print(f"{sym_source=}")
     n = 2
     mesh = man_soln.get_mesh(n)
-
+    tol = 1e-16
     order = 1
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.eager import EagerDGDiscretization
@@ -789,20 +849,31 @@ def test_ns_mms(actx_factory):
     )
 
     nodes = thaw(discr.nodes(), actx)
-    print(f"{nodes=}")
-    eval_mapper = EvaluationMapper(
-            context=dict(x=nodes, t=0),
-            zeros_factory=partial(discr.zeros, actx))
+    # print(f"{nodes=}")
+    zeros_factory = None
+    if use_zfac:
+        zeros_factory = partial(discr.zeros, actx)
+    eval_mapper = EvaluationMapper(context=dict(x=nodes, t=0),
+                                   zeros_factory=zeros_factory)
+
+    cv_eval = evaluate(sym_cv, eval_mapper)
+    print(f"{cv_eval=}")
 
     source_eval = evaluate(sym_source, eval_mapper)
     print(f"{source_eval=}")
 
-    pu.db
-    cv_eval = evaluate(sym_cv, eval_mapper)
-    print(f"{cv_eval=}")
+    from mirgecom.simutil import componentwise_norms
+    source_norms = componentwise_norms(discr, source_eval)
+    print(f"{source_norms=}")
 
-    assert False
+    assert source_norms.mass < tol
+    assert source_norms.energy < tol
+    for i in range(dim):
+        assert source_norms.momentum[i] < tol
 
+    # pu.db
+
+    # assert False
     # def get_rhs(t, u):
     #    # Hrm, need fluid state for this part....
     #    from mirgecom.gas_model import make_fluid_state
