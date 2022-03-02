@@ -27,13 +27,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from grudge.array_context import (
-    PyOpenCLArrayContext,
-    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
-)
-
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
@@ -57,8 +50,11 @@ from logpyle import IntervalTimer, set_dt
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         lazy=False, rst_filename=None, actx_class=None):
     """Run the example."""
+    if actx_class is None:
+        raise RuntimeError("Array context class missing.")
+
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -75,11 +71,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    if actx_class == PytatoPyOpenCLArrayContext:
+    if lazy:
         actx = actx_class(comm, queue, mpi_base_tag=12000)
     else:
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
@@ -206,13 +203,13 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    lazy = args.lazy
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
-            else PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -222,6 +219,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         lazy=lazy, casename=casename, rst_filename=rst_filename,
+         actx_class=actx_class)
 
 # vim: foldmethod=marker
