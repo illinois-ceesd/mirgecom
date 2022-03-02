@@ -253,9 +253,6 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     args = parser.parse_args()
     lazy = args.lazy
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
 
     from grudge.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
