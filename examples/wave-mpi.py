@@ -28,12 +28,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
-
-from grudge.array_context import (PyOpenCLArrayContext,
-    MPISingleGridWorkBalancingPytatoArrayContext)
 from arraycontext import thaw, freeze
-
-from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -73,8 +68,11 @@ def bump(actx, discr, t=0):
 
 @mpi_entry_point
 def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
-         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
+         use_profiling=False, use_logmgr=False, actx_class=None, lazy=False):
     """Drive the example."""
+    if actx_class is None:
+        raise RuntimeError("Array context class missing.")
+
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -88,16 +86,15 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            logmgr=logmgr)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        if actx_class == MPISingleGridWorkBalancingPytatoArrayContext:
-            actx = actx_class(comm, queue, mpi_base_tag=1200)
-        else:
-            actx = actx_class(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    else:
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     if restart_step is None:
 
@@ -255,10 +252,15 @@ if __name__ == "__main__":
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     args = parser.parse_args()
+    lazy = args.lazy
+    if args.profiling:
+        if lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=MPISingleGridWorkBalancingPytatoArrayContext if args.lazy
-         else PyOpenCLArrayContext)
-
+         actx_class=actx_class, lazy=lazy)
 
 # vim: foldmethod=marker
