@@ -651,7 +651,8 @@ class OutflowBoundary(PrescribedFluidBoundary):
         kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
         gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
         external_pressure = 2*self._pressure - state_minus.pressure
-        boundary_pressure = actx.np.where(boundary_speed >= speed_of_sound,
+        boundary_pressure = actx.np.where(actx.np.greater(boundary_speed,
+                                                          speed_of_sound),
                                           state_minus.pressure, external_pressure)
         internal_energy = boundary_pressure / (gamma - 1)
         total_energy = internal_energy + kinetic_energy
@@ -714,7 +715,7 @@ class InflowBoundary(PrescribedFluidBoundary):
         r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
         r_plus_supersonic = (v_plus + 2*c_plus/(gamma_plus - 1))*ones
         r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
-        r_plus = actx.np.where(v_minus >= c_minus, r_plus_supersonic,
+        r_plus = actx.np.where(actx.np.greater(v_minus, c_minus), r_plus_supersonic,
                                r_plus_subsonic)
 
         velocity_boundary = (r_minus + r_plus)/2
