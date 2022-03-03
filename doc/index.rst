@@ -76,6 +76,7 @@ Table of Contents
     support/support
     development/development
     running/running
+    simulations/simulations
     faq/faq
     misc
     🚀 Github <https://github.com/illinois-ceesd/mirgecom>
