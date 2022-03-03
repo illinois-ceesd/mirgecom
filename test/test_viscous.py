@@ -494,6 +494,19 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
 @pytest.mark.parametrize("nspecies", [0, 5, 10])
 def test_viscous_timestep(actx_factory, dim, mu, vel_val, mass_val, nspecies):
     """Test timestep size."""
+    # This verifies the viscous timestep formula is implemented as intended
+    # especially for situations we encounter in-practice.
+    #
+    # In 1, 2, and 3 spatial dimensions, the following situations are tested:
+    # - Fully inviscid state: multiple densities, velocities, and species
+    # - Single gas viscous states:
+    # -- with 0 viscosity (mu), variable: density, velocities
+    # -- with non-zero viscosity variable: (ditto)
+    # - Multispecies gases:
+    # -- inviscid state w/variable dens, vel
+    # -- viscous states:
+    # --- with and without diffusion
+    # --- variable dens, vels
     actx = actx_factory()
     nel_1d = 4
 
