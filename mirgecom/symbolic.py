@@ -55,17 +55,29 @@ def diff(var):
     return DifferentiationMapper(var, func_map=func_map)
 
 
-def div(vector_func):
-    """Return the symbolic divergence of *vector_func*."""
-    dim = len(vector_func)
-    coords = pmbl.make_sym_vector("x", dim)
-    return sum([diff(coords[i])(vector_func[i]) for i in range(dim)])
+def div(ambient_dim, func):
+    """Return the symbolic divergence of *func*."""
+    coords = pmbl.make_sym_vector("x", ambient_dim)
+
+    def component_div(f):
+        return sum(diff(coords[i])(f[i]) for i in range(ambient_dim))
+
+    from grudge.op import _div_helper
+    from pymbolic.primitives import Expression
+    return _div_helper(ambient_dim, component_div, Expression, func)
 
 
-def grad(dim, func):
+def grad(ambient_dim, func, nested=False):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
-    coords = pmbl.make_sym_vector("x", dim)
-    return make_obj_array([diff(coords[i])(func) for i in range(dim)])
+    coords = pmbl.make_sym_vector("x", ambient_dim)
+
+    def component_grad(f):
+        return make_obj_array([diff(coords[i])(f) for i in range(ambient_dim)])
+
+    from grudge.op import _grad_helper
+    from pymbolic.primitives import Expression
+    return _grad_helper(
+        ambient_dim, component_grad, Expression, func, nested=nested)
 
 
 class EvaluationMapper(BaseEvaluationMapper):
@@ -84,4 +96,7 @@ class EvaluationMapper(BaseEvaluationMapper):
 
 def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
     """Evaluate a symbolic expression using a specified mapper."""
-    return mapper_type(kwargs)(expr)
+    mapper = mapper_type(kwargs)
+
+    from arraycontext import rec_map_array_container
+    return rec_map_array_container(mapper, expr)
