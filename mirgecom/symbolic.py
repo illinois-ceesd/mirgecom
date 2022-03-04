@@ -55,6 +55,11 @@ def diff(var):
     return DifferentiationMapper(var, func_map=func_map)
 
 
+def _is_expression_or_number(f):
+    from pymbolic.primitives import Expression
+    return isinstance(f, Expression) or np.isscalar(f)
+
+
 def div(ambient_dim, func):
     """Return the symbolic divergence of *func*."""
     coords = pmbl.make_sym_vector("x", ambient_dim)
@@ -63,8 +68,7 @@ def div(ambient_dim, func):
         return sum(diff(coords[i])(f[i]) for i in range(ambient_dim))
 
     from grudge.op import _div_helper
-    from pymbolic.primitives import Expression
-    return _div_helper(ambient_dim, component_div, Expression, func)
+    return _div_helper(ambient_dim, component_div, _is_expression_or_number, func)
 
 
 def grad(ambient_dim, func, nested=False):
@@ -75,9 +79,8 @@ def grad(ambient_dim, func, nested=False):
         return make_obj_array([diff(coords[i])(f) for i in range(ambient_dim)])
 
     from grudge.op import _grad_helper
-    from pymbolic.primitives import Expression
     return _grad_helper(
-        ambient_dim, component_grad, Expression, func, nested=nested)
+        ambient_dim, component_grad, _is_expression_or_number, func, nested=nested)
 
 
 class EvaluationMapper(BaseEvaluationMapper):
