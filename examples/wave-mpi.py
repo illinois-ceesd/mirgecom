@@ -67,12 +67,9 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
-         use_profiling=False, use_logmgr=False, actx_class=None, lazy=False):
+def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+         restart_step=None, use_profiling=False, use_logmgr=False, lazy=False):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -257,7 +254,6 @@ if __name__ == "__main__":
     from grudge.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=actx_class, lazy=lazy)
+    main(actx_class, use_profiling=use_profiling, use_logmgr=use_logging, lazy=lazy)
 
 # vim: foldmethod=marker

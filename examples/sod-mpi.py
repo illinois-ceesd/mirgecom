@@ -68,9 +68,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None, lazy=False):
+def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, lazy=False,
+         rst_filename=None):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -396,8 +396,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         lazy=lazy)
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
+         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
