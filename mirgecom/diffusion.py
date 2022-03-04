@@ -208,6 +208,14 @@ class _DiffusionStateTag:
     pass
 
 
+class _DiffusionAlphaTag:
+    pass
+
+
+class _DiffusionGradTag:
+    pass
+
+
 def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=False):
     r"""
     Compute the diffusion operator.
@@ -292,8 +300,8 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
             + sum(
                 diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair)
                 for alpha_tpair, grad_u_tpair in zip(
-                    cross_rank_trace_pairs(discr, alpha, tag=_DiffusionStateTag),
-                    cross_rank_trace_pairs(discr, grad_u, tag=_DiffusionStateTag)))
+                    cross_rank_trace_pairs(discr, alpha, tag=_DiffusionAlphaTag),
+                    cross_rank_trace_pairs(discr, grad_u, tag=_DiffusionGradTag)))
             )
         )
 
