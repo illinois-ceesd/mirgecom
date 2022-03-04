@@ -72,15 +72,10 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_overintegration=False,
-         use_profiling=False, casename=None, lazy=False,
-         rst_filename=None, actx_class=None,
-         log_dependent=True):
+def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_overintegration=False, use_profiling=False,
+         casename=None, lazy=False, rst_filename=None, log_dependent=True):
     """Drive example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     cl_ctx = ctx_factory()
 
     if casename is None:
@@ -642,10 +637,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration,
-         use_profiling=args.profiling, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+         use_overintegration=args.overintegration, use_profiling=args.profiling,
+         lazy=lazy, casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent)
 
 # vim: foldmethod=marker
