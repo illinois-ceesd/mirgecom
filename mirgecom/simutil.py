@@ -1,8 +1,14 @@
 """Provide some utilities for building simulation applications.
 
+Application base classes
+------------------------
+
+.. autoclass:: SimulationApplication
+
 General utilities
 -----------------
 
+.. autofunction:: read_mirgecom_configuration_file
 .. autofunction:: check_step
 .. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
@@ -49,6 +55,8 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import grudge.op as op
+
+from abc import ABCMeta, abstractmethod
 
 from arraycontext import map_array_container, flatten
 
@@ -384,3 +392,105 @@ def create_parallel_grid(comm, generate_grid):
          "instead. This function will disappear August 1, 2021",
          DeprecationWarning, stacklevel=2)
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
+
+
+def read_mirgecom_configuration_file(file_path=None, comm=None):
+    """Read a configuration file in mirgecom format TBD."""
+    from os.path import exists
+    if file_path is None or not exists(file_path):
+        return {}
+    rank = 0 if comm is None else comm.Get_rank()
+    from yaml import load, FullLoader
+    if rank == 0:
+        with open(file_path) as f:
+            config_data = load(f, Loader=FullLoader)
+        if comm is not None:
+            config_data = comm.bcast(config_data, root=0)
+    return config_data
+
+
+class SimulationApplication(metaclass=ABCMeta):
+    """Application intended to be used by the MIRGE-Com generic simulation driver."""
+
+    def __init__(self, actx=None, comm=None, casename=None, restart_file_root=None,
+                 config_path=None, log_manager=None):
+        """Initialize the simulation application."""
+        self._actx = actx
+        self._comm = comm
+        self._stepper_time = 0
+        self._stepper_step = 0
+        self._status = 0
+        self._nparts = 1 if comm is None else comm.Get_size()
+        self._rank = 0 if comm is None else comm.Get_rank()
+        self._casename = casename
+        self._restart_file_root = restart_file_root
+        self._logmgr = log_manager
+        if config_path is None:
+            if casename is not None:
+                config_path = f"./{casename}_config.yaml"
+        self._config_params = read_mirgecom_configuration_file(config_path, comm)
+
+    @property
+    def status(self):
+        """Return a status code."""
+        return self._status
+
+    @property
+    def communicator(self):
+        """Grab the MPI communicator, if any."""
+        return self._comm
+
+    @property
+    def array_context(self):
+        """Grab the default/main array context for the simulation application."""
+        return self._actx
+
+    @property
+    def stepper_time(self):
+        """Return the starting time to be used by the stepper to advance time."""
+        return self._starting_time
+
+    @property
+    def stepper_step(self):
+        """Return the starting step to be used by the stepper to advance the step."""
+        return self._starting_step
+
+    @abstractmethod
+    def get_mesh(self):
+        """Get the mesh for the simulation application."""
+        pass
+
+    @abstractmethod
+    def get_solution_state_for_stepping(self):
+        """Get the solution state to be used by the generic time stepper."""
+        pass
+
+    @abstractmethod
+    def get_timestep_dt(self, stepper_state=None, time=0, timestep=0):
+        """Get the application-desired timestep."""
+        pass
+
+    @abstractmethod
+    def pre_stepping_callback(self):
+        """Perform any pre-stepping operations before stepping begins."""
+        pass
+
+    @abstractmethod
+    def pre_step_callback(self):
+        """Perform any pre-time-step operation, once per timestep by the stepper."""
+        pass
+
+    @abstractmethod
+    def post_step_callback(self):
+        """Perform any post-time-step operation, once per timestep by the stepper."""
+        pass
+
+    @abstractmethod
+    def rhs(self, t, state):
+        """Compute the RHS for the stepper to use in advancing the solution state."""
+        pass
+
+    @abstractmethod
+    def finalize(self, final_step=0, final_time=0):
+        """Wrap it up."""
+        pass
