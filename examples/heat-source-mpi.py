@@ -27,12 +27,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
@@ -47,16 +41,16 @@ from mirgecom.mpi import mpi_entry_point
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_device_name,
+                                         logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 from logpyle import IntervalTimer, set_dt
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, lazy=False,
+         rst_filename=None):
     """Run the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -74,9 +68,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    else:
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
@@ -135,7 +132,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     u = discr.zeros(actx)
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
@@ -203,13 +200,13 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    lazy = args.lazy
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
-            else PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -218,7 +215,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
+         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
