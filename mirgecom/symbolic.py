@@ -81,23 +81,28 @@ def div(ambient_dim, func):
     """Return the symbolic divergence of *func*."""
     coords = pmbl.make_sym_vector("x", ambient_dim)
 
-    def component_div(f):
-        return sum(diff(coords[i])(f[i]) for i in range(ambient_dim))
-
-    from grudge.op import _div_helper
-    return _div_helper(ambient_dim, component_div, _is_expression_or_number, func)
+    from grudge.tools import rec_map_subarrays
+    return rec_map_subarrays(
+        f=lambda f: sum(diff(coords[i])(f[i]) for i in range(ambient_dim)),
+        in_shape=(ambient_dim,),
+        out_shape=(),
+        is_scalar=_is_expression_or_number,
+        ary=func)
 
 
 def grad(ambient_dim, func, nested=False):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
     coords = pmbl.make_sym_vector("x", ambient_dim)
 
-    def component_grad(f):
-        return make_obj_array([diff(coords[i])(f) for i in range(ambient_dim)])
-
-    from grudge.op import _grad_helper
-    return _grad_helper(
-        ambient_dim, component_grad, _is_expression_or_number, func, nested=nested)
+    from grudge.tools import rec_map_subarrays
+    return rec_map_subarrays(
+        f=lambda f: make_obj_array([
+            diff(coords[i])(f) for i in range(ambient_dim)]),
+        in_shape=(),
+        out_shape=(ambient_dim,),
+        is_scalar=_is_expression_or_number,
+        return_nested=nested,
+        ary=func)
 
 
 class EvaluationMapper(BaseEvaluationMapper):
