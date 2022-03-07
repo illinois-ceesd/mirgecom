@@ -656,7 +656,10 @@ class OutflowBoundary(PrescribedFluidBoundary):
                                           state_minus.pressure, external_pressure)
         internal_energy = boundary_pressure / (gamma - 1)
         total_energy = internal_energy + kinetic_energy
-        cv_outflow = state_minus.cv.replace(energy=total_energy)
+        cv_outflow = make_conserved(dim=state_minus.dim, mass=state_minus.cv.mass,
+                                    momentum=state_minus.cv.momentum,
+                                    energy=total_energy,
+                                    species_mass=state_minus.cv.species_mass)
 
         return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
