@@ -52,7 +52,7 @@ class DifferentiationMapper(BaseDifferentiationMapper):
         """Differentiate *expr*."""
         from arraycontext import rec_map_array_container
         return rec_map_array_container(
-            lambda f: super(BaseDifferentiationMapper, self).__call__(
+            lambda f: super(DifferentiationMapper, self).__call__(
                 f, *args, **kwargs),
             expr)
 
