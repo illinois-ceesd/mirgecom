@@ -34,14 +34,31 @@ import numpy as np  # noqa
 import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
+from pymbolic.mapper.differentiator import (
+    DifferentiationMapper as BaseDifferentiationMapper
+)
 from pymbolic.mapper.evaluator import EvaluationMapper as BaseEvaluationMapper
 import mirgecom.math as mm
 
 
+class DifferentiationMapper(BaseDifferentiationMapper):
+    """
+    Differentiates a symbolic expression.
+
+    Inherits from :class:`pymbolic.mapper.differentiator.DifferentiationMapper`.
+    """
+
+    def __call__(self, expr, *args, **kwargs):
+        """Differentiate *expr*."""
+        from arraycontext import rec_map_array_container
+        return rec_map_array_container(
+            lambda f: super(BaseDifferentiationMapper, self).__call__(
+                f, *args, **kwargs),
+            expr)
+
+
 def diff(var):
     """Return the symbolic derivative operator with respect to *var*."""
-    from pymbolic.mapper.differentiator import DifferentiationMapper
-
     def func_map(arg_index, func, arg, allowed_nonsmoothness):
         if func == pmbl.var("sin"):
             return pmbl.var("cos")(*arg)

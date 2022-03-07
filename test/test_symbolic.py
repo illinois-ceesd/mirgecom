@@ -78,12 +78,58 @@ def _exp_diff_pair():
     return sym_exp(2*sym_x), sym_exp(2*sym_x)*2
 
 
+def _obj_array_diff_pair():
+    """
+    Return a pair of object arrays containing expressions and their derivatives.
+    """
+    expr_deriv_pairs = [
+        _const_diff_pair(),
+        _poly_diff_pair(),
+        _cos_diff_pair()]
+    return (
+        make_obj_array([expr for expr, _ in expr_deriv_pairs]),
+        make_obj_array([deriv for _, deriv in expr_deriv_pairs]))
+
+
+def _array_container_diff_pair():
+    """
+    Return a pair of array containers containing expressions and their derivatives.
+
+    Returns
+    -------
+    A pair of :class:`mirgecom.fluid.ConservedVars` instances.
+    """
+    expr_deriv_pairs = [
+        _const_diff_pair(),
+        _poly_diff_pair(),
+        _cos_diff_pair(),
+        _sin_diff_pair()]
+    from mirgecom.fluid import make_conserved
+    return (
+        make_conserved(
+            dim=2,
+            mass=expr_deriv_pairs[0][0],
+            energy=expr_deriv_pairs[1][0],
+            momentum=make_obj_array([
+                expr_deriv_pairs[2][0],
+                expr_deriv_pairs[3][0]])),
+        make_conserved(
+            dim=2,
+            mass=expr_deriv_pairs[0][1],
+            energy=expr_deriv_pairs[1][1],
+            momentum=make_obj_array([
+                expr_deriv_pairs[2][1],
+                expr_deriv_pairs[3][1]])))
+
+
 @pytest.mark.parametrize(("sym_f", "expected_sym_df"), [
     _const_diff_pair(),
     _poly_diff_pair(),
     _cos_diff_pair(),
     _sin_diff_pair(),
     _exp_diff_pair(),
+    _obj_array_diff_pair(),
+    _array_container_diff_pair(),
 ])
 def test_symbolic_diff(sym_f, expected_sym_df):
     """
@@ -91,7 +137,10 @@ def test_symbolic_diff(sym_f, expected_sym_df):
     expected result.
     """
     sym_df = sym.diff(pmbl.var("x"))(sym_f)
-    assert sym_df == expected_sym_df
+    if isinstance(sym_f, np.ndarray):
+        assert (sym_df == expected_sym_df).all()
+    else:
+        assert sym_df == expected_sym_df
 
 
 def test_symbolic_div():
