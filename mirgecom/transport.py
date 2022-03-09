@@ -110,7 +110,8 @@ class TransportModel:
         raise NotImplementedError()
 
     def thermal_conductivity(self, cv: ConservedVars,
-                             dv: Optional[GasDependentVars] = None) -> DOFArray:
+                             dv: Optional[GasDependentVars] = None,
+                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         raise NotImplementedError()
 
@@ -127,7 +128,7 @@ class TransportModel:
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv=cv, dv=dv),
             viscosity=self.viscosity(cv=cv, dv=dv),
-            thermal_conductivity=self.thermal_conductivity(cv=cv, dv=dv),
+            thermal_conductivity=self.thermal_conductivity(cv=cv, dv=dv, eos=eos),
             species_diffusivity=self.species_diffusivity(cv=cv, dv=dv, eos=eos)
         )
 
@@ -177,7 +178,8 @@ class SimpleTransport(TransportModel):
         return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
 
     def thermal_conductivity(self, cv: ConservedVars,
-                             dv: Optional[GasDependentVars] = None) -> DOFArray:
+                             dv: Optional[GasDependentVars] = None,
+                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         return self._kappa*(0*cv.mass + 1.0)
 
