@@ -246,7 +246,10 @@ class PowerLawTransport(TransportModel):
 
         $\kappa = \sigma\mu{C}_{v}$
         """
-        return self._sigma * self.viscosity(cv, dv) * eos.heat_capacity_cv(cv)
+        return (
+            self._sigma * self.viscosity(cv, dv)
+            * eos.heat_capacity_cv(cv, dv.temperature)
+        )
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
                             eos: GasEOS) -> DOFArray:
