@@ -8,17 +8,19 @@ pymetis
 importlib-resources
 psutil
 pyyaml
+git+https://github.com/pythological/kanren.git#egg=miniKanren
 
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
---editable git+https://github.com/kaushikcfd/loopy.git@pytato-array-context-transforms#egg=loopy
+--editable git+https://github.com/kaushikcfd/loopy.git#egg=loopy
 --editable git+https://github.com/inducer/dagrt.git#egg=dagrt
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git#egg=modepy
---editable git+https://github.com/inducer/arraycontext.git#egg=arraycontext
---editable git+https://github.com/kaushikcfd/meshmode.git@pytato-array-context-transforms#egg=meshmode
---editable git+https://github.com/inducer/grudge.git#egg=grudge
---editable git+https://github.com/inducer/pytato.git#egg=pytato
+--editable git+https://github.com/kaushikcfd/arraycontext.git#egg=arraycontext
+--editable git+https://github.com/kaushikcfd/meshmode.git#egg=meshmode
+--editable git+https://github.com/kaushikcfd/grudge.git#egg=grudge
+--editable git+https://github.com/kaushikcfd/pytato.git#egg=pytato
 --editable git+https://github.com/ecisneros8/pyrometheus.git#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
+--editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
