@@ -34,14 +34,31 @@ import numpy as np  # noqa
 import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
+from pymbolic.mapper.differentiator import (
+    DifferentiationMapper as BaseDifferentiationMapper
+)
 from pymbolic.mapper.evaluator import EvaluationMapper as BaseEvaluationMapper
 import mirgecom.math as mm
 
 
+class DifferentiationMapper(BaseDifferentiationMapper):
+    """
+    Differentiates a symbolic expression.
+
+    Inherits from :class:`pymbolic.mapper.differentiator.DifferentiationMapper`.
+    """
+
+    def __call__(self, expr, *args, **kwargs):
+        """Differentiate *expr*."""
+        from arraycontext import rec_map_array_container
+        return rec_map_array_container(
+            lambda f: super(DifferentiationMapper, self).__call__(
+                f, *args, **kwargs),
+            expr)
+
+
 def diff(var):
     """Return the symbolic derivative operator with respect to *var*."""
-    from pymbolic.mapper.differentiator import DifferentiationMapper
-
     def func_map(arg_index, func, arg, allowed_nonsmoothness):
         if func == pmbl.var("sin"):
             return pmbl.var("cos")(*arg)
@@ -55,17 +72,37 @@ def diff(var):
     return DifferentiationMapper(var, func_map=func_map)
 
 
-def div(vector_func):
-    """Return the symbolic divergence of *vector_func*."""
-    dim = len(vector_func)
-    coords = pmbl.make_sym_vector("x", dim)
-    return sum([diff(coords[i])(vector_func[i]) for i in range(dim)])
+def _is_expression_or_number(f):
+    from pymbolic.primitives import Expression
+    return isinstance(f, Expression) or np.isscalar(f)
 
 
-def grad(dim, func):
+def div(ambient_dim, func):
+    """Return the symbolic divergence of *func*."""
+    coords = pmbl.make_sym_vector("x", ambient_dim)
+
+    from grudge.tools import rec_map_subarrays
+    return rec_map_subarrays(
+        f=lambda f: sum(diff(coords[i])(f[i]) for i in range(ambient_dim)),
+        in_shape=(ambient_dim,),
+        out_shape=(),
+        is_scalar=_is_expression_or_number,
+        ary=func)
+
+
+def grad(ambient_dim, func, nested=False):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
-    coords = pmbl.make_sym_vector("x", dim)
-    return make_obj_array([diff(coords[i])(func) for i in range(dim)])
+    coords = pmbl.make_sym_vector("x", ambient_dim)
+
+    from grudge.tools import rec_map_subarrays
+    return rec_map_subarrays(
+        f=lambda f: make_obj_array([
+            diff(coords[i])(f) for i in range(ambient_dim)]),
+        in_shape=(),
+        out_shape=(ambient_dim,),
+        is_scalar=_is_expression_or_number,
+        return_nested=nested,
+        ary=func)
 
 
 class EvaluationMapper(BaseEvaluationMapper):
@@ -84,4 +121,7 @@ class EvaluationMapper(BaseEvaluationMapper):
 
 def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
     """Evaluate a symbolic expression using a specified mapper."""
-    return mapper_type(kwargs)(expr)
+    mapper = mapper_type(kwargs)
+
+    from arraycontext import rec_map_array_container
+    return rec_map_array_container(mapper, expr)
