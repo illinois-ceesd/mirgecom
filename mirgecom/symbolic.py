@@ -111,6 +111,22 @@ class EvaluationMapper(BaseEvaluationMapper):
     Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
     """
 
+    def __init__(self, context=None):
+        super().__init__(context)
+        self._cache = {}
+
+    def rec(self, expr):
+        try:
+            return self._cache[expr]
+        except KeyError:
+            result = super().rec(expr)
+
+            # This stores any-and-everything in its cache.
+            # FIXME: Be more selective if this ends up eating too
+            # much memory.
+            self._cache[expr] = result
+            return result
+
     def map_call(self, expr):
         """Map a symbolic code expression to actual function call."""
         from pymbolic.primitives import Variable
