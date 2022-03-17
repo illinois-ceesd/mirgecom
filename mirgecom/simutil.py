@@ -1,8 +1,15 @@
 """Provide some utilities for building simulation applications.
 
+Application base classes
+------------------------
+
+.. autoclass:: SimulationApplication
+.. autoclass:: DummySimulation
+
 General utilities
 -----------------
 
+.. autofunction:: read_mirgecom_configuration_file
 .. autofunction:: check_step
 .. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
@@ -50,6 +57,8 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import grudge.op as op
+
+from abc import ABCMeta, abstractmethod
 
 from arraycontext import map_array_container, flatten
 
@@ -436,3 +445,196 @@ def limit_species_mass_fractions(cv):
             y_spec = actx.np.where(y_spec < 0, zero, y_spec)
         cv = cv.replace(species_mass=cv.mass*y)
     return(cv)
+
+
+def read_mirgecom_configuration_file(file_path=None, comm=None):
+    """Read a configuration file in mirgecom format TBD."""
+    from os.path import exists
+    if file_path is None or not exists(file_path):
+        return {}
+    rank = 0 if comm is None else comm.Get_rank()
+    from yaml import load, FullLoader
+    if rank == 0:
+        with open(file_path) as f:
+            config_data = load(f, Loader=FullLoader)
+        if comm is not None:
+            config_data = comm.bcast(config_data, root=0)
+    return config_data
+
+
+def configurate(config_key, config_object=None, default_value=None):
+    """Return a configured item from a configuration object."""
+    print(f"{config_key=},{config_object=},{default_value=}")
+    if config_object is not None:
+        print(f"{config_object.__dict__=}")
+        if config_key in config_object.__dict__:
+            print(f"{config_object.__dict__[config_key]=}")
+            return config_object.__dict__[config_key]
+
+    return default_value
+
+
+class SimulationApplication(metaclass=ABCMeta):
+    """Application intended to be used by the MIRGE-Com generic simulation driver."""
+
+    def __init__(self, actx=None, comm=None, casename=None, restart_file_root=None,
+                 config_object=None, log_manager=None):
+        """Initialize the simulation application."""
+        self._actx = actx
+        self._comm = comm
+        self._stepper_time = 0
+        self._stepper_step = 0
+        self._status = 0
+        self._name = "mirgecom-simulation-application"
+        self._nparts = 1 if comm is None else comm.Get_size()
+        self._rank = 0 if comm is None else comm.Get_rank()
+        self._casename = casename
+        self._restart_file_root = restart_file_root
+        self._logmgr = log_manager
+        self._config = config_object
+        self._rst_filename = (f"{self._restart_file_root}-{self._rank:04d}.pkl"
+                              if restart_file_root is not None else None)
+        from mirgecom.restart import read_restart_data
+        self._restart_data = (read_restart_data(self._actx, self._rst_filename)
+                              if self._rst_filename is not None else None)
+        if self._restart_data is not None:
+            npart_restart = self._restart_data["nparts"]
+            if npart_restart != self._nparts:
+                raise ValueError(f"Unable to restart with (nprocs != npartitions): "
+                                 f"({self._nparts} != {npart_restart})")
+
+    @property
+    def name(self):
+        """Return the name of the simulation application."""
+        return self._name
+
+    @property
+    def status(self):
+        """Return a status code."""
+        return self._status
+
+    @property
+    def communicator(self):
+        """Grab the MPI communicator, if any."""
+        return self._comm
+
+    @property
+    def array_context(self):
+        """Grab the default/main array context for the simulation application."""
+        return self._actx
+
+    @abstractmethod
+    def get_initial_advancer_state(self):
+        """Get the solution state to be used by the generic time stepper."""
+        pass
+
+    @abstractmethod
+    def get_initial_stepper_position(self):
+        """Get the current time/step position of the initial solution."""
+        pass
+
+    @abstractmethod
+    def get_final_stepper_position(self):
+        """Get the desired final time/step position for the final solution."""
+        pass
+
+    @abstractmethod
+    def get_timestep_dt(self, stepper_state=None, time=0, timestep=0):
+        """Get the application-desired timestep."""
+        pass
+
+    @abstractmethod
+    def get_timestepper_method(self):
+        """Get the mirgecom timestepper method desirned for the simulation."""
+        pass
+
+    @abstractmethod
+    def pre_step_callback(self):
+        """Perform any pre-time-step operation, once per timestep by the stepper."""
+        pass
+
+    @abstractmethod
+    def post_step_callback(self):
+        """Perform any post-time-step operation, once per timestep by the stepper."""
+        pass
+
+    @abstractmethod
+    def rhs(self, t, state):
+        """Compute the RHS for the stepper to use in advancing the solution state."""
+        pass
+
+    @abstractmethod
+    def finalize(self, final_step=0, final_time=0):
+        """Wrap it up."""
+        pass
+
+
+class DummySimulation(SimulationApplication):
+    """Dummy simulation for testing."""
+
+    def __init__(self, **kwargs):
+        """Initialize the dummy simulation."""
+        super().__init__(**kwargs)
+        self._name = "DummySimulation"
+        pass
+
+    def get_initial_advancer_state(self):
+        """Return dummy advancer state."""
+        from pytools.obj_array import make_obj_array
+        return make_obj_array([0])
+
+    def get_initial_stepper_position(self):
+        """Return initial stepper position."""
+        return 0, 0.
+
+    def get_final_stepper_position(self):
+        """Return final stepper position."""
+        return 1, 1.
+
+    def get_timestep_dt(self, stepper_state=None, stepper_time=0, stepper_dt=0):
+        """Return desired DT."""
+        return 1.
+
+    def get_timestepper_method(self):
+        """Return the desired timestepper."""
+        from mirgecom.integrators import euler_step
+        return configurate("timestepper", self._config, euler_step)
+
+    def rhs(self, time, stepper_state):
+        """Return the RHS."""
+        from pytools.obj_array import make_obj_array
+        return make_obj_array([1.])
+
+    def pre_step_callback(self, step, t, dt, state):
+        """Perform pre-step activities."""
+        current_stepper_step = step
+        current_stepper_time = t
+        current_stepper_dt = dt
+        current_stepper_state = state
+        if self._rank == 0:
+            logger.info(f"Dummy pre-step: {current_stepper_step=},"
+                        f"{current_stepper_time=}, {current_stepper_dt=}\n"
+                        f"                {current_stepper_state=}")
+        return current_stepper_state, current_stepper_dt
+
+    def post_step_callback(self, step, t, dt, state):
+        """Perform post-step activities."""
+        current_stepper_step = step
+        current_stepper_time = t
+        current_stepper_dt = dt
+        current_stepper_state = state
+        if self._rank == 0:
+            logger.info(f"Dummy post-step: {current_stepper_step=},"
+                        f"{current_stepper_time=}, {current_stepper_dt=}\n"
+                        f"                {current_stepper_state=}")
+        return current_stepper_state, current_stepper_dt
+
+    def finalize(self, step, t, state):
+        """Perform finalization."""
+        final_stepper_step = step
+        final_stepper_time = t
+        final_stepper_state = state
+        if self._rank == 0:
+            logger.info(f"Dummy finalize: {final_stepper_step=},"
+                        f"{final_stepper_time=}\n"
+                        f"                {final_stepper_state=}")

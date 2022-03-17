@@ -1,4 +1,4 @@
-"""Drive a :class:`mirgecom.simulation_application` time advancement."""
+"""Drive a :class:`mirgecom.simutil.SimulationApplication` time advancement."""
 
 __copyright__ = """
 dCopyright (C) 2020 University of Illinois Board of Trustees
@@ -46,19 +46,11 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True, lazy=False,
-         use_profiling=False, casename=None, actx_class=None, rst_filename=None,
-         simulation_application_class=None, cfg_filename=None):
-    """Drive the time/step advancement of a :class:`mirgecom.simulation_application`."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-    if simulation_application_class is None:
-        raise RuntimeError("MIRGE-Com simulation application class missing.")
-
+def main(actx_class, simulation_application_class, casename,
+         ctx_factory=cl.create_some_context, use_logmgr=True,
+         lazy=False, use_profiling=False, rst_filename=None, cfg_object=None):
+    """Drive advancement of a :class:`mirgecom.simutil.SimulationApplication`."""
     cl_ctx = ctx_factory()
-
-    if casename is None:
-        casename = "mirgecom"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -92,23 +84,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True, lazy=False,
         ])
 
     sim_app = simulation_application_class(
-        actx=actx, comm=comm, logmgr=logmgr, casename=casename,
-        config_filename=cfg_filename, restart_filename=rst_filename)
+        actx=actx, comm=comm, log_manager=logmgr, casename=casename,
+        config_object=cfg_object, restart_file_root=rst_filename)
 
     if sim_app.status:
         raise RuntimeError("Simulation application failed to initialize.")
 
     current_advancer_state = sim_app.get_initial_advancer_state()
-    current_step, current_time, max_dt = sim_app.get_initial_stepper_position()
+    current_step, current_time = sim_app.get_initial_stepper_position()
     max_step, final_time = sim_app.get_final_stepper_position()
+    max_dt = sim_app.get_timestep_dt(current_advancer_state, current_time)
+    timestepper = sim_app.get_timestepper_method()
 
     if rank == 0:
         logger.info(f"Running MIRGE-Com simulation application: {sim_app.name=}\n"
                     f"Starting at: {current_step=}, {current_time=}, {max_dt=}\n"
-                    f"Finishing by: {max_step=}, {final_time=}")
+                    f"Finishing by: {max_step=}, {final_time=}\n"
+                    f"Using timestepper: {timestepper=}")
 
     current_step, current_time, current_advancer_state = \
-        advance_state(rhs=sim_app.rhs, timestepper=sim_app.timestepper,
+        advance_state(rhs=sim_app.rhs, timestepper=timestepper,
                       pre_step_callback=sim_app.pre_step_callback,
                       post_step_callback=sim_app.post_step_callback, dt=max_dt,
                       state=current_advancer_state, t=current_time,
@@ -122,14 +117,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True, lazy=False,
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    if sim_app.finalize(current_step, current_time, current_advancer_state):
+    if sim_app.finalize(step=current_step, t=current_time,
+                        state=current_advancer_state):
         raise RuntimeError("Simulation application has experienced an error.")
-        
 
 
 if __name__ == "__main__":
     import argparse
-    casename = "nsmix"
+    casename = "mirgecom"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
@@ -140,13 +135,13 @@ if __name__ == "__main__":
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--simulation-module",
+                        help="path/filename of simulation application module.")
+    parser.add_argument("--config-filename",
+                        help="path/filename of application configuration module.")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
     lazy = args.lazy
-
-    from warnings import warn
-    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
-    log_dependent = False
 
     if args.profiling:
         if lazy:
@@ -158,12 +153,32 @@ if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
+
     rst_filename = None
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent, lazy=lazy)
+    cfg_object = None
+    if args.config_filename:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "config_module", args.config_filename)
+        cfg_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cfg_module)
+        cfg_object = cfg_module.Config()
+
+    from mirgecom.simutil import DummySimulation
+    app_class = DummySimulation
+    if args.simulation_module:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "module.name", args.simulation_module)
+        application_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(application_module)
+        app_class = application_module.SimulationApplication
+
+    main(actx_class, app_class, casename, cfg_object=cfg_object, lazy=lazy,
+         use_profiling=args.profiling, use_logmgr=args.log,
+         rst_filename=rst_filename)
 
 # vim: foldmethod=marker
