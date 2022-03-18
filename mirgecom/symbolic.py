@@ -111,9 +111,11 @@ class EvaluationMapper(BaseEvaluationMapper):
     Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
     """
 
-    def __init__(self, context=None):
+    def __init__(self, context=None, constant_zero=None):
         super().__init__(context)
         self._cache = {}
+        self._constant_zero = constant_zero
+        self._used_symbols = set()
 
     def rec(self, expr):
         try:
@@ -127,6 +129,12 @@ class EvaluationMapper(BaseEvaluationMapper):
             self._cache[expr] = result
             return result
 
+    def map_constant(self, expr):
+        if self._constant_zero is None:
+            return super().map_constant(expr)
+        else:
+            return super().map_constant(expr) + self._constant_zero
+
     def map_call(self, expr):
         """Map a symbolic code expression to actual function call."""
         from pymbolic.primitives import Variable
@@ -134,10 +142,22 @@ class EvaluationMapper(BaseEvaluationMapper):
         par, = expr.parameters
         return getattr(mm, expr.function.name)(self.rec(par))
 
+    def map_variable(self, expr):
+        self._used_symbols.add(expr.name)
+        return super().map_variable(expr)
+
 
 def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
     """Evaluate a symbolic expression using a specified mapper."""
-    mapper = mapper_type(kwargs)
+    constant_zero = kwargs.pop("zero", None)
+    unused_ok = kwargs.pop("unused_ok", False)
+    mapper = mapper_type(kwargs, constant_zero=constant_zero)
 
     from arraycontext import rec_map_array_container
-    return rec_map_array_container(mapper, expr)
+    result = rec_map_array_container(mapper, expr)
+
+    if not unused_ok and mapper._used_symbols != set(mapper.context):
+        raise ValueError("some variables were not used during evaluation: "
+                f"{', '.join(set(mapper.context) - mapper._used_symbols)}")
+
+    return result
