@@ -484,8 +484,8 @@ class UniformSolution(FluidManufacturedSolution):
     def get_solution(self, x, t):
         """Return sym soln."""
         x_c = x[0]
-        ones = mm.cos(x_c - x_c) * mm.cos(t - t)
-        zeros = mm.sin(x_c - x_c) * mm.sin(t - t)
+        ones = mm.cos(0) * mm.cos(0)
+        zeros = mm.sin(0) * mm.sin(0)
         for i in range(self._dim):
             if self._vel[i] == 0:
                 self._vel[i] = zeros
@@ -783,7 +783,10 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
     nodes = thaw(discr.nodes(), actx)
 
-    source_eval = evaluate(sym_source, t=0, x=nodes)
+    source_eval = evaluate(sym_source, t=0, x=nodes,
+            constant_zero=discr.zeros(actx),
+            # FIXME
+            unused_ok=True)
 
     if isinstance(source_eval.mass, DOFArray):
         source_norms = componentwise_norms(discr, source_eval)
@@ -958,7 +961,9 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
             discr.norm(characteristic_lengthscales(actx, discr), np.inf)
         )
 
-        source_eval = evaluate(sym_source, t=0, x=nodes)
+        source_eval = evaluate(sym_source, t=0, x=nodes,
+                # FIXME
+                unused_ok=True)
         cv_exact = evaluate(sym_cv, t=0, x=nodes)
 
         # Sanity check the dependent quantities
