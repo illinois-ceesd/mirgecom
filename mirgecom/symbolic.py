@@ -117,6 +117,8 @@ class EvaluationMapper(BaseEvaluationMapper):
         self._constant_zero = constant_zero
         self._used_symbols = set()
 
+        self.subscript_eval_mapper = BaseEvaluationMapper(context)
+
     def rec(self, expr):
         try:
             return self._cache[expr]
@@ -134,6 +136,10 @@ class EvaluationMapper(BaseEvaluationMapper):
             return super().map_constant(expr)
         else:
             return super().map_constant(expr) + self._constant_zero
+
+    def map_subscript(self, expr):
+        rec_result = self.rec(expr.aggregate)
+        return rec_result[self.subscript_eval_mapper(expr.index)]
 
     def map_call(self, expr):
         """Map a symbolic code expression to actual function call."""
