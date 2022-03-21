@@ -125,10 +125,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     debug = False
 
     # Some i/o frequencies
-    nstatus = 1
-    nviz = 5
-    nrestart = 5
-    nhealth = 1
+    nstatus = 100
+    nviz = 100
+    nrestart = 100
+    nhealth = 100
 
     dim = 2
     rst_path = "restart_data/"
@@ -364,9 +364,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(status_msg)
 
-    def my_write_viz(step, t, state, dv):
-        viz_fields = [("cv", state),
-                      ("dv", dv)]
+    def my_write_viz(step, t, state, dv=None):
+        if dv is not None:
+            viz_fields = [("cv", state),
+                          ("dv", dv)]
+        else:
+            viz_fields = [("cv", state)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
@@ -441,8 +444,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
-        dv = fluid_state.dv
+
         try:
 
             if logmgr:
@@ -453,6 +455,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
             do_status = check_step(step, interval=nstatus)
+
+            if any([constant_cfl, do_viz, do_status, do_health]):
+                fluid_state = construct_fluid_state(cv, tseed)
+                dv = fluid_state.dv
 
             if do_health:
                 health_errors = global_reduce(my_health_check(cv, dv), op="lor")
@@ -467,15 +473,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 my_write_viz(step=step, t=t, state=cv, dv=dv)
 
-            dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
-                                  t_final, constant_cfl)
+            dt = current_dt
+            if constant_cfl:
+                dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
+                                      t_final, constant_cfl)
+
             if do_status:
                 my_write_status(step, t, dt, dv=dv, state=fluid_state)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=cv, dv=dv)
+            my_write_viz(step=step, t=t, state=cv)
             my_write_restart(step=step, t=t, state=cv, tseed=tseed)
             raise
 
@@ -483,7 +492,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_post_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
+        # fluid_state = construct_fluid_state(cv, tseed)
 
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -492,7 +501,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             set_sim_state(logmgr, dim, cv, gas_model.eos)
             logmgr.tick_after()
 
-        return make_obj_array([cv, fluid_state.temperature]), dt
+        # return make_obj_array([cv, fluid_state.temperature]), dt
+        return state, dt
 
     def my_rhs(t, state):
         cv, tseed = state
@@ -501,7 +511,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ns_rhs = ns_operator(discr, state=fluid_state, time=t,
                              boundaries=visc_bnds, gas_model=gas_model)
         cv_rhs = ns_rhs + eos.get_species_source_terms(cv, fluid_state.temperature)
-        return make_obj_array([cv_rhs, 0*tseed])
+        return make_obj_array([cv_rhs, fluid_state.temperature-tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t,
                                   current_dt, current_cfl, t_final, constant_cfl)

@@ -568,6 +568,13 @@ class SimulationApplication(metaclass=ABCMeta):
         """Wrap it up."""
         pass
 
+    def _configit(self, key, default):
+        return configurate(key, self._config, default)
+
+    def _allreduce(self, **kwargs):
+        from mirgecom.simutil import global_reduce
+        return global_reduce(comm=self._comm, **kwargs)
+
 
 class DummySimulation(SimulationApplication):
     """Dummy simulation for testing."""
