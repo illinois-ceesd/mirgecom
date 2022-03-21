@@ -1006,7 +1006,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
             nodes = thaw(bnd_discr.nodes(), actx)
-            boundary_cv = evaluate(sym_cv, x=nodes, t=time)
+            boundary_cv = evaluate(sym_cv, x=nodes)
             return make_fluid_state(boundary_cv, gas_model)
 
         boundaries = {
