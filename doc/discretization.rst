@@ -175,18 +175,26 @@ $$
 \b{Q}_h^+ + \b{Q}_h^-\right)\b{n}
 $$
 
-Domain boundary considerations
-------------------------------
+Domain boundary treatments
+==========================
 
 What happens when $\partial E \cap \partial\Omega \neq \emptyset$?
 
 In DG, numerical fluxes are not only responsible for handling the flow of information
 between adjacent cells, but they also enforce information flow at the boundaries.
 
-We denote the *boundary fluxes* as $\b{h}^*_e(\b{Q}_{bc})$,
-$\b{h}^*_v(\b{Q}_{bc}$, $\b{\Sigma}_{bc})$, and
-$\b{H}^*_s(\b{Q}_{bc})$, where $\b{Q}_{bc}$, $\b{\Sigma}_{bc}$ denote
-boundary conditions imposed on the state, and the gradient of the state respectively.
+The relevant quantities for the boundary treatments are as follows:
+
+.. math::
+   
+  \b{Q}^- &\equiv \text{solution on the interior of the boundary face} \\
+  \b{\Sigma}^- &\equiv \text{gradient of solution on interior of boundary face} \\
+  \b{Q}_{bc} &\equiv \text{solution on the exterior of the boundary face (boundary soln)} \\
+  \b{\Sigma}_{bc} &\equiv \text{grad of soln on exterior of boundary face} \\
+  \b{h}^*_e(\b{Q}_{bc}) &\equiv \text{boundary flux for the divergence of inviscid flux} \\
+  \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) &\equiv \text{bndry flux for divergence of viscous flux} \\
+  \b{H}^*(\b{Q}_{bc}) &\equiv \text{boundary flux for the gradient of the solution} \\
+  \hat{\b{n}} &\equiv \text{outward pointing normal for the boundary face}
 
 For all $\partial E \cap \partial\Omega$ the $+$ side is on the domain boundary. 
 Boundary conditions are set by prescribing one or more components of the solution
@@ -197,10 +205,54 @@ sections.
 
 
 Solid walls
-^^^^^^^^^^^
+-----------
 
+There are a few versions of solid wall treatments implemented in mirgecom:
+
+1. Adiabatic slip wall
+2. Adiabatic noslip wall
+3. Isothermal noslip wall
+
+Common to all implemented boundary treatments, we start by calculating or prescribing a
+boundary solution, $\b{Q}_{bc}$, for the exterior of the boundary face.  The following
+sections will describe how each of the wall treatments compute the boundary solution,
+and then the remaining relevant quantities described above.
+
+Adiabtic slip wall
+^^^^^^^^^^^^^^^^^^
+
+The adiabatic slip wall is an inviscid-only boundary condition.  The boundary solution
+is prescribed as follows:
+
+.. math::
+   \b{Q}_{bc} = \b{Q}^- - 2*\b{v}^-\cdot\hat{\b{n}},
+
+where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.
+
+The flux for the divergence of the inviscid flux is then calculated with the same numerical
+flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}_bc)$.
+
+No-slip walls
+^^^^^^^^^^^^^
+
+Boundary solution
+"""""""""""""""""
+
+For walls enforcing a no-slip condition, we choose the boundary solution as:
+
+.. math::
+   \b{Q}_{bc} = \b{Q}^- - \rho\b{v}^-,
+
+where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.
+
+
+Gradient boundary flux
+""""""""""""""""""""""
 Inviscid boundary flux
 """"""""""""""""""""""
+Viscous boundary flux
+"""""""""""""""""""""
+
 $\b{h}^*_e$ is equal to the (interior; - side) pressure contribution of
 $\b{F}^I(\b{Q}_{bc})\cdot\b{n}$
 (since $\b{V}\cdot\b{n} = 0$).
@@ -221,6 +273,7 @@ $$
 \b{\Sigma}_{bc} = \b{\Sigma}_h^-.
 $$
 Otherwise, $\b{\Sigma}_{bc}$ will need to be modified accordingly.
+
 
 Inflow/outflow boundaries
 ^^^^^^^^^^^^^^^^^^^^^^^^^
