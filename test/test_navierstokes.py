@@ -484,8 +484,9 @@ class UniformSolution(FluidManufacturedSolution):
     def get_solution(self, x, t):
         """Return sym soln."""
         x_c = x[0]
-        ones = mm.cos(0) * mm.cos(0)
-        zeros = mm.sin(0) * mm.sin(0)
+        zeros = 0*x_c
+        ones = zeros + 1.
+        # zeros = mm.sin(0) * mm.sin(0)
         for i in range(self._dim):
             if self._vel[i] == 0:
                 self._vel[i] = zeros
@@ -550,8 +551,10 @@ class ShearFlow(FluidManufacturedSolution):
         """Return sym soln."""
         x_c = x[0]
         y_c = x[1]
-        zeros = mm.sin(x_c - x_c)*mm.sin(t - t)
-        ones = mm.cos(x_c - x_c)*mm.cos(t - t)
+        # zeros = mm.sin(x_c - x_c)*mm.sin(t - t)
+        # ones = mm.cos(x_c - x_c)*mm.cos(t - t)
+        zeros = 0*x_c  # mm.sin(0)*mm.sin(0)
+        ones = zeros + 1.  #  mm.cos(0)*mm.cos(0)
         v_x = y_c**2
         v_y = 1.*zeros
         density = self._rho * ones
@@ -816,8 +819,10 @@ class RoySolution(FluidManufacturedSolution):
         c = self._q_coeff[0]
         ax = self._x_coeff[0]
         lx = self._lx
-        tone = mm.cos(t - t)
-        xone = mm.cos(x[0] - x[0])
+        # tone = mm.cos(t - t)
+        # xone = mm.cos(x[0] - x[0])
+        tone = 1.
+        xone = 1.
         omega_x = [np.pi*x[i]/lx[i] for i in range(self._dim)]
 
         funcs = [mm.sin, mm.cos, mm.sin]
@@ -962,9 +967,13 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         )
 
         source_eval = evaluate(sym_source, t=0, x=nodes,
-                # FIXME
-                unused_ok=True)
-        cv_exact = evaluate(sym_cv, t=0, x=nodes)
+                               constant_zero=discr.zeros(actx),
+                               # FIXME
+                               unused_ok=True)
+
+        cv_exact = evaluate(sym_cv, t=0, x=nodes,
+                    constant_zero=discr.zeros(actx),
+                            unused_ok = True)
 
         # Sanity check the dependent quantities
         # tmp_exact = evaluate(sym_tmp, t=0, x=nodes)
