@@ -10,6 +10,6 @@ echo $OMPI_COMM_WORLD_LOCAL_RANK
 
 export CUDA_VISIBLE_DEVICES=$OMPI_COMM_WORLD_LOCAL_RANK
 
-export PYOPENCL_CTX=0:1
+export PYOPENCL_TEST="port:nv"
 
 python -m mpi4py pulse-mpi.py --lazy
