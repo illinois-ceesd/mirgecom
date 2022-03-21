@@ -149,7 +149,7 @@ class EvaluationMapper(BaseEvaluationMapper):
 
 def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
     """Evaluate a symbolic expression using a specified mapper."""
-    constant_zero = kwargs.pop("zero", None)
+    constant_zero = kwargs.pop("constant_zero", None)
     unused_ok = kwargs.pop("unused_ok", False)
     mapper = mapper_type(kwargs, constant_zero=constant_zero)
 
