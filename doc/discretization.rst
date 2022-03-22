@@ -175,6 +175,12 @@ $$
 \b{Q}_h^+ + \b{Q}_h^-\right)\b{n}
 $$
 
+It is worth noting here that when $\b{Q}_h^+ = \b{Q}_h^-$, then there is no change in
+field value across the boundary, resulting in a $\nabla{\b{Q}}$ which vanishes in the
+normal direction corresponding to that boundary or face.
+
+That is, if $\b{Q}_h^+ = \b{Q}_h^-$, then $\nabla{\b{Q}} \cdot \hat{\b{n}} = 0$.
+
 Domain boundary treatments
 ==========================
 
@@ -213,7 +219,7 @@ There are a few versions of solid wall treatments implemented in mirgecom:
 2. Adiabatic noslip wall
 3. Isothermal noslip wall
 
-Common to all implemented boundary treatments, we start by calculating or prescribing a
+Common to all implemented wall boundary treatments, we start by calculating or prescribing a
 boundary solution, $\b{Q}_{bc}$, for the exterior of the boundary face.  The following
 sections will describe how each of the wall treatments compute the boundary solution,
 and then the remaining relevant quantities described above.
@@ -225,12 +231,14 @@ The adiabatic slip wall is an inviscid-only boundary condition.  The boundary so
 is prescribed as follows:
 
 .. math::
-   \b{Q}_{bc} = \b{Q}^- - 2*\b{v}^-\cdot\hat{\b{n}},
+
+   \b{Q}_{bc} = \b{Q}^- - 2*\left(\rho\b{v}^-\cdot\hat{\b{n}}\right)\hat{\b{n}},
 
 where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.
 
 The flux for the divergence of the inviscid flux is then calculated with the same numerical
-flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}_bc)$.
+flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}_{bc})$.
+
 
 No-slip walls
 ^^^^^^^^^^^^^
@@ -238,41 +246,104 @@ No-slip walls
 Boundary solution
 """""""""""""""""
 
-For walls enforcing a no-slip condition, we choose the boundary solution as:
+For walls enforcing a no-slip condition, we choose the "no-slip boundary solution" as:
 
 .. math::
-   \b{Q}_{bc} = \b{Q}^- - \rho\b{v}^-,
+
+   \b{Q}_{bc} = \b{Q}^- - 2\rho\b{v}^-,
 
 where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.
 
-
 Gradient boundary flux
 """"""""""""""""""""""
+
+The boundary flux for $\nabla{\b{Q}}$ at the boundary is computed with a central
+flux as follows:
+
+.. math::
+
+   \b{H}^*(\b{Q}_{bc}) = \b{H}_s(\b{Q}^-, \b{Q}_{bc}) = \frac{1}{2}\left(\b{Q}^- + \b{Q}_{bc}\right)\b{n},
+
+using the no-slip boundary solution, $\b{Q}_{bc}$, as defined above.
+
+Since:
+
+.. math::
+
+   \rho^+ &= \rho^- \\
+   (\rho{E})^+ &= (\rho{E})^- \\
+   (\rho{Y})^+ &= (\rho{Y})^-,
+
+we expect:
+
+.. math::
+
+   \nabla(\rho) \cdot \hat{\b{n}} &= 0 \\
+   \nabla(\rho{E}) \cdot \hat{\b{n}} &= 0 \\
+   \nabla(\rho{Y}) \cdot \hat{\b{n}} &= 0
+
+We compute $\nabla{Y}$ and $\nabla{E}$ from the product rule:
+
+.. math::
+
+   \nabla{Y} &= \frac{1}{\rho}\left(\nabla{(\rho{Y})} - Y\nabla{\rho}\right) \\  
+   \nabla{E} &= \frac{1}{\rho}\left(\nabla{(\rho{E})} - E\nabla{\rho}\right)
+
+So we likewise expect:
+
+.. math::
+
+   \nabla{Y} \cdot \hat{\b{n}} &= 0 \\
+   \nabla{E} \cdot \hat{\b{n}} &= 0
+
 Inviscid boundary flux
 """"""""""""""""""""""
+
+The inviscid boundary flux is calculated from the numerical flux function
+used for inviscid interfacial fluxes in the volume:
+
+.. math::
+
+   \b{h}^*_e = \b{h}_e(\b{Q}^-, \b{Q}_{bc})
+
+Intuitively, we expect $\b{h}^*_e$ is equal to the (interior; - side) pressure contribution of
+$\b{F}^I(\b{Q}_{bc})\cdot\b{n}$ (since $\b{V}\cdot\b{n} = 0$).
+
 Viscous boundary flux
 """""""""""""""""""""
 
-$\b{h}^*_e$ is equal to the (interior; - side) pressure contribution of
-$\b{F}^I(\b{Q}_{bc})\cdot\b{n}$
-(since $\b{V}\cdot\b{n} = 0$).
+*MIRGE-Com* has a departure from BR1 for the computation of viscous fluxes.  This section
+will describe both the viscous flux calculation prescribed by BR1, and also what
+*MIRGE-Com* is currently doing.
 
-Viscous boundary flux
-"""""""""""""""""""""
-$$
-\b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{F}_V(\b{Q}_{bc},
-\b{\Sigma}_{bc})\cdot\b{n},
-$$
+---------
+
+BR1 prescribes the following boundary treatment:
+
+The viscous boundary flux at solid walls is computed as:
+
+.. math::
+
+   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{F}_V(\b{Q}_{bc},\b{\Sigma}_{bc})\cdot\b{n},
+
 where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
 
-
-Gradient boundary flux
-""""""""""""""""""""""
 If there are no conditions on $\nabla\b{Q}\cdot\b{n}$, then:
 $$
 \b{\Sigma}_{bc} = \b{\Sigma}_h^-.
 $$
 Otherwise, $\b{\Sigma}_{bc}$ will need to be modified accordingly.
+
+--------
+
+MIRGE-Com currently does the following:
+
+.. math::
+
+   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{h}_v\left(\b{Q}^-,\b{\Sigma}^-,\b{Q}_{bc},\b{\Sigma}_{bc}\right),
+
+where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
+
 
 
 Inflow/outflow boundaries
