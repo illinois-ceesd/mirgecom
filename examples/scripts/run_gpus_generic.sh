@@ -4,7 +4,7 @@
 # It works by "hiding" GPUs from CUDA that do not
 # correspond to the local rank ID on the nodes, such that
 # only a single GPU is visible to each process.
-# This is useful on systems such as porter that have multiple
+# This is useful on systems such as 'porter' that have multiple
 # GPUs on a node but don't have an MPI process launcher that
 # handles GPU distribution.
 #
