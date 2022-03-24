@@ -96,7 +96,7 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                 inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
                 viscous_numerical_flux_func=viscous_flux_central,
-                quadrature_tag=None):
+                quadrature_tag=None, return_gradients=False):
     r"""Compute RHS of the Navier-Stokes equations.
 
     Returns
@@ -293,7 +293,9 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
             numerical_flux_func=inviscid_numerical_flux_func, time=time)
 
     )
-
-    return div_operator(discr, dd_vol_quad, dd_faces_quad, vol_term, bnd_term)
+    ns_rhs = div_operator(discr, dd_vol_quad, dd_faces_quad, vol_term, bnd_term)
+    if return_gradients:
+        return ns_rhs, grad_cv, grad_t
+    return ns_rhs
 
     # }}} NS RHS

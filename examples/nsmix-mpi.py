@@ -364,9 +364,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(status_msg)
 
-    def my_write_viz(step, t, state, dv):
-        viz_fields = [("cv", state),
+    def my_write_viz(step, t, cv, dv, ns_rhs=None, chem_rhs=None,
+                     grad_cv=None, grad_t=None, grad_v=None):
+        viz_fields = [("cv", cv),
                       ("dv", dv)]
+        if ns_rhs is not None:
+            viz_ext = [("nsrhs", ns_rhs),
+                       ("chemrhs", chem_rhs),
+                       ("grad_rho", grad_cv.mass),
+                       ("grad_e", grad_cv.energy),
+                       ("grad_mom_x", grad_cv.momentum[0]),
+                       ("grad_mom_y", grad_cv.momentum[1]),
+                       ("grad_y_1", grad_cv.species_mass[0]),
+                       ("grad_v_x", grad_v[0]),
+                       ("grad_v_y", grad_v[1]),
+                       ("grad_temperature", grad_t)]
+            viz_fields.extend(viz_ext)
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
@@ -465,7 +478,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=cv, tseed=tseed)
 
             if do_viz:
-                my_write_viz(step=step, t=t, state=cv, dv=dv)
+                from mirgecom.fluid import velocity_gradient
+                ns_rhs, grad_cv, grad_t = \
+                    ns_operator(discr, state=fluid_state, time=t,
+                                boundaries=visc_bnds, gas_model=gas_model,
+                                return_gradients=True)
+                grad_v = velocity_gradient(cv, grad_cv)
+                chem_rhs = \
+                    gas_model.eos.get_species_source_terms(cv,
+                                                           fluid_state.temperature)
+                my_write_viz(step=step, t=t, cv=cv, dv=dv, ns_rhs=ns_rhs,
+                             chem_rhs=chem_rhs, grad_cv=grad_cv, grad_t=grad_t,
+                             grad_v=grad_v)
 
             dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
@@ -475,7 +499,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=cv, dv=dv)
+            my_write_viz(step=step, t=t, cv=cv, dv=dv)
             my_write_restart(step=step, t=t, state=cv, tseed=tseed)
             raise
 
@@ -523,7 +547,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_dv = current_state.dv
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
-    my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
+    from mirgecom.fluid import velocity_gradient
+    ns_rhs, grad_cv, grad_t = \
+        ns_operator(discr, state=current_state, time=current_t,
+                    boundaries=visc_bnds, gas_model=gas_model,
+                    return_gradients=True)
+    grad_v = velocity_gradient(current_state.cv, grad_cv)
+    chem_rhs = \
+        gas_model.eos.get_species_source_terms(current_state.cv,
+                                               current_state.temperature)
+    my_write_viz(step=current_step, t=current_t, cv=current_state.cv, dv=final_dv,
+                             chem_rhs=chem_rhs, grad_cv=grad_cv, grad_t=grad_t,
+                             grad_v=grad_v)
     my_write_restart(step=current_step, t=current_t, state=current_state.cv,
                      tseed=tseed)
     my_write_status(current_step, current_t, final_dt, state=current_state,
