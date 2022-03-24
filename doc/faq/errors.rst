@@ -54,3 +54,17 @@ This can be caused by multiple issues:
   This error occurs because pyopencl was built by source with an incompatible
   gcc version. Load a newer gcc module (``$ ml load gcc/8.3.1`` should work),
   and recompile pyopencl.
+
+
+What does ``clEnqueueNDRangeKernel failed: OUT_OF_RESOURCES`` mean?
+-------------------------------------------------------------------
+
+This error message indicates that there is not enough memory available
+to run the simulation::
+
+     File "<generated code for 'invoke__pt_kernel_loopy_kernel'>", line 996, in invoke__pt_kernel_loopy_kernel
+     File "<generated code for 'invoke__pt_kernel_loopy_kernel'>", line 62, in _lpy_host__pt_kernel
+   pyopencl._cl.RuntimeError: clEnqueueNDRangeKernel failed: OUT_OF_RESOURCES
+
+
+Try running on more nodes and/or devices.
