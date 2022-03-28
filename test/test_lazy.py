@@ -254,7 +254,7 @@ def _get_scalar_lump():
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
     }
 
-    return gas_model, init, boundaries, 5e-12
+    return gas_model, init, boundaries, 1e-11
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
