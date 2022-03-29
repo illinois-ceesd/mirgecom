@@ -87,7 +87,8 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy_eval:
-            actx = PytatoPyOpenCLArrayContext(queue)
+            actx = PytatoPyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
         else:
             actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
