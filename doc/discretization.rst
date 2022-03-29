@@ -186,8 +186,16 @@ Domain boundary treatments
 
 What happens when $\partial E \cap \partial\Omega \neq \emptyset$?
 
-In DG, numerical fluxes are not only responsible for handling the flow of information
-between adjacent cells, but they also enforce information flow at the boundaries.
+In DG, fluxes are responsible for handling the flow of information
+between adjacent cells, and for transferring the boundary conditions
+into the domain from the domain boundary.  In this sense, all of the
+boundary conditions are _weak_, in that they are weakly enforced
+through the flux, as opposed to directly setting the solution of the
+boundary elements (a _strong_ enforcement).
+
+Boundary treatments in *MIRGE-Com* follow the prescriptions of the
+the so-called BR1 method descibed by [Bassi_1997]_, and the boundary
+treatment strategies outlined by [Mengaldo_2014]_.
 
 The relevant quantities for the boundary treatments are as follows:
 
@@ -234,10 +242,20 @@ is prescribed as follows:
 
    \b{Q}_{bc} = \b{Q}^- - 2*\left(\rho\b{v}^-\cdot\hat{\b{n}}\right)\hat{\b{n}},
 
-where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.
+where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.  More explicity for
+our particular system of equations we set:
+
+.. math::
+
+   \b{Q}_{bc} = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\(\rho{v_b})_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
+
+where $\mathbf{v}_b = \mathbf{v}^{-} - 2(\mathbf{v}^{-}\cdot\hat{\mathbf{n}})\hat{\mathbf{n}}$,
+$\mathbf{v}^{-}$ being the flow velocity on the interior (minus side) of the face.
 
 The flux for the divergence of the inviscid flux is then calculated with the same numerical
-flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}_{bc})$.
+flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}_{bc})$.  This is
+an inviscid-only wall condition, so no section on viscous or gradient fluxes are included
+for this particular wall treatment.
 
 
 No-slip walls
@@ -250,21 +268,97 @@ For walls enforcing a no-slip condition, we choose the "no-slip boundary solutio
 
 .. math::
 
-   \b{Q}_{bc} = \b{Q}^- - 2\rho\b{v}^-,
+   \b{Q}_{bc} = \b{Q}^- - 2(\rho\b{v}^-),
 
-where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.
+where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$. Explicity, for our
+particular equations in *MIRGE-Com*, we set:
+
+.. math::
+
+   \b{Q}_{bc} = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\-(\rho{v})^{-}_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
+
+which is just the interior fluid state except with the opposite momentum. This ensures that any
+Riemann solver used at the boundary will have an intermediate state with 0 velocities on the boundary.
+Other choices here will lead to non-zero velocities at the boundary, leading to material penetration
+at the wall; a non-physical result.
+
+Inviscid boundary flux
+""""""""""""""""""""""
+
+The inviscid boundary flux is calculated from the numerical flux function
+used for inviscid interfacial fluxes in the volume:
+
+.. math::
+
+   \b{h}^*_e = \b{h}_e(\b{Q}^-, \b{Q}_{bc})
+
+Intuitively, we expect $\b{h}^*_e$ is equal to the (interior; - side) pressure contribution of
+$\b{F}^I(\b{Q}_{bc})\cdot\b{n}$ (since $\b{V}\cdot\b{n} = 0$).
+
+Viscous boundary flux
+"""""""""""""""""""""
+
+*MIRGE-Com* has a departure from BR1 for the computation of viscous fluxes.  This section
+will describe the viscous flux calculations prescribed by [Bassi_1997]_, and [Mengaldo_2014]_,
+and also what *MIRGE-Com* is currently doing.
+
+--------
+
+.. note::
+
+   [Mengaldo_2014]_ prescribes that when computing the gradients of the solution
+   (i.e. the auxiliary equation) and the viscous fluxes, one should use a $\b{Q}_{bc}$
+   that is distinct from that used for the advective terms. This reference recommends
+   explicitly setting the boundary velocities to zero for the $\b{Q}_{bc}$ used in
+   computing $\nabla{\b{Q}}$ and $\b{F}_v(\b{Q}_{bc})$.
+
+
+BR1 and Mengaldo prescribe the following boundary treatment:
+
+The viscous boundary flux at solid walls is computed as:
+
+.. math::
+
+   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{F}_V(\b{Q}_{bc},\b{\Sigma}_{bc})\cdot\b{n},
+
+where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
+
+If there are no conditions on $\nabla\b{Q}\cdot\b{n}$, then:
+$$
+\b{\Sigma}_{bc} = \b{\Sigma}_h^-.
+$$
+Otherwise, $\b{\Sigma}_{bc}$ will need to be modified accordingly.
+
+--------
+
+MIRGE-Com currently does the following:
+
+.. math::
+
+   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{h}_v\left(\b{Q}^-,\b{\Sigma}^-,\b{Q}_{bc},\b{\Sigma}_{bc}\right),
+
+where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
+
+In *MIRGE-Com*, we use the central flux to transfer viscous BCs to the domain:
+
+.. math::
+
+     \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \frac{1}{2}\left(\mathbf{F}_v(\mathbf{Q}_{bc},\mathbf{\Sigma}_{bc}) + \mathbf{F}_v(\mathbf{Q}^{-},\mathbf{\Sigma}^{-})\right)
+
+
+--------
 
 Gradient boundary flux
 """"""""""""""""""""""
 
-The boundary flux for $\nabla{\b{Q}}$ at the boundary is computed with a central
+The boundary flux for $\nabla{\b{Q}}$ (i.e. for the auxiliary at the boundary is computed with a central
 flux as follows:
 
 .. math::
 
    \b{H}^*(\b{Q}_{bc}) = \b{H}_s(\b{Q}^-, \b{Q}_{bc}) = \frac{1}{2}\left(\b{Q}^- + \b{Q}_{bc}\right)\b{n},
 
-using the no-slip boundary solution, $\b{Q}_{bc}$, as defined above.
+using the no-slip boundary solution, $\b{Q}_{bc}$, as defined above. The note above about [Mengaldo_2014]_ using a distinct $\b{Q}_{bc}$ is relevant here. 
 
 Since:
 
@@ -296,55 +390,8 @@ So we likewise expect:
    \nabla{Y} \cdot \hat{\b{n}} &= 0 \\
    \nabla{E} \cdot \hat{\b{n}} &= 0
 
-Inviscid boundary flux
-""""""""""""""""""""""
-
-The inviscid boundary flux is calculated from the numerical flux function
-used for inviscid interfacial fluxes in the volume:
-
-.. math::
-
-   \b{h}^*_e = \b{h}_e(\b{Q}^-, \b{Q}_{bc})
-
-Intuitively, we expect $\b{h}^*_e$ is equal to the (interior; - side) pressure contribution of
-$\b{F}^I(\b{Q}_{bc})\cdot\b{n}$ (since $\b{V}\cdot\b{n} = 0$).
-
-Viscous boundary flux
-"""""""""""""""""""""
-
-*MIRGE-Com* has a departure from BR1 for the computation of viscous fluxes.  This section
-will describe both the viscous flux calculation prescribed by BR1, and also what
-*MIRGE-Com* is currently doing.
 
 ---------
-
-BR1 prescribes the following boundary treatment:
-
-The viscous boundary flux at solid walls is computed as:
-
-.. math::
-
-   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{F}_V(\b{Q}_{bc},\b{\Sigma}_{bc})\cdot\b{n},
-
-where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
-
-If there are no conditions on $\nabla\b{Q}\cdot\b{n}$, then:
-$$
-\b{\Sigma}_{bc} = \b{\Sigma}_h^-.
-$$
-Otherwise, $\b{\Sigma}_{bc}$ will need to be modified accordingly.
-
---------
-
-MIRGE-Com currently does the following:
-
-.. math::
-
-   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{h}_v\left(\b{Q}^-,\b{\Sigma}^-,\b{Q}_{bc},\b{\Sigma}_{bc}\right),
-
-where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
-
-
 
 Inflow/outflow boundaries
 ^^^^^^^^^^^^^^^^^^^^^^^^^

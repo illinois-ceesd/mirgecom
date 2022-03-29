@@ -71,3 +71,6 @@ References
     `(DOI) <https://doi.org/10.1007/978-3-642-59721-3_14>`__
 .. [Ihme_2014] Yu Lv and Matthias Ihme (2014) Journal of Computationsl Physics 270 105 \
     `(DOI) <http://dx.doi.org/10.1016/j.jcp.2014.03.029>`__
+.. [Mengaldo_2014] Gianmarco Mengaldo (2014) A Guide to the Implementation of Boundary Conditions in Compact High-Order Methods for Compressible Aerodynamics \
+   `(DOI) <https://doi.org/10.2514/6.2014-2923>`__
+ 
