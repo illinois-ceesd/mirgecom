@@ -817,14 +817,16 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         from mirgecom.fluid import species_mass_fraction_gradient
         grad_y_plus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
+        grad_y_plus = grad_y_plus - np.outer(grad_y_plus@normal, normal)
+        grad_species_mass_plus = 0.*grad_y_plus
         for i in range(state_minus.nspecies):
-            grad_y_plus[i] = grad_y_plus[i] - (np.dot(grad_y_plus[i], normal)*normal)
-        grad_cv = make_conserved(grad_cv_minus.dim,
-                                 mass=grad_cv_minus.mass,
-                                 energy=grad_cv_minus.energy,
-                                 momentum=grad_cv_minus.momentum,
-                                 species_mass=state_minus.mass_density*grad_y_plus)
-        return grad_cv
+            grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
+                + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+        return make_conserved(grad_cv_minus.dim,
+                              mass=grad_cv_minus.mass,
+                              energy=grad_cv_minus.energy,
+                              momentum=grad_cv_minus.momentum,
+                              species_mass=grad_species_mass_plus)
 
     def viscous_wall_flux(self, discr, btag, gas_model, state_minus,
                                            grad_cv_minus, grad_t_minus,
