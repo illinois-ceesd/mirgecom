@@ -752,3 +752,103 @@ class InflowBoundary(PrescribedFluidBoundary):
         def temperature_bc(self, state_minus, **kwargs):
             """Temperature value that prescribes the desired temperature."""
             return -state_minus.temperature + 2.0*self._free_stream_temperature
+
+
+class IsothermalWallBoundary(PrescribedFluidBoundary):
+    r"""Isothermal viscous wall boundary.
+    This class implements an isothermal wall by:
+    Pescribed flux, *not* with Riemann solver
+    """
+
+    def __init__(self, wall_temperature=300):
+        """Initialize the boundary condition object."""
+        self._wall_temp = wall_temperature
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.isothermal_wall_state,
+            inviscid_flux_func=self.inviscid_wall_flux,
+            viscous_flux_func=self.viscous_wall_flux,
+            boundary_temperature_func=self.temperature_bc,
+            boundary_gradient_cv_func=self.grad_cv_bc
+        )
+
+    def isothermal_wall_state(self, discr, btag, gas_model, state_minus, **kwargs):
+        """Return state with 0 velocities and energy(Twall)."""
+        temperature_wall = self._wall_temp + 0*state_minus.mass_density
+        mom_plus = state_minus.mass_density*0.*state_minus.velocity
+        mass_frac_plus = state_minus.species_mass_fractions
+
+        internal_energy_plus = gas_model.eos.get_internal_energy(
+            temperature=temperature_wall, species_mass_fractions=mass_frac_plus)
+
+        total_energy_plus = state_minus.mass_density*internal_energy_plus
+
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density, energy=total_energy_plus,
+            momentum=mom_plus, species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
+            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+        """Return Riemann flux using state with mom opposite of interior state."""
+        wall_cv = make_conserved(dim=state_minus.dim,
+                                 mass=state_minus.mass_density,
+                                 momentum=-state_minus.momentum_density,
+                                 energy=state_minus.energy_density,
+                                 species_mass=state_minus.species_mass_density)
+        wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
+                                      temperature_seed=state_minus.temperature)
+        state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
+
+        from mirgecom.inviscid import inviscid_facial_flux
+        return self._boundary_quantity(
+            discr, btag,
+            inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
+                                 numerical_flux_func=numerical_flux_func,
+                                 local=True),
+            **kwargs)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        # return 2*self._wall_temp - state_minus.temperature
+        return 0.*state_minus.temperature + self._wall_temp
+
+    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        from mirgecom.fluid import species_mass_fraction_gradient
+        grad_y_plus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
+        for i in range(state_minus.nspecies):
+            grad_y_plus[i] = grad_y_plus[i] - (np.dot(grad_y_plus[i], normal)*normal)
+        grad_cv = make_conserved(grad_cv_minus.dim,
+                                 mass=grad_cv_minus.mass,
+                                 energy=grad_cv_minus.energy,
+                                 momentum=grad_cv_minus.momentum,
+                                 species_mass=state_minus.mass_density*grad_y_plus)
+        return grad_cv
+
+    def viscous_wall_flux(self, discr, btag, gas_model, state_minus,
+                                           grad_cv_minus, grad_t_minus,
+                                           numerical_flux_func=viscous_flux_central,
+                                           **kwargs):
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = thaw(discr.normal(btag), actx)
+
+        state_plus = self.isothermal_wall_state(discr=discr, btag=btag,
+                                                gas_model=gas_model,
+                                                state_minus=state_minus, **kwargs)
+        grad_cv_plus = self.grad_cv_bc(state_minus=state_minus,
+                                       grad_cv_minus=grad_cv_minus,
+                                       normal=normal, **kwargs)
+
+        grad_t_plus = self._bnd_grad_temperature_func(
+            discr=discr, btag=btag, gas_model=gas_model,
+            state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+            grad_t_minus=grad_t_minus)
+
+        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
+                             grad_t=grad_t_plus)
+
+        return self._boundary_quantity(
+            discr, btag,
+            quantity=f_ext@normal)
