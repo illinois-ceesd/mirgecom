@@ -113,7 +113,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.5
+    t_final = 0.1
     current_cfl = 0.1
     current_dt = .001
     current_t = 0
@@ -126,8 +126,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nhealth = 1
 
     dim = 2
-    nel_1d = 16
-    order = 2
+    nel_1d = 4
+    order = 1
 
     rst_path = "restart_data/"
     rst_pattern = (
