@@ -36,7 +36,8 @@ from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
-from mirgecom.euler import euler_operator
+from mirgecom.transport import SimpleTransport
+from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh

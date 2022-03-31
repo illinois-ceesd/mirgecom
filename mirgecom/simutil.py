@@ -428,11 +428,45 @@ def create_parallel_grid(comm, generate_grid):
 
 def limit_species_mass_fractions(cv):
     """Keep the species mass fractions from going negative."""
-    y = cv.species_mass_fractions
-    if len(y) > 0:
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
         actx = cv.array_context
+        new_y = 1.*y
         zero = 0 * y[0]
-        for y_spec in y:
-            y_spec = actx.np.where(y_spec < 0, zero, y_spec)
-        cv = cv.replace(species_mass=cv.mass*y)
-    return(cv)
+        one = zero + 1.
+
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 1e-14), 
+                                     zero, new_y[i])
+            new_y[i] = actx.np.where(actx.np.greater(new_y[i], 1.), 
+                                     one, new_y[i])
+        new_rho_y = cv.mass*new_y
+
+        for i in range(cv.nspecies):
+            new_rho_y[i] = actx.np.where(actx.np.less(new_rho_y[i], 1e-14),
+                                         zero, new_rho_y[i])
+            new_rho_y[i] = actx.np.where(actx.np.greater(new_rho_y[i], 1.),
+                                         one, new_rho_y[i])
+            
+        return make_conserved(dim=cv.dim, mass=cv.mass,
+                              momentum=cv.momentum, energy=cv.energy,
+                              species_mass=new_rho_y)
+    return cv
+
+def species_fraction_anomaly_relaxation(cv, alpha=1.):
+    """Pull negative species fractions back towards 0."""
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
+        actx = cv.array_context
+        new_y = 1.*y
+        zero = 0. * y[0]
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 0.),
+                                     -new_y[i], zero)
+            # y_spec = actx.np.where(y_spec > 1., y_spec-1., zero)
+        return make_conserved(dim=cv.dim, mass=0.*cv.mass,
+                              momentum=0.*cv.momentum, energy=0.*cv.energy,
+                              species_mass=alpha*cv.mass*new_y)
+    return 0.*cv

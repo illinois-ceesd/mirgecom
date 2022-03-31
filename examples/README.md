@@ -19,3 +19,4 @@ unique features they exercise are as follows:
 - `nsmix-mpi.py`: Viscous mixture w/Pyrometheus-based EOS
 - `poiseuille-mpi.py`: Poiseuille flow verification case
 - `poiseuille-multispecies-mpi.py`: Poiseuille flow with passive scalars
+- `scalar-advdiff-mpi.py`: Scalar advection-diffusion verification case

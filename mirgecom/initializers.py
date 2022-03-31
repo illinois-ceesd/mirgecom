@@ -764,6 +764,195 @@ class MulticomponentLump:
                               momentum=momrhs, species_mass=specrhs)
 
 
+class MulticomponentTrig:
+    r"""Initializer for trig-distributed species fractions.
+
+    The trig lump is defined by:
+
+    .. math::
+
+         \rho &= 1.0\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
+         {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
+         + {a_\alpha}\sin{\omega(\mathbf{r} - \mathbf{v}t)},
+
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
+    and $\gamma$ is taken from the equation-of-state object (eos).
+
+    The user-specified vector of initial values (${{Y}_\alpha}_0$)
+    for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
+    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
+    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
+
+    A call to this object after creation/init creates the lump solution at a given
+    time (*t*) relative to the configured origin (*center*) and background flow
+    velocity (*velocity*).
+
+    This object also supplies the exact expected RHS terms from the analytic
+    expression via :meth:`exact_rhs`.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: exact_rhs
+    """
+
+    def __init__(
+            self, *, dim=1, nspecies=0,
+            rho0=1.0, p0=1.0, gamma=1.4,
+            center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None,
+            spec_centers=None,
+            spec_omegas=None,
+            spec_diffusivities=None,
+            wave_vector=None
+    ):
+        r"""Initialize MulticomponentLump parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specify the number of dimensions for the lump
+        rho0: float
+            specifies the value of $\rho_0$
+        p0: float
+            specifies the value of $p_0$
+        center: numpy.ndarray
+            center of lump, shape ``(dim,)``
+        velocity: numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(dim,)``
+        """
+        if center is None:
+            center = np.zeros(shape=(dim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        if center.shape != (dim,) or velocity.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional vector inputs.")
+        if spec_y0s is None:
+            spec_y0s = np.ones(shape=(nspecies,))
+        if spec_centers is None:
+            spec_centers = make_obj_array([np.zeros(shape=dim,)
+                                           for i in range(nspecies)])
+        if spec_omegas is None:
+            spec_omegas = 1./2./np.pi*np.ones(shaep=(nspecies,))
+
+        if spec_amplitudes is None:
+            spec_amplitudes = np.ones(shape=(nspecies,))
+        if spec_diffusivities is None:
+            spec_diffusivities = np.ones(shape=(nspecies,))
+
+        if wave_vector is None:
+            wave_vector = np.zeros(shape=(dim,))
+            wave_vector[0] = 1
+
+        if len(spec_y0s) != nspecies or\
+           len(spec_amplitudes) != nspecies or\
+               len(spec_centers) != nspecies:
+            raise ValueError(f"Expected nspecies={nspecies} inputs.")
+        for i in range(nspecies):
+            if len(spec_centers[i]) != dim:
+                raise ValueError(f"Expected {dim}-dimensional "
+                                 f"inputs for spec_centers.")
+
+        self._nspecies = nspecies
+        self._dim = dim
+        self._velocity = velocity
+        self._center = center
+        self._p0 = p0
+        self._rho0 = rho0
+        self._spec_y0s = spec_y0s
+        self._spec_centers = spec_centers
+        self._spec_amps = spec_amplitudes
+        self._gamma = gamma
+        self._spec_omegas = spec_omegas
+        self._d = spec_diffusivities
+        self._wave_vector = wave_vector
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        """
+        Create a multi-component lump solution at time *t* and locations *x_vec*.
+
+        The solution at time *t* is created by advecting the component mass lump
+        at the user-specified constant, uniform velocity
+        (``MulticomponentLump._velocity``).
+
+        Parameters
+        ----------
+        time: float
+            Current time at which the solution is desired
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        t = time
+        if x_vec.shape != (self._dim,):
+            print(f"len(x_vec) = {len(x_vec)}")
+            print(f"self._dim = {self._dim}")
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
+        # actx = x_vec[0].array_context
+        mass = 0 * x_vec[0] + self._rho0
+        mom = self._velocity * mass
+        energy = ((self._p0 / (self._gamma - 1.0))
+                  + 0.5*mass*np.dot(self._velocity, self._velocity))
+
+        import mirgecom.math as mm
+        vel_t = t * self._velocity
+        spec_mass = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            spec_x = x_vec - self._spec_centers[i]
+            wave_r = spec_x - vel_t
+            wave_x = np.dot(wave_r, self._wave_vector)
+            expterm = mm.exp(-t*self._d[i]*self._spec_omegas[i]**2)
+            trigterm = mm.sin(self._spec_omegas[i]*wave_x)
+            spec_y = self._spec_y0s[i] + self._spec_amps[i]*expterm*trigterm
+            spec_mass[i] = mass * spec_y
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=spec_mass)
+
+    def exact_rhs(self, discr, cv, time=0.0):
+        """
+        Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
+
+        The RHS at time *t* is created by advecting the species mass lump at the
+        user-specified constant, uniform velocity (``MulticomponentLump._velocity``).
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point.
+        time: float
+            Time at which RHS is desired
+        """
+        t = time
+        actx = cv.array_context
+        nodes = thaw(actx, discr.nodes())
+        loc_update = t * self._velocity
+
+        mass = 0 * nodes[0] + self._rho0
+        mom = self._velocity * mass
+
+        v = mom / mass
+        massrhs = 0 * mass
+        energyrhs = 0 * mass
+        momrhs = 0 * mom
+
+        # process the species components independently
+        specrhs = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            lump_loc = self._spec_centers[i] + loc_update
+            rel_pos = nodes - lump_loc
+            r2 = np.dot(rel_pos, rel_pos)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
+
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=specrhs)
+
+
 class AcousticPulse:
     r"""Solution initializer for N-dimensional Gaussian acoustic pulse.
 
