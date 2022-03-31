@@ -756,8 +756,9 @@ class InflowBoundary(PrescribedFluidBoundary):
 
 class IsothermalWallBoundary(PrescribedFluidBoundary):
     r"""Isothermal viscous wall boundary.
-    This class implements an isothermal wall by:
-    Pescribed flux, *not* with Riemann solver
+
+    This class implements an isothermal wall consistent with the prescription
+    by [Mengaldo_2014]_.
     """
 
     def __init__(self, wall_temperature=300):
@@ -780,6 +781,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         internal_energy_plus = gas_model.eos.get_internal_energy(
             temperature=temperature_wall, species_mass_fractions=mass_frac_plus)
 
+        # Velocity is pinned to 0 here, no kinetic energy
         total_energy_plus = state_minus.mass_density*internal_energy_plus
 
         cv_plus = make_conserved(
@@ -815,13 +817,16 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         return 0.*state_minus.temperature + self._wall_temp
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
         from mirgecom.fluid import species_mass_fraction_gradient
-        grad_y_plus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
-        grad_y_plus = grad_y_plus - np.outer(grad_y_plus@normal, normal)
+        grad_y_minus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
+        grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
         grad_species_mass_plus = 0.*grad_y_plus
+
         for i in range(state_minus.nspecies):
             grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
                 + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
         return make_conserved(grad_cv_minus.dim,
                               mass=grad_cv_minus.mass,
                               energy=grad_cv_minus.energy,
@@ -832,6 +837,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                                            grad_cv_minus, grad_t_minus,
                                            numerical_flux_func=viscous_flux_central,
                                            **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
         normal = thaw(discr.normal(btag), actx)
@@ -848,6 +854,8 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
             state_minus=state_minus, grad_cv_minus=grad_cv_minus,
             grad_t_minus=grad_t_minus)
 
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
         f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
                              grad_t=grad_t_plus)
 

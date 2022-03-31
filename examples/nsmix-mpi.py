@@ -248,9 +248,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # states for this particular mechanism.
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature)
-    gas_model = GasModel(eos=eos, transport=transport_model)
+    pyro_eos = PyrometheusMixture(pyrometheus_mechanism,
+                                  temperature_guess=init_temperature)
+    gas_model = GasModel(eos=pyro_eos, transport=transport_model)
 
     # }}}
 
@@ -485,8 +485,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                 return_gradients=True)
                 grad_v = velocity_gradient(cv, grad_cv)
                 chem_rhs = \
-                    gas_model.eos.get_species_source_terms(cv,
-                                                           fluid_state.temperature)
+                    pyro_eos.get_species_source_terms(cv,
+                                                      fluid_state.temperature)
                 my_write_viz(step=step, t=t, cv=cv, dv=dv, ns_rhs=ns_rhs,
                              chem_rhs=chem_rhs, grad_cv=grad_cv, grad_t=grad_t,
                              grad_v=grad_v)
@@ -524,7 +524,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                        temperature_seed=tseed)
         ns_rhs = ns_operator(discr, state=fluid_state, time=t,
                              boundaries=visc_bnds, gas_model=gas_model)
-        cv_rhs = ns_rhs + eos.get_species_source_terms(cv, fluid_state.temperature)
+        cv_rhs = ns_rhs + pyro_eos.get_species_source_terms(cv,
+                                                            fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t,
@@ -554,8 +555,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     return_gradients=True)
     grad_v = velocity_gradient(current_state.cv, grad_cv)
     chem_rhs = \
-        gas_model.eos.get_species_source_terms(current_state.cv,
-                                               current_state.temperature)
+        pyro_eos.get_species_source_terms(current_state.cv,
+                                          current_state.temperature)
     my_write_viz(step=current_step, t=current_t, cv=current_state.cv, dv=final_dv,
                              chem_rhs=chem_rhs, grad_cv=grad_cv, grad_t=grad_t,
                              grad_v=grad_v)

@@ -36,9 +36,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.transport import SimpleTransport
 from mirgecom.euler import euler_operator
-from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh
@@ -47,11 +45,7 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    AdiabaticSlipBoundary,
-    AdiabaticNoslipMovingBoundary,
-    IsothermalNoSlipBoundary
-)
+from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
     Lump,
     AcousticPulse
@@ -122,11 +116,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1.0
-    current_cfl = 0.1
+    t_final = 0.1
+    current_cfl = 1.0
     current_dt = .01
     current_t = 0
-    constant_cfl = True
+    constant_cfl = False
 
     # some i/o frequencies
     nstatus = 1
@@ -199,17 +193,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    kappa = 1e-5
-    sigma = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
     eos = IdealSingleGas()
-    gas_model = GasModel(eos=eos, transport=transport_model)
-
+    gas_model = GasModel(eos=eos)
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    wall = AdiabaticNoslipMovingBoundary(dim=3)
-
+    wall = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: wall}
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
@@ -223,8 +212,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        # current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
-        current_cv = uniform_state
+        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     current_state = make_fluid_state(current_cv, gas_model)
 
@@ -278,8 +266,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_pre_step(step, t, dt, state):
         fluid_state = make_fluid_state(state, gas_model)
         dv = fluid_state.dv
-        dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
-                              t_final, constant_cfl)
 
         try:
 
@@ -326,10 +312,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return ns_operator(discr, state=fluid_state, time=t,
-                           boundaries=boundaries,
-                           gas_model=gas_model,
-                           quadrature_tag=quadrature_tag)
+        return euler_operator(discr, state=fluid_state, time=t,
+                              boundaries=boundaries,
+                              gas_model=gas_model,
+                              quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)

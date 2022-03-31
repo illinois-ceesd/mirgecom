@@ -156,16 +156,16 @@ def sym_grad(dim, expr):
         return sym.grad(dim, expr)
 
 
-# @pytest.mark.parametrize("sym_test_func_factory",
-#                         [partial(_coord_test_func, order=0),
-#                          partial(_coord_test_func, order=1),
-#                          lambda dim: 2*_coord_test_func(dim, order=1),
-#                          partial(_coord_test_func, order=2),
-#                          _trig_test_func, _cv_test_func])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("sym_test_func_factory",
-                         [_cv_test_func])
+@pytest.mark.parametrize("sym_test_func_factory", [
+    partial(_coord_test_func, order=0),
+    partial(_coord_test_func, order=1),
+    lambda dim: 2*_coord_test_func(dim, order=1),
+    partial(_coord_test_func, order=2),
+    _trig_test_func,
+    _cv_test_func
+])
 def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
     """Test the gradient operator for sanity.
 
@@ -178,7 +178,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
     actx = actx_factory()
-    visualize = True
+
     sym_test_func = sym_test_func_factory(dim)
 
     tol = 1e-10 if dim < 3 else 1e-9
@@ -229,8 +229,8 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         if err_scale <= 1e-16:
             err_scale = 1
 
-        # print(f"{test_data=}")
-        # print(f"{exact_grad=}")
+        print(f"{test_data=}")
+        print(f"{exact_grad=}")
 
         test_data_int_tpair = interior_trace_pair(discr, test_data)
         boundaries = [BTAG_ALL]
@@ -244,35 +244,13 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_grad = grad_operator(discr, dd_vol, dd_faces,
                                   test_data, test_data_flux_bnd)
 
-        # print(f"{test_grad=}")
+        print(f"{test_grad=}")
         grad_err = \
             max(flatten(componentwise_norms(discr, test_grad - exact_grad, np.inf),
                         actx)) / err_scale
 
-        if visualize and dim == 3 and order == 1:
-            from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order+3)
-            resid = exact_grad - test_grad
-            vis.write_vtk_file("grad_test_{dim}_{order}_{n}.vtu".format(
-                dim=dim, order=order, n=nfac), [
-                    ("cv", test_data),
-                    ("dmass", test_grad.mass),
-                    ("denergy", test_grad.energy),
-                    ("dmom_x", test_grad.momentum[0]),
-                    ("dmom_y", test_grad.momentum[1]),
-                    ("dmass_exact", exact_grad.mass),
-                    ("denergy_exact", exact_grad.energy),
-                    ("dmom_x_exact", exact_grad.momentum[0]),
-                    ("dmom_y_exact", exact_grad.momentum[1]),
-                    ("resid_mass", resid.mass),
-                    ("resid_energy", resid.energy),
-                    ("resid_mom_x", resid.momentum[0]),
-                    ("resid_mom_y", resid.momentum[1])])
-
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 
-    print(f"{order=}\n{dim=}\n{sym_test_func_factory=}")
-    print(f"{eoc.pretty_print()}")
     assert (
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < tol

@@ -10,14 +10,19 @@ Solution Initializers
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. autofunction:: make_pulse
 .. autoclass:: MixtureInitializer
 .. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
+.. autoclass:: MulticomponentTrig
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
 .. autofunction:: initialize_fluid_state
+
+Initialization Utilities
+^^^^^^^^^^^^^^^^^^^^^^^^
+.. autofunction:: make_pulse
+
 """
 
 __copyright__ = """
@@ -785,16 +790,12 @@ class MulticomponentTrig:
     user-specified vector of amplitudes for each species, *spec_amplitudes*, and
     $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
 
-    A call to this object after creation/init creates the lump solution at a given
-    time (*t*) relative to the configured origin (*center*) and background flow
-    velocity (*velocity*).
-
-    This object also supplies the exact expected RHS terms from the analytic
-    expression via :meth:`exact_rhs`.
+    A call to this object after creation/init creates the trig solution at a given
+    time (*t*) relative to the configured origin (*center*), wave_vector k,  and
+    background flow velocity (*velocity*).
 
     .. automethod:: __init__
     .. automethod:: __call__
-    .. automethod:: exact_rhs
     """
 
     def __init__(
@@ -835,7 +836,7 @@ class MulticomponentTrig:
             spec_centers = make_obj_array([np.zeros(shape=dim,)
                                            for i in range(nspecies)])
         if spec_omegas is None:
-            spec_omegas = 1./2./np.pi*np.ones(shaep=(nspecies,))
+            spec_omegas = 2.*np.pi*np.ones(shape=(nspecies,))
 
         if spec_amplitudes is None:
             spec_amplitudes = np.ones(shape=(nspecies,))
@@ -911,46 +912,6 @@ class MulticomponentTrig:
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=spec_mass)
-
-    def exact_rhs(self, discr, cv, time=0.0):
-        """
-        Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
-
-        The RHS at time *t* is created by advecting the species mass lump at the
-        user-specified constant, uniform velocity (``MulticomponentLump._velocity``).
-
-        Parameters
-        ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point.
-        time: float
-            Time at which RHS is desired
-        """
-        t = time
-        actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
-        loc_update = t * self._velocity
-
-        mass = 0 * nodes[0] + self._rho0
-        mom = self._velocity * mass
-
-        v = mom / mass
-        massrhs = 0 * mass
-        energyrhs = 0 * mass
-        momrhs = 0 * mom
-
-        # process the species components independently
-        specrhs = np.empty((self._nspecies,), dtype=object)
-        for i in range(self._nspecies):
-            lump_loc = self._spec_centers[i] + loc_update
-            rel_pos = nodes - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
-
-        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
-                              momentum=momrhs, species_mass=specrhs)
 
 
 class AcousticPulse:
