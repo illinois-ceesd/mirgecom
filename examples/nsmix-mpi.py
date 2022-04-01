@@ -518,12 +518,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return make_obj_array([cv, fluid_state.temperature]), dt
 
+    flux_beta = .25
+    from mirgecom.viscous import viscous_flux_central
+    from mirgecom.flux import gradient_flux_central
+    grad_num_flux_func = partial(gradient_flux_central, beta=flux_beta)
+    viscous_num_flux_func = partial(viscous_flux_central, beta=-flux_beta)
+
     def my_rhs(t, state):
         cv, tseed = state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
         ns_rhs = ns_operator(discr, state=fluid_state, time=t,
-                             boundaries=visc_bnds, gas_model=gas_model)
+                             boundaries=visc_bnds, gas_model=gas_model,
+                             gradient_numerical_flux_func=grad_num_flux_func,
+                             viscous_numerical_flux_func=viscous_num_flux_func)
         cv_rhs = ns_rhs + pyro_eos.get_species_source_terms(cv,
                                                             fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
