@@ -2,6 +2,7 @@ r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
 .. autofunction:: grad_flux
 .. autofunction:: diffusion_flux
+.. autofunction:: grad_operator
 .. autofunction:: diffusion_operator
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
@@ -227,6 +228,65 @@ class _DiffusionGradTag:
     pass
 
 
+def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
+    r"""
+    Compute the gradient of *u*.
+
+    Uses unstabilized central numerical fluxes.
+
+    Parameters
+    ----------
+    discr: grudge.eager.EagerDGDiscretization
+        the discretization to use
+    boundaries:
+        dictionary (or list of dictionaries) mapping boundary tags to
+        :class:`DiffusionBoundary` instances
+    u: meshmode.dof_array.DOFArray or numpy.ndarray
+        the DOF array (or object array of DOF arrays) to which the operator should be
+        applied
+    quadrature_tag:
+        quadrature tag indicating which discretization in *discr* to use for
+        overintegration
+
+    Returns
+    -------
+    grad_u: numpy.ndarray
+        the gradient of *u*
+    """
+    if isinstance(u, np.ndarray):
+        if not isinstance(boundaries, list):
+            raise TypeError("boundaries must be a list if u is an object array")
+        if len(boundaries) != len(u):
+            raise TypeError("boundaries must be the same length as u")
+        return obj_array_vectorize_n_args(
+            lambda boundaries_i, u_i: grad_operator(
+                discr, boundaries_i, u_i, quadrature_tag=quadrature_tag),
+            make_obj_array(boundaries), u)
+
+    for btag, bdry in boundaries.items():
+        if not isinstance(bdry, DiffusionBoundary):
+            raise TypeError(f"Unrecognized boundary type for tag {btag}. "
+                "Must be an instance of DiffusionBoundary.")
+
+    dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
+
+    return discr.inverse_mass(
+        discr.weak_grad(-u)
+        -  # noqa: W504
+        discr.face_mass(
+            dd_allfaces_quad,
+            sum(
+                grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
+                for u_tpair in interior_trace_pairs(
+                    discr, u, comm_tag=_DiffusionStateTag))
+            + sum(
+                bdry.get_grad_flux(
+                    discr, as_dofdesc(btag), kappa, u, quadrature_tag=quadrature_tag)
+                for btag, bdry in boundaries.items())
+            )
+        )
+
+
 # Yuck
 def _normalize_arguments(*args, **kwargs):
     if len(args) >= 2 and not isinstance(args[1], (dict, list)):
@@ -323,21 +383,7 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
     dd_quad = DOFDesc("vol", quadrature_tag)
     dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
 
-    grad_u = discr.inverse_mass(
-        discr.weak_grad(-u)
-        -  # noqa: W504
-        discr.face_mass(
-            dd_allfaces_quad,
-            sum(
-                grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
-                for u_tpair in interior_trace_pairs(
-                    discr, u, comm_tag=_DiffusionStateTag))
-            + sum(
-                bdry.get_grad_flux(
-                    discr, as_dofdesc(btag), kappa, u, quadrature_tag=quadrature_tag)
-                for btag, bdry in boundaries.items())
-            )
-        )
+    grad_u = grad_operator(discr, boundaries, u, quadrature_tag=quadrature_tag)
 
     kappa_quad = discr.project("vol", dd_quad, kappa)
     grad_u_quad = discr.project("vol", dd_quad, grad_u)
