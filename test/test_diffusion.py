@@ -58,7 +58,7 @@ class HeatProblem(metaclass=ABCMeta):
 
     .. autoproperty:: dim
     .. automethod:: get_mesh
-    .. automethod:: get_alpha
+    .. automethod:: get_kappa
     .. automethod:: get_solution
     .. automethod:: get_boundaries
     """
@@ -82,8 +82,10 @@ class HeatProblem(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_alpha(self, x, t, u):
-        """Return the diffusivity for coordinates *x*, time *t*, and solution *u*."""
+    def get_kappa(self, x, t, u):
+        """
+        Return the conductivity for coordinates *x*, time *t*, and solution *u*.
+        """
         pass
 
     @abstractmethod
@@ -106,27 +108,27 @@ def get_box_mesh(dim, a, b, n):
         nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
 
-# 1D: u(x,t) = exp(-alpha*t)*cos(x)
-# 2D: u(x,y,t) = exp(-2*alpha*t)*sin(x)*cos(y)
-# 3D: u(x,y,z,t) = exp(-3*alpha*t)*sin(x)*sin(y)*cos(z)
+# 1D: u(x,t) = exp(-kappa*t)*cos(x)
+# 2D: u(x,y,t) = exp(-2*kappa*t)*sin(x)*cos(y)
+# 3D: u(x,y,z,t) = exp(-3*kappa*t)*sin(x)*sin(y)*cos(z)
 # on [-pi/2, pi/2]^{#dims}
 class DecayingTrig(HeatProblem):
-    def __init__(self, dim, alpha):
+    def __init__(self, dim, kappa):
         super().__init__(dim)
-        self._alpha = alpha
+        self._kappa = kappa
 
     def get_mesh(self, n):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
 
     def get_solution(self, x, t):
-        u = mm.exp(-self.dim*self._alpha*t)
+        u = mm.exp(-self.dim*self._kappa*t)
         for i in range(self.dim-1):
             u = u * mm.sin(x[i])
         u = u * mm.cos(x[self.dim-1])
         return u
 
-    def get_alpha(self, x, t, u):
-        return self._alpha
+    def get_kappa(self, x, t, u):
+        return self._kappa
 
     def get_boundaries(self, discr, actx, t):
         boundaries = {}
@@ -144,27 +146,27 @@ class DecayingTrig(HeatProblem):
         return boundaries
 
 
-# 1D: u(x,t) = exp(-alpha*t)*cos(x)
-# 2D: u(x,y,t) = exp(-2*alpha*t)*sin(x)*cos(y)
-# 3D: u(x,y,z,t) = exp(-3*alpha*t)*sin(x)*sin(y)*cos(z)
+# 1D: u(x,t) = exp(-kappa*t)*cos(x)
+# 2D: u(x,y,t) = exp(-2*kappa*t)*sin(x)*cos(y)
+# 3D: u(x,y,z,t) = exp(-3*kappa*t)*sin(x)*sin(y)*cos(z)
 # on [-pi/2, pi/4]^{#dims}
 class DecayingTrigTruncatedDomain(HeatProblem):
-    def __init__(self, dim, alpha):
+    def __init__(self, dim, kappa):
         super().__init__(dim)
-        self._alpha = alpha
+        self._kappa = kappa
 
     def get_mesh(self, n):
         return get_box_mesh(self.dim, -0.5*np.pi, 0.25*np.pi, n)
 
     def get_solution(self, x, t):
-        u = mm.exp(-self.dim*self._alpha*t)
+        u = mm.exp(-self.dim*self._kappa*t)
         for i in range(self.dim-1):
             u = u * mm.sin(x[i])
         u = u * mm.cos(x[self.dim-1])
         return u
 
-    def get_alpha(self, x, t, u):
-        return self._alpha
+    def get_kappa(self, x, t, u):
+        return self._kappa
 
     def get_boundaries(self, discr, actx, t):
         nodes = thaw(discr.nodes(), actx)
@@ -194,11 +196,11 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         return boundaries
 
 
-# 1D: alpha(x) = 1+0.2*cos(3*x)
+# 1D: kappa(x) = 1+0.2*cos(3*x)
 #     u(x,t)   = cos(t)*cos(x) (manufactured)
-# 2D: alpha(x,y) = 1+0.2*cos(3*x)*cos(3*y)
+# 2D: kappa(x,y) = 1+0.2*cos(3*x)*cos(3*y)
 #     u(x,y,t)   = cos(t)*sin(x)*cos(y) (manufactured)
-# 3D: alpha(x,y,z) = 1+0.2*cos(3*x)*cos(3*y)*cos(3*z)
+# 3D: kappa(x,y,z) = 1+0.2*cos(3*x)*cos(3*y)*cos(3*z)
 #     u(x,y,z,t)   = cos(t)*sin(x)*sin(y)*cos(z) (manufactured)
 # on [-pi/2, pi/2]^{#dims}
 class OscillatingTrigVarDiff(HeatProblem):
@@ -215,12 +217,12 @@ class OscillatingTrigVarDiff(HeatProblem):
         u = u * mm.cos(x[self.dim-1])
         return u
 
-    def get_alpha(self, x, t, u):
-        alpha = 1
+    def get_kappa(self, x, t, u):
+        kappa = 1
         for i in range(self.dim):
-            alpha = alpha * mm.cos(3.*x[i])
-        alpha = 1 + 0.2*alpha
-        return alpha
+            kappa = kappa * mm.cos(3.*x[i])
+        kappa = 1 + 0.2*kappa
+        return kappa
 
     def get_boundaries(self, discr, actx, t):
         boundaries = {}
@@ -238,7 +240,7 @@ class OscillatingTrigVarDiff(HeatProblem):
         return boundaries
 
 
-# alpha(u) = 1 + u**3
+# kappa(u) = 1 + u**3
 # 1D: u(x,t) = cos(t)*cos(x) (manufactured)
 # 2D: u(x,y,t) = cos(t)*sin(x)*cos(y) (manufactured)
 # 3D: u(x,y,z,t) = cos(t)*sin(x)*sin(y)*cos(z) (manufactured)
@@ -257,7 +259,7 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         u = u * mm.cos(x[self.dim-1])
         return u
 
-    def get_alpha(self, x, t, u):
+    def get_kappa(self, x, t, u):
         return 1 + u**3
 
     def get_boundaries(self, discr, actx, t):
@@ -276,10 +278,10 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         return boundaries
 
 
-def sym_diffusion(dim, sym_alpha, sym_u):
+def sym_diffusion(dim, sym_kappa, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
-    return sym_div(sym_alpha * sym_grad(dim, sym_u))
+    return sym_div(sym_kappa * sym_grad(dim, sym_u))
 
 
 # Note: Must integrate in time for a while in order to achieve expected spatial
@@ -311,9 +313,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     sym_x = pmbl.make_sym_vector("x", p.dim)
     sym_t = pmbl.var("t")
     sym_u = p.get_solution(sym_x, sym_t)
-    sym_alpha = p.get_alpha(sym_x, sym_t, sym_u)
+    sym_kappa = p.get_kappa(sym_x, sym_t, sym_u)
 
-    sym_diffusion_u = sym_diffusion(p.dim, sym_alpha, sym_u)
+    sym_diffusion_u = sym_diffusion(p.dim, sym_kappa, sym_u)
 
     # In order to support manufactured solutions, we modify the heat equation
     # to add a source term f. If the solution is exact, this term should be 0.
@@ -340,14 +342,14 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         nodes = thaw(discr.nodes(), actx)
 
         def get_rhs(t, u):
-            alpha = p.get_alpha(nodes, t, u)
-            if isinstance(alpha, DOFArray):
+            kappa = p.get_kappa(nodes, t, u)
+            if isinstance(kappa, DOFArray):
                 quadrature_tag = DISCR_TAG_QUAD
             else:
                 quadrature_tag = DISCR_TAG_BASE
             return (
                 diffusion_operator(
-                    discr, alpha=alpha, boundaries=p.get_boundaries(discr, actx, t),
+                    discr, kappa=kappa, boundaries=p.get_boundaries(discr, actx, t),
                     u=u, quadrature_tag=quadrature_tag)
                 + evaluate(sym_f, x=nodes, t=t))
 
@@ -386,9 +388,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
+def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     """
-    Checks the accuracy of the diffusion operator for an alpha field that has a
+    Checks the accuracy of the diffusion operator for an kappa field that has a
     jump across an element face.
     """
     actx = actx_factory()
@@ -415,34 +417,34 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
     upper_mask_np[int(n/2):, :] = 1
     upper_mask = DOFArray(actx, (actx.from_numpy(upper_mask_np),))
 
-    alpha_lower = 0.5
-    alpha_upper = 1
+    kappa_lower = 0.5
+    kappa_upper = 1
 
-    alpha = alpha_lower * lower_mask + alpha_upper * upper_mask
+    kappa = kappa_lower * lower_mask + kappa_upper * upper_mask
 
     boundaries = {
         DTAG_BOUNDARY("-0"): DirichletDiffusionBoundary(0.),
         DTAG_BOUNDARY("+0"): DirichletDiffusionBoundary(1.),
     }
 
-    flux = -alpha_lower*alpha_upper/(alpha_lower + alpha_upper)
+    flux = -kappa_lower*kappa_upper/(kappa_lower + kappa_upper)
 
     u_steady = (
-              -flux/alpha_lower * (nodes[0] + 1)  * lower_mask  # noqa: E126, E221
-        + (1 - flux/alpha_upper * (nodes[0] - 1)) * upper_mask)  # noqa: E131
+              -flux/kappa_lower * (nodes[0] + 1)  * lower_mask  # noqa: E126, E221
+        + (1 - flux/kappa_upper * (nodes[0] - 1)) * upper_mask)  # noqa: E131
 
     def get_rhs(t, u):
         return diffusion_operator(
-            discr, alpha=alpha, boundaries=boundaries, u=u)
+            discr, kappa=kappa, boundaries=boundaries, u=u)
 
     rhs = get_rhs(0, u_steady)
 
     if visualize:
         from grudge.shortcuts import make_visualizer
         vis = make_visualizer(discr, discr.order+3)
-        vis.write_vtk_file("diffusion_discontinuous_alpha_rhs_{order}.vtu"
+        vis.write_vtk_file("diffusion_discontinuous_kappa_rhs_{order}.vtu"
             .format(order=order), [
-                ("alpha", alpha),
+                ("kappa", kappa),
                 ("u_steady", u_steady),
                 ("rhs", rhs),
                 ])
@@ -470,9 +472,9 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
         t += dt
 
     if visualize:
-        vis.write_vtk_file("diffusion_disc_alpha_stability_{order}.vtu"
+        vis.write_vtk_file("diffusion_disc_kappa_stability_{order}.vtu"
             .format(order=order), [
-                ("alpha", alpha),
+                ("kappa", kappa),
                 ("u", u),
                 ("u_steady", u_steady),
                 ])
@@ -501,11 +503,11 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
     sym_x = pmbl.make_sym_vector("x", p.dim)
     sym_t = pmbl.var("t")
     sym_u = p.get_solution(sym_x, sym_t)
-    sym_alpha = p.get_alpha(sym_x, sym_t, sym_u)
+    sym_kappa = p.get_kappa(sym_x, sym_t, sym_u)
 
-    assert sym_alpha == 1
+    assert sym_kappa == 1
 
-    sym_diffusion_u = sym_diffusion(p.dim, sym_alpha, sym_u)
+    sym_diffusion_u = sym_diffusion(p.dim, sym_kappa, sym_u)
 
     from meshmode.interop.nodal_dg import download_nodal_dg_if_not_present
     download_nodal_dg_if_not_present()
@@ -526,7 +528,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             u_mirgecom = p.get_solution(nodes_mirgecom, t)
 
             diffusion_u_mirgecom = diffusion_operator(
-                discr_mirgecom, alpha=discr_mirgecom.zeros(actx)+1.,
+                discr_mirgecom, kappa=discr_mirgecom.zeros(actx)+1.,
                 boundaries=p.get_boundaries(discr_mirgecom, actx, t),
                 u=u_mirgecom)
 
@@ -576,16 +578,16 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     sym_u1 = get_u1(sym_x, sym_t)
     sym_u2 = get_u2(sym_x, sym_t)
 
-    sym_alpha1 = p.get_alpha(sym_x, sym_t, sym_u1)
-    sym_alpha2 = p.get_alpha(sym_x, sym_t, sym_u2)
+    sym_kappa1 = p.get_kappa(sym_x, sym_t, sym_u1)
+    sym_kappa2 = p.get_kappa(sym_x, sym_t, sym_u2)
 
-    assert isinstance(sym_alpha1, Number)
-    assert isinstance(sym_alpha2, Number)
+    assert isinstance(sym_kappa1, Number)
+    assert isinstance(sym_kappa2, Number)
 
-    alpha = sym_alpha1
+    kappa = sym_kappa1
 
-    sym_diffusion_u1 = sym_diffusion(p.dim, alpha, sym_u1)
-    sym_diffusion_u2 = sym_diffusion(p.dim, alpha, sym_u2)
+    sym_diffusion_u1 = sym_diffusion(p.dim, kappa, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(p.dim, kappa, sym_u2)
 
     n = 128
 
@@ -601,12 +603,12 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u1 = get_u1(nodes, t)
     u2 = get_u2(nodes, t)
 
-    alpha = p.get_alpha(nodes, t, u1)
+    kappa = p.get_kappa(nodes, t, u1)
 
     boundaries = p.get_boundaries(discr, actx, t)
 
     diffusion_u1 = diffusion_operator(
-        discr, alpha=alpha, boundaries=boundaries, u=u1)
+        discr, kappa=kappa, boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
@@ -620,7 +622,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u_vector = make_obj_array([u1, u2])
 
     diffusion_u_vector = diffusion_operator(
-        discr, alpha=alpha, boundaries=boundaries_vector, u=u_vector)
+        discr, kappa=kappa, boundaries=boundaries_vector, u=u_vector)
 
     assert isinstance(diffusion_u_vector, np.ndarray)
     assert diffusion_u_vector.shape == (2,)

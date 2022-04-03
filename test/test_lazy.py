@@ -114,14 +114,12 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
 #     }
 #
-#     def op(alpha, u):
-#         return _gradient_operator(
-#             discr, alpha, boundaries, u)
+#     def op(u):
+#         return _gradient_operator(discr, boundaries, u)
 
 #     compiled_op = actx.compile(op)
-#     alpha = discr.zeros(actx) + 1
 #     u = discr.zeros(actx)
-#     compiled_op(alpha, u)
+#     compiled_op(u)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -185,16 +183,16 @@ def test_lazy_op_diffusion(op_test_data, order):
         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
     }
 
-    def op(alpha, u):
-        return diffusion_operator(discr, alpha, boundaries, u)
+    def op(kappa, u):
+        return diffusion_operator(discr, kappa, boundaries, u)
 
     lazy_op = lazy_actx.compile(op)
 
     def get_inputs(actx):
         nodes = thaw(discr.nodes(), actx)
-        alpha = discr.zeros(actx) + 1
+        kappa = discr.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
-        return alpha, u
+        return kappa, u
 
     tol = 1e-11
     isclose = partial(

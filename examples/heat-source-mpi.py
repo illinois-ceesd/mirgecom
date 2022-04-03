@@ -153,7 +153,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def rhs(t, u):
         return (
-            diffusion_operator(discr, alpha=1, boundaries=boundaries, u=u)
+            diffusion_operator(discr, kappa=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     compiled_rhs = actx.compile(rhs)
