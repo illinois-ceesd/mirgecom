@@ -103,7 +103,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #     cl_ctx = ctx_factory()
 #     actx, discr = _op_test_fixture(cl_ctx)
 #
-#     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+#     from grudge.dof_desc import DTAG_BOUNDARY
 #     from mirgecom.diffusion import (
 #         _gradient_operator,
 #         DirichletDiffusionBoundary,
@@ -116,7 +116,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #
 #     def op(alpha, u):
 #         return _gradient_operator(
-#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
+#             discr, alpha, boundaries, u)
 
 #     compiled_op = actx.compile(op)
 #     alpha = discr.zeros(actx) + 1
@@ -174,7 +174,7 @@ def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+    from grudge.dof_desc import DTAG_BOUNDARY
     from mirgecom.diffusion import (
         diffusion_operator,
         DirichletDiffusionBoundary,
@@ -186,8 +186,7 @@ def test_lazy_op_diffusion(op_test_data, order):
     }
 
     def op(alpha, u):
-        return diffusion_operator(
-            discr, DISCR_TAG_BASE, alpha, boundaries, u)
+        return diffusion_operator(discr, alpha, boundaries, u)
 
     lazy_op = lazy_actx.compile(op)
 

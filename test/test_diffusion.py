@@ -342,11 +342,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         def get_rhs(t, u):
             alpha = p.get_alpha(nodes, t, u)
             if isinstance(alpha, DOFArray):
-                discr_tag = DISCR_TAG_QUAD
+                quadrature_tag = DISCR_TAG_QUAD
             else:
-                discr_tag = DISCR_TAG_BASE
-            return (diffusion_operator(discr, quad_tag=discr_tag, alpha=alpha,
-                    boundaries=p.get_boundaries(discr, actx, t), u=u)
+                quadrature_tag = DISCR_TAG_BASE
+            return (
+                diffusion_operator(
+                    discr, alpha=alpha, boundaries=p.get_boundaries(discr, actx, t),
+                    u=u, quadrature_tag=quadrature_tag)
                 + evaluate(sym_f, x=nodes, t=t))
 
         t = 0.
@@ -431,7 +433,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
 
     def get_rhs(t, u):
         return diffusion_operator(
-            discr, quad_tag=DISCR_TAG_BASE, alpha=alpha, boundaries=boundaries, u=u)
+            discr, alpha=alpha, boundaries=boundaries, u=u)
 
     rhs = get_rhs(0, u_steady)
 
@@ -523,9 +525,10 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             u_mirgecom = p.get_solution(nodes_mirgecom, t)
 
-            diffusion_u_mirgecom = diffusion_operator(discr_mirgecom,
-                quad_tag=DISCR_TAG_BASE, alpha=discr_mirgecom.zeros(actx)+1.,
-                boundaries=p.get_boundaries(discr_mirgecom, actx, t), u=u_mirgecom)
+            diffusion_u_mirgecom = diffusion_operator(
+                discr_mirgecom, alpha=discr_mirgecom.zeros(actx)+1.,
+                boundaries=p.get_boundaries(discr_mirgecom, actx, t),
+                u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
             nodes_ndg = thaw(discr_ndg.nodes(), actx)
@@ -602,8 +605,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     boundaries = p.get_boundaries(discr, actx, t)
 
-    diffusion_u1 = diffusion_operator(discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
-        boundaries=boundaries, u=u1)
+    diffusion_u1 = diffusion_operator(
+        discr, alpha=alpha, boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
@@ -617,9 +620,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u_vector = make_obj_array([u1, u2])
 
     diffusion_u_vector = diffusion_operator(
-        discr, quad_tag=DISCR_TAG_BASE, alpha=alpha,
-        boundaries=boundaries_vector, u=u_vector
-    )
+        discr, alpha=alpha, boundaries=boundaries_vector, u=u_vector)
 
     assert isinstance(diffusion_u_vector, np.ndarray)
     assert diffusion_u_vector.shape == (2,)
