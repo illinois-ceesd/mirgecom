@@ -39,8 +39,7 @@ from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DOFDesc, as_dofdesc
-from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
-from grudge.trace_pair import TracePair
+from grudge.trace_pair import TracePair, interior_trace_pairs
 
 
 def gradient_flux(discr, quad_tag, u_tpair):
@@ -273,14 +272,13 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
-            gradient_flux(discr, quad_tag, interior_trace_pair(discr, u))
+            sum(
+                gradient_flux(discr, quad_tag, u_tpair)
+                for u_tpair in interior_trace_pairs(
+                    discr, u, comm_tag=_DiffusionStateTag))
             + sum(
                 bdry.get_gradient_flux(discr, quad_tag, as_dofdesc(btag), alpha, u)
                 for btag, bdry in boundaries.items())
-            + sum(
-                gradient_flux(discr, quad_tag, u_tpair)
-                for u_tpair in cross_rank_trace_pairs(discr, u,
-                                                      tag=_DiffusionStateTag))
             )
         )
 
@@ -292,16 +290,14 @@ def diffusion_operator(discr, quad_tag, alpha, boundaries, u, return_grad_u=Fals
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
-            diffusion_flux(discr, quad_tag, interior_trace_pair(discr, alpha),
-                interior_trace_pair(discr, grad_u))
+            sum(
+                diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair)
+                for alpha_tpair, grad_u_tpair in zip(
+                    interior_trace_pairs(discr, alpha, comm_tag=_DiffusionAlphaTag),
+                    interior_trace_pairs(discr, grad_u, comm_tag=_DiffusionGradTag)))
             + sum(
                 bdry.get_diffusion_flux(discr, quad_tag, as_dofdesc(btag), alpha,
                     grad_u) for btag, bdry in boundaries.items())
-            + sum(
-                diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair)
-                for alpha_tpair, grad_u_tpair in zip(
-                    cross_rank_trace_pairs(discr, alpha, tag=_DiffusionAlphaTag),
-                    cross_rank_trace_pairs(discr, grad_u, tag=_DiffusionGradTag)))
             )
         )
 
