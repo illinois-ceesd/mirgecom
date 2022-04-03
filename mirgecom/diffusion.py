@@ -100,7 +100,7 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_grad_flux(
-            self, discr, dd, kappa, u, *, quadrature_tag=DISCR_TAG_BASE):
+            self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):
         """Compute the flux for grad(u) on the boundary corresponding to *dd*."""
         raise NotImplementedError
 
@@ -140,8 +140,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(
-            self, discr, dd, kappa, u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
@@ -194,8 +193,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(
-            self, discr, dd, kappa, u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
@@ -281,7 +279,7 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
                     discr, u, comm_tag=_DiffusionStateTag))
             + sum(
                 bdry.get_grad_flux(
-                    discr, as_dofdesc(btag), kappa, u, quadrature_tag=quadrature_tag)
+                    discr, as_dofdesc(btag), u, quadrature_tag=quadrature_tag)
                 for btag, bdry in boundaries.items())
             )
         )
