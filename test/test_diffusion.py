@@ -26,6 +26,7 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
+from arraycontext import thaw
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
@@ -36,7 +37,7 @@ from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from meshmode.dof_array import thaw, DOFArray
+from meshmode.dof_array import DOFArray
 from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, DISCR_TAG_QUAD
 
 from meshmode.array_context import (  # noqa
@@ -166,7 +167,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         return self._alpha
 
     def get_boundaries(self, discr, actx, t):
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         sym_exact_u = self.get_solution(
             pmbl.make_sym_vector("x", self.dim), pmbl.var("t"))
@@ -180,7 +181,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
             upper_grad_u = discr.project("vol", upper_btag, exact_grad_u)
-            normal = thaw(actx, discr.normal(upper_btag))
+            normal = thaw(discr.normal(upper_btag), actx)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
@@ -336,7 +337,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             }
         )
 
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
 
         def get_rhs(t, u):
             alpha = p.get_alpha(nodes, t, u)
@@ -397,7 +398,7 @@ def test_diffusion_discontinuous_alpha(actx_factory, order, visualize=False):
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -518,7 +519,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             from grudge.eager import EagerDGDiscretization
             discr_mirgecom = EagerDGDiscretization(actx, mesh, order=order)
-            nodes_mirgecom = thaw(actx, discr_mirgecom.nodes())
+            nodes_mirgecom = thaw(discr_mirgecom.nodes(), actx)
 
             u_mirgecom = p.get_solution(nodes_mirgecom, t)
 
@@ -527,7 +528,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
                 boundaries=p.get_boundaries(discr_mirgecom, actx, t), u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
-            nodes_ndg = thaw(actx, discr_ndg.nodes())
+            nodes_ndg = thaw(discr_ndg.nodes(), actx)
 
             u_ndg = p.get_solution(nodes_ndg, t)
 
@@ -590,7 +591,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     from grudge.eager import EagerDGDiscretization
     discr = EagerDGDiscretization(actx, mesh, order=4)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     t = 1.23456789
 

@@ -36,8 +36,8 @@ import abc
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import thaw
 from grudge.dof_desc import DOFDesc, as_dofdesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 from grudge.trace_pair import TracePair
@@ -51,7 +51,7 @@ def gradient_flux(discr, quad_tag, u_tpair):
     dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
-    normal_quad = thaw(actx, discr.normal(dd_quad))
+    normal_quad = thaw(discr.normal(dd_quad), actx)
 
     def to_quad(a):
         return discr.project(dd, dd_quad, a)
@@ -71,7 +71,7 @@ def diffusion_flux(discr, quad_tag, alpha_tpair, grad_u_tpair):
     dd_quad = dd.with_discr_tag(quad_tag)
     dd_allfaces_quad = dd_quad.with_dtag("all_faces")
 
-    normal_quad = thaw(actx, discr.normal(dd_quad))
+    normal_quad = thaw(discr.normal(dd_quad), actx)
 
     def to_quad(a):
         return discr.project(dd, dd_quad, a)

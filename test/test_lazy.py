@@ -29,11 +29,11 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
+from arraycontext import freeze, thaw
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
-from arraycontext.container.traversal import freeze, thaw
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
