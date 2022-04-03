@@ -1,6 +1,6 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
-.. autofunction:: gradient_flux
+.. autofunction:: grad_flux
 .. autofunction:: diffusion_flux
 .. autofunction:: diffusion_operator
 .. autoclass:: DiffusionBoundary
@@ -42,7 +42,7 @@ from grudge.dof_desc import DOFDesc, as_dofdesc, DISCR_TAG_BASE
 from grudge.trace_pair import TracePair, interior_trace_pairs
 
 
-def gradient_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
+def grad_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
     r"""Compute the numerical flux for $\nabla u$."""
     actx = u_tpair.int.array_context
 
@@ -93,12 +93,12 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
     """
     Diffusion boundary base class.
 
-    .. automethod:: get_gradient_flux
+    .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
     """
 
     @abc.abstractmethod
-    def get_gradient_flux(
+    def get_grad_flux(
             self, discr, dd, kappa, u, *, quadrature_tag=DISCR_TAG_BASE):
         """Compute the flux for grad(u) on the boundary corresponding to *dd*."""
         raise NotImplementedError
@@ -138,12 +138,12 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         """
         self.value = value
 
-    def get_gradient_flux(
+    def get_grad_flux(
             self, discr, dd, kappa, u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
-        return gradient_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
+        return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
             self, discr, dd, kappa, grad_u, *,
@@ -192,12 +192,12 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         """
         self.value = value
 
-    def get_gradient_flux(
+    def get_grad_flux(
             self, discr, dd, kappa, u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
-        return gradient_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
+        return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
             self, discr, dd, kappa, grad_u, *,
@@ -329,11 +329,11 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
         discr.face_mass(
             dd_allfaces_quad,
             sum(
-                gradient_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
+                grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
                 for u_tpair in interior_trace_pairs(
                     discr, u, comm_tag=_DiffusionStateTag))
             + sum(
-                bdry.get_gradient_flux(
+                bdry.get_grad_flux(
                     discr, as_dofdesc(btag), kappa, u, quadrature_tag=quadrature_tag)
                 for btag, bdry in boundaries.items())
             )
