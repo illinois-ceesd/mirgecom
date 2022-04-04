@@ -46,11 +46,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import grudge.dof_desc as dof_desc
+from functools import partial
+
+from grudge.dof_desc import DISCR_TAG_MODAL, as_dofdesc
 
 from arraycontext import map_array_container
-
-from functools import partial
 
 from meshmode.dof_array import DOFArray
 
@@ -200,22 +200,20 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     result: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the filtered field(s).
     """
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
-
     if not isinstance(field, DOFArray):
         return map_array_container(
             partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
         )
 
-    actx = field.array_context
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
+    dd_nodal = as_dofdesc(dd)
+    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
 
-    modal_map = dcoll.connection_from_dds(dd, dd_modal)
-    nodal_map = dcoll.connection_from_dds(dd_modal, dd)
+    discr = dcoll.discr_from_dd(dd_nodal)
+
+    actx = field.array_context
+
+    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
+    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
     field = modal_map(field)
     field = apply_spectral_filter(actx, field, discr, cutoff,
                                   mode_resp_func)

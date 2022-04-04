@@ -7,6 +7,7 @@ r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
+.. autoclass:: InterfaceDiffusionBoundary
 """
 
 __copyright__ = """
@@ -36,10 +37,12 @@ THE SOFTWARE.
 import abc
 import numpy as np
 import numpy.linalg as la  # noqa
+from dataclasses import replace
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DOFDesc, as_dofdesc, DISCR_TAG_BASE
+from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE, as_dofdesc
 from grudge.trace_pair import TracePair, interior_trace_pairs
 
 
@@ -47,19 +50,20 @@ def grad_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
     r"""Compute the numerical flux for $\nabla u$."""
     actx = u_tpair.int.array_context
 
-    dd = u_tpair.dd
-    dd_quad = dd.with_discr_tag(quadrature_tag)
-    dd_allfaces_quad = dd_quad.with_dtag("all_faces")
+    dd_trace = u_tpair.dd
+    dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_trace_quad.with_domain_tag(
+        replace(dd_trace_quad.domain_tag, tag=FACE_RESTR_ALL))
 
-    normal_quad = thaw(discr.normal(dd_quad), actx)
+    normal_quad = thaw(discr.normal(dd_trace_quad), actx)
 
     def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+        return discr.project(dd_trace, dd_trace_quad, a)
 
     def flux(u, normal):
         return -u * normal
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux(
+    return discr.project(dd_trace_quad, dd_allfaces_quad, flux(
         to_quad(u_tpair.avg), normal_quad))
 
 
@@ -68,26 +72,27 @@ def diffusion_flux(
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$."""
     actx = grad_u_tpair.int[0].array_context
 
-    dd = grad_u_tpair.dd
-    dd_quad = dd.with_discr_tag(quadrature_tag)
-    dd_allfaces_quad = dd_quad.with_dtag("all_faces")
+    dd_trace = grad_u_tpair.dd
+    dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_trace_quad.with_domain_tag(
+        replace(dd_trace_quad.domain_tag, tag=FACE_RESTR_ALL))
 
-    normal_quad = thaw(discr.normal(dd_quad), actx)
+    normal_quad = thaw(discr.normal(dd_trace_quad), actx)
 
     def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+        return discr.project(dd_trace, dd_trace_quad, a)
 
     def flux(kappa, grad_u, normal):
         return -kappa * np.dot(grad_u, normal)
 
-    flux_tpair = TracePair(dd_quad,
+    flux_tpair = TracePair(dd_trace_quad,
         interior=flux(
             to_quad(kappa_tpair.int), to_quad(grad_u_tpair.int), normal_quad),
         exterior=flux(
             to_quad(kappa_tpair.ext), to_quad(grad_u_tpair.ext), normal_quad)
         )
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux_tpair.avg)
+    return discr.project(dd_trace_quad, dd_allfaces_quad, flux_tpair.avg)
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
@@ -100,14 +105,16 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_grad_flux(
-            self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):
-        """Compute the flux for grad(u) on the boundary corresponding to *dd*."""
+            self, discr, dd_vol, dd_bdry, u, *,
+            quadrature_tag=DISCR_TAG_BASE):
+        """Compute the flux for grad(u) on the boundary *dd_bdry*."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def get_diffusion_flux(
-            self, discr, dd, kappa, grad_u, *, quadrature_tag=DISCR_TAG_BASE):
-        """Compute the flux for diff(u) on the boundary corresponding to *dd*."""
+            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
+            quadrature_tag=DISCR_TAG_BASE):
+        """Compute the flux for diff(u) on the boundary *dd_bdry*."""
         raise NotImplementedError
 
 
@@ -140,20 +147,21 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(
-            self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd_vol, dd_bdry, u, *,
+            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get gradient flux."""
-        u_int = discr.project("vol", dd, u)
-        u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
+        u_int = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=2*self.value-u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, discr, dd, kappa, grad_u, *,
+            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get diffusion flux."""
-        kappa_int = discr.project("vol", dd, kappa)
-        kappa_tpair = TracePair(dd, interior=kappa_int, exterior=kappa_int)
-        grad_u_int = discr.project("vol", dd, grad_u)
-        grad_u_tpair = TracePair(dd, interior=grad_u_int, exterior=grad_u_int)
+        kappa_int = discr.project(dd_vol, dd_bdry, kappa)
+        kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=kappa_int)
+        grad_u_int = discr.project(dd_vol, dd_bdry, grad_u)
+        grad_u_tpair = TracePair(dd_bdry, interior=grad_u_int, exterior=grad_u_int)
         return diffusion_flux(
             discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
 
@@ -195,27 +203,72 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(
-            self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd_vol, dd_bdry, u, *,
+            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get gradient flux."""
-        u_int = discr.project("vol", dd, u)
-        u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
+        u_int = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, discr, dd, kappa, grad_u, *,
+            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get diffusion flux."""
-        dd_quad = dd.with_discr_tag(quadrature_tag)
-        dd_allfaces_quad = dd_quad.with_dtag("all_faces")
+        dd_bdry_quad = dd_bdry.with_discr_tag(quadrature_tag)
+        dd_allfaces_quad = dd_bdry_quad.with_domain_tag(
+            replace(dd_bdry_quad.domain_tag, tag=FACE_RESTR_ALL))
         # Compute the flux directly instead of constructing an external grad_u value
         # (and the associated TracePair); this approach is simpler in the
         # spatially-varying kappa case (the other approach would result in a
         # grad_u_tpair that lives in the quadrature discretization; diffusion_flux
         # would need to be modified to accept such values).
-        kappa_int_quad = discr.project("vol", dd_quad, kappa)
-        value_quad = discr.project(dd, dd_quad, self.value)
+        kappa_int_quad = discr.project(dd_vol, dd_bdry_quad, kappa)
+        value_quad = discr.project(dd_bdry, dd_bdry_quad, self.value)
         flux_quad = -kappa_int_quad*value_quad
-        return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
+        return discr.project(dd_bdry_quad, dd_allfaces_quad, flux_quad)
+
+
+class InterfaceDiffusionBoundary(DiffusionBoundary):
+    r"""
+    Interface boundary condition for the diffusion operator.
+
+    Prescribes external value(s) of $u$ and $\nabla u$ at the boundary.
+
+    .. automethod:: __init__
+    """
+
+    def __init__(self, u_ext, grad_u_ext, kappa_ext):
+        r"""
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        u_ext: float or meshmode.dof_array.DOFArray
+            the external value(s) of $u$ along the boundary
+        grad_u_ext: numpy.ndarray
+            the external value(s) of $\nabla u$ along the boundary
+        """
+        self.u_ext = u_ext
+        self.grad_u_ext = grad_u_ext
+        self.kappa_ext = kappa_ext
+
+    def get_grad_flux(
+            self, discr, dd_vol, dd_bdry, u, *,
+            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        u_int = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=self.u_ext)
+        return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
+
+    def get_diffusion_flux(
+            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
+            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        kappa_int = discr.project(dd_vol, dd_bdry, kappa)
+        kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=self.kappa_ext)
+        grad_u_int = discr.project(dd_vol, dd_bdry, grad_u)
+        grad_u_tpair = TracePair(
+            dd_bdry, interior=grad_u_int, exterior=self.grad_u_ext)
+        return diffusion_flux(
+            discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
 
 
 class _DiffusionStateTag:
@@ -230,7 +283,9 @@ class _DiffusionGradTag:
     pass
 
 
-def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
+def grad_operator(
+        discr, boundaries, u, *, quadrature_tag=DISCR_TAG_BASE,
+        volume_dd=DD_VOLUME_ALL):
     r"""
     Compute the gradient of *u*.
 
@@ -249,6 +304,8 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
     quadrature_tag:
         quadrature tag indicating which discretization in *discr* to use for
         overintegration
+    volume_dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the volume on which to apply the operator
 
     Returns
     -------
@@ -262,29 +319,38 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
             raise TypeError("boundaries must be the same length as u")
         return obj_array_vectorize_n_args(
             lambda boundaries_i, u_i: grad_operator(
-                discr, boundaries_i, u_i, quadrature_tag=quadrature_tag),
+                discr, boundaries_i, u_i, quadrature_tag=quadrature_tag,
+                volume_dd=volume_dd),
             make_obj_array(boundaries), u)
 
-    for btag, bdry in boundaries.items():
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
+    for bdtag, bdry in boundaries.items():
         if not isinstance(bdry, DiffusionBoundary):
-            raise TypeError(f"Unrecognized boundary type for tag {btag}. "
+            raise TypeError(f"Unrecognized boundary type for tag {bdtag}. "
                 "Must be an instance of DiffusionBoundary.")
 
-    dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
+    dd_vol_base = volume_dd
+    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     return discr.inverse_mass(
-        discr.weak_grad(-u)
+        dd_vol_base,
+        discr.weak_grad(dd_vol_base, -u)
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
             sum(
                 grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
                 for u_tpair in interior_trace_pairs(
-                    discr, u, comm_tag=_DiffusionStateTag))
+                    discr, u, volume_dd=dd_vol_base, tag=_DiffusionStateTag))
             + sum(
-                bdry.get_grad_flux(
-                    discr, as_dofdesc(btag), u, quadrature_tag=quadrature_tag)
-                for btag, bdry in boundaries.items())
+                bdry.get_grad_flux(discr, dd_vol_base,
+                    dd_vol_base.with_domain_tag(bdtag), u,
+                    quadrature_tag=quadrature_tag)
+                for bdtag, bdry in boundaries.items())
             )
         )
 
@@ -329,7 +395,8 @@ def _normalize_arguments(*args, **kwargs):
     return kappa, boundaries, u, quadrature_tag
 
 
-def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
+def diffusion_operator(
+        discr, *args, return_grad_u=False, volume_dd=DD_VOLUME_ALL, **kwargs):
     r"""
     Compute the diffusion operator.
 
@@ -346,7 +413,7 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
     kappa: numbers.Number or meshmode.dof_array.DOFArray
         the conductivity value(s)
     boundaries:
-        dictionary (or list of dictionaries) mapping boundary tags to
+        dictionary (or list of dictionaries) mapping boundary domain tags to
         :class:`DiffusionBoundary` instances
     u: meshmode.dof_array.DOFArray or numpy.ndarray
         the DOF array (or object array of DOF arrays) to which the operator should be
@@ -356,6 +423,8 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
     quadrature_tag:
         quadrature tag indicating which discretization in *discr* to use for
         overintegration
+    volume_dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the volume on which to apply the operator
 
     Returns
     -------
@@ -374,24 +443,31 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
         return obj_array_vectorize_n_args(
             lambda boundaries_i, u_i: diffusion_operator(
                 discr, kappa, boundaries_i, u_i, return_grad_u=return_grad_u,
-                quadrature_tag=quadrature_tag),
+                quadrature_tag=quadrature_tag, volume_dd=volume_dd),
             make_obj_array(boundaries), u)
 
-    for btag, bdry in boundaries.items():
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
+    for bdtag, bdry in boundaries.items():
         if not isinstance(bdry, DiffusionBoundary):
-            raise TypeError(f"Unrecognized boundary type for tag {btag}. "
+            raise TypeError(f"Unrecognized boundary type for tag {bdtag}. "
                 "Must be an instance of DiffusionBoundary.")
 
-    dd_quad = DOFDesc("vol", quadrature_tag)
-    dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
+    dd_vol_base = volume_dd
+    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    grad_u = grad_operator(discr, boundaries, u, quadrature_tag=quadrature_tag)
+    grad_u = grad_operator(
+        discr, boundaries, u, quadrature_tag=quadrature_tag, volume_dd=dd_vol_base)
 
-    kappa_quad = discr.project("vol", dd_quad, kappa)
-    grad_u_quad = discr.project("vol", dd_quad, grad_u)
+    kappa_quad = discr.project(dd_vol_base, dd_vol_quad, kappa)
+    grad_u_quad = discr.project(dd_vol_base, dd_vol_quad, grad_u)
 
     diff_u = discr.inverse_mass(
-        discr.weak_div(dd_quad, -kappa_quad*grad_u_quad)
+        dd_vol_base,
+        discr.weak_div(dd_vol_quad, -kappa_quad*grad_u_quad)
         -  # noqa: W504
         discr.face_mass(
             dd_allfaces_quad,
@@ -399,13 +475,16 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
                 diffusion_flux(
                     discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
                 for kappa_tpair, grad_u_tpair in zip(
-                    interior_trace_pairs(discr, kappa, comm_tag=_DiffusionKappaTag),
-                    interior_trace_pairs(discr, grad_u, comm_tag=_DiffusionGradTag)))
+                    interior_trace_pairs(
+                        discr, kappa, volume_dd=dd_vol_base, tag=_DiffusionKappaTag),
+                    interior_trace_pairs(
+                        discr, grad_u, volume_dd=dd_vol_base, tag=_DiffusionGradTag))
+            )
             + sum(
                 bdry.get_diffusion_flux(
-                    discr, as_dofdesc(btag), kappa, grad_u,
-                    quadrature_tag=quadrature_tag)
-                for btag, bdry in boundaries.items())
+                    discr, dd_vol_base, dd_vol_base.with_domain_tag(bdtag), kappa,
+                    grad_u, quadrature_tag=quadrature_tag)
+                for bdtag, bdry in boundaries.items())
             )
         )
 

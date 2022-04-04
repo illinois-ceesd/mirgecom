@@ -40,7 +40,7 @@ from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 from mirgecom.fluid import make_conserved
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 
 from mirgecom.boundary import (
     DummyBoundary,
@@ -294,20 +294,20 @@ def test_poiseuille_rhs(actx_factory, order):
                                    for i in range(num_eqns)])
         )
 
-        def boundary_func(discr, btag, gas_model, state_minus, **kwargs):
+        def boundary_func(discr, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = discr.discr_from_dd(dd_bdry)
             nodes = thaw(bnd_discr.nodes(), actx)
             return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                                 **kwargs), gas_model)
 
         boundaries = {
-            DTAG_BOUNDARY("-1"):
-            PrescribedFluidBoundary(boundary_state_func=boundary_func),
-            DTAG_BOUNDARY("+1"):
-            PrescribedFluidBoundary(boundary_state_func=boundary_func),
-            DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
-            DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
+            BoundaryDomainTag("-1"):
+                PrescribedFluidBoundary(boundary_state_func=boundary_func),
+            BoundaryDomainTag("+1"):
+                PrescribedFluidBoundary(boundary_state_func=boundary_func),
+            BoundaryDomainTag("-2"): AdiabaticNoslipMovingBoundary(),
+            BoundaryDomainTag("+2"): AdiabaticNoslipMovingBoundary()}
 
         state = make_fluid_state(gas_model=gas_model, cv=cv_input)
         ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,

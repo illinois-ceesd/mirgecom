@@ -63,6 +63,8 @@ from functools import partial
 
 from meshmode.dof_array import DOFArray
 
+from grudge.dof_desc import DD_VOLUME_ALL
+
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,9 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
+def get_sim_timestep(
+        discr, state, t, dt, cfl, t_final, constant_cfl=False,
+        fluid_volume_dd=DD_VOLUME_ALL):
     """Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
@@ -132,7 +136,7 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
         from grudge.op import nodal_min
         mydt = state.array_context.to_numpy(
             cfl * nodal_min(
-                discr, "vol",
+                discr, fluid_volume_dd,
                 get_viscous_timestep(discr=discr, state=state)))[()]
     return min(t_remaining, mydt)
 
@@ -381,7 +385,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     return local_mesh, global_nelements
 
 
-def boundary_report(discr, boundaries, outfile_name):
+def boundary_report(discr, boundaries, outfile_name, volume_dd=DD_VOLUME_ALL):
     """Generate a report of the grid boundaries."""
     comm = discr.mpi_communicator
     nproc = 1
@@ -395,22 +399,23 @@ def boundary_report(discr, boundaries, outfile_name):
     local_report = StringIO(local_header)
     local_report.seek(0, 2)
 
-    for btag in boundaries:
-        boundary_discr = discr.discr_from_dd(btag)
+    for bdtag in boundaries:
+        boundary_discr = discr.discr_from_dd(bdtag)
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-        local_report.write(f"{btag}: {nnodes}\n")
+        local_report.write(f"{bdtag}: {nnodes}\n")
 
-    if nproc > 1:
-        from meshmode.mesh import BTAG_PARTITION
-        from grudge.trace_pair import connected_ranks
-        remote_ranks = connected_ranks(discr)
-        local_report.write(f"remote_ranks: {remote_ranks}\n")
-        rank_nodes = []
-        for remote_rank in remote_ranks:
-            boundary_discr = discr.discr_from_dd(BTAG_PARTITION(remote_rank))
-            nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-            rank_nodes.append(nnodes)
-        local_report.write(f"nnodes_pb: {rank_nodes}\n")
+    from meshmode.mesh import BTAG_PARTITION
+    from meshmode.distributed import get_connected_partitions
+    connected_part_ids = get_connected_partitions(
+        discr.discr_from_dd(volume_dd).mesh)
+    local_report.write(f"connected_part_ids: {connected_part_ids}\n")
+    part_nodes = []
+    for connected_part_id in connected_part_ids:
+        boundary_discr = discr.discr_from_dd(BTAG_PARTITION(connected_part_id))
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        part_nodes.append(nnodes)
+    if part_nodes:
+        local_report.write(f"nnodes_pb: {part_nodes}\n")
 
     local_report.write("-----\n")
     local_report.seek(0)

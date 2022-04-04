@@ -183,9 +183,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
 
-    def boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
+    def boundary_solution(discr, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = discr.discr_from_dd(dd_bdry)
         nodes = thaw(bnd_discr.nodes(), actx)
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)

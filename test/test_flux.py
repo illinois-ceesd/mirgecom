@@ -34,6 +34,7 @@ import pytest
 from pytools.obj_array import make_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
+from grudge.dof_desc import as_dofdesc
 from grudge.symbolic.primitives import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
@@ -127,7 +128,10 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
     mag = np.linalg.norm(normal)
     normal = norm_dir*normal/mag
 
-    state_pair = TracePair("vol", interior=fluid_state_int, exterior=fluid_state_ext)
+    state_pair = TracePair(
+        as_dofdesc("vol"),
+        interior=fluid_state_int,
+        exterior=fluid_state_ext)
 
     # code passes in fluxes in the direction of the surface normal,
     # so we will too
@@ -264,7 +268,10 @@ def test_hll_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
     mag = np.linalg.norm(normal)
     normal = norm_dir*normal/mag
 
-    state_pair = TracePair("vol", interior=fluid_state_int, exterior=fluid_state_ext)
+    state_pair = TracePair(
+        as_dofdesc("vol"),
+        interior=fluid_state_int,
+        exterior=fluid_state_ext)
 
     from mirgecom.inviscid import inviscid_flux_hll
     flux_bnd = inviscid_flux_hll(state_pair, gas_model, normal)

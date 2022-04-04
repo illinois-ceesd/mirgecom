@@ -30,10 +30,13 @@ import numpy.linalg as la  # noqa
 import pyopencl.clmath  # noqa
 import logging
 import pytest  # noqa
+from dataclasses import replace
 
 from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
+from grudge.dof_desc import as_dofdesc
 import grudge.op as op
 from grudge.eager import (
     EagerDGDiscretization,
@@ -163,8 +166,9 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                     int_tpair, boundaries):
-        return (compute_interior_flux(int_tpair)
-                + sum(compute_boundary_flux(btag) for btag in boundaries))
+        return (
+            compute_interior_flux(int_tpair)
+            + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
 
     from mirgecom.flux import gradient_flux_central
 
@@ -174,15 +178,16 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         dd_all_faces = int_tpair.dd.with_dtag("all_faces")
         return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
 
-    def cv_flux_boundary(btag):
-        boundary_discr = discr.discr_from_dd(btag)
+    def cv_flux_boundary(dd_bdry):
+        boundary_discr = discr.discr_from_dd(dd_bdry)
         bnd_nodes = thaw(actx, boundary_discr.nodes())
         cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
-        bnd_nhat = thaw(actx, discr.normal(btag))
+        bnd_nhat = thaw(actx, discr.normal(dd_bdry))
         from grudge.trace_pair import TracePair
-        bnd_tpair = TracePair(btag, interior=cv_bnd, exterior=cv_bnd)
+        bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
         flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
-        dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
+        dd_all_faces = dd_bdry.with_domain_tag(
+            replace(dd_bdry.domain_tag, tag=FACE_RESTR_ALL))
         return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
 
     for nfac in [1, 2, 4]:
@@ -213,7 +218,6 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
                                   cv_int_tpair, boundaries)
         from mirgecom.operators import grad_operator
-        from grudge.dof_desc import as_dofdesc
         dd_vol = as_dofdesc("vol")
         dd_faces = as_dofdesc("all_faces")
         grad_cv = grad_operator(discr, dd_vol, dd_faces, cv, cv_flux_bnd)

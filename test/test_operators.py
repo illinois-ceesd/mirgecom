@@ -36,6 +36,7 @@ import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
+from grudge.dof_desc import as_dofdesc
 from mirgecom.flux import gradient_flux_central
 from mirgecom.fluid import (
     ConservedVars,
@@ -53,8 +54,9 @@ logger = logging.getLogger(__name__)
 
 def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
                 int_tpair, boundaries):
-    return (compute_interior_flux(int_tpair)
-            + sum(compute_boundary_flux(btag) for btag in boundaries))
+    return (
+        compute_interior_flux(int_tpair)
+        + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
@@ -130,14 +132,14 @@ def central_flux_interior(actx, discr, int_tpair):
     return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
 
 
-def central_flux_boundary(actx, discr, soln_func, btag):
+def central_flux_boundary(actx, discr, soln_func, dd_bdry):
     """Compute a central flux for boundary faces."""
-    boundary_discr = discr.discr_from_dd(btag)
+    boundary_discr = discr.discr_from_dd(dd_bdry)
     bnd_nodes = thaw(actx, boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = thaw(actx, discr.normal(btag))
+    bnd_nhat = thaw(actx, discr.normal(dd_bdry))
     from grudge.trace_pair import TracePair
-    bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
+    bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
     dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
     return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
@@ -238,7 +240,6 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
                                          test_data_int_tpair, boundaries)
 
         from mirgecom.operators import grad_operator
-        from grudge.dof_desc import as_dofdesc
         dd_vol = as_dofdesc("vol")
         dd_faces = as_dofdesc("all_faces")
         test_grad = grad_operator(discr, dd_vol, dd_faces,

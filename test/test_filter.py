@@ -30,7 +30,6 @@ import pytest
 import numpy as np
 from functools import partial
 
-from meshmode.dof_array import thaw
 from grudge.eager import EagerDGDiscretization
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -38,7 +37,7 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import (
     make_obj_array
 )
-from meshmode.dof_array import thaw  # noqa
+from arraycontext import thaw  # noqa
 from mirgecom.filter import make_spectral_filter
 
 
@@ -126,11 +125,12 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
 
     for group in vol_discr.groups:
         mode_ids = group.mode_ids()
-        filter_coeff = actx.thaw(
+        filter_coeff = thaw(
             make_spectral_filter(
                 actx, group, cutoff=cutoff,
                 mode_response_function=frfunc
-            )
+            ),
+            actx
         )
         for mode_index, mode_id in enumerate(mode_ids):
             mode = mode_id
@@ -168,7 +168,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
 
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
@@ -231,9 +231,9 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         from grudge.shortcuts import make_visualizer
         vis = make_visualizer(discr, discr.order)
 
-    from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
+    from grudge.dof_desc import DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL
 
-    modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    modal_map = discr.connection_from_dds(DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL)
 
     for field_order in range(cutoff+1, cutoff+4):
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]

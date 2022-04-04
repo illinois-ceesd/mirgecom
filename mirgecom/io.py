@@ -32,6 +32,8 @@ THE SOFTWARE.
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from grudge.dof_desc import DD_VOLUME_ALL
+
 
 def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
@@ -52,12 +54,13 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
+def make_status_message(
+        *, discr, t, step, dt, cfl, dependent_vars, fluid_volume_dd=DD_VOLUME_ALL):
     r"""Make simulation status and health message."""
     dv = dependent_vars
     from functools import partial
-    _min = partial(discr.nodal_min, "vol")
-    _max = partial(discr.nodal_max, "vol")
+    _min = partial(discr.nodal_min, fluid_volume_dd)
+    _max = partial(discr.nodal_max, fluid_volume_dd)
     statusmsg = (
         f"Status: {step=} {t=}\n"
         f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"

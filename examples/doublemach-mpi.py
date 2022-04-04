@@ -32,7 +32,7 @@ from functools import partial
 
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
@@ -245,22 +245,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(discr, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = discr.discr_from_dd(dd_bdry)
         nodes = thaw(bnd_discr.nodes(), actx)
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
     boundaries = {
-        DTAG_BOUNDARY("ic1"):
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        DTAG_BOUNDARY("ic2"):
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        DTAG_BOUNDARY("ic3"):
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
-        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
+        BoundaryDomainTag("ic1"):
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("ic2"):
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("ic3"):
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("wall"): AdiabaticNoslipMovingBoundary(),
+        BoundaryDomainTag("out"): AdiabaticNoslipMovingBoundary(),
     }
 
     if rst_filename:
@@ -275,8 +275,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
-    visualizer = make_visualizer(discr,
-                                 discr.order if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order if discr.dim == 2 else order)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__

@@ -189,29 +189,30 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     zeros = discr.zeros(actx)
 
     class TestBoundary:
-        def soln_gradient_flux(self, disc, btag, fluid_state, gas_model, **kwargs):
-            fluid_state_int = project_fluid_state(disc, "vol", btag, fluid_state,
+        def soln_gradient_flux(
+                self, disc, dd_bdry, fluid_state, gas_model, **kwargs):
+            fluid_state_int = project_fluid_state(disc, "vol", dd_bdry, fluid_state,
                                                   gas_model)
             cv_int = fluid_state_int.cv
             from grudge.trace_pair import TracePair
-            bnd_pair = TracePair(btag,
+            bnd_pair = TracePair(dd_bdry,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = thaw(actx, disc.normal(btag))
+            nhat = thaw(actx, disc.normal(dd_bdry))
             from mirgecom.flux import gradient_flux_central
             flux_weak = gradient_flux_central(bnd_pair, normal=nhat)
-            return disc.project(btag, "all_faces", flux_weak)
+            return disc.project(dd_bdry, "all_faces", flux_weak)
 
-        def av_flux(self, disc, btag, diffusion, **kwargs):
-            nhat = thaw(actx, disc.normal(btag))
-            diffusion_minus = discr.project("vol", btag, diffusion)
+        def av_flux(self, disc, dd_bdry, diffusion, **kwargs):
+            nhat = thaw(actx, disc.normal(dd_bdry))
+            diffusion_minus = discr.project("vol", dd_bdry, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
-            bnd_grad_pair = TracePair(btag, interior=diffusion_minus,
+            bnd_grad_pair = TracePair(dd_bdry, interior=diffusion_minus,
                                       exterior=diffusion_plus)
             from mirgecom.flux import divergence_flux_central
             flux_weak = divergence_flux_central(bnd_grad_pair, normal=nhat)
-            return disc.project(btag, "all_faces", flux_weak)
+            return disc.project(dd_bdry, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
     # Uniform field return 0 rhs

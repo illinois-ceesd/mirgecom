@@ -57,13 +57,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import replace
 from functools import partial
+
+from meshmode.discretization.connection import FACE_RESTR_ALL
 
 from grudge.trace_pair import (
     TracePair,
     interior_trace_pairs
 )
-from grudge.dof_desc import DOFDesc, as_dofdesc, DISCR_TAG_BASE
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    as_dofdesc,
+)
 
 import grudge.op as op
 
@@ -99,16 +106,18 @@ class _NSGradTemperatureTag:
 def _gradient_flux_interior(discr, numerical_flux_func, tpair):
     """Compute interior face flux for gradient operator."""
     actx = tpair.int.array_context
-    dd = tpair.dd
-    normal = thaw(discr.normal(dd), actx)
+    dd_trace = tpair.dd
+    dd_allfaces = dd_trace.with_domain_tag(
+        replace(dd_trace.domain_tag, tag=FACE_RESTR_ALL))
+    normal = thaw(discr.normal(dd_trace), actx)
     flux = numerical_flux_func(tpair, normal)
-    return op.project(discr, dd, dd.with_dtag("all_faces"), flux)
+    return op.project(discr, dd_trace, dd_allfaces, flux)
 
 
 def grad_cv_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=gradient_flux_central,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
@@ -122,7 +131,8 @@ def grad_cv_operator(
         quantities.
 
     boundaries
-        Dictionary of boundary functions keyed by btags
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     time
         Time
@@ -136,6 +146,9 @@ def grad_cv_operator(
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
 
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to apply the operator.
+
     Returns
     -------
     :class:`numpy.ndarray`
@@ -143,12 +156,21 @@ def grad_cv_operator(
         Array of :class:`~mirgecom.fluid.ConservedVars` representing the
         gradient of the fluid conserved variables.
     """
-    dd_vol_quad = DOFDesc("vol", quadrature_tag)
-    dd_faces_quad = DOFDesc("all_faces", quadrature_tag)
+    if not state.is_viscous:
+        raise ValueError("Navier-Stokes operator expects viscous gas model.")
+
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
+    dd_vol_base = volume_dd
+    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            discr, state, gas_model, boundaries, quadrature_tag)
+            discr, state, gas_model, boundaries, quadrature_tag,
+            volume_dd=dd_vol_base)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -164,16 +186,15 @@ def grad_cv_operator(
     cv_flux_bnd = (
 
         # Domain boundaries
-        sum(bdry.cv_gradient_flux(
-            discr,
-            # Make sure we get the state on the quadrature grid
-            # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            gas_model=gas_model,
-            state_minus=domain_bnd_states_quad[btag],
-            time=time,
-            numerical_flux_func=numerical_flux_func)
-            for btag, bdry in boundaries.items())
+        sum(
+            bdry.cv_gradient_flux(
+                discr,
+                dd_vol_quad.with_domain_tag(bdtag),
+                gas_model=gas_model,
+                state_minus=domain_bnd_states_quad[bdtag],
+                time=time,
+                numerical_flux_func=numerical_flux_func)
+            for bdtag, bdry in boundaries.items())
 
         # Interior boundaries
         + sum(get_interior_flux(tpair) for tpair in cv_interior_pairs)
@@ -181,13 +202,13 @@ def grad_cv_operator(
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     return grad_operator(
-        discr, dd_vol_quad, dd_faces_quad, vol_state_quad.cv, cv_flux_bnd)
+        discr, dd_vol_quad, dd_allfaces_quad, vol_state_quad.cv, cv_flux_bnd)
 
 
 def grad_t_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=gradient_flux_central,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
@@ -215,6 +236,9 @@ def grad_t_operator(
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
 
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to apply the operator.
+
     Returns
     -------
     :class:`numpy.ndarray`
@@ -222,12 +246,21 @@ def grad_t_operator(
         Array of :class:`~meshmode.dof_array.DOFArray` representing the gradient of
         the fluid temperature.
     """
-    dd_vol_quad = DOFDesc("vol", quadrature_tag)
-    dd_faces_quad = DOFDesc("all_faces", quadrature_tag)
+    if not state.is_viscous:
+        raise ValueError("Navier-Stokes operator expects viscous gas model.")
+
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
+    dd_vol_base = volume_dd
+    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            discr, state, gas_model, boundaries, quadrature_tag)
+            discr, state, gas_model, boundaries, quadrature_tag,
+            volume_dd=dd_vol_base)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -247,16 +280,14 @@ def grad_t_operator(
     t_flux_bnd = (
 
         # Domain boundaries
-        sum(bdry.temperature_gradient_flux(
-            discr,
-            # Make sure we get the state on the quadrature grid
-            # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            gas_model=gas_model,
-            state_minus=domain_bnd_states_quad[btag],
-            time=time,
-            numerical_flux_func=numerical_flux_func)
-            for btag, bdry in boundaries.items())
+        sum(
+            bdry.temperature_gradient_flux(
+                discr,
+                dd_vol_quad.with_domain_tag(bdtag),
+                gas_model=gas_model,
+                state_minus=domain_bnd_states_quad[bdtag],
+                time=time)
+            for bdtag, bdry in boundaries.items())
 
         # Interior boundaries
         + sum(get_interior_flux(tpair) for tpair in t_interior_pairs)
@@ -264,14 +295,15 @@ def grad_t_operator(
 
     # Fluxes in-hand, compute the gradient of temperature
     return grad_operator(
-        discr, dd_vol_quad, dd_faces_quad, vol_state_quad.temperature, t_flux_bnd)
+        discr, dd_vol_quad, dd_allfaces_quad, vol_state_quad.temperature, t_flux_bnd)
 
 
 def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
                 inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
                 viscous_numerical_flux_func=viscous_flux_central,
-                quadrature_tag=DISCR_TAG_BASE, return_gradients=False,
+                return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
+                volume_dd=DD_VOLUME_ALL,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
@@ -300,6 +332,9 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
 
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to apply the operator.
+
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
@@ -313,9 +348,13 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
 
-    dd_base = as_dofdesc("vol")
-    dd_vol_quad = DOFDesc("vol", quadrature_tag)
-    dd_faces_quad = DOFDesc("all_faces", quadrature_tag)
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
+    dd_vol_base = volume_dd
+    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     # Make model-consistent fluid state data (i.e. CV *and* DV) for:
     # - Volume: vol_state_quad
@@ -326,7 +365,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     # otherwise they stay on the interpolatory/base domain.
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            discr, state, gas_model, boundaries, quadrature_tag)
+            discr, state, gas_model, boundaries, quadrature_tag,
+            volume_dd=dd_vol_base)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -335,13 +375,12 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
 
     # transfer trace pairs to quad grid, update pair dd
     def _interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        dd_trace = utpair.dd
+        dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
         return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
-        )
+            dd_trace_quad,
+            interior=op.project(discr, dd_trace, dd_trace_quad, utpair.int),
+            exterior=op.project(discr, dd_trace, dd_trace_quad, utpair.ext))
 
     # }}}
 
@@ -351,7 +390,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
         grad_cv = grad_cv_operator(
             discr, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
-            quadrature_tag=quadrature_tag,
+            quadrature_tag=quadrature_tag, volume_dd=dd_vol_base,
             operator_states_quad=operator_states_quad)
 
     # Communicate grad(CV) and put it on the quadrature domain
@@ -360,7 +399,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_cv, tag=_NSGradCVTag)
+        for tpair in interior_trace_pairs(
+            discr, grad_cv, volume_dd=dd_vol_base, tag=_NSGradCVTag)
     ]
 
     # }}} Compute grad(CV)
@@ -371,7 +411,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
         grad_t = grad_t_operator(
             discr, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
-            quadrature_tag=quadrature_tag,
+            quadrature_tag=quadrature_tag, volume_dd=dd_vol_base,
             operator_states_quad=operator_states_quad)
 
     # Create the interior face trace pairs, perform MPI exchange, interp to quad
@@ -379,7 +419,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_t, tag=_NSGradTemperatureTag)
+        for tpair in interior_trace_pairs(
+            discr, grad_t, volume_dd=dd_vol_base, tag=_NSGradTemperatureTag)
     ]
 
     # }}} compute grad(temperature)
@@ -393,8 +434,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
         # using field values on the quadrature grid
         viscous_flux(state=vol_state_quad,
                      # Interpolate gradients to the quadrature grid
-                     grad_cv=op.project(discr, dd_base, dd_vol_quad, grad_cv),
-                     grad_t=op.project(discr, dd_base, dd_vol_quad, grad_t))
+                     grad_cv=op.project(discr, dd_vol_base, dd_vol_quad, grad_cv),
+                     grad_t=op.project(discr, dd_vol_base, dd_vol_quad, grad_t))
 
         # Compute the volume contribution of the inviscid flux terms
         # using field values on the quadrature grid
@@ -409,16 +450,18 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
             discr, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, grad_cv, grad_cv_interior_pairs,
             grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
-            numerical_flux_func=viscous_numerical_flux_func, time=time)
+            numerical_flux_func=viscous_numerical_flux_func, time=time,
+            volume_dd=dd_vol_base)
 
         # All surface contributions from the inviscid fluxes
         - inviscid_boundary_flux_for_divergence_operator(
             discr, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, quadrature_tag=quadrature_tag,
-            numerical_flux_func=inviscid_numerical_flux_func, time=time)
+            numerical_flux_func=inviscid_numerical_flux_func, time=time,
+            volume_dd=dd_vol_base)
 
     )
-    ns_rhs = div_operator(discr, dd_vol_quad, dd_faces_quad, vol_term, bnd_term)
+    ns_rhs = div_operator(discr, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
     if return_gradients:
         return ns_rhs, grad_cv, grad_t
     return ns_rhs

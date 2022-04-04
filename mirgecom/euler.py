@@ -54,7 +54,8 @@ THE SOFTWARE.
 
 import numpy as np  # noqa
 
-from grudge.dof_desc import DOFDesc
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
 
 from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.inviscid import (
@@ -67,7 +68,7 @@ from mirgecom.operators import div_operator
 
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_flux_rusanov,
-                   quadrature_tag=None):
+                   quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL):
     r"""Compute RHS of the Euler flow equations.
 
     Parameters
@@ -79,7 +80,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
     boundaries
 
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     time
 
@@ -94,7 +96,9 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
-        The default value is *None*.
+
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to apply the operator.
 
     Returns
     -------
@@ -107,12 +111,12 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
             \dot{\mathbf{q}} = - \nabla\cdot\mathbf{F} +
                 (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
     """
-    dd_quad_vol = DOFDesc("vol", quadrature_tag)
-    dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
+    dd_quad_vol = volume_dd.with_discr_tag(quadrature_tag)
+    dd_quad_allfaces = dd_quad_vol.trace(FACE_RESTR_ALL)
 
     volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
         make_operator_fluid_states(discr, state, gas_model, boundaries,
-                                    quadrature_tag)
+                                    quadrature_tag, volume_dd=volume_dd)
 
     # Compute volume contributions
     inviscid_flux_vol = inviscid_flux(volume_state_quad)
@@ -121,9 +125,10 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
     inviscid_flux_bnd = inviscid_boundary_flux_for_divergence_operator(
         discr, gas_model, boundaries, interior_boundary_states_quad,
         domain_boundary_states_quad, quadrature_tag=quadrature_tag,
-        numerical_flux_func=inviscid_numerical_flux_func, time=time)
+        numerical_flux_func=inviscid_numerical_flux_func, time=time,
+        volume_dd=volume_dd)
 
-    return -div_operator(discr, dd_quad_vol, dd_quad_faces,
+    return -div_operator(discr, dd_quad_vol, dd_quad_allfaces,
                          inviscid_flux_vol, inviscid_flux_bnd)
 
 

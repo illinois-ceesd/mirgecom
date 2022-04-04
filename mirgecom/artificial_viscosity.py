@@ -95,10 +95,12 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from dataclasses import replace
 
 from pytools import memoize_in, keyed_memoize_in
 
 from meshmode.dof_array import thaw, DOFArray
+from meshmode.discretization.connection import FACE_RESTR_ALL
 
 from mirgecom.flux import gradient_flux_central, divergence_flux_central
 from mirgecom.operators import div_operator, grad_operator
@@ -108,10 +110,10 @@ from grudge.trace_pair import (
     interior_trace_pairs
 )
 from grudge.dof_desc import (
-    DOFDesc,
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    DISCR_TAG_MODAL,
     as_dofdesc,
-    DD_VOLUME_MODAL,
-    DD_VOLUME
 )
 
 import grudge.op as op
@@ -126,7 +128,8 @@ class _AVRTag:
 
 
 def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
-                          boundary_kwargs=None, **kwargs):
+                          boundary_kwargs=None, quadrature_tag=DISCR_TAG_BASE,
+                          volume_dd=DD_VOLUME_ALL, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -146,13 +149,15 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     alpha: float
         The maximum artificial viscosity coefficient to be applied
 
+    boundary_kwargs: :class:`dict`
+        dictionary of extra arguments to pass through to the boundary conditions
+
     quadrature_tag
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
-        The default value is *None*.
 
-    boundary_kwargs: :class:`dict`
-        dictionary of extra arguments to pass through to the boundary conditions
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to apply the operator.
 
     Returns
     -------
@@ -162,56 +167,72 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     if boundary_kwargs is None:
         boundary_kwargs = dict()
 
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
     cv = fluid_state.cv
     actx = cv.array_context
-    quadrature_tag = kwargs.get("quadrature_tag", None)
-    dd_vol = DOFDesc("vol", quadrature_tag)
-    dd_faces = DOFDesc("all_faces", quadrature_tag)
+
+    dd_base = volume_dd
+    dd_vol = dd_base.with_discr_tag(quadrature_tag)
+    dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
 
     def interp_to_vol_quad(u):
-        return op.project(discr, "vol", dd_vol, u)
+        return op.project(discr, dd_base, dd_vol, u)
 
     def interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+        dd_trace = utpair.dd
+        dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
         return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
+            dd_trace_quad,
+            interior=op.project(discr, dd_trace, dd_trace_quad, utpair.int),
+            exterior=op.project(discr, dd_trace, dd_trace_quad, utpair.ext)
         )
 
     # Get smoothness indicator based on mass component
     kappa = kwargs.get("kappa", 1.0)
     s0 = kwargs.get("s0", -6.0)
-    indicator = smoothness_indicator(discr, cv.mass, kappa=kappa, s0=s0)
+    indicator = smoothness_indicator(
+        discr, cv.mass, kappa=kappa, s0=s0, volume_dd=dd_vol)
 
     def central_flux(utpair):
-        dd = utpair.dd
-        normal = thaw(actx, discr.normal(dd))
-        return op.project(discr, dd, dd.with_dtag("all_faces"),
+        dd_trace = utpair.dd
+        dd_allfaces = dd_trace.with_domain_tag(
+            replace(dd_trace.domain_tag, tag=FACE_RESTR_ALL))
+        normal = thaw(actx, discr.normal(dd_trace))
+        return op.project(discr, dd_trace, dd_allfaces,
                           # This uses a central scalar flux along nhat:
                           # flux = 1/2 * (Q- + Q+) * nhat
                           gradient_flux_central(utpair, normal))
 
     cv_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux(interp_to_surf_quad(tpair))
-              for tpair in interior_trace_pairs(discr, cv, tag=_AVCVTag))
+        sum(
+            central_flux(interp_to_surf_quad(tpair))
+            for tpair in interior_trace_pairs(
+                discr, cv, volume_dd=dd_base, tag=_AVCVTag))
         # Contributions from boundary fluxes
-        + sum(boundaries[btag].soln_gradient_flux(
-            discr,
-            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            fluid_state=fluid_state, **boundary_kwargs) for btag in boundaries)
+        + sum(
+            bdry.soln_gradient_flux(
+                discr,
+                dd_vol=dd_vol,
+                dd_bdry=dd_vol.with_domain_tag(bdtag),
+                fluid_state=fluid_state, **boundary_kwargs)
+            for bdtag, bdry in boundaries.items())
     )
 
     # Compute R = alpha*grad(Q)
     r = -alpha * indicator \
-        * grad_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(cv), cv_bnd)
+        * grad_operator(
+            discr, dd_vol, dd_allfaces, interp_to_vol_quad(cv), cv_bnd)
 
     def central_flux_div(utpair):
-        dd = utpair.dd
-        normal = thaw(actx, discr.normal(dd))
-        return op.project(discr, dd, dd.with_dtag("all_faces"),
+        dd_trace = utpair.dd
+        dd_allfaces = dd_trace.with_domain_tag(
+            replace(dd_trace.domain_tag, tag=FACE_RESTR_ALL))
+        normal = thaw(actx, discr.normal(dd_trace))
+        return op.project(discr, dd_trace, dd_allfaces,
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
                           divergence_flux_central(utpair, normal))
@@ -219,20 +240,25 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux_div(interp_to_surf_quad(tpair))
-              for tpair in interior_trace_pairs(discr, r, tag=_AVRTag))
+        sum(
+            central_flux_div(interp_to_surf_quad(tpair))
+            for tpair in interior_trace_pairs(
+                discr, r, volume_dd=dd_base, tag=_AVRTag))
         # Contributions from boundary fluxes
-        + sum(boundaries[btag].av_flux(
-            discr,
-            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            diffusion=r, **boundary_kwargs) for btag in boundaries)
+        + sum(
+            bdry.av_flux(
+                discr,
+                dd_vol=dd_vol,
+                dd_bdry=dd_vol.with_domain_tag(bdtag),
+                diffusion=r, **boundary_kwargs)
+            for bdtag, bdry in boundaries.items())
     )
 
     # Return the AV RHS term
-    return -div_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
+    return -div_operator(discr, dd_vol, dd_allfaces, interp_to_vol_quad(r), r_bnd)
 
 
-def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
+def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0, volume_dd=DD_VOLUME_ALL):
     r"""Calculate the smoothness indicator.
 
     Parameters
@@ -295,7 +321,9 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         )
 
     # Convert to modal solution representation
-    modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    dd_vol = volume_dd
+    dd_modal = dd_vol.with_discr_tag(DISCR_TAG_MODAL)
+    modal_map = discr.connection_from_dds(dd_vol, dd_modal)
     uhat = modal_map(u)
 
     # Compute smoothness indicator value
@@ -306,7 +334,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
                 indicator_prg(),
                 vec=uhat[grp.index],
                 modes_active_flag=highest_mode(grp))["result"]
-            for grp in discr.discr_from_dd("vol").groups
+            for grp in discr.discr_from_dd(dd_vol).groups
         )
     )
     indicator = actx.np.log10(indicator + 1.0e-12)

@@ -31,7 +31,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -126,8 +126,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nodes = thaw(discr.nodes(), actx)
 
     boundaries = {
-        DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
-        DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
+        BoundaryDomainTag("dirichlet"): DirichletDiffusionBoundary(0.),
+        BoundaryDomainTag("neumann"): NeumannDiffusionBoundary(0.)
     }
 
     u = discr.zeros(actx)

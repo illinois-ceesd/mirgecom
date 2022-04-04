@@ -35,7 +35,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
@@ -270,22 +270,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                              species_diffusivity=species_diffusivity))
     exact = initializer(x_vec=nodes, eos=gas_model.eos)
 
-    def _exact_boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
+    def _exact_boundary_solution(discr, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = discr.discr_from_dd(dd_bdry)
         nodes = thaw(bnd_discr.nodes(), actx)
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             cv=state_minus.cv, **kwargs), gas_model)
 
-    boundaries = \
-        {DTAG_BOUNDARY("-1"):
-         PrescribedFluidBoundary(boundary_state_func=_exact_boundary_solution),
-         DTAG_BOUNDARY("+1"):
-         PrescribedFluidBoundary(boundary_state_func=_exact_boundary_solution),
-         DTAG_BOUNDARY("-2"):
-         IsothermalNoSlipBoundary(wall_temperature=348.5),
-         DTAG_BOUNDARY("+2"):
-         IsothermalNoSlipBoundary(wall_temperature=348.5)}
+    boundaries = {
+        BoundaryDomainTag("-1"):
+            PrescribedFluidBoundary(boundary_state_func=_exact_boundary_solution),
+        BoundaryDomainTag("+1"):
+            PrescribedFluidBoundary(boundary_state_func=_exact_boundary_solution),
+        BoundaryDomainTag("-2"):
+            IsothermalNoSlipBoundary(wall_temperature=348.5),
+        BoundaryDomainTag("+2"):
+            IsothermalNoSlipBoundary(wall_temperature=348.5)}
 
     if rst_filename:
         current_t = restart_data["t"]
