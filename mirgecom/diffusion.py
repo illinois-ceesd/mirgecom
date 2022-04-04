@@ -84,11 +84,19 @@ def diffusion_flux(
     def flux(kappa, grad_u, normal):
         return -kappa * np.dot(grad_u, normal)
 
+    def harmonic_mean(x, y):
+        x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+        return 2*x*y/x_plus_y
+
+    kappa_harmonic_mean_quad = harmonic_mean(
+        to_quad(kappa_tpair.int),
+        to_quad(kappa_tpair.ext))
+
     flux_tpair = TracePair(dd_trace_quad,
         interior=flux(
-            to_quad(kappa_tpair.int), to_quad(grad_u_tpair.int), normal_quad),
+            kappa_harmonic_mean_quad, to_quad(grad_u_tpair.int), normal_quad),
         exterior=flux(
-            to_quad(kappa_tpair.ext), to_quad(grad_u_tpair.ext), normal_quad)
+            kappa_harmonic_mean_quad, to_quad(grad_u_tpair.ext), normal_quad)
         )
 
     return discr.project(dd_trace_quad, dd_allfaces_quad, flux_tpair.avg)
