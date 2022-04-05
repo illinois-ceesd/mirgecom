@@ -165,54 +165,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, rst_filename)
-        local_fluid_mesh = restart_data["local_fluid_mesh"]
-        local_wall_mesh = restart_data["local_fluid_mesh"]
+        volume_to_local_mesh = restart_data["volume_to_local_mesh"]
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        from meshmode.mesh.io import read_gmsh
-        mesh = read_gmsh("multivolume.msh", force_ambient_dim=2)
+        def get_mesh_data():
+            from meshmode.mesh.io import read_gmsh
+            mesh, gmsh_tag_to_elements = read_gmsh(
+                "multivolume.msh", force_ambient_dim=2,
+                return_tag_to_elements_map=True)
+            volume_to_elements = {
+                "Fluid": gmsh_tag_to_elements["Upper"],
+                "Wall": gmsh_tag_to_elements["Lower"]}
+            return mesh, volume_to_elements
 
-        global_nelements = mesh.nelements
+        from mirgecom.simutil import distribute_mesh
+        volume_to_local_mesh, global_nelements = distribute_mesh(
+            comm, get_mesh_data)
 
-        volume_tags = ["Fluid", "Wall"]
-
-        volume_tag_to_mesh_tags = {
-            "Fluid": ["Upper"],
-            "Wall": ["Lower"],
-        }
-
-        volume_index_per_element = np.empty(mesh.nelements, dtype=int)
-        for vtag, mesh_tags in volume_tag_to_mesh_tags.items():
-            vol_idx = volume_tags.index(vtag)
-            for vgrp in mesh.volume_groups[0]:
-                if vgrp.volume_tag in mesh_tags:
-                    volume_index_per_element[vgrp.elements] = vol_idx
-
-        from meshmode.distributed import get_partition_by_pymetis
-        rank_per_element = get_partition_by_pymetis(mesh, num_parts)
-
-        part_id_to_elements = {
-            (rank, volume_tags[vol_idx]):
-                np.where(
-                    (volume_index_per_element == vol_idx)
-                    & (rank_per_element == rank))[0]
-            for vol_idx in range(len(volume_tags))
-            for rank in range(num_parts)}
-
-        from meshmode.mesh.processing import partition_mesh
-        part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
-
-        rank_to_meshes = {
-            rank: (
-                part_id_to_mesh[rank, "Fluid"],
-                part_id_to_mesh[rank, "Wall"])
-            for rank in range(num_parts)}
-
-        from meshmode.distributed import mpi_distribute
-        local_fluid_mesh, local_wall_mesh = mpi_distribute(comm, rank_to_meshes)
-
-        del mesh
+    local_fluid_mesh = volume_to_local_mesh["Fluid"]
+    local_wall_mesh = volume_to_local_mesh["Wall"]
 
     local_nelements = local_fluid_mesh.nelements + local_wall_mesh.nelements
 
@@ -222,10 +194,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
     discr = make_discretization_collection(
         actx,
-        volumes={
-            "Fluid": local_fluid_mesh,
-            "Wall": local_wall_mesh
-        },
+        volumes=volume_to_local_mesh,
         discr_tag_to_group_factory={
             DISCR_TAG_BASE: default_simplex_group_factory(
                 base_dim=dim, order=order),
@@ -456,8 +425,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != rst_filename:
             rst_data = {
-                "local_fluid_mesh": local_fluid_mesh,
-                "local_wall_mesh": local_wall_mesh,
+                "volume_to_local_mesh": volume_to_local_mesh,
                 "cv": state[0],
                 "wall_temperature": state[1],
                 "t": t,
