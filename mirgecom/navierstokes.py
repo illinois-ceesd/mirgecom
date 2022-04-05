@@ -101,7 +101,9 @@ def grad_cv_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=gradient_flux_central,
         quadrature_tag=DISCR_TAG_BASE,
-        _operator_states_quad=None):
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        operator_states_quad=None):
     # FIXME: eos stuff is out of date
     r"""Compute the gradient of the fluid conserved variables.
 
@@ -138,12 +140,12 @@ def grad_cv_operator(
     dd_vol_quad = DOFDesc("vol", quadrature_tag)
     dd_faces_quad = DOFDesc("all_faces", quadrature_tag)
 
-    if _operator_states_quad is None:
-        _operator_states_quad = make_operator_fluid_states(
+    if operator_states_quad is None:
+        operator_states_quad = make_operator_fluid_states(
             discr, state, gas_model, boundaries, quadrature_tag)
 
     volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
-        _operator_states_quad
+        operator_states_quad
 
     get_interior_flux = partial(
         _gradient_flux_interior, discr, numerical_flux_func)
@@ -180,7 +182,9 @@ def grad_t_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=gradient_flux_central,
         quadrature_tag=DISCR_TAG_BASE,
-        _operator_states_quad=None):
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        operator_states_quad=None):
     # FIXME: eos stuff is out of date
     r"""Compute the gradient of the fluid temperature.
 
@@ -217,12 +221,12 @@ def grad_t_operator(
     dd_vol_quad = DOFDesc("vol", quadrature_tag)
     dd_faces_quad = DOFDesc("all_faces", quadrature_tag)
 
-    if _operator_states_quad is None:
-        _operator_states_quad = make_operator_fluid_states(
+    if operator_states_quad is None:
+        operator_states_quad = make_operator_fluid_states(
             discr, state, gas_model, boundaries, quadrature_tag)
 
     volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
-        _operator_states_quad
+        operator_states_quad
 
     get_interior_flux = partial(
         _gradient_flux_interior, discr, numerical_flux_func)
@@ -263,7 +267,11 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
                 inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
                 viscous_numerical_flux_func=viscous_flux_central,
-                quadrature_tag=DISCR_TAG_BASE):
+                quadrature_tag=DISCR_TAG_BASE,
+                # Added to avoid repeated computation
+                # FIXME: See if there's a better way to do this
+                operator_states_quad=None,
+                grad_cv=None, grad_t=None):
     # FIXME: eos stuff is out of date
     # FIXME: Multiple "Returns" sections
     r"""Compute RHS of the Navier-Stokes equations.
@@ -320,8 +328,9 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     #
     # Note: these states will live on the quadrature domain if one is given,
     # otherwise they stay on the interpolatory/base domain.
-    operator_states_quad = make_operator_fluid_states(
-        discr, state, gas_model, boundaries, quadrature_tag)
+    if operator_states_quad is None:
+        operator_states_quad = make_operator_fluid_states(
+            discr, state, gas_model, boundaries, quadrature_tag)
     # FIXME: Maybe call these "interior_state_traces_quad" and
     # "boundary_state_traces_quad"? "interior boundary" sounds weird
     volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
@@ -343,11 +352,12 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
 
     # {{{ === Compute grad(CV) ===
 
-    grad_cv = grad_cv_operator(
-        discr, gas_model, boundaries, state, time=time,
-        numerical_flux_func=gradient_numerical_flux_func,
-        quadrature_tag=quadrature_tag,
-        _operator_states_quad=operator_states_quad)
+    if grad_cv is None:
+        grad_cv = grad_cv_operator(
+            discr, gas_model, boundaries, state, time=time,
+            numerical_flux_func=gradient_numerical_flux_func,
+            quadrature_tag=quadrature_tag,
+            operator_states_quad=operator_states_quad)
 
     # Communicate grad(CV) and put it on the quadrature domain
     # FIXME/ReviewQuestion: communicate grad_cv - already on quadrature dom?
@@ -362,11 +372,12 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
 
     # {{{ === Compute grad(temperature) ===
 
-    grad_t = grad_t_operator(
-        discr, gas_model, boundaries, state, time=time,
-        numerical_flux_func=gradient_numerical_flux_func,
-        quadrature_tag=quadrature_tag,
-        _operator_states_quad=operator_states_quad)
+    if grad_t is None:
+        grad_t = grad_t_operator(
+            discr, gas_model, boundaries, state, time=time,
+            numerical_flux_func=gradient_numerical_flux_func,
+            quadrature_tag=quadrature_tag,
+            operator_states_quad=operator_states_quad)
 
     # Create the interior face trace pairs, perform MPI exchange, interp to quad
     grad_t_interior_pairs = [
