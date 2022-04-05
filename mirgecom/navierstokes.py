@@ -183,7 +183,6 @@ def grad_t_operator(
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
-    # FIXME: eos stuff is out of date
     r"""Compute the gradient of the fluid temperature.
 
     Parameters
@@ -199,11 +198,10 @@ def grad_t_operator(
     time
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-        Implementing the transport properties including heat conductivity,
-        and species diffusivities type(mirgecom.transport.TransportModel).
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
 
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
@@ -270,18 +268,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
                 grad_cv=None, grad_t=None):
-    # FIXME: eos stuff is out of date
-    # FIXME: Multiple "Returns" sections
     r"""Compute RHS of the Navier-Stokes equations.
-
-    Returns
-    -------
-    numpy.ndarray
-        The right-hand-side of the Navier-Stokes equations:
-
-        .. math::
-
-            \partial_t \mathbf{Q} = \nabla\cdot(\mathbf{F}_V - \mathbf{F}_I)
 
     Parameters
     ----------
@@ -296,11 +283,10 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     time
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-        Implementing the transport properties including heat conductivity,
-        and species diffusivities type(mirgecom.transport.TransportModel).
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
 
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
@@ -311,6 +297,10 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     :class:`mirgecom.fluid.ConservedVars`
 
         The RHS of the Navier-Stokes equations.
+
+        .. math::
+
+            \partial_t \mathbf{Q} = \nabla\cdot(\mathbf{F}_V - \mathbf{F}_I)
     """
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
