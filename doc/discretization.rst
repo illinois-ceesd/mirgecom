@@ -331,7 +331,7 @@ for this particular wall treatment.
 
 In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, and :mod:`~mirgecom.navierstokes`,
 go to calculate the flux for the divergence of the inviscid transport flux, they call the
-:meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
+`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
 :meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_state`, and returns the
 numerical flux ${h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+) \cdot \hat{\b{n}}$.
