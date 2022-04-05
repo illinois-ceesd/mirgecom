@@ -79,4 +79,3 @@ References
     `(DOI) <http://doi.org/10.1007/978-3-540-49834-6>`__
 .. [Mengaldo_2014] G. Mengaldo (2009), A Guide to the Implementation of Boundary Conditions in Compact \
     High-Order Methods for Compressible Aerodynamics `(DOI) <https://doi.org/10.2514/6.2014-2923>`__
-
