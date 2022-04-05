@@ -99,15 +99,6 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
                 quadrature_tag=None, return_gradients=False):
     r"""Compute RHS of the Navier-Stokes equations.
 
-    Returns
-    -------
-    numpy.ndarray
-        The right-hand-side of the Navier-Stokes equations:
-
-        .. math::
-
-            \partial_t \mathbf{Q} = \nabla\cdot(\mathbf{F}_V - \mathbf{F}_I)
-
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
@@ -121,11 +112,10 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     time
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
-        Implementing the transport properties including heat conductivity,
-        and species diffusivities type(mirgecom.transport.TransportModel).
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
 
     quadrature_tag
         An optional identifier denoting a particular quadrature
@@ -136,8 +126,11 @@ def ns_operator(discr, gas_model, state, boundaries, time=0.0,
     -------
     :class:`mirgecom.fluid.ConservedVars`
 
-        Agglomerated object array of DOF arrays representing the RHS of the
-        Navier-Stokes equations.
+        The right-hand-side of the Navier-Stokes equations:
+
+        .. math::
+
+            \partial_t \mathbf{Q} = \nabla\cdot(\mathbf{F}_V - \mathbf{F}_I)
     """
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
