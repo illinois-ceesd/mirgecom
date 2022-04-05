@@ -13,8 +13,6 @@ Boundary Conditions
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
 .. autoclass:: IsothermalNoSlipBoundary
-.. autoclass:: TemperatureCoupledSlipBoundary
-.. autoclass:: TemperatureCoupledNoSlipBoundary
 .. autoclass:: FarfieldBoundary
 .. autoclass:: InflowBoundary
 .. autoclass:: OutflowBoundary
@@ -56,7 +54,7 @@ from dataclasses import replace
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import DISCR_TAG_BASE, VolumeDomainTag, as_dofdesc
+from grudge.dof_desc import VolumeDomainTag, as_dofdesc
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import inviscid_flux_rusanov
@@ -543,153 +541,6 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value to weakly prescribe wall bc."""
         return 2*self._wall_temp - state_minus.temperature
-
-
-class TemperatureCoupledSlipBoundary(PrescribedFluidBoundary):
-    def __init__(self, ext_t, ext_grad_t, ext_kappa):
-        """Initialize TemperatureCoupledSlipBoundary."""
-        PrescribedFluidBoundary.__init__(
-            self,
-            boundary_state_func=self.temperature_coupled_slip_state,
-            boundary_grad_av_func=self.temperature_coupled_slip_grad_av,
-            boundary_temperature_func=lambda *args, **kwargs: ext_t,
-            boundary_gradient_temperature_func=lambda *args, **kwargs: ext_grad_t
-        )
-        self.ext_t = ext_t
-        self.ext_grad_t = ext_grad_t
-        self.ext_kappa = ext_kappa
-
-    def temperature_coupled_slip_state(
-            self, discr, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        # Grab some boundary-relevant data
-        dim = discr.dim
-        actx = state_minus.array_context
-
-        # Grab a unit normal to the boundary
-        nhat = thaw(discr.normal(dd_bdry), actx)
-
-        # Subtract out the 2*wall-normal component
-        # of velocity from the velocity at the wall to
-        # induce an equal but opposite wall-normal (reflected) wave
-        # preserving the tangential component
-        cv_minus = state_minus.cv
-        ext_mom = (cv_minus.momentum
-                   - 2.0*np.dot(cv_minus.momentum, nhat)*nhat)
-
-        # Compute the energy
-        ext_internal_energy = (
-            cv_minus.mass
-            * gas_model.eos.get_internal_energy(
-                temperature=self.ext_t,
-                species_mass_fractions=cv_minus.species_mass_fractions))
-        ext_kinetic_energy = gas_model.eos.kinetic_energy(cv_minus)
-        ext_energy = ext_internal_energy + ext_kinetic_energy
-
-        # Form the external boundary solution with the new momentum and energy
-        ext_cv = make_conserved(
-            dim=dim, mass=cv_minus.mass, energy=ext_energy, momentum=ext_mom,
-            species_mass=cv_minus.species_mass)
-        t_seed = state_minus.temperature if state_minus.is_mixture else None
-
-        ext_state_without_kappa = make_fluid_state(
-            cv=ext_cv, gas_model=gas_model, temperature_seed=t_seed)
-
-        # Replace the heat conductivity values computed from the state with the
-        # prescribed external values
-        from dataclasses import replace
-        ext_tv = replace(
-            ext_state_without_kappa.tv, thermal_conductivity=self.ext_kappa)
-        ext_state = replace(ext_state_without_kappa, tv=ext_tv)
-
-        return ext_state
-
-    def temperature_coupled_slip_grad_av(self, discr, dd_bdry, grad_av_minus,
-                                         **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
-        # Grab some boundary-relevant data
-        actx = grad_av_minus[0].array_context
-
-        # Grab a unit normal to the boundary
-        nhat = thaw(discr.normal(dd_bdry), actx)
-
-        # Apply a Neumann condition on the energy gradient
-        ext_grad_energy = (
-            grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat)
-
-        return make_conserved(
-            discr.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=grad_av_minus.species_mass)
-
-
-class TemperatureCoupledNoSlipBoundary(PrescribedFluidBoundary):
-    def __init__(self, ext_t, ext_grad_t, ext_kappa):
-        """Initialize TemperatureCoupledSlipBoundary."""
-        PrescribedFluidBoundary.__init__(
-            self,
-            boundary_state_func=self.temperature_coupled_noslip_state,
-            boundary_grad_av_func=self.temperature_coupled_noslip_grad_av,
-            boundary_temperature_func=lambda *args, **kwargs: ext_t,
-            boundary_gradient_temperature_func=lambda *args, **kwargs: ext_grad_t
-        )
-        self.ext_t = ext_t
-        self.ext_grad_t = ext_grad_t
-        self.ext_kappa = ext_kappa
-
-    def temperature_coupled_noslip_state(
-            self, discr, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            raise NotImplementedError
-
-        # Grab some boundary-relevant data
-        dim = discr.dim
-
-        # Cancel out the momentum
-        cv_minus = state_minus.cv
-        ext_mom = -cv_minus.momentum
-
-        # Compute the energy
-        ext_internal_energy = (
-            cv_minus.mass
-            * gas_model.eos.get_internal_energy(
-                temperature=self.ext_t,
-                species_mass_fractions=cv_minus.species_mass_fractions))
-        ext_kinetic_energy = gas_model.eos.kinetic_energy(cv_minus)
-        ext_energy = ext_internal_energy + ext_kinetic_energy
-
-        # Form the external boundary solution with the new momentum and energy
-        ext_cv = make_conserved(
-            dim=dim, mass=cv_minus.mass, energy=ext_energy, momentum=ext_mom,
-            species_mass=cv_minus.species_mass)
-        t_seed = state_minus.temperature if state_minus.is_mixture else None
-
-        def replace_thermal_conductivity(state, kappa):
-            from dataclasses import replace
-            new_tv = replace(state.tv, thermal_conductivity=kappa)
-            return replace(state, tv=new_tv)
-
-        return replace_thermal_conductivity(
-            make_fluid_state(
-                cv=ext_cv, gas_model=gas_model, temperature_seed=t_seed),
-            self.ext_kappa)
-
-    def temperature_coupled_noslip_grad_av(
-            self, discr, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
-        # Grab some boundary-relevant data
-        actx = grad_av_minus[0].array_context
-
-        # Grab a unit normal to the boundary
-        nhat = thaw(discr.normal(dd_bdry), actx)
-
-        # Apply a Neumann condition on the energy gradient
-        ext_grad_energy = (
-            grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat)
-
-        return make_conserved(
-            discr.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=grad_av_minus.species_mass)
 
 
 class FarfieldBoundary(PrescribedFluidBoundary):

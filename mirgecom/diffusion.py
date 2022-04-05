@@ -7,7 +7,6 @@ r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
-.. autoclass:: InterfaceDiffusionBoundary
 """
 
 __copyright__ = """
@@ -226,49 +225,6 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         value_quad = discr.project(dd_bdry, dd_bdry_quad, self.value)
         flux_quad = -kappa_int_quad*value_quad
         return discr.project(dd_bdry_quad, dd_allfaces_quad, flux_quad)
-
-
-class InterfaceDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Interface boundary condition for the diffusion operator.
-
-    Prescribes external value(s) of $u$ and $\nabla u$ at the boundary.
-
-    .. automethod:: __init__
-    """
-
-    def __init__(self, u_ext, grad_u_ext, kappa_ext):
-        r"""
-        Initialize the boundary condition.
-
-        Parameters
-        ----------
-        u_ext: float or meshmode.dof_array.DOFArray
-            the external value(s) of $u$ along the boundary
-        grad_u_ext: numpy.ndarray
-            the external value(s) of $\nabla u$ along the boundary
-        """
-        self.u_ext = u_ext
-        self.grad_u_ext = grad_u_ext
-        self.kappa_ext = kappa_ext
-
-    def get_grad_flux(
-            self, discr, dd_vol, dd_bdry, u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        u_int = discr.project(dd_vol, dd_bdry, u)
-        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=self.u_ext)
-        return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
-
-    def get_diffusion_flux(
-            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        kappa_int = discr.project(dd_vol, dd_bdry, kappa)
-        kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=self.kappa_ext)
-        grad_u_int = discr.project(dd_vol, dd_bdry, grad_u)
-        grad_u_tpair = TracePair(
-            dd_bdry, interior=grad_u_int, exterior=self.grad_u_ext)
-        return diffusion_flux(
-            discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
 
 
 class _DiffusionStateTag:
