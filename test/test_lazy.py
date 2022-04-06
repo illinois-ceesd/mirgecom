@@ -29,11 +29,11 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
+from arraycontext import freeze, thaw
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
-from arraycontext.container.traversal import freeze, thaw
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -103,7 +103,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #     cl_ctx = ctx_factory()
 #     actx, discr = _op_test_fixture(cl_ctx)
 #
-#     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+#     from grudge.dof_desc import DTAG_BOUNDARY
 #     from mirgecom.diffusion import (
 #         _gradient_operator,
 #         DirichletDiffusionBoundary,
@@ -114,14 +114,12 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
 #     }
 #
-#     def op(alpha, u):
-#         return _gradient_operator(
-#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
+#     def op(u):
+#         return _gradient_operator(discr, boundaries, u)
 
 #     compiled_op = actx.compile(op)
-#     alpha = discr.zeros(actx) + 1
 #     u = discr.zeros(actx)
-#     compiled_op(alpha, u)
+#     compiled_op(u)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -174,7 +172,7 @@ def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+    from grudge.dof_desc import DTAG_BOUNDARY
     from mirgecom.diffusion import (
         diffusion_operator,
         DirichletDiffusionBoundary,
@@ -185,17 +183,16 @@ def test_lazy_op_diffusion(op_test_data, order):
         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
     }
 
-    def op(alpha, u):
-        return diffusion_operator(
-            discr, DISCR_TAG_BASE, alpha, boundaries, u)
+    def op(kappa, u):
+        return diffusion_operator(discr, kappa, boundaries, u)
 
     lazy_op = lazy_actx.compile(op)
 
     def get_inputs(actx):
         nodes = thaw(discr.nodes(), actx)
-        alpha = discr.zeros(actx) + 1
+        kappa = discr.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
-        return alpha, u
+        return kappa, u
 
     tol = 1e-11
     isclose = partial(
