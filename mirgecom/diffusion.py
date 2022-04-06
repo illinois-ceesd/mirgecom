@@ -141,6 +141,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        """Get gradient flux."""
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
@@ -148,6 +149,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, discr, dd, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        """Get diffusion flux."""
         kappa_int = discr.project("vol", dd, kappa)
         kappa_tpair = TracePair(dd, interior=kappa_int, exterior=kappa_int)
         grad_u_int = discr.project("vol", dd, grad_u)
@@ -194,6 +196,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        """Get gradient flux."""
         u_int = discr.project("vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
@@ -201,6 +204,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, discr, dd, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        """Get diffusion flux."""
         dd_quad = dd.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_quad.with_dtag("all_faces")
         # Compute the flux directly instead of constructing an external grad_u value
@@ -214,15 +218,15 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
 
 
-class _DiffusionGradTag:
-    pass
-
-
 class _DiffusionStateTag:
     pass
 
 
 class _DiffusionKappaTag:
+    pass
+
+
+class _DiffusionGradTag:
     pass
 
 
