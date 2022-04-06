@@ -142,7 +142,7 @@ def grad_cv_operator(
         operator_states_quad = make_operator_fluid_states(
             discr, state, gas_model, boundaries, quadrature_tag)
 
-    volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
+    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
 
     get_interior_flux = partial(
@@ -151,7 +151,7 @@ def grad_cv_operator(
     cv_interior_pairs = [TracePair(state_pair.dd,
                                    interior=state_pair.int.cv,
                                    exterior=state_pair.ext.cv)
-                         for state_pair in interior_boundary_states_quad]
+                         for state_pair in inter_elem_bnd_states_quad]
 
     cv_flux_bnd = (
 
@@ -162,7 +162,7 @@ def grad_cv_operator(
             # restricted to the tag *btag*
             as_dofdesc(btag).with_discr_tag(quadrature_tag),
             gas_model=gas_model,
-            state_minus=domain_boundary_states_quad[btag],
+            state_minus=domain_bnd_states_quad[btag],
             time=time,
             numerical_flux_func=numerical_flux_func)
             for btag, bdry in boundaries.items())
@@ -173,7 +173,7 @@ def grad_cv_operator(
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     return grad_operator(
-        discr, dd_vol_quad, dd_faces_quad, volume_state_quad.cv, cv_flux_bnd)
+        discr, dd_vol_quad, dd_faces_quad, vol_state_quad.cv, cv_flux_bnd)
 
 
 def grad_t_operator(
@@ -221,7 +221,7 @@ def grad_t_operator(
         operator_states_quad = make_operator_fluid_states(
             discr, state, gas_model, boundaries, quadrature_tag)
 
-    volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
+    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
 
     get_interior_flux = partial(
@@ -234,7 +234,7 @@ def grad_t_operator(
     t_interior_pairs = [TracePair(state_pair.dd,
                                   interior=state_pair.int.temperature,
                                   exterior=state_pair.ext.temperature)
-                        for state_pair in interior_boundary_states_quad]
+                        for state_pair in inter_elem_bnd_states_quad]
 
     t_flux_bnd = (
 
@@ -245,7 +245,7 @@ def grad_t_operator(
             # restricted to the tag *btag*
             as_dofdesc(btag).with_discr_tag(quadrature_tag),
             gas_model=gas_model,
-            state_minus=domain_boundary_states_quad[btag],
+            state_minus=domain_bnd_states_quad[btag],
             time=time,
             numerical_flux_func=numerical_flux_func)
             for btag, bdry in boundaries.items())
@@ -256,7 +256,7 @@ def grad_t_operator(
 
     # Fluxes in-hand, compute the gradient of temperature
     return grad_operator(
-        discr, dd_vol_quad, dd_faces_quad, volume_state_quad.temperature, t_flux_bnd)
+        discr, dd_vol_quad, dd_faces_quad, vol_state_quad.temperature, t_flux_bnd)
 
 
 def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
@@ -310,18 +310,17 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     dd_faces_quad = DOFDesc("all_faces", quadrature_tag)
 
     # Make model-consistent fluid state data (i.e. CV *and* DV) for:
-    # - Volume: volume_state_quad
-    # - Interior face trace pairs: interior_boundary_states_quad
-    # - Interior states on the domain boundary: domain_boundary_states_quad
+    # - Volume: vol_state_quad
+    # - Element-element boundary face trace pairs: inter_elem_bnd_states_quad
+    # - Interior states (Q_minus) on the domain boundary: domain_bnd_states_quad
     #
     # Note: these states will live on the quadrature domain if one is given,
     # otherwise they stay on the interpolatory/base domain.
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
             discr, state, gas_model, boundaries, quadrature_tag)
-    # FIXME: Maybe call these "interior_state_traces_quad" and
-    # "boundary_state_traces_quad"? "interior boundary" sounds weird
-    volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad = \
+
+    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
 
     # {{{ Local utilities
@@ -384,14 +383,14 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
 
         # Compute the volume contribution of the viscous flux terms
         # using field values on the quadrature grid
-        viscous_flux(state=volume_state_quad,
+        viscous_flux(state=vol_state_quad,
                      # Interpolate gradients to the quadrature grid
                      grad_cv=op.project(discr, dd_base, dd_vol_quad, grad_cv),
                      grad_t=op.project(discr, dd_base, dd_vol_quad, grad_t))
 
         # Compute the volume contribution of the inviscid flux terms
         # using field values on the quadrature grid
-        - inviscid_flux(state=volume_state_quad)
+        - inviscid_flux(state=vol_state_quad)
     )
 
     # Compute the boundary terms for the divergence operator
@@ -399,15 +398,15 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
 
         # All surface contributions from the viscous fluxes
         viscous_boundary_flux_for_divergence_operator(
-            discr, gas_model, boundaries, interior_boundary_states_quad,
-            domain_boundary_states_quad, grad_cv, grad_cv_interior_pairs,
+            discr, gas_model, boundaries, inter_elem_bnd_states_quad,
+            domain_bnd_states_quad, grad_cv, grad_cv_interior_pairs,
             grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
             numerical_flux_func=viscous_numerical_flux_func, time=time)
 
         # All surface contributions from the inviscid fluxes
         - inviscid_boundary_flux_for_divergence_operator(
-            discr, gas_model, boundaries, interior_boundary_states_quad,
-            domain_boundary_states_quad, quadrature_tag=quadrature_tag,
+            discr, gas_model, boundaries, inter_elem_bnd_states_quad,
+            domain_bnd_states_quad, quadrature_tag=quadrature_tag,
             numerical_flux_func=inviscid_numerical_flux_func, time=time)
 
     )
