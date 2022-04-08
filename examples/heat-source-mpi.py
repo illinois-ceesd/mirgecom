@@ -31,7 +31,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_BASE, DTAG_BOUNDARY
+from grudge.dof_desc import DTAG_BOUNDARY
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -153,9 +153,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def rhs(t, u):
         return (
-            diffusion_operator(
-                discr, quad_tag=DISCR_TAG_BASE,
-                alpha=1, boundaries=boundaries, u=u)
+            diffusion_operator(discr, kappa=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     compiled_rhs = actx.compile(rhs)
