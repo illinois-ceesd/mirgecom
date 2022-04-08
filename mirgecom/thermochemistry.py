@@ -36,17 +36,18 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5):
     :class:`pyrometheus.Thermochemistry` class and overrides a couple of the methods
     to adapt it to :mod:`mirgecom`'s needs.
 
-        - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
-        of  the same function, pinning any negative concentrations due to slightly
-        negative massfractions (which are OK) back to 0.
-        - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
-        to find a temperature from an input state.
+    - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
+      of  the same function, pinning any negative concentrations due to slightly
+      negative massfractions (which are OK) back to 0.
+
+    - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
+      to find a temperature from an input state.
 
     Parameters
     ----------
     pyro_class: :class:`pyrometheus.Thermochemistry`
         Pyro thermochemical mechanism to wrap
-    temperature_niter: integer
+    temperature_niter: int
         Number of Newton iterations in `get_temperature` (default=5)
     """
 
@@ -116,9 +117,9 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
 
     Parameters
     ----------
-    cantera_soln: Cantera solution
+    cantera_soln:
         Cantera solution from which to create the thermochemical mechanism
-    temperature_niter: integer
+    temperature_niter: int
         Number of Newton iterations in `get_temperature` (default=5)
     """
     import pyrometheus as pyro
