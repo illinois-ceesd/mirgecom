@@ -377,6 +377,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     else:
         local_mesh = mesh_dist.receive_mesh_part()
 
+    global_nelements = comm.bcast(global_nelements)
     return local_mesh, global_nelements
 
 
