@@ -303,6 +303,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     fluid_visualizer = make_visualizer(discr, volume_dd=dd_vol_fluid)
     wall_visualizer = make_visualizer(discr, volume_dd=dd_vol_wall)
 
+    from grudge.dt_utils import characteristic_lengthscales
+    wall_lengthscales = characteristic_lengthscales(actx, discr, dd=dd_vol_wall)
+    h_wall = nodal_min(discr, dd_vol_wall, wall_lengthscales)
+
     initname = "multivolume"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -321,10 +325,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             discr, fluid_state, t, current_dt, current_cfl, t_final,
             constant_cfl, fluid_volume_dd=dd_vol_fluid)
         if constant_cfl:
-            from grudge.dt_utils import characteristic_lengthscales
-            h_wall = nodal_min(
-                discr, dd_vol_wall,
-                characteristic_lengthscales(actx, discr, dd=dd_vol_wall))
             wall_alpha = wall_time_scale * wall_model.thermal_diffusivity()
             wall_dt = actx.to_numpy(h_wall**2 * current_cfl/wall_alpha)[()]
         else:
@@ -348,10 +348,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 nodal_max(
                     discr, dd_vol_fluid, get_viscous_cfl(
                         discr, dt, fluid_state, volume_dd=dd_vol_fluid)))
-            from grudge.dt_utils import characteristic_lengthscales
-            h_wall = nodal_min(
-                discr, dd_vol_wall,
-                characteristic_lengthscales(actx, discr, dd=dd_vol_wall))
             wall_alpha = wall_time_scale * wall_model.thermal_diffusivity()
             wall_cfl = actx.to_numpy(wall_alpha * dt/h_wall**2)
         if rank == 0:
