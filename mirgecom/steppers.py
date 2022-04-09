@@ -126,8 +126,6 @@ def _advance_state_stepper_func(rhs, timestepper,
     compiled_rhs = _compile_rhs(actx, rhs)
 
     while t < t_final:
-        state = _force_evaluation(actx, state)
-
         if logmgr:
             logmgr.tick_before()
 
@@ -135,6 +133,7 @@ def _advance_state_stepper_func(rhs, timestepper,
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
+        state = _force_evaluation(actx, state)
 
         t += dt
         istep += 1
@@ -207,7 +206,6 @@ def _advance_state_leap(rhs, timestepper, state,
                                                     compiled_rhs, t, dt, state)
 
     while t < t_final:
-        state = _force_evaluation(actx, state)
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
@@ -219,6 +217,8 @@ def _advance_state_leap(rhs, timestepper, state,
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component
+                state = _force_evaluation(actx, state)
+
                 t += dt
 
                 if post_step_callback is not None:

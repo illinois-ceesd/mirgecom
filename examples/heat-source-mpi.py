@@ -27,6 +27,8 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
+from arraycontext import freeze, thaw
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from grudge.shortcuts import make_visualizer
@@ -122,7 +124,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     source_width = 0.2
 
-    from arraycontext import thaw
     nodes = thaw(discr.nodes(), actx)
 
     boundaries = {
@@ -172,6 +173,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ], overwrite=True)
 
         u = rk4_step(u, t, dt, compiled_rhs)
+        # Force evaluation once per timestep
+        u = thaw(freeze(u), actx)
+
         t += dt
         istep += 1
 
