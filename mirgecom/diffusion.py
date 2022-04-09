@@ -67,8 +67,13 @@ def grad_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
 
 
 def diffusion_flux(
-        discr, kappa_tpair, grad_u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
+        discr, u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair, *,
+        penalty_amount=None, quadrature_tag=DISCR_TAG_BASE):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$."""
+    if penalty_amount is None:
+        # *shrug*
+        penalty_amount = 0.05
+
     actx = grad_u_tpair.int[0].array_context
 
     dd_trace = grad_u_tpair.dd
@@ -92,14 +97,24 @@ def diffusion_flux(
         to_quad(kappa_tpair.int),
         to_quad(kappa_tpair.ext))
 
-    flux_tpair = TracePair(dd_trace_quad,
+    flux_quad_tpair = TracePair(dd_trace_quad,
         interior=flux(
             kappa_harmonic_mean_quad, to_quad(grad_u_tpair.int), normal_quad),
         exterior=flux(
             kappa_harmonic_mean_quad, to_quad(grad_u_tpair.ext), normal_quad)
         )
 
-    return discr.project(dd_trace_quad, dd_allfaces_quad, flux_tpair.avg)
+    lengthscales_avg_quad = to_quad(lengthscales_tpair.avg)
+
+    # TODO: Figure out what this is really supposed to be
+    tau_quad = penalty_amount*kappa_harmonic_mean_quad/lengthscales_avg_quad
+
+    u_int_quad = to_quad(u_tpair.int)
+    u_ext_quad = to_quad(u_tpair.ext)
+
+    return discr.project(
+        dd_trace_quad, dd_allfaces_quad,
+        flux_quad_tpair.avg - tau_quad*(u_ext_quad - u_int_quad))
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
@@ -119,8 +134,8 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_diffusion_flux(
-            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
-            quadrature_tag=DISCR_TAG_BASE):
+            self, discr, dd_vol, dd_bdry, u, kappa, grad_u, *,
+            penalty_amount=None, quadrature_tag=DISCR_TAG_BASE):
         """Compute the flux for diff(u) on the boundary *dd_bdry*."""
         raise NotImplementedError
 
@@ -162,15 +177,24 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd_vol, dd_bdry, u, kappa, grad_u, *,
+            penalty_amount=None, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get diffusion flux."""
+        u_int = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=2*self.value-u_int)
         kappa_int = discr.project(dd_vol, dd_bdry, kappa)
         kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=kappa_int)
         grad_u_int = discr.project(dd_vol, dd_bdry, grad_u)
         grad_u_tpair = TracePair(dd_bdry, interior=grad_u_int, exterior=grad_u_int)
+        # Memoized, so should be OK to call here
+        from grudge.dt_utils import characteristic_lengthscales
+        lengthscales = characteristic_lengthscales(u.array_context, discr, dd_vol)
+        lengthscales_int = discr.project(dd_vol, dd_bdry, lengthscales)
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_int, exterior=lengthscales_int)
         return diffusion_flux(
-            discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
+            discr, u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair,
+            penalty_amount=penalty_amount, quadrature_tag=quadrature_tag)
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
@@ -218,8 +242,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd_vol, dd_bdry, u, kappa, grad_u, *,
+            penalty_amount=None, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get diffusion flux."""
         dd_bdry_quad = dd_bdry.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_bdry_quad.with_domain_tag(
@@ -235,7 +259,11 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return discr.project(dd_bdry_quad, dd_allfaces_quad, flux_quad)
 
 
-class _DiffusionStateTag:
+class _DiffusionState1Tag:
+    pass
+
+
+class _DiffusionState2Tag:
     pass
 
 
@@ -244,6 +272,10 @@ class _DiffusionKappaTag:
 
 
 class _DiffusionGradTag:
+    pass
+
+
+class _DiffusionLengthscalesTag:
     pass
 
 
@@ -309,7 +341,7 @@ def grad_operator(
             sum(
                 grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
                 for u_tpair in interior_trace_pairs(
-                    discr, u, volume_dd=dd_vol_base, tag=_DiffusionStateTag))
+                    discr, u, volume_dd=dd_vol_base, tag=_DiffusionState1Tag))
             + sum(
                 bdry.get_grad_flux(discr, dd_vol_base,
                     dd_vol_base.with_domain_tag(bdtag), u,
@@ -360,7 +392,8 @@ def _normalize_arguments(*args, **kwargs):
 
 
 def diffusion_operator(
-        discr, *args, return_grad_u=False, volume_dd=DD_VOLUME_ALL, **kwargs):
+        discr, *args, return_grad_u=False, penalty_amount=None,
+        volume_dd=DD_VOLUME_ALL, **kwargs):
     r"""
     Compute the diffusion operator.
 
@@ -384,6 +417,9 @@ def diffusion_operator(
         applied
     return_grad_u: bool
         an optional flag indicating whether $\nabla u$ should also be returned
+    penalty_amount: float
+        strength parameter for the diffusion flux interior penalty (temporary?);
+        the default value is 0.05
     quadrature_tag:
         quadrature tag indicating which discretization in *discr* to use for
         overintegration
@@ -407,7 +443,8 @@ def diffusion_operator(
         return obj_array_vectorize_n_args(
             lambda boundaries_i, u_i: diffusion_operator(
                 discr, kappa, boundaries_i, u_i, return_grad_u=return_grad_u,
-                quadrature_tag=quadrature_tag, volume_dd=volume_dd),
+                penalty_amount=penalty_amount, quadrature_tag=quadrature_tag,
+                volume_dd=volume_dd),
             make_obj_array(boundaries), u)
 
     boundaries = {
@@ -429,6 +466,10 @@ def diffusion_operator(
     kappa_quad = discr.project(dd_vol_base, dd_vol_quad, kappa)
     grad_u_quad = discr.project(dd_vol_base, dd_vol_quad, grad_u)
 
+    from grudge.dt_utils import characteristic_lengthscales
+    lengthscales = characteristic_lengthscales(
+        u.array_context, discr, dd=dd_vol_base)
+
     diff_u = discr.inverse_mass(
         dd_vol_base,
         discr.weak_div(dd_vol_quad, -kappa_quad*grad_u_quad)
@@ -437,17 +478,24 @@ def diffusion_operator(
             dd_allfaces_quad,
             sum(
                 diffusion_flux(
-                    discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
-                for kappa_tpair, grad_u_tpair in zip(
+                    discr, u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair,
+                    penalty_amount=penalty_amount, quadrature_tag=quadrature_tag)
+                for u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair in zip(
+                    interior_trace_pairs(
+                        discr, u, volume_dd=dd_vol_base, tag=_DiffusionState2Tag),
                     interior_trace_pairs(
                         discr, kappa, volume_dd=dd_vol_base, tag=_DiffusionKappaTag),
                     interior_trace_pairs(
-                        discr, grad_u, volume_dd=dd_vol_base, tag=_DiffusionGradTag))
+                        discr, grad_u, volume_dd=dd_vol_base, tag=_DiffusionGradTag),
+                    interior_trace_pairs(
+                        discr, lengthscales, volume_dd=dd_vol_base,
+                        tag=_DiffusionLengthscalesTag))
             )
             + sum(
                 bdry.get_diffusion_flux(
-                    discr, dd_vol_base, dd_vol_base.with_domain_tag(bdtag), kappa,
-                    grad_u, quadrature_tag=quadrature_tag)
+                    discr, dd_vol_base, dd_vol_base.with_domain_tag(bdtag), u, kappa,
+                    grad_u, penalty_amount=penalty_amount,
+                    quadrature_tag=quadrature_tag)
                 for bdtag, bdry in boundaries.items())
             )
         )

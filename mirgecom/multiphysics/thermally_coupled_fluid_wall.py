@@ -196,17 +196,26 @@ class InterfaceWallBoundary(DiffusionBoundary):
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, discr, dd_vol, dd_bdry, kappa, grad_u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+            self, discr, dd_vol, dd_bdry, u, kappa, grad_u, *,
+            penalty_amount=None, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get the numerical flux for the diff(u) on the boundary."""
+        u_int = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=self.u_ext)
         kappa_int = discr.project(dd_vol, dd_bdry, kappa)
         kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=self.kappa_ext)
         grad_u_int = discr.project(dd_vol, dd_bdry, grad_u)
         grad_u_tpair = TracePair(
             dd_bdry, interior=grad_u_int, exterior=self.grad_u_ext)
+        # Memoized, so should be OK to call here
+        from grudge.dt_utils import characteristic_lengthscales
+        lengthscales = characteristic_lengthscales(u.array_context, discr, dd_vol)
+        lengthscales_int = discr.project(dd_vol, dd_bdry, lengthscales)
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_int, exterior=lengthscales_int)
         from mirgecom.diffusion import diffusion_flux
         return diffusion_flux(
-            discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
+            discr, u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair,
+            penalty_amount=penalty_amount, quadrature_tag=quadrature_tag)
 
 
 def _get_interface_boundaries_no_grad(
@@ -379,13 +388,13 @@ def get_interface_boundaries(
 
 def _heat_operator(
         discr, wall_model, boundaries, temperature, *,
-        quadrature_tag, volume_dd):
+        penalty_amount, quadrature_tag, volume_dd):
     return (
         1/(wall_model.density * wall_model.heat_capacity)
         * diffusion_operator(
-            discr, kappa=wall_model.thermal_conductivity,
-            boundaries=boundaries, u=temperature,
-            quadrature_tag=quadrature_tag, volume_dd=volume_dd))
+            discr, wall_model.thermal_conductivity, boundaries, temperature,
+            penalty_amount=penalty_amount, quadrature_tag=quadrature_tag,
+            volume_dd=volume_dd))
 
 
 def coupled_ns_heat_operator(
@@ -398,6 +407,7 @@ def coupled_ns_heat_operator(
         fluid_gradient_numerical_flux_func=gradient_flux_central,
         inviscid_numerical_flux_func=inviscid_flux_rusanov,
         viscous_numerical_flux_func=viscous_flux_central,
+        wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE):
     # FIXME: Incomplete docs
     """Compute RHS of the coupled fluid-wall system."""
@@ -453,4 +463,5 @@ def coupled_ns_heat_operator(
             operator_states_quad=fluid_operator_states_quad),
         wall_time_scale * _heat_operator(
             discr, wall_model, wall_full_boundaries, wall_temperature,
-            quadrature_tag=quadrature_tag, volume_dd=wall_volume_dd))
+            penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
+            volume_dd=wall_volume_dd))
