@@ -12,7 +12,17 @@ declare -i numsuccess=0
 echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
+
+examples=""
 for example in $examples_dir/*.py
+do
+    example_file=$(basename "$example")
+    examples="$examples $example_file"
+done
+
+cd $examples_dir
+
+for example in $examples
 do
     if [[ "$example" == *"-mpi-lazy.py" ]]
     then
@@ -38,7 +48,8 @@ do
         echo "*** Example $example failed."
         failed_examples="$failed_examples $example"
     fi
-    rm -rf *vtu *sqlite *pkl *-journal restart_data
+    # FIXME: This could delete data from other runs
+    # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
 ((numtests=numsuccess+numfail))
 echo "*** Done running examples!"
