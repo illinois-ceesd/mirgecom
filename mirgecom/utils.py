@@ -1,6 +1,7 @@
 """Useful bits and bobs.
 
 .. autofunction:: asdict_shallow
+.. autofunction:: force_evaluation
 """
 
 __copyright__ = """
@@ -113,3 +114,11 @@ class StatisticsAccumulator:
             return None
 
         return self._min * self.scale_factor
+
+
+def force_evaluation(actx, x):
+    """Force evaluation of a (possibly lazy) array."""
+    if actx is None:
+        return x
+    from arraycontext import freeze, thaw
+    return thaw(freeze(x, actx), actx)

@@ -27,14 +27,13 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 
-from arraycontext import freeze, thaw
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DTAG_BOUNDARY
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
+from mirgecom.utils import force_evaluation
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -124,6 +123,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     source_width = 0.2
 
+    from arraycontext import thaw
     nodes = thaw(discr.nodes(), actx)
 
     boundaries = {
@@ -173,8 +173,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ], overwrite=True)
 
         u = rk4_step(u, t, dt, compiled_rhs)
-        # Force evaluation once per timestep
-        u = thaw(freeze(u), actx)
+        u = force_evaluation(actx, u)
 
         t += dt
         istep += 1
