@@ -66,6 +66,7 @@ from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
     ns_operator,
 )
+from mirgecom.artificial_viscosity import av_laplacian_operator
 from mirgecom.diffusion import (
     DiffusionBoundary,
     grad_operator as wall_grad_t_operator,
@@ -144,7 +145,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
     def get_external_grad_av(self, discr, dd_bdry, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
-        actx = grad_av_minus[0].array_context
+        actx = grad_av_minus.array_context
 
         # Grab a unit normal to the boundary
         nhat = thaw(discr.normal(dd_bdry), actx)
@@ -407,6 +408,8 @@ def coupled_ns_heat_operator(
         fluid_gradient_numerical_flux_func=gradient_flux_central,
         inviscid_numerical_flux_func=inviscid_flux_rusanov,
         viscous_numerical_flux_func=viscous_flux_central,
+        use_av=False,
+        av_kwargs=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE):
     # FIXME: Incomplete docs
@@ -456,12 +459,21 @@ def coupled_ns_heat_operator(
     wall_full_boundaries.update(wall_boundaries)
     wall_full_boundaries.update(wall_interface_boundaries)
 
-    return (
-        ns_operator(
-            discr, gas_model, fluid_state, fluid_full_boundaries,
-            time=time, quadrature_tag=quadrature_tag, volume_dd=fluid_volume_dd,
-            operator_states_quad=fluid_operator_states_quad),
-        wall_time_scale * _heat_operator(
-            discr, wall_model, wall_full_boundaries, wall_temperature,
-            penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-            volume_dd=wall_volume_dd))
+    fluid_rhs = ns_operator(
+        discr, gas_model, fluid_state, fluid_full_boundaries,
+        time=time, quadrature_tag=quadrature_tag, volume_dd=fluid_volume_dd,
+        operator_states_quad=fluid_operator_states_quad)
+
+    if use_av:
+        if av_kwargs is None:
+            av_kwargs = {}
+        fluid_rhs += av_laplacian_operator(
+            discr, fluid_full_boundaries, fluid_state, quadrature_tag=quadrature_tag,
+            volume_dd=fluid_volume_dd, **av_kwargs)
+
+    wall_rhs = wall_time_scale * _heat_operator(
+        discr, wall_model, wall_full_boundaries, wall_temperature,
+        penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
+        volume_dd=wall_volume_dd)
+
+    return fluid_rhs, wall_rhs
