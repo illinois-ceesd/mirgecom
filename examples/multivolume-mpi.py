@@ -163,17 +163,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:  # generate the grid from scratch
         def get_mesh_data():
             from meshmode.mesh.io import read_gmsh
-            mesh, gmsh_tag_to_elements = read_gmsh(
+            mesh, tag_to_elements = read_gmsh(
                 "multivolume.msh", force_ambient_dim=2,
                 return_tag_to_elements_map=True)
-            volume_to_elements = {
-                "Fluid": gmsh_tag_to_elements["Upper"],
-                "Wall": gmsh_tag_to_elements["Lower"]}
-            return mesh, volume_to_elements
+            volume_to_tags = {
+                "Fluid": ["Upper"],
+                "Wall": ["Lower"]}
+            return mesh, tag_to_elements, volume_to_tags
 
         from mirgecom.simutil import distribute_mesh
-        volume_to_local_mesh, global_nelements = distribute_mesh(
+        volume_to_local_mesh_data, global_nelements = distribute_mesh(
             comm, get_mesh_data)
+        volume_to_local_mesh = {
+            vol: mesh
+            for vol, (mesh, _) in volume_to_local_mesh_data.items()}
 
     local_fluid_mesh = volume_to_local_mesh["Fluid"]
     local_wall_mesh = volume_to_local_mesh["Wall"]

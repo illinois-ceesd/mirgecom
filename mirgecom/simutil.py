@@ -368,6 +368,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
 
 
 def distribute_mesh(comm, get_mesh_data):
+    # FIXME: Out of date
     """Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -406,16 +407,17 @@ def distribute_mesh(comm, get_mesh_data):
         from meshmode.mesh import Mesh
         if isinstance(global_data, Mesh):
             mesh = global_data
-            volume_to_elements = None
-        elif isinstance(global_data, tuple) and len(global_data) == 2:
-            mesh, volume_to_elements = global_data
+            tag_to_elements = None
+            volume_to_tags = None
+        elif isinstance(global_data, tuple) and len(global_data) == 3:
+            mesh, tag_to_elements, volume_to_tags = global_data
         else:
             raise TypeError("Unexpected result from get_mesh_data")
 
         from meshmode.distributed import get_partition_by_pymetis
         from meshmode.mesh.processing import partition_mesh
 
-        if volume_to_elements is None:
+        if tag_to_elements is None:
             rank_per_element = get_partition_by_pymetis(mesh, num_ranks)
 
             rank_to_elements = {
@@ -425,11 +427,17 @@ def distribute_mesh(comm, get_mesh_data):
             rank_to_mesh_data = partition_mesh(mesh, rank_to_elements)
 
         else:
-            volumes = list(volume_to_elements.keys())
+            tag_to_volume = {
+                tag: vol
+                for vol, tags in volume_to_tags.items()
+                for tag in tags}
+
+            volumes = list(volume_to_tags.keys())
 
             volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
-            for vtag, elements in volume_to_elements.items():
-                volume_index_per_element[elements] = volumes.index(vtag)
+            for tag, elements in tag_to_elements.items():
+                volume_index_per_element[elements] = volumes.index(
+                    tag_to_volume[tag])
 
             if np.any(volume_index_per_element < 0):
                 raise ValueError("Missing volume specification for some elements.")
@@ -444,12 +452,38 @@ def distribute_mesh(comm, get_mesh_data):
                 for vol_idx in range(len(volumes))
                 for rank in range(num_ranks)}
 
+            # FIXME: Find a better way to do this
+            part_id_to_part_index = {
+                part_id: part_index
+                for part_id, part_index in zip(
+                    part_id_to_elements.keys(),
+                    range(len(part_id_to_elements)))}
+            from meshmode.mesh.processing import _compute_global_elem_to_part_elem
+            global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+                mesh.nelements, part_id_to_elements, part_id_to_part_index,
+                mesh.element_id_dtype)
+
+            tag_to_global_to_part = {
+                tag: global_elem_to_part_elem[elements, :]
+                for tag, elements in tag_to_elements.items()}
+
+            part_id_to_tag_to_elements = {}
+            for part_id in part_id_to_elements.keys():
+                part_idx = part_id_to_part_index[part_id]
+                part_tag_to_elements = {}
+                for tag, global_to_part in tag_to_global_to_part.items():
+                    part_tag_to_elements[tag] = global_to_part[
+                        global_to_part[:, 0] == part_idx, 1]
+                part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+
             part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
 
             rank_to_mesh_data = {
                 rank: {
-                    vtag: part_id_to_mesh[rank, vtag]
-                    for vtag in volumes}
+                    vol: (
+                        part_id_to_mesh[rank, vol],
+                        part_id_to_tag_to_elements[rank, vol])
+                    for vol in volumes}
                 for rank in range(num_ranks)}
 
         local_mesh_data = mpi_distribute(
