@@ -856,14 +856,18 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        from mirgecom.fluid import species_mass_fraction_gradient
-        grad_y_minus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
-        grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        grad_species_mass_plus = 0.*grad_y_plus
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        if state_minus.nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_plus = 0.*grad_y_plus
 
-        for i in range(state_minus.nspecies):
-            grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
-                + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+            for i in range(state_minus.nspecies):
+                grad_species_mass_plus[i] = \
+                    (state_minus.mass_density*grad_y_plus[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
 
         return make_conserved(grad_cv_minus.dim,
                               mass=grad_cv_minus.mass,
@@ -964,14 +968,18 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        from mirgecom.fluid import species_mass_fraction_gradient
-        grad_y_minus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
-        grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        grad_species_mass_plus = 0.*grad_y_plus
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        if state_minus.nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_plus = 0.*grad_y_plus
 
-        for i in range(state_minus.nspecies):
-            grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
-                + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+            for i in range(state_minus.nspecies):
+                grad_species_mass_plus[i] = \
+                    (state_minus.mass_density*grad_y_plus[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
 
         return make_conserved(grad_cv_minus.dim,
                               mass=grad_cv_minus.mass,
@@ -981,7 +989,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
-        return grad_t_minus - np.outer(grad_t_minus@normal, normal)
+        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
 
     def viscous_wall_flux(self, discr, btag, gas_model, state_minus,
                                            grad_cv_minus, grad_t_minus,
