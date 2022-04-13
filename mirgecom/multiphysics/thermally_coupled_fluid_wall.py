@@ -460,21 +460,54 @@ def coupled_ns_heat_operator(
     wall_full_boundaries.update(wall_boundaries)
     wall_full_boundaries.update(wall_interface_boundaries)
 
-    fluid_rhs = ns_operator(
+
+
+
+
+    fluid_grad_t, wall_grad_t = coupled_grad_t_operator(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_boundaries, wall_boundaries,
+        fluid_state, wall_temperature,
+        time=time,
+        fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
+        quadrature_tag=quadrature_tag,
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        _fluid_operator_states_quad=fluid_operator_states_quad,
+        _fluid_interface_boundaries_no_grad=fluid_interface_boundaries,
+        _wall_interface_boundaries_no_grad=wall_interface_boundaries)
+
+
+
+
+
+#     fluid_rhs = 0*fluid_grad_t[0]*fluid_grad_t[1]*fluid_state.cv
+    fluid_rhs = 0*fluid_grad_t[0]*fluid_grad_t[1] + ns_operator(
         discr, gas_model, fluid_state, fluid_full_boundaries,
         time=time, quadrature_tag=quadrature_tag, volume_dd=fluid_volume_dd,
         operator_states_quad=fluid_operator_states_quad)
+#     fluid_rhs = ns_operator(
+#         discr, gas_model, fluid_state, fluid_full_boundaries,
+#         time=time, quadrature_tag=quadrature_tag, volume_dd=fluid_volume_dd,
+#         operator_states_quad=fluid_operator_states_quad)
 
-    if use_av:
-        if av_kwargs is None:
-            av_kwargs = {}
-        fluid_rhs += av_laplacian_operator(
-            discr, fluid_full_boundaries, fluid_state, quadrature_tag=quadrature_tag,
-            volume_dd=fluid_volume_dd, **av_kwargs)
+#     if use_av:
+#         if av_kwargs is None:
+#             av_kwargs = {}
+#         fluid_rhs = fluid_rhs + (0*fluid_grad_t[0]*fluid_grad_t[1] + av_laplacian_operator(
+#             discr, fluid_full_boundaries, fluid_state, quadrature_tag=quadrature_tag,
+#             volume_dd=fluid_volume_dd, **av_kwargs))
 
-    wall_rhs = wall_time_scale * _heat_operator(
+#     wall_rhs = 0*wall_grad_t[0]*wall_grad_t[1]*wall_temperature
+    wall_rhs = 0*wall_grad_t[0]*wall_grad_t[1] + wall_time_scale * _heat_operator(
         discr, wall_model, wall_full_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
         volume_dd=wall_volume_dd)
+#     wall_rhs = wall_time_scale * _heat_operator(
+#         discr, wall_model, wall_full_boundaries, wall_temperature,
+#         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
+#         volume_dd=wall_volume_dd)
 
     return fluid_rhs, wall_rhs
