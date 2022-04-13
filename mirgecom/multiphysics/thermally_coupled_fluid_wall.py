@@ -209,7 +209,8 @@ class InterfaceWallBoundary(DiffusionBoundary):
             dd_bdry, interior=grad_u_int, exterior=self.grad_u_ext)
         # Memoized, so should be OK to call here
         from grudge.dt_utils import characteristic_lengthscales
-        lengthscales = characteristic_lengthscales(u.array_context, discr, dd_vol)
+        lengthscales = (
+            characteristic_lengthscales(u.array_context, discr, dd_vol) * (0*u+1))
         lengthscales_int = discr.project(dd_vol, dd_bdry, lengthscales)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_int, exterior=lengthscales_int)
