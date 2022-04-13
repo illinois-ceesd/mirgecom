@@ -135,7 +135,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = rk4_step
     t_final = 1
     current_cfl = 1.0
-    current_dt = 5e-8
+    current_dt = 1e-8
     current_t = 0
     constant_cfl = False
 
@@ -144,8 +144,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # some i/o frequencies
     nstatus = 1
-    nrestart = 100
-    nviz = 1
+    nrestart = 500
+    nviz = 25
     nhealth = 1
 
     dim = 2
@@ -248,10 +248,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     fluid_density = fluid_pressure/fluid_temperature/r
     wall_model = WallModel(
         density=fluid_density,
-        heat_capacity=eos.heat_capacity_cp(),
-        thermal_conductivity=0.25*fluid_kappa)
+        heat_capacity=50*eos.heat_capacity_cp(),
+        thermal_conductivity=10*fluid_kappa)
 
-    wall_time_scale = 1
+    wall_time_scale = 20
 
     isothermal_wall_temp = 300
 
@@ -270,9 +270,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         fluid_ones = discr.zeros(actx, dd=dd_vol_fluid) + 1
-        wall_ones = discr.zeros(actx, dd=dd_vol_wall) + 1
         pressure = 4935.22/x_scale
-        temperature = 658.7 * fluid_ones
+#         temperature = 658.7 * fluid_ones
+        temperature = isothermal_wall_temp * fluid_ones
         sigma = 500/x_scale
         offset = 0
         fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
@@ -293,6 +293,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             mass=mass,
             momentum=mom,
             energy=energy)
+
+#         pressure = 4935.22/x_scale
+#         mass = pressure/isothermal_wall_temp/r
+#         fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
+#         vel = np.zeros(shape=(dim,))
+#         orig = np.array([0., 0.01*x_scale])
+#         from mirgecom.initializers import Lump, AcousticPulse
+#         initializer = Lump(
+#             dim=dim, center=orig, velocity=vel, rho0=mass, rhoamp=0.0,
+#             p0=pressure)
+#         uniform_state = initializer(fluid_nodes)
+#         acoustic_pulse = AcousticPulse(dim=dim, amplitude=50.0, width=.002*x_scale,
+#                                        center=orig)
+#         current_cv = acoustic_pulse(x_vec=fluid_nodes, cv=uniform_state, eos=eos)
+
+        wall_ones = discr.zeros(actx, dd=dd_vol_wall) + 1
         current_wall_temperature = isothermal_wall_temp * wall_ones
 
     current_state = make_obj_array([current_cv, current_wall_temperature])
@@ -360,34 +376,44 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         f"----- Fluid Temperature({fluid_t_min}, {fluid_t_max})\n"
                         f"----- Wall Temperature({wall_t_min}, {wall_t_max})\n")
 
+#     def _grad_t_operator(t, fluid_state, wall_temperature):
+#         fluid_grad_t, wall_grad_t = coupled_grad_t_operator(
+#             discr,
+#             gas_model, wall_model,
+#             dd_vol_fluid, dd_vol_wall,
+#             fluid_boundaries, wall_boundaries,
+#             fluid_state, wall_temperature,
+#             time=t,
+#             quadrature_tag=quadrature_tag)
+#         return make_obj_array([fluid_grad_t, wall_grad_t])
+
+#     grad_t_operator = actx.compile(_grad_t_operator)
+
     def my_write_viz(step, t, state, dv=None, rhs=None):
-        fluid_state = make_fluid_state(state[0], gas_model)
+        cv = state[0]
         wall_temperature = state[1]
         if dv is None:
+            fluid_state = make_fluid_state(state[0], gas_model)
             dv = fluid_state.dv
-        if rhs is None:
-            rhs = my_rhs(t, state)
-        fluid_grad_temperature, wall_grad_temperature = \
-            coupled_grad_t_operator(
-                discr,
-                gas_model, wall_model,
-                dd_vol_fluid, dd_vol_wall,
-                fluid_boundaries, wall_boundaries,
-                fluid_state, wall_temperature,
-                time=t,
-                quadrature_tag=quadrature_tag)
+#         if rhs is None:
+#             rhs = my_rhs(t, state)
+
+#         grad_temperature = grad_t_operator(t, fluid_state, wall_temperature)
+#         fluid_grad_temperature = grad_temperature[0]
+#         wall_grad_temperature = grad_temperature[1]
+
         fluid_viz_fields = [
-            ("cv", fluid_state.cv),
+            ("cv", cv),
             ("dv", dv),
-            ("grad_t", fluid_grad_temperature),
-            ("rhs", rhs[0]),
-            ("kappa", fluid_state.thermal_conductivity),
+#             ("grad_t", fluid_grad_temperature),
+#             ("rhs", rhs[0]),
+#             ("kappa", fluid_state.thermal_conductivity),
         ]
         wall_viz_fields = [
             ("temperature", wall_temperature),
-            ("grad_t", wall_grad_temperature),
-            ("rhs", rhs[1]),
-            ("kappa", wall_model.thermal_conductivity),
+#             ("grad_t", wall_grad_temperature),
+#             ("rhs", rhs[1]),
+#             ("kappa", wall_model.thermal_conductivity),
         ]
         from mirgecom.simutil import write_visfile
         write_visfile(
@@ -486,6 +512,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
+    fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
+
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
         wall_temperature = state[1]
@@ -496,6 +524,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             fluid_boundaries, wall_boundaries,
             fluid_state, wall_temperature,
             time=t, wall_time_scale=wall_time_scale, quadrature_tag=quadrature_tag)
+        from dataclasses import replace
+        fluid_rhs = replace(
+            fluid_rhs,
+            energy=fluid_rhs.energy + 1e9*actx.np.exp(
+                -(fluid_nodes[0]**2+(fluid_nodes[1]-0.005)**2)/0.004**2)*actx.np.exp(-t/5e-6))
         return make_obj_array([fluid_rhs, wall_rhs])
 
     current_dt = my_get_timestep(step=current_step, t=current_t, state=current_state)
@@ -504,7 +537,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state, t=current_t, t_final=t_final)
+                      istep=current_step, state=current_state, t=current_t,
+                      t_final=t_final)
 
     # Dump the final data
     if rank == 0:

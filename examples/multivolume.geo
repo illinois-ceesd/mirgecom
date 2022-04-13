@@ -35,24 +35,24 @@ Mesh.MeshSizeFromCurvature = 0;
 
 Mesh.ScalingFactor = 0.001;
 
-mesh_scale = 8.;
+mesh_scale = 16.;
 
-min_size = 4/mesh_scale;
-max_size = 4;
+min_size = 2/mesh_scale;
+max_size = 2;
 
 Mesh.CharacteristicLengthMin = min_size;
 Mesh.CharacteristicLengthMax = max_size;
 
 Field[1] = Distance;
-Field[1].CurvesList = {3,5,6,7};
+Field[1].CurvesList = {3};
 Field[1].NumPointsPerCurve = 100000;
 
 Field[2] = Threshold;
 Field[2].InField = 1;
 Field[2].SizeMin = min_size;
 Field[2].SizeMax = max_size;
-Field[2].DistMin = 4;
-Field[2].DistMax = 10;
+Field[2].DistMin = 0.25;
+Field[2].DistMax = 5;
 Field[2].StopAtDistMax = 1;
 
 Background Field = 2;
