@@ -284,7 +284,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0, volume_dd=DD_VOLUME_ALL):
 
     actx = u.array_context
 
-    @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl"))
+    @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl", volume_dd))
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
         from arraycontext import make_loopy_program
@@ -311,7 +311,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0, volume_dd=DD_VOLUME_ALL):
                                       "idof": ConcurrentDOFInameTag()})
 
     @keyed_memoize_in(actx, (smoothness_indicator,
-                             "highest_mode"),
+                             "highest_mode", volume_dd),
                       lambda grp: grp.discretization_key())
     def highest_mode(grp):
         return actx.from_numpy(
