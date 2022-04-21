@@ -16,16 +16,16 @@ for example in $examples_dir/*.py
 do
     if [[ "$example" == *"-mpi-lazy.py" ]]
     then
-        echo "*** Running parallel lazy example (1 rank): $example"
-        mpiexec -n 1 python -m mpi4py ${example} --lazy
+        echo "*** Running distributed lazy example (2 ranks): $example"
+        mpiexec -n 2 python -m mpi4py ${example} --lazy
     elif [[ "$example" == *"-mpi.py" ]]; then
-        echo "*** Running parallel example (2 ranks): $example"
+        echo "*** Running distributed eager example (2 ranks): $example"
         mpiexec -n 2 python -m mpi4py ${example}
     elif [[ "$example" == *"-lazy.py" ]]; then
         echo "*** Running serial lazy example: $example"
         python ${example} --lazy
     else
-        echo "*** Running serial example: $example"
+        echo "*** Running serial eager example: $example"
         python ${example}
     fi
     if [[ $? -eq 0 ]]
