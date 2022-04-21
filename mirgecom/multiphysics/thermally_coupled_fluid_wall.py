@@ -5,8 +5,8 @@ Couples a fluid subdomain governed by the compressible Navier-Stokes equations
 equation (:module:`mirgecom.diffusion`) by enforcing continuity of temperature
 and heat flux across their interface.
 
-.. autofunction:: coupled_grad_t_operator
 .. autofunction:: get_interface_boundaries
+.. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
 
 .. autoclass:: InterfaceFluidBoundary
@@ -40,8 +40,6 @@ THE SOFTWARE.
 from dataclasses import replace
 import numpy as np
 
-from pytools.obj_array import make_obj_array
-
 from arraycontext import thaw
 
 from grudge.trace_pair import (
@@ -74,11 +72,15 @@ from mirgecom.diffusion import (
 )
 
 
-class _InterVolNoGradTag:
+class _TemperatureInterVolTag:
     pass
 
 
-class _InterVolTag:
+class _KappaInterVolTag:
+    pass
+
+
+class _GradTemperatureInterVolTag:
     pass
 
 
@@ -86,7 +88,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
     """Interface boundary condition for the fluid side."""
 
     # FIXME: Incomplete docs
-    def __init__(self, ext_t, ext_grad_t, ext_kappa):
+    def __init__(self, ext_t, ext_kappa, ext_grad_t=None):
         """Initialize InterfaceFluidBoundary."""
         PrescribedFluidBoundary.__init__(
             self,
@@ -96,8 +98,8 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             boundary_gradient_temperature_func=self.get_external_grad_t
         )
         self.ext_t = ext_t
-        self.ext_grad_t = ext_grad_t
         self.ext_kappa = ext_kappa
+        self.ext_grad_t = ext_grad_t
 
     # FIXME: This probably uses the wrong BC for the species mass fractions
     def get_external_state(self, discr, dd_bdry, gas_model, state_minus, **kwargs):
@@ -170,6 +172,9 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             self, discr, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, **kwargs):
         """Get the exterior grad(T) on the boundary."""
+        if self.ext_grad_t is None:
+            raise ValueError(
+                "Boundary does not have external temperature gradient data.")
         if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
             dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
             return discr.project(dd_bdry_base, dd_bdry, self.ext_grad_t)
@@ -181,18 +186,18 @@ class InterfaceWallBoundary(DiffusionBoundary):
     """Interface boundary condition for the wall side."""
 
     # FIXME: Incomplete docs
-    def __init__(self, u_ext, grad_u_ext, kappa_ext):
+    def __init__(self, ext_u, ext_kappa, ext_grad_u=None):
         """Initialize InterfaceWallBoundary."""
-        self.u_ext = u_ext
-        self.grad_u_ext = grad_u_ext
-        self.kappa_ext = kappa_ext
+        self.ext_u = ext_u
+        self.ext_kappa = ext_kappa
+        self.ext_grad_u = ext_grad_u
 
     def get_grad_flux(
             self, discr, dd_vol, dd_bdry, u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get the numerical flux for grad(u) on the boundary."""
-        u_int = discr.project(dd_vol, dd_bdry, u)
-        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=self.u_ext)
+        int_u = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=int_u, exterior=self.ext_u)
         from mirgecom.diffusion import grad_flux
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
@@ -200,64 +205,151 @@ class InterfaceWallBoundary(DiffusionBoundary):
             self, discr, dd_vol, dd_bdry, u, kappa, grad_u, *,
             penalty_amount=None, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get the numerical flux for the diff(u) on the boundary."""
-        u_int = discr.project(dd_vol, dd_bdry, u)
-        u_tpair = TracePair(dd_bdry, interior=u_int, exterior=self.u_ext)
-        kappa_int = discr.project(dd_vol, dd_bdry, kappa)
-        kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=self.kappa_ext)
-        grad_u_int = discr.project(dd_vol, dd_bdry, grad_u)
+        if self.ext_grad_u is None:
+            raise ValueError(
+                "Boundary does not have external temperature gradient data.")
+        int_u = discr.project(dd_vol, dd_bdry, u)
+        u_tpair = TracePair(dd_bdry, interior=int_u, exterior=self.ext_u)
+        int_kappa = discr.project(dd_vol, dd_bdry, kappa)
+        kappa_tpair = TracePair(dd_bdry, interior=int_kappa, exterior=self.ext_kappa)
+        int_grad_u = discr.project(dd_vol, dd_bdry, grad_u)
         grad_u_tpair = TracePair(
-            dd_bdry, interior=grad_u_int, exterior=self.grad_u_ext)
+            dd_bdry, interior=int_grad_u, exterior=self.ext_grad_u)
         # Memoized, so should be OK to call here
         from grudge.dt_utils import characteristic_lengthscales
         lengthscales = (
             characteristic_lengthscales(u.array_context, discr, dd_vol) * (0*u+1))
-        lengthscales_int = discr.project(dd_vol, dd_bdry, lengthscales)
+        int_lengthscales = discr.project(dd_vol, dd_bdry, lengthscales)
         lengthscales_tpair = TracePair(
-            dd_bdry, interior=lengthscales_int, exterior=lengthscales_int)
+            dd_bdry, interior=int_lengthscales, exterior=int_lengthscales)
         from mirgecom.diffusion import diffusion_flux
         return diffusion_flux(
             discr, u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair,
             penalty_amount=penalty_amount, quadrature_tag=quadrature_tag)
 
 
-def _get_interface_boundaries_no_grad(
+def _temperature_inter_volume_trace_pairs(
         discr,
         gas_model, wall_model,
         fluid_volume_dd, wall_volume_dd,
-        fluid_boundaries, wall_boundaries,
         fluid_state, wall_temperature):
-    pairwise_vol_data = {
-        (fluid_volume_dd, wall_volume_dd): (
-            make_obj_array([
-                fluid_state.temperature,
-                fluid_state.thermal_conductivity]),
-            make_obj_array([
-                wall_temperature,
-                wall_model.thermal_conductivity]))}
-    inter_vol_tpairs = inter_volume_trace_pairs(
-        discr, pairwise_vol_data, comm_tag=_InterVolNoGradTag)
+    pairwise_temperature = {
+        (fluid_volume_dd, wall_volume_dd):
+            (fluid_state.temperature, wall_temperature)}
+    return inter_volume_trace_pairs(
+        discr, pairwise_temperature, comm_tag=_TemperatureInterVolTag)
 
-    fluid_interface_boundaries_no_grad = {}
-    fluid_tpairs_no_grad = inter_vol_tpairs[wall_volume_dd, fluid_volume_dd]
-    for tpair in fluid_tpairs_no_grad:
-        bdtag = tpair.dd.domain_tag
-        ext_temperature, ext_kappa = tpair.ext
-        fluid_interface_boundaries_no_grad[bdtag] = InterfaceFluidBoundary(
-            ext_temperature,
-            (0*ext_temperature,)*discr.dim,
-            ext_kappa)
 
-    wall_interface_boundaries_no_grad = {}
-    wall_tpairs_no_grad = inter_vol_tpairs[fluid_volume_dd, wall_volume_dd]
-    for tpair in wall_tpairs_no_grad:
-        bdtag = tpair.dd.domain_tag
-        ext_temperature, ext_kappa = tpair.ext
-        wall_interface_boundaries_no_grad[bdtag] = InterfaceWallBoundary(
-            ext_temperature,
-            (0*ext_temperature,)*discr.dim,
-            ext_kappa)
+def _kappa_inter_volume_trace_pairs(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_state, wall_temperature):
+    pairwise_kappa = {
+        (fluid_volume_dd, wall_volume_dd):
+            (fluid_state.thermal_conductivity, wall_model.thermal_conductivity)}
+    return inter_volume_trace_pairs(
+        discr, pairwise_kappa, comm_tag=_KappaInterVolTag)
 
-    return fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad
+
+def _grad_temperature_inter_volume_trace_pairs(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_grad_temperature, wall_grad_temperature):
+    pairwise_grad_temperature = {
+        (fluid_volume_dd, wall_volume_dd):
+            (fluid_grad_temperature, wall_grad_temperature)}
+    return inter_volume_trace_pairs(
+        discr, pairwise_grad_temperature, comm_tag=_GradTemperatureInterVolTag)
+
+
+def get_interface_boundaries(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_state, wall_temperature,
+        fluid_grad_temperature=None, wall_grad_temperature=None,
+        *,
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        _temperature_inter_vol_tpairs=None,
+        _kappa_inter_vol_tpairs=None,
+        _grad_temperature_inter_vol_tpairs=None):
+    # FIXME: Incomplete docs
+    """Get the fluid-wall interface boundaries."""
+    include_gradient = (
+        fluid_grad_temperature is not None and wall_grad_temperature is not None)
+
+    if _temperature_inter_vol_tpairs is None:
+        temperature_inter_vol_tpairs = _temperature_inter_volume_trace_pairs(
+            discr,
+            gas_model, wall_model,
+            fluid_volume_dd, wall_volume_dd,
+            fluid_state, wall_temperature)
+    else:
+        temperature_inter_vol_tpairs = _temperature_inter_vol_tpairs
+
+    if _kappa_inter_vol_tpairs is None:
+        kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
+            discr,
+            gas_model, wall_model,
+            fluid_volume_dd, wall_volume_dd,
+            fluid_state, wall_temperature)
+    else:
+        kappa_inter_vol_tpairs = _kappa_inter_vol_tpairs
+
+    if include_gradient:
+        if _grad_temperature_inter_vol_tpairs is None:
+            grad_temperature_inter_vol_tpairs = \
+                _grad_temperature_inter_volume_trace_pairs(
+                    discr,
+                    gas_model, wall_model,
+                    fluid_volume_dd, wall_volume_dd,
+                    fluid_grad_temperature, wall_grad_temperature)
+        else:
+            grad_temperature_inter_vol_tpairs = _grad_temperature_inter_vol_tpairs
+    else:
+        grad_temperature_inter_vol_tpairs = None
+
+    if include_gradient:
+        fluid_interface_boundaries = {
+            temperature_tpair.dd.domain_tag: InterfaceFluidBoundary(
+                temperature_tpair.ext,
+                kappa_tpair.ext,
+                grad_temperature_tpair.ext)
+            for temperature_tpair, kappa_tpair, grad_temperature_tpair in zip(
+                temperature_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd],
+                kappa_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd],
+                grad_temperature_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd])}
+
+        wall_interface_boundaries = {
+            temperature_tpair.dd.domain_tag: InterfaceWallBoundary(
+                temperature_tpair.ext,
+                kappa_tpair.ext,
+                grad_temperature_tpair.ext)
+            for temperature_tpair, kappa_tpair, grad_temperature_tpair in zip(
+                temperature_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd],
+                kappa_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd],
+                grad_temperature_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd])}
+    else:
+        fluid_interface_boundaries = {
+            temperature_tpair.dd.domain_tag: InterfaceFluidBoundary(
+                temperature_tpair.ext,
+                kappa_tpair.ext)
+            for temperature_tpair, kappa_tpair in zip(
+                temperature_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd],
+                kappa_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd])}
+
+        wall_interface_boundaries = {
+            temperature_tpair.dd.domain_tag: InterfaceWallBoundary(
+                temperature_tpair.ext,
+                kappa_tpair.ext)
+            for temperature_tpair, kappa_tpair in zip(
+                temperature_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd],
+                kappa_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd])}
+
+    return fluid_interface_boundaries, wall_interface_boundaries
 
 
 def coupled_grad_t_operator(
@@ -271,9 +363,9 @@ def coupled_grad_t_operator(
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        _fluid_operator_states_quad=None,
-        _fluid_interface_boundaries_no_grad=None,
-        _wall_interface_boundaries_no_grad=None):
+        _temperature_inter_vol_tpairs=None,
+        _kappa_inter_vol_tpairs=None,
+        _fluid_operator_states_quad=None):
     # FIXME: Incomplete docs
     """Compute grad(T) of the coupled fluid-wall system."""
     fluid_boundaries = {
@@ -283,120 +375,46 @@ def coupled_grad_t_operator(
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
 
-    if (
-            _fluid_interface_boundaries_no_grad is None
-            or _wall_interface_boundaries_no_grad is None):
-        fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
-            _get_interface_boundaries_no_grad(
-                discr,
-                gas_model, wall_model,
-                fluid_volume_dd, wall_volume_dd,
-                fluid_boundaries, wall_boundaries,
-                fluid_state, wall_temperature)
-    else:
-        fluid_interface_boundaries_no_grad = _fluid_interface_boundaries_no_grad
-        wall_interface_boundaries_no_grad = _wall_interface_boundaries_no_grad
+    fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
+        get_interface_boundaries(
+            discr,
+            gas_model, wall_model,
+            fluid_volume_dd, wall_volume_dd,
+            fluid_state, wall_temperature,
+            _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs,
+            _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs)
 
-    fluid_full_boundaries_no_grad = {}
-    fluid_full_boundaries_no_grad.update(fluid_boundaries)
-    fluid_full_boundaries_no_grad.update(fluid_interface_boundaries_no_grad)
+    fluid_all_boundaries_no_grad = {}
+    fluid_all_boundaries_no_grad.update(fluid_boundaries)
+    fluid_all_boundaries_no_grad.update(fluid_interface_boundaries_no_grad)
 
-    wall_full_boundaries_no_grad = {}
-    wall_full_boundaries_no_grad.update(wall_boundaries)
-    wall_full_boundaries_no_grad.update(wall_interface_boundaries_no_grad)
+    wall_all_boundaries_no_grad = {}
+    wall_all_boundaries_no_grad.update(wall_boundaries)
+    wall_all_boundaries_no_grad.update(wall_interface_boundaries_no_grad)
 
     return (
         fluid_grad_t_operator(
-            discr, gas_model, fluid_full_boundaries_no_grad, fluid_state,
+            discr, gas_model, fluid_all_boundaries_no_grad, fluid_state,
             time=time, numerical_flux_func=fluid_numerical_flux_func,
             quadrature_tag=quadrature_tag, volume_dd=fluid_volume_dd,
             operator_states_quad=_fluid_operator_states_quad),
         wall_grad_t_operator(
-            discr, wall_full_boundaries_no_grad, wall_temperature,
+            discr, wall_all_boundaries_no_grad, wall_temperature,
             quadrature_tag=quadrature_tag, volume_dd=wall_volume_dd))
-
-
-def get_interface_boundaries(
-        discr,
-        gas_model, wall_model,
-        fluid_volume_dd, wall_volume_dd,
-        fluid_boundaries, wall_boundaries,
-        fluid_state, wall_temperature, *,
-        time=0.,
-        fluid_gradient_numerical_flux_func=gradient_flux_central,
-        quadrature_tag=DISCR_TAG_BASE,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        _fluid_operator_states_quad=None,
-        _fluid_interface_boundaries_no_grad=None,
-        _wall_interface_boundaries_no_grad=None):
-    # FIXME: Incomplete docs
-    """Get the BCs for the interface surfaces between the fluid and the wall."""
-    fluid_boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in fluid_boundaries.items()}
-    wall_boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in wall_boundaries.items()}
-
-    fluid_grad_temperature, wall_grad_temperature = coupled_grad_t_operator(
-        discr,
-        gas_model, wall_model,
-        fluid_volume_dd, wall_volume_dd,
-        fluid_boundaries, wall_boundaries,
-        fluid_state, wall_temperature,
-        time=time,
-        fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
-        quadrature_tag=DISCR_TAG_BASE,
-        _fluid_operator_states_quad=_fluid_operator_states_quad,
-        _fluid_interface_boundaries_no_grad=_fluid_interface_boundaries_no_grad,
-        _wall_interface_boundaries_no_grad=_wall_interface_boundaries_no_grad)
-
-    pairwise_vol_data = {
-        (fluid_volume_dd, wall_volume_dd): (
-            make_obj_array([
-                fluid_state.temperature,
-                fluid_grad_temperature,
-                fluid_state.thermal_conductivity]),
-            make_obj_array([
-                wall_temperature,
-                wall_grad_temperature,
-                wall_model.thermal_conductivity]))}
-    inter_vol_tpairs = inter_volume_trace_pairs(
-        discr, pairwise_vol_data, comm_tag=_InterVolTag)
-
-    fluid_interface_boundaries = {}
-    fluid_tpairs = inter_vol_tpairs[wall_volume_dd, fluid_volume_dd]
-    for tpair in fluid_tpairs:
-        bdtag = tpair.dd.domain_tag
-        ext_temperature, ext_grad_temperature, ext_kappa = tpair.ext
-        fluid_interface_boundaries[bdtag] = InterfaceFluidBoundary(
-            ext_temperature,
-            ext_grad_temperature,
-            ext_kappa)
-
-    wall_interface_boundaries = {}
-    wall_tpairs = inter_vol_tpairs[fluid_volume_dd, wall_volume_dd]
-    for tpair in wall_tpairs:
-        bdtag = tpair.dd.domain_tag
-        ext_temperature, ext_grad_temperature, ext_kappa = tpair.ext
-        wall_interface_boundaries[bdtag] = InterfaceWallBoundary(
-            ext_temperature,
-            ext_grad_temperature,
-            ext_kappa)
-
-    return fluid_interface_boundaries, wall_interface_boundaries
 
 
 def _heat_operator(
         discr, wall_model, boundaries, temperature, *,
-        penalty_amount, quadrature_tag, volume_dd):
+        penalty_amount, quadrature_tag, volume_dd,
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        _grad_temperature=None):
     return (
         1/(wall_model.density * wall_model.heat_capacity)
         * diffusion_operator(
             discr, wall_model.thermal_conductivity, boundaries, temperature,
             penalty_amount=penalty_amount, quadrature_tag=quadrature_tag,
-            volume_dd=volume_dd))
+            volume_dd=volume_dd, grad_u=_grad_temperature))
 
 
 def coupled_ns_heat_operator(
@@ -422,59 +440,82 @@ def coupled_ns_heat_operator(
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
 
+    temperature_inter_vol_tpairs = _temperature_inter_volume_trace_pairs(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_state, wall_temperature)
+
+    kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_state, wall_temperature)
+
     fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
-        _get_interface_boundaries_no_grad(
+        get_interface_boundaries(
             discr,
             gas_model, wall_model,
             fluid_volume_dd, wall_volume_dd,
-            fluid_boundaries, wall_boundaries,
-            fluid_state, wall_temperature)
+            fluid_state, wall_temperature,
+            _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
+            _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs)
 
-    fluid_full_boundaries_no_grad = {}
-    fluid_full_boundaries_no_grad.update(fluid_boundaries)
-    fluid_full_boundaries_no_grad.update(fluid_interface_boundaries_no_grad)
+    fluid_all_boundaries_no_grad = {}
+    fluid_all_boundaries_no_grad.update(fluid_boundaries)
+    fluid_all_boundaries_no_grad.update(fluid_interface_boundaries_no_grad)
 
     fluid_operator_states_quad = make_operator_fluid_states(
-        discr, fluid_state, gas_model, fluid_full_boundaries_no_grad,
+        discr, fluid_state, gas_model, fluid_all_boundaries_no_grad,
         quadrature_tag, volume_dd=fluid_volume_dd)
+
+    fluid_grad_temperature, wall_grad_temperature = coupled_grad_t_operator(
+        discr,
+        gas_model, wall_model,
+        fluid_volume_dd, wall_volume_dd,
+        fluid_boundaries, wall_boundaries,
+        fluid_state, wall_temperature,
+        time=time,
+        fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
+        quadrature_tag=DISCR_TAG_BASE,
+        _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
+        _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
+        _fluid_operator_states_quad=fluid_operator_states_quad)
 
     fluid_interface_boundaries, wall_interface_boundaries = \
         get_interface_boundaries(
             discr,
             gas_model, wall_model,
             fluid_volume_dd, wall_volume_dd,
-            fluid_boundaries, wall_boundaries,
             fluid_state, wall_temperature,
-            time=time,
-            fluid_gradient_numerical_flux_func=fluid_gradient_numerical_flux_func,
-            quadrature_tag=quadrature_tag,
-            _fluid_operator_states_quad=fluid_operator_states_quad,
-            _fluid_interface_boundaries_no_grad=fluid_interface_boundaries_no_grad,
-            _wall_interface_boundaries_no_grad=wall_interface_boundaries_no_grad)
+            fluid_grad_temperature, wall_grad_temperature,
+            _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
+            _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs)
 
-    fluid_full_boundaries = {}
-    fluid_full_boundaries.update(fluid_boundaries)
-    fluid_full_boundaries.update(fluid_interface_boundaries)
+    fluid_all_boundaries = {}
+    fluid_all_boundaries.update(fluid_boundaries)
+    fluid_all_boundaries.update(fluid_interface_boundaries)
 
-    wall_full_boundaries = {}
-    wall_full_boundaries.update(wall_boundaries)
-    wall_full_boundaries.update(wall_interface_boundaries)
+    wall_all_boundaries = {}
+    wall_all_boundaries.update(wall_boundaries)
+    wall_all_boundaries.update(wall_interface_boundaries)
 
     fluid_rhs = ns_operator(
-        discr, gas_model, fluid_state, fluid_full_boundaries,
+        discr, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, volume_dd=fluid_volume_dd,
-        operator_states_quad=fluid_operator_states_quad)
+        operator_states_quad=fluid_operator_states_quad,
+        grad_t=fluid_grad_temperature)
 
     if use_av:
         if av_kwargs is None:
             av_kwargs = {}
         fluid_rhs = fluid_rhs + av_laplacian_operator(
-            discr, fluid_full_boundaries, fluid_state, quadrature_tag=quadrature_tag,
+            discr, fluid_all_boundaries, fluid_state, quadrature_tag=quadrature_tag,
             volume_dd=fluid_volume_dd, **av_kwargs)
 
     wall_rhs = wall_time_scale * _heat_operator(
-        discr, wall_model, wall_full_boundaries, wall_temperature,
+        discr, wall_model, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        volume_dd=wall_volume_dd)
+        volume_dd=wall_volume_dd, _grad_temperature=wall_grad_temperature)
 
     return fluid_rhs, wall_rhs

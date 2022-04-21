@@ -394,7 +394,11 @@ def _normalize_arguments(*args, **kwargs):
 
 def diffusion_operator(
         discr, *args, return_grad_u=False, penalty_amount=None,
-        volume_dd=DD_VOLUME_ALL, **kwargs):
+        volume_dd=DD_VOLUME_ALL,
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        grad_u=None,
+        **kwargs):
     r"""
     Compute the diffusion operator.
 
@@ -461,8 +465,10 @@ def diffusion_operator(
     dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    grad_u = grad_operator(
-        discr, boundaries, u, quadrature_tag=quadrature_tag, volume_dd=dd_vol_base)
+    if grad_u is None:
+        grad_u = grad_operator(
+            discr, boundaries, u, quadrature_tag=quadrature_tag,
+            volume_dd=dd_vol_base)
 
     kappa_quad = discr.project(dd_vol_base, dd_vol_quad, kappa)
     grad_u_quad = discr.project(dd_vol_base, dd_vol_quad, grad_u)
