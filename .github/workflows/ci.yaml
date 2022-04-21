@@ -25,7 +25,7 @@ jobs:
             source myenv/bin/activate
             python -m pip install wheel
             python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
-            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py && echo "Flake8 found no errors."
+            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
     pylint:
         name: Pylint
@@ -103,7 +103,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             examples/run_examples.sh ./examples
- 
+
     doc:
         name: Documentation
         runs-on: ubuntu-latest
@@ -153,7 +153,7 @@ jobs:
             cd mirgecom/examples
             python -m mpi4py ./pulse-mpi.py
 
-    y1: 
+    y1:
         name: Production testing
         runs-on: ${{ matrix.os }}
         strategy:
