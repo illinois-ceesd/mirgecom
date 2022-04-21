@@ -83,7 +83,7 @@ class _InterVolTag:
 
 
 class InterfaceFluidBoundary(PrescribedFluidBoundary):
-    """Interface boundary condition for fluid side."""
+    """Interface boundary condition for the fluid side."""
 
     # FIXME: Incomplete docs
     def __init__(self, ext_t, ext_grad_t, ext_kappa):
@@ -178,7 +178,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
 
 class InterfaceWallBoundary(DiffusionBoundary):
-    """Interface boundary condition for wall side."""
+    """Interface boundary condition for the wall side."""
 
     # FIXME: Incomplete docs
     def __init__(self, u_ext, grad_u_ext, kappa_ext):
