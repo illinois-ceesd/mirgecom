@@ -78,7 +78,7 @@ from mirgecom.logging_quantities import (
 )
 
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_grad_t_operator,
+    # coupled_grad_t_operator,
     coupled_ns_heat_operator,
 )
 
@@ -376,18 +376,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         f"----- Fluid Temperature({fluid_t_min}, {fluid_t_max})\n"
                         f"----- Wall Temperature({wall_t_min}, {wall_t_max})\n")
 
-#     def _grad_t_operator(t, fluid_state, wall_temperature):
-#         fluid_grad_t, wall_grad_t = coupled_grad_t_operator(
-#             discr,
-#             gas_model, wall_model,
-#             dd_vol_fluid, dd_vol_wall,
-#             fluid_boundaries, wall_boundaries,
-#             fluid_state, wall_temperature,
-#             time=t,
-#             quadrature_tag=quadrature_tag)
-#         return make_obj_array([fluid_grad_t, wall_grad_t])
+    # def _grad_t_operator(t, fluid_state, wall_temperature):
+    #     fluid_grad_t, wall_grad_t = coupled_grad_t_operator(
+    #         discr,
+    #         gas_model, wall_model,
+    #         dd_vol_fluid, dd_vol_wall,
+    #         fluid_boundaries, wall_boundaries,
+    #         fluid_state, wall_temperature,
+    #         time=t,
+    #         quadrature_tag=quadrature_tag)
+    #     return make_obj_array([fluid_grad_t, wall_grad_t])
 
-#     grad_t_operator = actx.compile(_grad_t_operator)
+    # grad_t_operator = actx.compile(_grad_t_operator)
 
     def my_write_viz(step, t, state, dv=None, rhs=None):
         cv = state[0]
@@ -395,25 +395,25 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if dv is None:
             fluid_state = make_fluid_state(state[0], gas_model)
             dv = fluid_state.dv
-#         if rhs is None:
-#             rhs = my_rhs(t, state)
+        # if rhs is None:
+        #     rhs = my_rhs(t, state)
 
-#         grad_temperature = grad_t_operator(t, fluid_state, wall_temperature)
-#         fluid_grad_temperature = grad_temperature[0]
-#         wall_grad_temperature = grad_temperature[1]
+        # grad_temperature = grad_t_operator(t, fluid_state, wall_temperature)
+        # fluid_grad_temperature = grad_temperature[0]
+        # wall_grad_temperature = grad_temperature[1]
 
         fluid_viz_fields = [
             ("cv", cv),
             ("dv", dv),
-#             ("grad_t", fluid_grad_temperature),
-#             ("rhs", rhs[0]),
-#             ("kappa", fluid_state.thermal_conductivity),
+            # ("grad_t", fluid_grad_temperature),
+            # ("rhs", rhs[0]),
+            # ("kappa", fluid_state.thermal_conductivity),
         ]
         wall_viz_fields = [
             ("temperature", wall_temperature),
-#             ("grad_t", wall_grad_temperature),
-#             ("rhs", rhs[1]),
-#             ("kappa", wall_model.thermal_conductivity),
+            # ("grad_t", wall_grad_temperature),
+            # ("rhs", rhs[1]),
+            # ("kappa", wall_model.thermal_conductivity),
         ]
         from mirgecom.simutil import write_visfile
         write_visfile(
@@ -527,8 +527,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from dataclasses import replace
         fluid_rhs = replace(
             fluid_rhs,
-            energy=fluid_rhs.energy + 1e9*actx.np.exp(
-                -(fluid_nodes[0]**2+(fluid_nodes[1]-0.005)**2)/0.004**2)*actx.np.exp(-t/5e-6))
+            energy=fluid_rhs.energy + (
+                1e9
+                * actx.np.exp(
+                    -(fluid_nodes[0]**2+(fluid_nodes[1]-0.005)**2)/0.004**2)
+                * actx.np.exp(-t/5e-6)))
         return make_obj_array([fluid_rhs, wall_rhs])
 
     current_dt = my_get_timestep(step=current_step, t=current_t, state=current_state)
