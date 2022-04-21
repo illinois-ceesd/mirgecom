@@ -222,7 +222,8 @@ class ConservedVars:
     @property
     def array_context(self):
         """Return an array context for the :class:`ConservedVars` object."""
-        return self.mass.array_context
+        from arraycontext import get_container_context_recursively
+        return get_container_context_recursively(self.mass)
 
     @property
     def dim(self):
