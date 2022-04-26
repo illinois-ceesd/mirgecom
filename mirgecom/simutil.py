@@ -63,6 +63,8 @@ from functools import partial
 
 from meshmode.dof_array import DOFArray
 
+from typing import List
+from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 
 
@@ -282,17 +284,26 @@ def allsync(local_values, comm=None, op=None):
     return global_reduce(local_values, op_string, comm=comm)
 
 
-def check_range_local(discr, dd, field, min_value, max_value):
-    """Check for any negative values."""
+def check_range_local(discr: DiscretizationCollection, dd: str, field: DOFArray,
+                      min_value: float, max_value: float) -> List[float]:
+    """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    return (
-        actx.to_numpy(op.nodal_min_loc(discr, dd, field)) < min_value
-        or actx.to_numpy(op.nodal_max_loc(discr, dd, field)) > max_value
-    )
+    local_min = np.asscalar(actx.to_numpy(op.nodal_min_loc(discr, dd, field)))
+    local_max = np.asscalar(actx.to_numpy(op.nodal_max_loc(discr, dd, field)))
+
+    failing_values = []
+
+    if local_min < min_value:
+        failing_values.append(local_min)
+    if local_max > max_value:
+        failing_values.append(local_max)
+
+    return failing_values
 
 
-def check_naninf_local(discr, dd, field):
-    """Check for any NANs or Infs in the field."""
+def check_naninf_local(discr: DiscretizationCollection, dd: str,
+                       field: DOFArray) -> bool:
+    """Return True if there are any NaNs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
     return not np.isfinite(s)
