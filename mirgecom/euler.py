@@ -62,6 +62,7 @@ from mirgecom.inviscid import (
     inviscid_flux_rusanov,
     inviscid_boundary_flux_for_divergence_operator
 )
+
 from mirgecom.operators import div_operator
 
 

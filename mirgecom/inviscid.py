@@ -4,9 +4,9 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_rusanov
 .. autofunction:: inviscid_flux_hll
+.. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_boundary_flux_for_divergence_operator
 
 Inviscid Time Step Computation
@@ -87,23 +87,24 @@ def inviscid_flux(state):
 def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
-    The Rusanov inviscid numerical flux is calculated as:
+    The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
+    as:
 
     .. math::
 
-        F^{*}_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-)
+        F^{*}_{\mathtt{Rusanov}} = \frac{1}{2}(\mathbf{F}(q^-)
         +\mathbf{F}(q^+)) \cdot \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
 
     where $q^-, q^+$ are the fluid solution state on the interior and the
-    exterior of the face on which the flux is to be calculated, $\mathbf{F}$ is
+    exterior of the face where the Rusanov flux is to be calculated, $\mathbf{F}$ is
     the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
     *local* maximum fluid wavespeed.
     """
     actx = state_pair.int.array_context
     lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
     from mirgecom.flux import num_flux_lfr
-    return num_flux_lfr(f_minus=inviscid_flux(state_pair.int)@normal,
-                        f_plus=inviscid_flux(state_pair.ext)@normal,
+    return num_flux_lfr(f_minus_normal=inviscid_flux(state_pair.int)@normal,
+                        f_plus_normal=inviscid_flux(state_pair.ext)@normal,
                         q_minus=state_pair.int.cv,
                         q_plus=state_pair.ext.cv, lam=lam)
 
@@ -163,14 +164,15 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     s_minus = u_int - c_int*q_int
     s_plus = u_ext + c_ext*q_ext
 
-    f_minus = inviscid_flux(state_pair.int)@normal
-    f_plus = inviscid_flux(state_pair.ext)@normal
+    f_minus_normal = inviscid_flux(state_pair.int)@normal
+    f_plus_normal = inviscid_flux(state_pair.ext)@normal
 
     q_minus = state_pair.int.cv
     q_plus = state_pair.ext.cv
 
     from mirgecom.flux import num_flux_hll
-    return num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus)
+    return num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus,
+                        s_plus)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
