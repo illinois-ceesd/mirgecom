@@ -37,15 +37,20 @@ from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from mirgecom.inviscid import (
+    inviscid_flux_rusanov,
+    inviscid_flux_hll
+)
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state,
     project_fluid_state,
     make_fluid_state_trace_pairs
 )
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,7 +127,9 @@ def test_slipwall_identity(actx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-def test_slipwall_flux(actx_factory, dim, order):
+@pytest.mark.parametrize("flux_func", [inviscid_flux_rusanov,
+                                       inviscid_flux_hll])
+def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """Check for zero boundary flux.
 
     Check for vanishing flux across the slipwall.
@@ -187,7 +194,8 @@ def test_slipwall_flux(actx_factory, dim, order):
 
                 bnd_flux = \
                     inviscid_facial_flux(discr=discr, gas_model=gas_model,
-                                         state_pair=state_pair, local=True)
+                                         state_pair=state_pair,
+                                         numerical_flux_func=flux_func, local=True)
 
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
