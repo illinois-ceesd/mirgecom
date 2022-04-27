@@ -388,8 +388,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
 
         When running MPI-distributed, volume state conserved quantities
         (ConservedVars), and for mixtures, temperatures will be communicated over
-        partition boundaries inside this routine. Note the use of
-        :func:`~grudge.trace_pair.interior_trace_pairs`.
+        partition boundaries inside this routine.
 
     Parameters
     ----------

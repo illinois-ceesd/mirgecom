@@ -34,7 +34,7 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL
 from mirgecom.flux import gradient_flux_central
 from mirgecom.fluid import (
@@ -124,7 +124,7 @@ def _cv_test_func(dim):
 
 def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = thaw(actx, discr.normal(int_tpair.dd))
+    normal = thaw(discr.normal(int_tpair.dd), actx)
     flux_weak = gradient_flux_central(int_tpair, normal)
     dd_all_faces = int_tpair.dd.with_dtag("all_faces")
     return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
@@ -133,9 +133,9 @@ def central_flux_interior(actx, discr, int_tpair):
 def central_flux_boundary(actx, discr, soln_func, btag):
     """Compute a central flux for boundary faces."""
     boundary_discr = discr.discr_from_dd(btag)
-    bnd_nodes = thaw(actx, boundary_discr.nodes())
+    bnd_nodes = thaw(boundary_discr.nodes(), actx)
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = thaw(actx, discr.normal(btag))
+    bnd_nhat = thaw(discr.normal(btag), actx)
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
     flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
@@ -154,6 +154,33 @@ def sym_grad(dim, expr):
             obj_array_vectorize(lambda e: sym.grad(dim, e), expr))
     else:
         return sym.grad(dim, expr)
+
+
+def _contextize_expression(expr, ones):
+
+    if isinstance(expr, ConservedVars):
+        dim = expr.dim
+        if isinstance(expr.mass, np.ndarray):
+            mass = make_obj_array([expr.mass[i]*ones for i in range(dim)])
+            energy = make_obj_array([expr.energy[i]*ones for i in range(dim)])
+            spec_mass = 0*expr.species_mass
+            for i in range(expr.nspecies):
+                spec_mass[i] = make_obj_array([expr.species_mass[j]*ones
+                                               for j in range(dim)])
+            mom = 0*expr.momentum
+            for i in range(dim):
+                for j in range(dim):
+                    mom[i][j] = expr.momentum[i][j]*ones
+        else:
+            mom = make_obj_array([expr.momentum[i]*ones for i in range(dim)])
+            mass = expr.mass*ones
+            energy = expr.energy*ones
+            spec_mass = make_obj_array([expr.species_mass[i]*ones
+                                        for i in range(expr.nspecies)])
+
+        return make_conserved(dim=dim, mass=mass, momentum=mom, energy=energy,
+                              species_mass=spec_mass)
+    return expr
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -197,6 +224,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
+
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
         h_max = h_max_from_volume(discr)
@@ -208,12 +236,14 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
             result = rec_map_array_container(mapper, expr)
             # If expressions don't depend on coords (e.g., order 0), evaluated result
             # will be scalar-valued, so promote to DOFArray(s) before returning
+            ones = 0*x_vec[0] + 1.0
+            result = _contextize_expression(result, ones)
             return result * (0*x_vec[0] + 1)
 
         test_func = partial(sym_eval, sym_test_func)
         grad_test_func = partial(sym_eval, sym_grad(dim, sym_test_func))
 
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         int_flux = partial(central_flux_interior, actx, discr)
         bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
 

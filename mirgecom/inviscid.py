@@ -102,8 +102,8 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     actx = state_pair.int.array_context
     lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
     from mirgecom.flux import num_flux_lfr
-    return num_flux_lfr(f_minus=inviscid_flux(state_pair.int)@normal,
-                        f_plus=inviscid_flux(state_pair.ext)@normal,
+    return num_flux_lfr(f_minus_normal=inviscid_flux(state_pair.int)@normal,
+                        f_plus_normal=inviscid_flux(state_pair.ext)@normal,
                         q_minus=state_pair.int.cv,
                         q_plus=state_pair.ext.cv, lam=lam)
 
@@ -163,14 +163,15 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     s_minus = u_int - c_int*q_int
     s_plus = u_ext + c_ext*q_ext
 
-    f_minus = inviscid_flux(state_pair.int)@normal
-    f_plus = inviscid_flux(state_pair.ext)@normal
+    f_minus_normal = inviscid_flux(state_pair.int)@normal
+    f_plus_normal = inviscid_flux(state_pair.ext)@normal
 
     q_minus = state_pair.int.cv
     q_plus = state_pair.ext.cv
 
     from mirgecom.flux import num_flux_hll
-    return num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus)
+    return num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus,
+                        s_plus)
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
