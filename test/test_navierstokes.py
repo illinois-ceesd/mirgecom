@@ -85,7 +85,19 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+            default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: default_simplex_group_factory(
+                    base_dim=mesh.dim, order=order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+            }
+        )
+
         zeros = discr.zeros(actx)
         ones = zeros + 1.0
 
@@ -284,7 +296,18 @@ def test_poiseuille_rhs(actx_factory, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+            default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+        discr = EagerDGDiscretization(
+            actx, mesh,
+            discr_tag_to_group_factory={
+                DISCR_TAG_BASE: default_simplex_group_factory(
+                    base_dim=mesh.dim, order=order),
+                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+            }
+        )
         nodes = thaw(discr.nodes(), actx)
 
         cv_input = initializer(x_vec=nodes, eos=gas_model.eos)
