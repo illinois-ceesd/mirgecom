@@ -4,9 +4,9 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_rusanov
 .. autofunction:: inviscid_flux_hll
+.. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_boundary_flux_for_divergence_operator
 
 Inviscid Time Step Computation
@@ -87,15 +87,16 @@ def inviscid_flux(state):
 def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
-    The Rusanov inviscid numerical flux is calculated as:
+    The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
+    as:
 
     .. math::
 
-        F^{*}_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-)
+        F^{*}_{\mathtt{Rusanov}} = \frac{1}{2}(\mathbf{F}(q^-)
         +\mathbf{F}(q^+)) \cdot \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
 
     where $q^-, q^+$ are the fluid solution state on the interior and the
-    exterior of the face on which the flux is to be calculated, $\mathbf{F}$ is
+    exterior of the face where the Rusanov flux is to be calculated, $\mathbf{F}$ is
     the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
     *local* maximum fluid wavespeed.
     """
