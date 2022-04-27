@@ -63,8 +63,10 @@ import grudge.op as op
 
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_flux_rusanov,
+    inviscid_boundary_flux_for_divergence_operator,
 )
+
 from mirgecom.operators import div_operator
 from mirgecom.gas_model import (
     project_fluid_state,
@@ -81,6 +83,7 @@ class _EulerTseedTag:
 
 
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
+                   inviscid_numerical_flux_func=inviscid_flux_rusanov,
                    quadrature_tag=None):
     r"""Compute RHS of the Euler flow equations.
 
@@ -176,20 +179,13 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
     # Compute volume contributions
     inviscid_flux_vol = inviscid_flux(vol_state_quad)
+
     # Compute interface contributions
-    inviscid_flux_bnd = (
-
-        # Interior faces
-        sum(inviscid_facial_flux(discr, state_pair)
-            for state_pair in interior_states_quad)
-
-        # Domain boundary faces
-        + sum(
-            boundaries[btag].inviscid_divergence_flux(
-                discr, as_dofdesc(btag).with_discr_tag(quadrature_tag), gas_model,
-                state_minus=boundary_states_quad[btag], time=time)
-            for btag in boundaries)
-    )
+    inviscid_flux_bnd = \
+        inviscid_boundary_flux_for_divergence_operator(
+            discr, gas_model, boundaries, interior_states_quad,
+            boundary_states_quad, quadrature_tag=quadrature_tag,
+            numerical_flux_func=inviscid_numerical_flux_func, time=time)
 
     return -div_operator(discr, dd_quad_vol, dd_quad_faces,
                          inviscid_flux_vol, inviscid_flux_bnd)

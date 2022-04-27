@@ -122,7 +122,8 @@ class PrescribedFluidBoundary(FluidBoundary):
         boundary_state_pair = TracePair(btag, interior=state_minus,
                                         exterior=state_plus)
 
-        return self._inviscid_div_flux_func(discr, state_tpair=boundary_state_pair)
+        return self._inviscid_div_flux_func(discr, state_pair=boundary_state_pair,
+                                            gas_model=gas_model)
 
 
 class DummyBoundary(PrescribedFluidBoundary):
