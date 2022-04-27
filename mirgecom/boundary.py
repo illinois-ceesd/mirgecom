@@ -156,13 +156,12 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_grad_temperature_func:
             self._bnd_grad_temperature_func = self._identical_grad_temperature
 
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
+    def _boundary_quantity(self, discr, btag, quantity, local=False):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        if local:
+            return quantity
         from grudge.dof_desc import as_dofdesc
         btag = as_dofdesc(btag)
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
         return discr.project(btag, btag.with_dtag("all_faces"), quantity)
 
     def _boundary_state_pair(self, discr, btag, gas_model, state_minus, **kwargs):
