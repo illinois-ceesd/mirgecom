@@ -42,8 +42,6 @@ THE SOFTWARE.
 
 import numpy as np
 from arraycontext import thaw
-# from grudge.trace_pair import TracePair
-# from mirgecom.flux import divergence_flux_lfr
 from mirgecom.fluid import make_conserved
 
 
