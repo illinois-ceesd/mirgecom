@@ -360,6 +360,19 @@ def _normalize_arguments(*args, **kwargs):
     else:
         pos_arg_names = ["kappa", "boundaries", "u"]
 
+    if len(args) > len(pos_arg_names):
+        raise TypeError(
+            f"diffusion_operator() takes up to {len(pos_arg_names)} positional "
+            f"arguments but {len(args)} were given")
+
+    all_arg_names = [
+        "alpha", "kappa", "quad_tag", "boundaries", "u", "quadrature_tag"]
+    for arg_name in kwargs.keys():
+        if arg_name not in all_arg_names:
+            raise TypeError(
+                "diffusion_operator() got an unexpected keyword argument "
+                f"'{arg_name}'")
+
     arg_dict = {
         arg_name: arg
         for arg_name, arg in zip(pos_arg_names[:len(args)], args)}
