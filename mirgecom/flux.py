@@ -41,7 +41,7 @@ THE SOFTWARE.
 import numpy as np  # noqa
 
 
-def num_flux_lfr(f_minus, f_plus, q_minus, q_plus, lam, **kwargs):
+def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -58,10 +58,10 @@ def num_flux_lfr(f_minus, f_plus, q_minus, q_plus, lam, **kwargs):
 
     Parameters
     ----------
-    f_minus
+    f_minus_normal
         Normal component of physical flux interior to (left of) interface
 
-    f_plus
+    f_plus_normal
         Normal component of physical flux exterior to (right of) interface
 
     q_minus
@@ -80,10 +80,10 @@ def num_flux_lfr(f_minus, f_plus, q_minus, q_plus, lam, **kwargs):
         object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov numerical flux.
     """
-    return (f_minus + f_plus - lam*(q_plus - q_minus))/2
+    return (f_minus_normal + f_plus_normal - lam*(q_plus - q_minus))/2
 
 
-def num_flux_central(f_minus, f_plus, **kwargs):
+def num_flux_central(f_minus_normal, f_plus_normal, **kwargs):
     r"""Central low-level numerical flux.
 
     The central flux is calculated as:
@@ -93,10 +93,10 @@ def num_flux_central(f_minus, f_plus, **kwargs):
 
     Parameters
     ----------
-    f_minus
+    f_minus_normal
         Normal component of physical flux interior to (left of) interface
 
-    f_plus
+    f_plus_normal
         Normal component of physical flux exterior to (right of) interface
 
     Returns
@@ -106,10 +106,10 @@ def num_flux_central(f_minus, f_plus, **kwargs):
         object array of :class:`~meshmode.dof_array.DOFArray` with the
         central numerical flux.
     """
-    return (f_plus + f_minus)/2
+    return (f_plus_normal + f_minus_normal)/2
 
 
-def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
+def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus):
     r"""HLL low-level numerical flux.
 
     The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:
@@ -128,10 +128,10 @@ def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
 
     Parameters
     ----------
-    f_minus
+    f_minus_normal
         Normal component of physical flux interior to (left of) interface
 
-    f_plus
+    f_plus_normal
         Normal component of physical flux exterior to (right of) interface
 
     q_minus
@@ -160,16 +160,18 @@ def num_flux_hll(f_minus, f_plus, q_minus, q_plus, s_minus, s_plus):
         HLL numerical flux.
     """
     actx = q_minus.array_context
-    f_star = (s_plus*f_minus - s_minus*f_plus
+    f_star = (s_plus*f_minus_normal - s_minus*f_plus_normal
               + s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
 
     # choose the correct f contribution based on the wave speeds
-    f_check_minus = actx.np.greater_equal(s_minus, 0*s_minus)*(0*f_minus + 1.0)
-    f_check_plus = actx.np.less_equal(s_plus, 0*s_plus)*(0*f_minus + 1.0)
+    f_check_minus = \
+        actx.np.greater_equal(s_minus, 0*s_minus)*(0*f_minus_normal + 1.0)
+    f_check_plus = \
+        actx.np.less_equal(s_plus, 0*s_plus)*(0*f_minus_normal + 1.0)
 
     f = f_star
-    f = actx.np.where(f_check_minus, f_minus, f)
-    f = actx.np.where(f_check_plus, f_plus, f)
+    f = actx.np.where(f_check_minus, f_minus_normal, f)
+    f = actx.np.where(f_check_plus, f_plus_normal, f)
 
     return f
 

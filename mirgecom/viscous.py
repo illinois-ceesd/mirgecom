@@ -46,7 +46,8 @@ THE SOFTWARE.
 
 import numpy as np
 from grudge.trace_pair import TracePair
-from meshmode.dof_array import thaw, DOFArray
+from meshmode.dof_array import DOFArray
+from arraycontext import thaw
 
 from mirgecom.flux import divergence_flux_central
 from mirgecom.fluid import (
@@ -320,7 +321,7 @@ def viscous_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
         local to the sub-discretization depending on *local* input parameter
     """
     actx = state_pair.int.array_context
-    normal = thaw(actx, discr.normal(state_pair.dd))
+    normal = thaw(discr.normal(state_pair.dd), actx)
 
     f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                          grad_t_pair.int)

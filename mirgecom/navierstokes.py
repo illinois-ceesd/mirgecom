@@ -355,7 +355,6 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
             operator_states_quad=operator_states_quad)
 
     # Communicate grad(CV) and put it on the quadrature domain
-    # FIXME/ReviewQuestion: communicate grad_cv - already on quadrature dom?
     grad_cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
