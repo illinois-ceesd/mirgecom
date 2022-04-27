@@ -39,10 +39,10 @@ def grad_operator(discr, dd_vol, dd_faces, u, flux):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     dd_vol: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the volume discrezation.
+        the degree-of-freedom tag associated with the volume discretization.
         This determines the type of quadrature to be used.
     dd_faces: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the surface discrezation.
+        the degree-of-freedom tag associated with the surface discretization.
         This determines the type of quadrature to be used.
     u: meshmode.dof_array.DOFArray or numpy.ndarray
         the function (or container of functions) for which gradient is to be
@@ -70,10 +70,10 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     dd_vol: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the volume discrezation.
+        the degree-of-freedom tag associated with the volume discretization.
         This determines the type of quadrature to be used.
     dd_faces: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the surface discrezation.
+        the degree-of-freedom tag associated with the surface discretization.
         This determines the type of quadrature to be used.
     v: numpy.ndarray
         obj array of :class:`~meshmode.dof_array.DOFArray` (or container of such)
