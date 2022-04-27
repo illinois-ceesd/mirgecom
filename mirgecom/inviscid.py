@@ -41,6 +41,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from arraycontext import thaw
 from mirgecom.fluid import make_conserved
 
 
@@ -175,48 +176,6 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
                         s_plus)
 
 
-def inviscid_facial_flux(discr, gas_model, state_pair,
-                         numerical_flux_func=inviscid_flux_rusanov, local=False):
-    r"""Return the numerical inviscid flux for the divergence operator.
-
-    Different numerical fluxes may be used through the specificiation of
-    the *numerical_flux_func*. By default, a Rusanov-type flux is used.
-
-    Parameters
-    ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
-
-        The discretization collection to use
-
-    state_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
-        which the flux calculation is to be performed
-
-    local: bool
-
-        Indicates whether to skip projection of fluxes to "all_faces" or not. If
-        set to *False* (the default), the returned fluxes are projected to
-        "all_faces."  If set to *True*, the returned fluxes are not projected to
-        "all_faces"; remaining instead on the boundary restriction.
-
-    Returns
-    -------
-    :class:`~mirgecom.fluid.ConservedVars`
-
-        A CV object containing the scalar numerical fluxes at the input faces.
-        The returned fluxes are scalar because they've already been dotted with
-        the face normals as required by the divergence operator for which they
-        are being computed.
-    """
-    from arraycontext import thaw
-    normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
-    num_flux = numerical_flux_func(state_pair, gas_model, normal)
-    dd = state_pair.dd
-    dd_allfaces = dd.with_dtag("all_faces")
-    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
-
-
 def inviscid_boundary_flux_for_divergence_operator(
         discr, gas_model, boundaries, interior_boundary_states,
         domain_boundary_states, quadrature_tag=None,
@@ -277,6 +236,48 @@ def inviscid_boundary_flux_for_divergence_operator(
     )
 
     return inviscid_flux_bnd
+
+
+def inviscid_facial_flux(discr, gas_model, state_pair,
+                         numerical_flux_func=inviscid_flux_rusanov, local=False,
+                         **kwargs):
+    r"""Return the numerical inviscid flux for the divergence operator.
+
+    Different numerical fluxes may be used through the specificiation of
+    the *numerical_flux_func*. By default, a Rusanov-type flux is used.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
+        The discretization collection to use
+
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    local: bool
+
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
+    """
+    normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
+    num_flux = numerical_flux_func(state_pair, gas_model, normal)
+    dd = state_pair.dd
+    dd_allfaces = dd.with_dtag("all_faces")
+    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
 
 
 def get_inviscid_timestep(discr, state):
