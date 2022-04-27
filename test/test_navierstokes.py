@@ -372,5 +372,6 @@ def test_poiseuille_rhs(actx_factory, order):
     if order <= 1:
         assert eoc_rec.order_estimate() >= order - 0.5
     else:
-        # Poiseuille is a quadratic profile, exactly represented by quadratic and higher
+        # Poiseuille is a quadratic profile, exactly represented by
+        # quadratic and higher
         assert eoc_rec.max_error() < tol_fudge
