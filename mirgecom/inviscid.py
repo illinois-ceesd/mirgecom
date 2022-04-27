@@ -266,7 +266,8 @@ def inviscid_boundary_flux_for_divergence_operator(
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
-                         numerical_flux_func=inviscid_flux_rusanov, local=False):
+                         numerical_flux_func=inviscid_flux_rusanov, local=False,
+                         **kwargs):
     r"""Return the numerical inviscid flux for the divergence operator.
 
     Different numerical fluxes may be used through the specificiation of
