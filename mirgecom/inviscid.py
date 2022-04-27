@@ -41,6 +41,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from arraycontext import thaw
 from mirgecom.fluid import make_conserved
 
 
@@ -209,7 +210,6 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
         the face normals as required by the divergence operator for which they
         are being computed.
     """
-    from arraycontext import thaw
     normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
     num_flux = numerical_flux_func(state_pair, gas_model, normal)
     dd = state_pair.dd
