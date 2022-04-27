@@ -34,6 +34,10 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
+from mirgecom.inviscid import (
+    inviscid_flux_rusanov,
+    inviscid_flux_hll
+)
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state,
@@ -127,7 +131,9 @@ def test_slipwall_identity(actx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-def test_slipwall_flux(actx_factory, dim, order):
+@pytest.mark.parametrize("flux_func", [inviscid_flux_rusanov,
+                                       inviscid_flux_hll])
+def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """Check for zero boundary flux.
 
     Check for vanishing flux across the slipwall.
@@ -191,8 +197,9 @@ def test_slipwall_flux(actx_factory, dim, order):
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
                 from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, state_pair,
-                                                           local=True)
+                bnd_flux = inviscid_facial_flux(discr, gas_model, state_pair,
+                                                numerical_flux_func=flux_func,
+                                                local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 
