@@ -50,6 +50,7 @@ from arraycontext import (
 @with_container_arithmetic(bcast_obj_array=False,
                            bcast_container_types=(DOFArray, np.ndarray),
                            matmul=True,
+                           _cls_has_array_context_attr=True,
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
