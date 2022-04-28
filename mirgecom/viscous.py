@@ -395,13 +395,13 @@ def viscous_boundary_flux_for_divergence_operator(
         A discretization collection encapsulating the DG elements
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
-        The physical model constructs for the gas_model
+        The physical model constructs for the gas model
 
     boundaries
         Dictionary of boundary functions, one for each valid btag
 
     interior_boundary_states
-        A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
+        Trace pairs of :class:`~mirgecom.gas_model.FluidState` for the interior faces
 
     domain_boundary_states
        A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
