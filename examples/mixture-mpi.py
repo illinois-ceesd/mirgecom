@@ -399,7 +399,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_state.cv,
                                             current_state.temperature]),
-                      t=current_t, t_final=t_final, eos=eos, dim=dim)
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
