@@ -79,7 +79,7 @@ class MyRuntimeError(RuntimeError):
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=None, lazy=False,
-         log_dependent=True):
+         log_dependent=True, use_overintegration=False):
     """Drive example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")
@@ -156,11 +156,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
     order = 1
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=local_mesh.dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
+
     ones = discr.zeros(actx) + 1.0
 
     if logmgr:
@@ -485,7 +501,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 ns_rhs, grad_cv, grad_t = \
                     ns_operator(discr, state=fluid_state, time=t,
                                 boundaries=visc_bnds, gas_model=gas_model,
-                                return_gradients=True)
+                                return_gradients=True, quadrature_tag=quadrature_tag)
                 grad_v = velocity_gradient(cv, grad_cv)
                 chem_rhs = \
                     pyro_eos.get_species_source_terms(cv,
@@ -534,7 +550,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ns_rhs = ns_operator(discr, state=fluid_state, time=t,
                              boundaries=visc_bnds, gas_model=gas_model,
                              gradient_numerical_flux_func=grad_num_flux_func,
-                             viscous_numerical_flux_func=viscous_num_flux_func)
+                             viscous_numerical_flux_func=viscous_num_flux_func,
+                             quadrature_tag=quadrature_tag)
         cv_rhs = ns_rhs + pyro_eos.get_species_source_terms(cv,
                                                             fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
@@ -589,6 +606,8 @@ if __name__ == "__main__":
     import argparse
     casename = "nsmix"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -622,6 +641,7 @@ if __name__ == "__main__":
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent, lazy=lazy)
+         log_dependent=log_dependent, lazy=lazy,
+         use_overintegration=args.overintegration)
 
 # vim: foldmethod=marker
