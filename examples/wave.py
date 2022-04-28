@@ -38,8 +38,9 @@ from mirgecom.integrators import rk4_step
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext
 )
+
 from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
