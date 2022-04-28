@@ -73,7 +73,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
     Returns
     -------
-    numpy.ndarray
+    :class:`~mirgecom.fluid.ConservedVars`
+
         The right-hand-side of the Euler flow equations:
 
         .. math::
@@ -106,10 +107,6 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
         The default value is *None*.
-
-    Returns
-    -------
-    :class:`mirgecom.fluid.ConservedVars`
     """
     dd_quad_vol = DOFDesc("vol", quadrature_tag)
     dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
