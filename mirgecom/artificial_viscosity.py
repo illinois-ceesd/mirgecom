@@ -171,8 +171,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     def interp_to_vol_quad(u):
         return op.project(discr, "vol", dd_vol, u)
 
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll=discr,
-                                  discr_tag=quadrature_tag)
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     # Get smoothness indicator based on mass component
     kappa = kwargs.get("kappa", 1.0)
@@ -189,7 +188,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
 
     cv_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux(interp_to_surf_quad(tpair))
+        + sum(central_flux(interp_to_surf_quad(tpair=tpair))
               for tpair in interior_trace_pairs(discr, cv, tag=_AVCVTag))
         # Contributions from boundary fluxes
         + sum(boundaries[btag].soln_gradient_flux(
@@ -213,7 +212,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux_div(interp_to_surf_quad(tpair))
+        + sum(central_flux_div(interp_to_surf_quad(tpair=tpair))
               for tpair in interior_trace_pairs(discr, r, tag=_AVRTag))
         # Contributions from boundary fluxes
         + sum(boundaries[btag].av_flux(
