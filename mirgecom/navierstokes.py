@@ -335,8 +335,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     # {{{ Local utilities
 
     # transfer trace pairs to quad grid, update pair dd
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll=discr,
-                                  discr_tag=quadrature_tag)
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     # }}}
 
@@ -353,7 +352,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     grad_cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        interp_to_surf_quad(tpair)
+        interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(discr, grad_cv, tag=_NSGradCVTag)
     ]
 
@@ -372,7 +371,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     grad_t_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        interp_to_surf_quad(tpair)
+        interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(discr, grad_t, tag=_NSGradTemperatureTag)
     ]
 

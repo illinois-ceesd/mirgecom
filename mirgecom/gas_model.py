@@ -432,8 +432,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
     dd_quad_vol = DOFDesc("vol", quadrature_tag)
 
     # project pair to the quadrature discretization and update dd to quad
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll=discr,
-                                  discr_tag=quadrature_tag)
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     domain_boundary_states_quad = {
         btag: project_fluid_state(discr, dd_base_vol,
@@ -446,7 +445,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
     cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        interp_to_surf_quad(tpair)
+        interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(discr, volume_state.cv, tag=_FluidCVTag)
     ]
 
@@ -459,7 +458,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
         tseed_interior_pairs = [
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
-            interp_to_surf_quad(tpair)
+            interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(discr, volume_state.temperature,
                                               tag=_FluidTemperatureTag)]
 
