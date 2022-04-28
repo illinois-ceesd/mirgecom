@@ -46,7 +46,7 @@ def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
     The Lax-Friedrichs/Rusanov flux is calculated as:
 
     .. math::
-        f_{\text{LFR}}=\frac{1}{2}\left(f^-+f^+-\lambda\left(q^--q^+\right)\right)
+        f_{\text{LFR}}=\frac{1}{2}\left(f^-+f^++\lambda\left(q^--q^+\right)\right)
 
     where $f^{\mp}$ and $q^{\mp}$ are the normal flux components and state components
     on the interior and the exterior of the face over which the LFR flux is to be
@@ -79,7 +79,7 @@ def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
         object array of :class:`~meshmode.dof_array.DOFArray` with the
         Lax-Friedrichs/Rusanov numerical flux.
     """
-    return (f_minus_normal + f_plus_normal - lam*(q_plus - q_minus))/2
+    return (f_minus_normal + f_plus_normal + lam*(q_minus - q_plus))/2
 
 
 def num_flux_central(f_minus_normal, f_plus_normal, **kwargs):
