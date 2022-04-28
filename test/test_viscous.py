@@ -98,8 +98,8 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     gas_model = GasModel(eos=eos, transport=tv_model)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    mu = tv_model.viscosity(eos, cv)
-    lam = tv_model.volume_viscosity(eos, cv)
+    mu = tv_model.viscosity(cv=cv, dv=fluid_state.dv)
+    lam = tv_model.volume_viscosity(cv=cv, dv=fluid_state.dv)
 
     # Exact answer for tau
     exp_grad_v = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
@@ -476,7 +476,9 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     tv_model = SimpleTransport(species_diffusivity=d_alpha_input)
     eos = IdealSingleGas()
 
-    d_alpha = tv_model.species_diffusivity(eos, cv)
+    dv = eos.dependent_vars(cv)
+
+    d_alpha = tv_model.species_diffusivity(eos=eos, cv=cv, dv=dv)
 
     from mirgecom.viscous import get_local_max_species_diffusivity
     expected = .3*ones
