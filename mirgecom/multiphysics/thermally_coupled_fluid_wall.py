@@ -88,7 +88,9 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
     """Interface boundary condition for the fluid side."""
 
     # FIXME: Incomplete docs
-    def __init__(self, ext_t, ext_kappa, ext_grad_t=None):
+    def __init__(
+            self, ext_t, ext_kappa, ext_grad_t=None, heat_flux_penalty_amount=None,
+            lengthscales=None):
         """Initialize InterfaceFluidBoundary."""
         PrescribedFluidBoundary.__init__(
             self,
@@ -103,6 +105,8 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         self.ext_t = ext_t
         self.ext_kappa = ext_kappa
         self.ext_grad_t = ext_grad_t
+        self.heat_flux_penalty_amount = heat_flux_penalty_amount
+        self.lengthscales = lengthscales
 
     # NOTE: The BC for species mass is y_+ = y_-, I think that is OK here
     #       The BC for species mass fraction gradient is set down inside the
@@ -219,37 +223,75 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
                               momentum=grad_cv_minus.momentum,
                               species_mass=grad_species_mass_plus)
 
-    def viscous_wall_flux(self, discr, dd_bdry, gas_model, state_minus,
-                                           grad_cv_minus, grad_t_minus,
-                                           numerical_flux_func=viscous_flux_central,
-                                           **kwargs):
+    def viscous_wall_flux(
+            self, discr, dd_bdry, gas_model, state_minus, grad_cv_minus,
+            grad_t_minus, numerical_flux_func=viscous_flux_central, **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
+        if self.heat_flux_penalty_amount is None:
+            raise ValueError("Boundary does not have heat flux penalty amount.")
+        if self.lengthscales is None:
+            raise ValueError("Boundary does not have length scales data.")
+
         dd_bdry = as_dofdesc(dd_bdry)
+        dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
         normal = thaw(discr.normal(dd_bdry), actx)
 
         # FIXME: Need to examine [Mengaldo_2014]_ - specifically momentum terms
-        state_bc = self.get_external_state(discr=discr, dd_bdry=dd_bdry,
-                                           gas_model=gas_model,
-                                           state_minus=state_minus, **kwargs)
-        grad_cv_bc = self.get_external_grad_cv(state_minus=state_minus,
-                                               grad_cv_minus=grad_cv_minus,
-                                               normal=normal, **kwargs)
+        state_plus = self.get_external_state(
+            discr=discr, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, **kwargs)
+        grad_cv_bc = self.get_external_grad_cv(
+            state_minus=state_minus, grad_cv_minus=grad_cv_minus, normal=normal,
+            **kwargs)
 
-        grad_t_bc = self.get_external_grad_t(
+        grad_t_plus = self.get_external_grad_t(
             discr=discr, dd_bdry=dd_bdry, gas_model=gas_model,
             state_minus=state_minus, grad_cv_minus=grad_cv_minus,
             grad_t_minus=grad_t_minus)
 
-        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
-        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
-        f_bnd = viscous_flux(state=state_bc, grad_cv=grad_cv_bc,
-                             grad_t=grad_t_bc)
+        def harmonic_mean(x, y):
+            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+            return 2*x*y/x_plus_y
+
+        def replace_kappa(state, kappa):
+            from dataclasses import replace
+            new_tv = replace(state.tv, thermal_conductivity=kappa)
+            return replace(state, tv=new_tv)
+
+        kappa_harmonic_mean = harmonic_mean(
+            state_minus.tv.thermal_conductivity,
+            state_plus.tv.thermal_conductivity)
+
+        state_pair_with_harmonic_mean_coefs = TracePair(
+            dd_bdry,
+            interior=replace_kappa(state_minus, kappa_harmonic_mean),
+            exterior=replace_kappa(state_plus, kappa_harmonic_mean))
+
+        f_int = viscous_flux(
+            state_pair_with_harmonic_mean_coefs.int, grad_cv_bc, grad_t_minus)
+        f_ext = viscous_flux(
+            state_pair_with_harmonic_mean_coefs.ext, grad_cv_bc, grad_t_plus)
+        f_pair = TracePair(dd_bdry, interior=f_int, exterior=f_ext)
+
+        lengthscales = discr.project(dd_bdry_base, dd_bdry, self.lengthscales)
+
+        tau = (
+            self.heat_flux_penalty_amount * kappa_harmonic_mean / lengthscales)
+
+        # NS and diffusion use opposite sign conventions for flux; hence penalty
+        # is added here instead of subtracted
+        flux_without_penalty = f_pair.avg @ normal
+        flux = replace(
+            flux_without_penalty,
+            energy=(
+                flux_without_penalty.energy
+                + tau * (state_plus.temperature - state_minus.temperature)))
 
         return self._boundary_quantity(
             discr, dd_bdry,
-            quantity=f_bnd@normal)
+            quantity=flux)
 
     def get_external_t(self, discr, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
@@ -277,11 +319,12 @@ class InterfaceWallBoundary(DiffusionBoundary):
     """Interface boundary condition for the wall side."""
 
     # FIXME: Incomplete docs
-    def __init__(self, ext_u, ext_kappa, ext_grad_u=None):
+    def __init__(self, ext_u, ext_kappa, ext_grad_u=None, lengthscales=None):
         """Initialize InterfaceWallBoundary."""
         self.ext_u = ext_u
         self.ext_kappa = ext_kappa
         self.ext_grad_u = ext_grad_u
+        self.lengthscales = lengthscales
 
     def get_grad_flux(
             self, discr, dd_vol, dd_bdry, u, *,
@@ -299,6 +342,8 @@ class InterfaceWallBoundary(DiffusionBoundary):
         if self.ext_grad_u is None:
             raise ValueError(
                 "Boundary does not have external temperature gradient data.")
+        if self.lengthscales is None:
+            raise ValueError("Boundary does not have length scales data.")
         int_u = discr.project(dd_vol, dd_bdry, u)
         u_tpair = TracePair(dd_bdry, interior=int_u, exterior=self.ext_u)
         int_kappa = discr.project(dd_vol, dd_bdry, kappa)
@@ -306,13 +351,8 @@ class InterfaceWallBoundary(DiffusionBoundary):
         int_grad_u = discr.project(dd_vol, dd_bdry, grad_u)
         grad_u_tpair = TracePair(
             dd_bdry, interior=int_grad_u, exterior=self.ext_grad_u)
-        # Memoized, so should be OK to call here
-        from grudge.dt_utils import characteristic_lengthscales
-        lengthscales = (
-            characteristic_lengthscales(u.array_context, discr, dd_vol) * (0*u+1))
-        int_lengthscales = discr.project(dd_vol, dd_bdry, lengthscales)
         lengthscales_tpair = TracePair(
-            dd_bdry, interior=int_lengthscales, exterior=int_lengthscales)
+            dd_bdry, interior=self.lengthscales, exterior=self.lengthscales)
         from mirgecom.diffusion import diffusion_flux
         return diffusion_flux(
             discr, u_tpair, kappa_tpair, grad_u_tpair, lengthscales_tpair,
@@ -361,6 +401,7 @@ def get_interface_boundaries(
         fluid_volume_dd, wall_volume_dd,
         fluid_state, wall_temperature,
         fluid_grad_temperature=None, wall_grad_temperature=None,
+        wall_penalty_amount=None,
         *,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -404,11 +445,24 @@ def get_interface_boundaries(
         grad_temperature_inter_vol_tpairs = None
 
     if include_gradient:
+        from grudge.dt_utils import characteristic_lengthscales
+        fluid_lengthscales = (
+            characteristic_lengthscales(
+                fluid_state.array_context, discr, fluid_volume_dd)
+            * (0*fluid_state.temperature+1))
+        wall_lengthscales = (
+            characteristic_lengthscales(
+                wall_temperature.array_context, discr, wall_volume_dd)
+            * (0*wall_temperature+1))
+
         fluid_interface_boundaries = {
             temperature_tpair.dd.domain_tag: InterfaceFluidBoundary(
                 temperature_tpair.ext,
                 kappa_tpair.ext,
-                grad_temperature_tpair.ext)
+                grad_temperature_tpair.ext,
+                wall_penalty_amount,
+                lengthscales=discr.project(
+                    fluid_volume_dd, temperature_tpair.dd, fluid_lengthscales))
             for temperature_tpair, kappa_tpair, grad_temperature_tpair in zip(
                 temperature_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd],
                 kappa_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd],
@@ -418,7 +472,9 @@ def get_interface_boundaries(
             temperature_tpair.dd.domain_tag: InterfaceWallBoundary(
                 temperature_tpair.ext,
                 kappa_tpair.ext,
-                grad_temperature_tpair.ext)
+                grad_temperature_tpair.ext,
+                discr.project(
+                    wall_volume_dd, temperature_tpair.dd, wall_lengthscales))
             for temperature_tpair, kappa_tpair, grad_temperature_tpair in zip(
                 temperature_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd],
                 kappa_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd],
@@ -524,6 +580,10 @@ def coupled_ns_heat_operator(
         quadrature_tag=DISCR_TAG_BASE):
     # FIXME: Incomplete docs
     """Compute RHS of the coupled fluid-wall system."""
+    if wall_penalty_amount is None:
+        # *shrug*
+        wall_penalty_amount = 0.05
+
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in fluid_boundaries.items()}
@@ -580,6 +640,7 @@ def coupled_ns_heat_operator(
             fluid_volume_dd, wall_volume_dd,
             fluid_state, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,
+            wall_penalty_amount=wall_penalty_amount,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs)
 
