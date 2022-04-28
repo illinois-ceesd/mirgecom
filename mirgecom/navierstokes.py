@@ -61,7 +61,8 @@ from functools import partial
 
 from grudge.trace_pair import (
     TracePair,
-    interior_trace_pairs
+    interior_trace_pairs,
+    tracepair_with_discr_tag
 )
 from grudge.dof_desc import DOFDesc, as_dofdesc, DISCR_TAG_BASE
 
@@ -86,6 +87,14 @@ from mirgecom.operators import (
 from mirgecom.gas_model import make_operator_fluid_states
 
 from arraycontext import thaw
+
+
+class _NSGradCVTag:
+    pass
+
+
+class _NSGradTemperatureTag:
+    pass
 
 
 def _gradient_flux_interior(discr, numerical_flux_func, tpair):
@@ -263,7 +272,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
                 inviscid_numerical_flux_func=inviscid_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
                 viscous_numerical_flux_func=viscous_flux_central,
-                quadrature_tag=DISCR_TAG_BASE,
+                quadrature_tag=DISCR_TAG_BASE, return_gradients=False,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
@@ -296,7 +305,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     -------
     :class:`mirgecom.fluid.ConservedVars`
 
-        The RHS of the Navier-Stokes equations.
+        The right-hand-side of the Navier-Stokes equations:
 
         .. math::
 
@@ -326,14 +335,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     # {{{ Local utilities
 
     # transfer trace pairs to quad grid, update pair dd
-    def _interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
-        return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
-        )
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     # }}}
 
@@ -350,8 +352,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     grad_cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_cv)
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(discr, grad_cv, tag=_NSGradCVTag)
     ]
 
     # }}} Compute grad(CV)
@@ -369,8 +371,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     grad_t_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, grad_t)
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(discr, grad_t, tag=_NSGradTemperatureTag)
     ]
 
     # }}} compute grad(temperature)
@@ -409,7 +411,9 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
             numerical_flux_func=inviscid_numerical_flux_func, time=time)
 
     )
-
-    return div_operator(discr, dd_vol_quad, dd_faces_quad, vol_term, bnd_term)
+    ns_rhs = div_operator(discr, dd_vol_quad, dd_faces_quad, vol_term, bnd_term)
+    if return_gradients:
+        return ns_rhs, grad_cv, grad_t
+    return ns_rhs
 
     # }}} NS RHS
