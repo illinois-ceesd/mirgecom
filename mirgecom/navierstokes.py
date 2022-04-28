@@ -61,7 +61,8 @@ from functools import partial
 
 from grudge.trace_pair import (
     TracePair,
-    interior_trace_pairs
+    interior_trace_pairs,
+    tracepair_with_discr_tag
 )
 from grudge.dof_desc import DOFDesc, as_dofdesc, DISCR_TAG_BASE
 
@@ -334,14 +335,8 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     # {{{ Local utilities
 
     # transfer trace pairs to quad grid, update pair dd
-    def _interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
-        return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
-        )
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll=discr,
+                                  discr_tag=quadrature_tag)
 
     # }}}
 
@@ -358,7 +353,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     grad_cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        _interp_to_surf_quad(tpair)
+        interp_to_surf_quad(tpair)
         for tpair in interior_trace_pairs(discr, grad_cv, tag=_NSGradCVTag)
     ]
 
@@ -377,7 +372,7 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     grad_t_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        _interp_to_surf_quad(tpair)
+        interp_to_surf_quad(tpair)
         for tpair in interior_trace_pairs(discr, grad_t, tag=_NSGradTemperatureTag)
     ]
 

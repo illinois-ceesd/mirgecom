@@ -97,15 +97,15 @@ THE SOFTWARE.
 import numpy as np
 
 from pytools import memoize_in, keyed_memoize_in
-
+from functools import partial
 from meshmode.dof_array import thaw, DOFArray
 
 from mirgecom.flux import gradient_flux_central, divergence_flux_central
 from mirgecom.operators import div_operator, grad_operator
 
 from grudge.trace_pair import (
-    TracePair,
-    interior_trace_pairs
+    interior_trace_pairs,
+    tracepair_with_discr_tag
 )
 from grudge.dof_desc import (
     DOFDesc,
@@ -171,14 +171,8 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     def interp_to_vol_quad(u):
         return op.project(discr, "vol", dd_vol, u)
 
-    def interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
-        return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
-        )
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll=discr,
+                                  discr_tag=quadrature_tag)
 
     # Get smoothness indicator based on mass component
     kappa = kwargs.get("kappa", 1.0)
