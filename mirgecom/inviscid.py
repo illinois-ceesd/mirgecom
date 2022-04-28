@@ -85,7 +85,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
+def inviscid_flux_rusanov(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
@@ -137,7 +137,7 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
-def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
+def inviscid_flux_hll(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
     The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
@@ -181,16 +181,13 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     pres_check_int = actx.np.greater(p_star, p_int)
     pres_check_ext = actx.np.greater(p_star, p_ext)
 
-    q_int = actx.np.where(pres_check_int, q_int, ones)
-    q_ext = actx.np.where(pres_check_ext, q_ext, ones)
-
-    q_int = actx.np.sqrt(q_int)
-    q_ext = actx.np.sqrt(q_ext)
+    q_int_rt = actx.np.sqrt(actx.np.where(pres_check_int, q_int, ones))
+    q_ext_rt = actx.np.sqrt(actx.np.where(pres_check_ext, q_ext, ones))
 
     # left (internal), and right (external) wave speed estimates
     # can alternatively use the roe estimated states to find the wave speeds
-    s_minus = u_int - c_int*q_int
-    s_plus = u_ext + c_ext*q_ext
+    s_minus = u_int - c_int*q_int_rt
+    s_plus = u_ext + c_ext*q_ext_rt
 
     f_minus_normal = inviscid_flux(state_pair.int)@normal
     f_plus_normal = inviscid_flux(state_pair.ext)@normal
