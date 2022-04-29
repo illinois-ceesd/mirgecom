@@ -300,7 +300,7 @@ def _central_facial_flux(
     return divergence_flux_central(f_pair, normal)
 
 
-def _as_facial_flux(flux_snippet_func):
+def _as_facial_flux(flux_snippet_func, name):
     """Promote a facial flux snippet to a complete viscous facial flux function."""
     def wrapped_func(
             discr, gas_model, state_pair, grad_cv_pair, grad_t_pair, local=False):
@@ -311,8 +311,8 @@ def _as_facial_flux(flux_snippet_func):
         dd_allfaces = dd.with_dtag("all_faces")
         return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
 
-    wrapped_func.__name__ = flux_snippet_func.__name__
-    wrapped_func.__qualname__ = flux_snippet_func.__qualname__
+    wrapped_func.__name__ = name
+    wrapped_func.__qualname__ = name
     wrapped_func.__annotations__ = flux_snippet_func.__annotations__
     wrapped_func.__doc__ = (
         flux_snippet_func.__doc__
@@ -361,7 +361,8 @@ def _as_facial_flux(flux_snippet_func):
     return wrapped_func
 
 
-viscous_facial_flux_central = _as_facial_flux(_central_facial_flux)
+viscous_facial_flux_central = _as_facial_flux(
+    _central_facial_flux, "viscous_facial_flux_central")
 
 
 def viscous_flux_on_element_boundary(
