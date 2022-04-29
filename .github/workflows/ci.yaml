@@ -82,7 +82,10 @@ jobs:
 
     examples:
         name: Examples
-        runs-on: [ubuntu-latest, porter]
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
