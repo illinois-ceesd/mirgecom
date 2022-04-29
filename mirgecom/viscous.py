@@ -10,7 +10,7 @@ Viscous Flux Calculation
 .. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux
 .. autofunction:: viscous_flux_central
-.. autofunction:: viscous_boundary_flux_for_divergence_operator
+.. autofunction:: viscous_flux_on_element_boundary
 
 Viscous Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -377,10 +377,10 @@ def viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair, grad_t_pair,
     return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
 
 
-def viscous_boundary_flux_for_divergence_operator(
-        discr, gas_model, boundaries, interior_boundary_states,
-        domain_boundary_states, grad_cv, interior_grad_cv,
-        grad_t, interior_grad_t, quadrature_tag=None,
+def viscous_flux_on_element_boundary(
+        discr, gas_model, boundaries, interior_state_pairs,
+        domain_boundary_states, grad_cv, interior_grad_cv_pairs,
+        grad_t, interior_grad_t_pairs, quadrature_tag=None,
         numerical_flux_func=viscous_flux_central, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
@@ -400,7 +400,7 @@ def viscous_boundary_flux_for_divergence_operator(
     boundaries
         Dictionary of boundary functions, one for each valid btag
 
-    interior_boundary_states
+    interior_state_pairs
         Trace pairs of :class:`~mirgecom.gas_model.FluidState` for the interior faces
 
     domain_boundary_states
@@ -410,14 +410,14 @@ def viscous_boundary_flux_for_divergence_operator(
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
        The gradient of the fluid conserved quantities.
 
-    interior_grad_cv
+    interior_grad_cv_pairs
        Trace pairs of :class:`~mirgecom.fluid.ConservedVars` for the interior faces
 
     grad_t
        Object array of :class:`~meshmode.dof_array.DOFArray` with the components of
        the gradient of the fluid temperature
 
-    interior_grad_t
+    interior_grad_t_pairs
        Trace pairs for the temperature gradient on interior faces
 
     quadrature_tag
@@ -476,9 +476,9 @@ def viscous_boundary_flux_for_divergence_operator(
             # Interior interface contributions for the viscous terms
             + sum(
                 fvisc_divergence_flux_interior(q_p, dq_p, dt_p)
-                for q_p, dq_p, dt_p in zip(interior_boundary_states,
-                                           interior_grad_cv,
-                                           interior_grad_t))
+                for q_p, dq_p, dt_p in zip(interior_state_pairs,
+                                           interior_grad_cv_pairs,
+                                           interior_grad_t_pairs))
         )
     )
 

@@ -64,7 +64,7 @@ import grudge.op as op
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_flux_rusanov,
-    inviscid_boundary_flux_for_divergence_operator,
+    inviscid_flux_on_element_boundary
 )
 
 from mirgecom.operators import div_operator
@@ -182,7 +182,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
 
     # Compute interface contributions
     inviscid_flux_bnd = \
-        inviscid_boundary_flux_for_divergence_operator(
+        inviscid_flux_on_element_boundary(
             discr, gas_model, boundaries, interior_states_quad,
             boundary_states_quad, quadrature_tag=quadrature_tag,
             numerical_flux_func=inviscid_numerical_flux_func, time=time)
