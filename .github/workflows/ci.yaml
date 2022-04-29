@@ -82,7 +82,7 @@ jobs:
 
     examples:
         name: Examples
-        runs-on: ubuntu-latest
+        runs-on: [ubuntu-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
