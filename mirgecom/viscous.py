@@ -8,8 +8,7 @@ Viscous Flux Calculation
 .. autofunction:: diffusive_flux
 .. autofunction:: conductive_heat_flux
 .. autofunction:: diffusive_heat_flux
-.. autofunction:: viscous_facial_flux
-.. autofunction:: viscous_flux_central
+.. autofunction:: viscous_facial_flux_central
 .. autofunction:: viscous_flux_on_element_boundary
 
 Viscous Time Step Computation
@@ -278,7 +277,8 @@ def viscous_flux(state, grad_cv, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair, **kwargs):
+def _central_facial_flux(
+        state_pair, grad_cv_pair, grad_t_pair, gas_model, normal, **kwargs):
     r"""Return a central viscous facial flux for the divergence operator.
 
     The central flux is defined as:
@@ -290,37 +290,7 @@ def viscous_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair, **kwargs)
 
     with viscous fluxes ($\mathbf{f}_v$), and the outward pointing
     face normal ($\hat{\mathbf{n}}$).
-
-    Parameters
-    ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
-
-        The discretization to use
-
-    state_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of :class:`~mirgecom.gas_model.FluidState` with the full fluid
-        conserved and thermal state on the faces
-
-    grad_cv_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
-        fluid solution on the faces
-
-    grad_t_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of temperature gradient on the faces.
-
-    Returns
-    -------
-    :class:`~mirgecom.fluid.ConservedVars`
-
-        The viscous transport flux in the face-normal direction on "all_faces" or
-        local to the sub-discretization depending on *local* input parameter
     """
-    actx = state_pair.int.array_context
-    normal = thaw(discr.normal(state_pair.dd), actx)
-
     f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                          grad_t_pair.int)
     f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
@@ -330,15 +300,34 @@ def viscous_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair, **kwargs)
     return divergence_flux_central(f_pair, normal)
 
 
-def viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair, grad_t_pair,
-                        numerical_flux_func=viscous_flux_central, local=False):
-    """Return the viscous facial flux for the divergence operator.
+def _as_facial_flux(flux_snippet_func):
+    """Promote a facial flux snippet to a complete viscous facial flux function."""
+    def wrapped_func(
+            discr, gas_model, state_pair, grad_cv_pair, grad_t_pair, local=False):
+        normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
+        num_flux = flux_snippet_func(
+            state_pair, grad_cv_pair, grad_t_pair, gas_model, normal)
+        dd = state_pair.dd
+        dd_allfaces = dd.with_dtag("all_faces")
+        return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+
+    wrapped_func.__name__ = flux_snippet_func.__name__
+    wrapped_func.__qualname__ = flux_snippet_func.__qualname__
+    wrapped_func.__annotations__ = flux_snippet_func.__annotations__
+    wrapped_func.__doc__ = (
+        flux_snippet_func.__doc__
+        + r"""
 
     Parameters
     ----------
     discr: :class:`~grudge.eager.EagerDGDiscretization`
 
         The discretization to use
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
 
     state_pair: :class:`~grudge.trace_pair.TracePair`
 
@@ -367,21 +356,19 @@ def viscous_facial_flux(discr, gas_model, state_pair, grad_cv_pair, grad_t_pair,
 
         The viscous transport flux in the face-normal direction on "all_faces" or
         local to the sub-discretization depending on *local* input parameter
-    """
-    num_flux = numerical_flux_func(discr=discr, gas_model=gas_model,
-                                   state_pair=state_pair,
-                                   grad_cv_pair=grad_cv_pair,
-                                   grad_t_pair=grad_t_pair)
-    dd = state_pair.dd
-    dd_allfaces = dd.with_dtag("all_faces")
-    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+        """)
+
+    return wrapped_func
+
+
+viscous_facial_flux_central = _as_facial_flux(_central_facial_flux)
 
 
 def viscous_flux_on_element_boundary(
         discr, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
         grad_t, interior_grad_t_pairs, quadrature_tag=None,
-        numerical_flux_func=viscous_flux_central, time=0.0):
+        numerical_flux_func=viscous_facial_flux_central, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the inviscid contributions
@@ -440,10 +427,9 @@ def viscous_flux_on_element_boundary(
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
-        return viscous_facial_flux(discr=discr, gas_model=gas_model,
-                                   state_pair=state_pair, grad_cv_pair=grad_cv_pair,
-                                   grad_t_pair=grad_t_pair,
-                                   numerical_flux_func=numerical_flux_func)
+        return numerical_flux_func(
+            discr=discr, gas_model=gas_model, state_pair=state_pair,
+            grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair)
 
     # viscous part of bcs applied here
     def fvisc_divergence_flux_boundary(btag, boundary_state):

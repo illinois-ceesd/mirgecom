@@ -47,7 +47,6 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux,
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
 )
@@ -331,10 +330,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         state_tpairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
         interior_state_pair = state_tpairs[0]
 
-        interior_face_flux = \
-            inviscid_facial_flux(discr, gas_model=gas_model,
-                                 state_pair=interior_state_pair,
-                                 numerical_flux_func=num_flux)
+        interior_face_flux = num_flux(
+            discr, gas_model=gas_model, state_pair=interior_state_pair)
 
         def inf_norm(data):
             if len(data) > 0:
@@ -378,10 +375,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         state_tpair = TracePair(BTAG_ALL,
                                 interior=make_fluid_state(dir_bval, gas_model),
                                 exterior=make_fluid_state(dir_bc, gas_model))
-        boundary_flux = inviscid_facial_flux(
-            discr, gas_model=gas_model, state_pair=state_tpair,
-            numerical_flux_func=num_flux
-        )
+        boundary_flux = num_flux(
+            discr, gas_model=gas_model, state_pair=state_tpair)
 
         assert inf_norm(boundary_flux.mass) < tolerance
         assert inf_norm(boundary_flux.energy) < tolerance

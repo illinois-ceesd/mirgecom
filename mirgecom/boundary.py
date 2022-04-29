@@ -43,7 +43,6 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import (
-    inviscid_facial_flux,
     inviscid_facial_flux_rusanov
 )
 
@@ -83,15 +82,12 @@ class PrescribedFluidBoundary(FluidBoundary):
         """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_state_func = boundary_state_func
         self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
-        self._inviscid_div_flux_func = inviscid_facial_flux_func
         self._bnd_temperature_func = boundary_temperature_func
 
         if not self._inviscid_bnd_flux_func and not self._bnd_state_func:
             from warnings import warn
             warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
-        if not self._inviscid_div_flux_func:
-            self._inviscid_div_flux_func = inviscid_facial_flux
         if not self._bnd_state_func:
             self._bnd_state_func = self._dummy_state_func
         if not self._bnd_temperature_func:
@@ -127,10 +123,8 @@ class PrescribedFluidBoundary(FluidBoundary):
         boundary_state_pair = TracePair(btag, interior=state_minus,
                                         exterior=state_plus)
 
-        return self._inviscid_div_flux_func(discr, state_pair=boundary_state_pair,
-                                            gas_model=gas_model,
-                                            numerical_flux_func=numerical_flux_func,
-                                            **kwargs)
+        return numerical_flux_func(
+            discr, state_pair=boundary_state_pair, gas_model=gas_model, **kwargs)
 
 
 class DummyBoundary(PrescribedFluidBoundary):

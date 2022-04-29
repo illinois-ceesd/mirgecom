@@ -196,10 +196,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, gas_model, state_pair,
-                                                numerical_flux_func=flux_func,
-                                                local=True)
+                bnd_flux = flux_func(
+                    discr, gas_model, state_pair, local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 
