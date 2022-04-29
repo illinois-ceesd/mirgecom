@@ -7,7 +7,7 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_flux_rusanov
 .. autofunction:: inviscid_flux_hll
 .. autofunction:: inviscid_facial_flux
-.. autofunction:: inviscid_boundary_flux_for_divergence_operator
+.. autofunction:: inviscid_flux_on_element_boundary
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -154,16 +154,13 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
     pres_check_int = actx.np.greater(p_star, p_int)
     pres_check_ext = actx.np.greater(p_star, p_ext)
 
-    q_int = actx.np.where(pres_check_int, q_int, ones)
-    q_ext = actx.np.where(pres_check_ext, q_ext, ones)
-
-    q_int = actx.np.sqrt(q_int)
-    q_ext = actx.np.sqrt(q_ext)
+    q_int_rt = actx.np.sqrt(actx.np.where(pres_check_int, q_int, ones))
+    q_ext_rt = actx.np.sqrt(actx.np.where(pres_check_ext, q_ext, ones))
 
     # left (internal), and right (external) wave speed estimates
     # can alternatively use the roe estimated states to find the wave speeds
-    s_minus = u_int - c_int*q_int
-    s_plus = u_ext + c_ext*q_ext
+    s_minus = u_int - c_int*q_int_rt
+    s_plus = u_ext + c_ext*q_ext_rt
 
     f_minus_normal = inviscid_flux(state_pair.int)@normal
     f_plus_normal = inviscid_flux(state_pair.ext)@normal
@@ -176,8 +173,59 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
                         s_plus)
 
 
-def inviscid_boundary_flux_for_divergence_operator(
-        discr, gas_model, boundaries, interior_boundary_states,
+def inviscid_facial_flux(discr, gas_model, state_pair,
+                         numerical_flux_func=inviscid_flux_rusanov, local=False,
+                         **kwargs):
+    r"""Return the numerical inviscid flux for the divergence operator.
+
+    Different numerical fluxes may be used through the specificiation of
+    the *numerical_flux_func*. By default, a Rusanov-type flux is used.
+
+    Parameters
+    ----------
+    discr: :class:`~grudge.eager.EagerDGDiscretization`
+
+        The discretization collection to use
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    numerical_flux_func:
+
+        Callable that returns the interface-normal numerical flux
+
+    local: bool
+
+        Indicates whether to skip projection of fluxes to "all_faces" or not. If
+        set to *False* (the default), the returned fluxes are projected to
+        "all_faces."  If set to *True*, the returned fluxes are not projected to
+        "all_faces"; remaining instead on the boundary restriction.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
+    """
+    normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
+    num_flux = numerical_flux_func(state_pair, gas_model, normal, **kwargs)
+    dd = state_pair.dd
+    dd_allfaces = dd.with_dtag("all_faces")
+    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
+
+
+def inviscid_flux_on_element_boundary(
+        discr, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, quadrature_tag=None,
         numerical_flux_func=inviscid_flux_rusanov, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
@@ -198,7 +246,7 @@ def inviscid_boundary_flux_for_divergence_operator(
     boundaries
         Dictionary of boundary functions, one for each valid btag
 
-    interior_boundary_states
+    interior_state_pairs
         A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
 
     domain_boundary_states
@@ -224,7 +272,7 @@ def inviscid_boundary_flux_for_divergence_operator(
         # Interior faces
         sum(inviscid_facial_flux(discr, gas_model, state_pair,
                                  numerical_flux_func)
-            for state_pair in interior_boundary_states)
+            for state_pair in interior_state_pairs)
 
         # Domain boundary faces
         + sum(
@@ -236,48 +284,6 @@ def inviscid_boundary_flux_for_divergence_operator(
     )
 
     return inviscid_flux_bnd
-
-
-def inviscid_facial_flux(discr, gas_model, state_pair,
-                         numerical_flux_func=inviscid_flux_rusanov, local=False,
-                         **kwargs):
-    r"""Return the numerical inviscid flux for the divergence operator.
-
-    Different numerical fluxes may be used through the specificiation of
-    the *numerical_flux_func*. By default, a Rusanov-type flux is used.
-
-    Parameters
-    ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
-
-        The discretization collection to use
-
-    state_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
-        which the flux calculation is to be performed
-
-    local: bool
-
-        Indicates whether to skip projection of fluxes to "all_faces" or not. If
-        set to *False* (the default), the returned fluxes are projected to
-        "all_faces."  If set to *True*, the returned fluxes are not projected to
-        "all_faces"; remaining instead on the boundary restriction.
-
-    Returns
-    -------
-    :class:`~mirgecom.fluid.ConservedVars`
-
-        A CV object containing the scalar numerical fluxes at the input faces.
-        The returned fluxes are scalar because they've already been dotted with
-        the face normals as required by the divergence operator for which they
-        are being computed.
-    """
-    normal = thaw(discr.normal(state_pair.dd), state_pair.int.array_context)
-    num_flux = numerical_flux_func(state_pair, gas_model, normal)
-    dd = state_pair.dd
-    dd_allfaces = dd.with_dtag("all_faces")
-    return num_flux if local else discr.project(dd, dd_allfaces, num_flux)
 
 
 def get_inviscid_timestep(discr, state):

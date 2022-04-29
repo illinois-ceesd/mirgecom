@@ -71,12 +71,12 @@ import grudge.op as op
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_flux_rusanov,
-    inviscid_boundary_flux_for_divergence_operator
+    inviscid_flux_on_element_boundary
 )
 from mirgecom.viscous import (
     viscous_flux,
     viscous_flux_central,
-    viscous_boundary_flux_for_divergence_operator
+    viscous_flux_on_element_boundary
 )
 from mirgecom.flux import (
     gradient_flux_central
@@ -398,14 +398,14 @@ def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
     bnd_term = (
 
         # All surface contributions from the viscous fluxes
-        viscous_boundary_flux_for_divergence_operator(
+        viscous_flux_on_element_boundary(
             discr, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, grad_cv, grad_cv_interior_pairs,
             grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
             numerical_flux_func=viscous_numerical_flux_func, time=time)
 
         # All surface contributions from the inviscid fluxes
-        - inviscid_boundary_flux_for_divergence_operator(
+        - inviscid_flux_on_element_boundary(
             discr, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, quadrature_tag=quadrature_tag,
             numerical_flux_func=inviscid_numerical_flux_func, time=time)
