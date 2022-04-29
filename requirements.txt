@@ -23,3 +23,4 @@ git+https://github.com/pythological/kanren.git#egg=miniKanren
 --editable git+https://github.com/inducer/pytato.git#egg=pytato
 --editable git+https://github.com/ecisneros8/pyrometheus.git#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
+--editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
