@@ -39,18 +39,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _const_diff_pair():
+def _const_deriv_pair():
     """Return a constant ($1$) and its derivative ($0$)."""
     return 1, 0
 
 
-def _poly_diff_pair():
+def _poly_deriv_pair():
     """Return a polynomial ($x^2$) and its derivative ($2x$)."""
     sym_x = pmbl.var("x")
     return sym_x**2, 2*sym_x
 
 
-def _cos_diff_pair():
+def _cos_deriv_pair():
     r"""Return a cosine function ($\cos(2x)$ and its derivative ($-2\sin(2x)$)."""
     sym_x = pmbl.var("x")
     sym_cos = pmbl.var("cos")
@@ -59,7 +59,7 @@ def _cos_diff_pair():
     return sym_cos(2*sym_x), -sym_sin(2*sym_x)*2
 
 
-def _sin_diff_pair():
+def _sin_deriv_pair():
     r"""Return a sine function ($\sin(2x)$ and its derivative ($2\cos(2x)$)."""
     sym_x = pmbl.var("x")
     sym_cos = pmbl.var("cos")
@@ -68,7 +68,7 @@ def _sin_diff_pair():
     return sym_sin(2*sym_x), sym_cos(2*sym_x)*2
 
 
-def _exp_diff_pair():
+def _exp_deriv_pair():
     r"""
     Return an exponential function ($\exp(2x)$ and its derivative ($2\exp(2x)$).
     """
@@ -78,20 +78,20 @@ def _exp_diff_pair():
     return sym_exp(2*sym_x), sym_exp(2*sym_x)*2
 
 
-def _obj_array_diff_pair():
+def _obj_array_deriv_pair():
     """
     Return a pair of object arrays containing expressions and their derivatives.
     """
     expr_deriv_pairs = [
-        _const_diff_pair(),
-        _poly_diff_pair(),
-        _cos_diff_pair()]
+        _const_deriv_pair(),
+        _poly_deriv_pair(),
+        _cos_deriv_pair()]
     return (
         make_obj_array([expr for expr, _ in expr_deriv_pairs]),
         make_obj_array([deriv for _, deriv in expr_deriv_pairs]))
 
 
-def _array_container_diff_pair():
+def _array_container_deriv_pair():
     """
     Return a pair of array containers containing expressions and their derivatives.
 
@@ -100,10 +100,10 @@ def _array_container_diff_pair():
     A pair of :class:`mirgecom.fluid.ConservedVars` instances.
     """
     expr_deriv_pairs = [
-        _const_diff_pair(),
-        _poly_diff_pair(),
-        _cos_diff_pair(),
-        _sin_diff_pair()]
+        _const_deriv_pair(),
+        _poly_deriv_pair(),
+        _cos_deriv_pair(),
+        _sin_deriv_pair()]
     from mirgecom.fluid import make_conserved
     return (
         make_conserved(
@@ -123,13 +123,13 @@ def _array_container_diff_pair():
 
 
 @pytest.mark.parametrize(("sym_f", "expected_sym_df"), [
-    _const_diff_pair(),
-    _poly_diff_pair(),
-    _cos_diff_pair(),
-    _sin_diff_pair(),
-    _exp_diff_pair(),
-    _obj_array_diff_pair(),
-    _array_container_diff_pair(),
+    _const_deriv_pair(),
+    _poly_deriv_pair(),
+    _cos_deriv_pair(),
+    _sin_deriv_pair(),
+    _exp_deriv_pair(),
+    _obj_array_deriv_pair(),
+    _array_container_deriv_pair(),
 ])
 def test_symbolic_diff(sym_f, expected_sym_df):
     """
