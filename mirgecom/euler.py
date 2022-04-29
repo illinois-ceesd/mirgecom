@@ -63,7 +63,7 @@ import grudge.op as op
 
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_flux_rusanov,
+    inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary
 )
 
@@ -83,7 +83,7 @@ class _EulerTseedTag:
 
 
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
-                   inviscid_numerical_flux_func=inviscid_flux_rusanov,
+                   inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                    quadrature_tag=None):
     r"""Compute RHS of the Euler flow equations.
 

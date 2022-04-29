@@ -44,7 +44,7 @@ from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import (
     inviscid_facial_flux,
-    inviscid_flux_rusanov
+    inviscid_facial_flux_rusanov
 )
 
 from abc import ABCMeta, abstractmethod
@@ -111,7 +111,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         return discr.project(btag, btag.with_dtag("all_faces"), quantity)
 
     def inviscid_divergence_flux(self, discr, btag, gas_model, state_minus,
-                                 numerical_flux_func=inviscid_flux_rusanov,
+                                 numerical_flux_func=inviscid_facial_flux_rusanov,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
         # This one is when the user specified a function that directly

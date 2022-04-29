@@ -4,8 +4,8 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_flux_rusanov
-.. autofunction:: inviscid_flux_hll
+.. autofunction:: inviscid_facial_flux_rusanov
+.. autofunction:: inviscid_facial_flux_hll
 .. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_on_element_boundary
 
@@ -85,7 +85,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
@@ -135,7 +135,7 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
-def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_hll(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
     The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
@@ -199,8 +199,8 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
-                         numerical_flux_func=inviscid_flux_rusanov, local=False,
-                         **kwargs):
+                         numerical_flux_func=inviscid_facial_flux_rusanov,
+                         local=False, **kwargs):
     r"""Return the numerical inviscid flux for the divergence operator.
 
     Different numerical fluxes may be used through the specificiation of
@@ -252,7 +252,7 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
 def inviscid_flux_on_element_boundary(
         discr, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, quadrature_tag=None,
-        numerical_flux_func=inviscid_flux_rusanov, time=0.0):
+        numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the inviscid contributions
