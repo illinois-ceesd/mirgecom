@@ -103,21 +103,19 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
-
-        The discretization collection to use
-
     state_pair: :class:`~grudge.trace_pair.TracePair`
 
         Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
         which the flux calculation is to be performed
 
-    local: bool
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
 
-        Indicates whether to skip projection of fluxes to "all_faces" or not. If
-        set to *False* (the default), the returned fluxes are projected to
-        "all_faces."  If set to *True*, the returned fluxes are not projected to
-        "all_faces"; remaining instead on the boundary restriction.
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
 
     Returns
     -------
