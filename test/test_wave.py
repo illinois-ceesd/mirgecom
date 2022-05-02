@@ -119,23 +119,22 @@ def sym_wave(dim, sym_phi):
     """
 
     sym_c = pmbl.var("c")
-    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
 
     # f = phi_tt - c^2 * div(grad(phi))
     sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - sym_c**2\
-                * sym.div(sym.grad(dim, sym_phi))
+                * sym.div(dim, sym.grad(dim, sym_phi))
 
     # u = phi_t
     sym_u = sym.diff(sym_t)(sym_phi)
 
     # v = c*grad(phi)
-    sym_v = [sym_c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
+    sym_v = sym_c * sym.grad(dim, sym_phi)
 
     # rhs(u part) = c*div(v) + f
     # rhs(v part) = c*grad(u)
     sym_rhs = flat_obj_array(
-        sym_c * sym.div(sym_v) + sym_f,
+        sym_c * sym.div(dim, sym_v) + sym_f,
         make_obj_array([sym_c]) * sym.grad(dim, sym_u))
 
     return sym_u, sym_v, sym_f, sym_rhs
