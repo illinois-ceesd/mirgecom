@@ -4,8 +4,8 @@ Inviscid Flux Calculation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: inviscid_flux
-.. autofunction:: inviscid_flux_rusanov
-.. autofunction:: inviscid_flux_hll
+.. autofunction:: inviscid_facial_flux_rusanov
+.. autofunction:: inviscid_facial_flux_hll
 .. autofunction:: inviscid_facial_flux
 .. autofunction:: inviscid_flux_on_element_boundary
 
@@ -85,7 +85,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
@@ -100,6 +100,31 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     exterior of the face where the Rusanov flux is to be calculated, $\mathbf{F}$ is
     the inviscid fluid flux, $\hat{n}$ is the face normal, and $\lambda$ is the
     *local* maximum fluid wavespeed.
+
+    Parameters
+    ----------
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
     """
     actx = state_pair.int.array_context
     lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
@@ -110,7 +135,7 @@ def inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
-def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_hll(state_pair, gas_model, normal, **kwargs):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
     The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
@@ -126,6 +151,31 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     Details about how the parameters and fluxes are calculated can be found in
     Section 10.3 of [Toro_2009]_.
+
+    Parameters
+    ----------
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
     """
     # calculate left/right wavespeeds
     actx = state_pair.int.array_context
@@ -174,8 +224,8 @@ def inviscid_flux_hll(state_pair, gas_model, normal, **kwargs):
 
 
 def inviscid_facial_flux(discr, gas_model, state_pair,
-                         numerical_flux_func=inviscid_flux_rusanov, local=False,
-                         **kwargs):
+                         numerical_flux_func=inviscid_facial_flux_rusanov,
+                         local=False, **kwargs):
     r"""Return the numerical inviscid flux for the divergence operator.
 
     Different numerical fluxes may be used through the specificiation of
@@ -227,7 +277,7 @@ def inviscid_facial_flux(discr, gas_model, state_pair,
 def inviscid_flux_on_element_boundary(
         discr, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, quadrature_tag=None,
-        numerical_flux_func=inviscid_flux_rusanov, time=0.0):
+        numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the inviscid contributions

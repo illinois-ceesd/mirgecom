@@ -553,7 +553,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return make_obj_array([cv, fluid_state.temperature]), dt
 
-    from mirgecom.inviscid import inviscid_flux_rusanov
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
 
     def my_rhs(t, state):
         cv, tseed = state
@@ -563,7 +563,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array([
             euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
                            gas_model=gas_model,
-                           inviscid_numerical_flux_func=inviscid_flux_rusanov,
+                           inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                            quadrature_tag=quadrature_tag)
             + eos.get_species_source_terms(cv, fluid_state.temperature),
             0*tseed])
