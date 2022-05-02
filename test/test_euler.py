@@ -62,8 +62,8 @@ from mirgecom.simutil import max_component_norm
 from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import (
     get_inviscid_timestep,
-    inviscid_flux_rusanov,
-    inviscid_flux_hll
+    inviscid_facial_flux_rusanov,
+    inviscid_facial_flux_hll
 )
 
 from mirgecom.integrators import rk4_step
@@ -76,7 +76,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_flux_rusanov, inviscid_flux_hll])
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
 def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
                      numerical_flux_func):
     """Test the inviscid rhs using a trivial constant/uniform state.
@@ -236,7 +236,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_flux_rusanov, inviscid_flux_hll])
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
 def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_func):
     """Test the inviscid rhs using the non-trivial 2D isentropic vortex.
 
@@ -322,7 +322,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_flux_rusanov, inviscid_flux_hll])
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
 def test_lump_rhs(actx_factory, dim, order, use_overintegration,
                   numerical_flux_func):
     """Test the inviscid rhs using the non-trivial mass lump case.
@@ -419,7 +419,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 @pytest.mark.parametrize("v0", [0.0, 1.0])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_flux_rusanov, inviscid_flux_hll])
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
 def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
                        numerical_flux_func):
     """Test the Euler rhs using the non-trivial 1, 2, and 3D mass lump case.
@@ -676,7 +676,7 @@ def _euler_flow_stepper(actx, parameters):
 @pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_flux_rusanov, inviscid_flux_hll])
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
 def test_isentropic_vortex(actx_factory, order, use_overintegration,
                            numerical_flux_func):
     """Advance the 2D isentropic vortex case in time with non-zero velocities.
