@@ -165,7 +165,7 @@ but are not limited to:
 |mirgecom| currently has LFR, and HLL numerical fluxes available from
 the :mod:`~mirgecom.inviscid` module.
 
-The LFR numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_flux_rusanov` as follows:
+The LFR numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov` as follows:
 
 $$
 \b{h}_{e}(\b{Q}_h^+, \b{Q}^-_h; \b{n}) = \frac{1}{2}\left(
@@ -178,7 +178,7 @@ which penalize the ''jump'' of the state $\left(\b{Q}_h^+ - \b{Q}_h^-\right)
 \b{n}$ act as an additional source of dissipation, which has a stabilizing effect
 on the numerics.
 
-The HLL numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_flux_hll` as follows:
+The HLL numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_facial_flux_hll` as follows:
 
 .. math::
    \b{h}_{e}(\b{Q}_h^+, \b{Q}^-_h;\b{n}) =

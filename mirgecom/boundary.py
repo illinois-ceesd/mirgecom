@@ -979,7 +979,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
-            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
         """Return Riemann flux using state with mom opposite of interior state."""
         wall_cv = make_conserved(dim=state_minus.dim,
                                  mass=state_minus.mass_density,
@@ -1097,7 +1097,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
-            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
         """Return Riemann flux using state with mom opposite of interior state."""
         wall_state = self.adiabatic_wall_state_for_advection(
             discr, btag, gas_model, state_minus)
@@ -1234,7 +1234,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
-            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
         """Return Riemann flux using state with mom opposite of interior state."""
         wall_state = self.adiabatic_wall_state_for_advection(
             discr, btag, gas_model, state_minus)
