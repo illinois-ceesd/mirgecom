@@ -125,7 +125,6 @@ jobs:
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
-            make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     emirge:
         name: Emirge installation
