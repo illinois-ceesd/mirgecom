@@ -70,7 +70,7 @@ import grudge.op as op
 
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_flux_rusanov,
+    inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary
 )
 from mirgecom.viscous import (
@@ -269,7 +269,7 @@ def grad_t_operator(
 
 
 def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
-                inviscid_numerical_flux_func=inviscid_flux_rusanov,
+                inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                 gradient_numerical_flux_func=gradient_flux_central,
                 viscous_numerical_flux_func=viscous_flux_central,
                 quadrature_tag=DISCR_TAG_BASE, return_gradients=False,
