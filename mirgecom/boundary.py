@@ -44,7 +44,6 @@ from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-from mirgecom.inviscid import inviscid_flux_rusanov
 from mirgecom.viscous import viscous_flux_central
 from mirgecom.flux import (
     gradient_flux_central,
@@ -54,6 +53,8 @@ from mirgecom.gas_model import (
     make_fluid_state,
     project_fluid_state,
 )
+from mirgecom.inviscid import inviscid_facial_flux_rusanov
+
 from abc import ABCMeta, abstractmethod
 
 
@@ -377,7 +378,7 @@ class PrescribedFluidBoundary(FluidBoundary):
     # prescribed CV(+).
     def _inviscid_flux_for_prescribed_state(
             self, discr, btag, gas_model, state_minus,
-            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
         # Use a prescribed boundary state and the numerical flux function
         boundary_state_pair = self._boundary_state_pair(discr=discr, btag=btag,
                                                         gas_model=gas_model,
@@ -427,9 +428,9 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     # }}} Default boundary helpers
 
-    def inviscid_divergence_flux(
-            self, discr, btag, gas_model, state_minus,
-            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+    def inviscid_divergence_flux(self, discr, btag, gas_model, state_minus,
+                                 numerical_flux_func=inviscid_facial_flux_rusanov,
+                                 **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
         return self._inviscid_flux_func(discr, btag, gas_model, state_minus,
                                         numerical_flux_func=numerical_flux_func,
