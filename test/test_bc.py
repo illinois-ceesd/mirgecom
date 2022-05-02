@@ -38,8 +38,8 @@ from grudge.eager import EagerDGDiscretization
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
 from mirgecom.inviscid import (
-    inviscid_flux_rusanov,
-    inviscid_flux_hll
+    inviscid_facial_flux_rusanov,
+    inviscid_facial_flux_hll
 )
 from mirgecom.gas_model import (
     GasModel,
@@ -127,8 +127,8 @@ def test_slipwall_identity(actx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-@pytest.mark.parametrize("flux_func", [inviscid_flux_rusanov,
-                                       inviscid_flux_hll])
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
 def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """Check for zero boundary flux.
 

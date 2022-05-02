@@ -133,8 +133,8 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
 
     # code passes in fluxes in the direction of the surface normal,
     # so we will too
-    from mirgecom.inviscid import inviscid_flux_rusanov
-    flux_bnd = inviscid_flux_rusanov(state_pair, gas_model, normal)
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    flux_bnd = inviscid_facial_flux_rusanov(state_pair, gas_model, normal)
 
     print(f"{normal=}")
     print(f"{flux_ext@normal=}")
@@ -277,8 +277,8 @@ def test_hll_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
 
     state_pair = TracePair("vol", interior=fluid_state_int, exterior=fluid_state_ext)
 
-    from mirgecom.inviscid import inviscid_flux_hll
-    flux_bnd = inviscid_flux_hll(state_pair, gas_model, normal)
+    from mirgecom.inviscid import inviscid_facial_flux_hll
+    flux_bnd = inviscid_facial_flux_hll(state_pair, gas_model, normal)
 
     print(f"{normal=}")
     print(f"{flux_ext@normal=}")

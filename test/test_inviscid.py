@@ -48,8 +48,8 @@ from meshmode.array_context import (  # noqa
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux,
-    inviscid_flux_rusanov,
-    inviscid_flux_hll
+    inviscid_facial_flux_rusanov,
+    inviscid_facial_flux_hll
 )
 
 logger = logging.getLogger(__name__)
@@ -270,8 +270,8 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("num_flux", [inviscid_flux_rusanov,
-                                      inviscid_flux_hll])
+@pytest.mark.parametrize("num_flux", [inviscid_facial_flux_rusanov,
+                                      inviscid_facial_flux_hll])
 def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
     """Check the flux across element faces.
 
