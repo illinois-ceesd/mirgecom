@@ -332,7 +332,7 @@ def test_symbolic_evaluation(actx_factory):
     from mirgecom.fluid import make_conserved
     sym_f = make_conserved(
         dim=2,
-        mass=pmbl.var("exp")(-pmbl.var("t")) * (0*sym_coords[0] + 1),
+        mass=pmbl.var("exp")(-pmbl.var("t")) * (sym_coords[0] - sym_coords[0] + 1),
         momentum=make_obj_array([
             pmbl.var("cos")(sym_coords[0]),
             pmbl.var("cos")(sym_coords[1])]),
