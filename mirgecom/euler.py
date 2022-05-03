@@ -72,6 +72,14 @@ from mirgecom.gas_model import (
 )
 
 
+class _EulerCVTag:
+    pass
+
+
+class _EulerTseedTag:
+    pass
+
+
 def euler_operator(discr, state, gas_model, boundaries, time=0.0,
                    quadrature_tag=None):
     r"""Compute RHS of the Euler flow equations.
@@ -142,7 +150,7 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         _interp_to_surf_quad(tpair)
-        for tpair in interior_trace_pairs(discr, state.cv)
+        for tpair in interior_trace_pairs(discr, state.cv, tag=_EulerCVTag)
     ]
 
     tseed_interior_pairs = None
@@ -155,7 +163,8 @@ def euler_operator(discr, state, gas_model, boundaries, time=0.0,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             _interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(discr, state.temperature)]
+            for tpair in interior_trace_pairs(discr, state.temperature,
+                                              tag=_EulerTseedTag)]
 
     interior_states_quad = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
                                                         tseed_interior_pairs)

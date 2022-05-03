@@ -29,16 +29,9 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -79,11 +72,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_overintegration=False,
-         use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
-         log_dependent=True):
+def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_overintegration=False, use_profiling=False,
+         casename=None, lazy=False, rst_filename=None, log_dependent=True):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -107,9 +98,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    else:
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     # Some discretization parameters
     dim = 2
@@ -625,16 +620,13 @@ if __name__ == "__main__":
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
+    lazy = args.lazy
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        if args.lazy:
-            log_dependent = False
-            actx_class = PytatoPyOpenCLArrayContext
-        else:
-            actx_class = PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -643,10 +635,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration,
-         use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+         use_overintegration=args.overintegration, use_profiling=args.profiling,
+         lazy=lazy, casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent)
 
 # vim: foldmethod=marker
