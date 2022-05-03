@@ -810,7 +810,6 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
     if isinstance(source_eval.mass, DOFArray):
         source_norms = componentwise_norms(discr, source_eval)
-        source_norms = source_eval
 
     assert source_norms.mass < tol
     assert source_norms.energy < tol
