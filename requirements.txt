@@ -3,13 +3,13 @@ mpi4py
 numpy
 pytest
 pytest-cov
-pyvisfile
 pymetis
 importlib-resources
 psutil
 pyyaml
 
 # The following packages will be git cloned by emirge:
+--editable git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
 --editable git+https://github.com/kaushikcfd/loopy.git@pytato-array-context-transforms#egg=loopy
