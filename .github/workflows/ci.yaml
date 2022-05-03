@@ -98,7 +98,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:pthread"
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv"
             cd examples && ./test_lazy_accuracy.sh
 
         - name: Run examples
@@ -106,7 +106,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:pthread"
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv"
             examples/run_examples.sh ./examples
 
     doc:
