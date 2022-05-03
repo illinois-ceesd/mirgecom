@@ -199,8 +199,9 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         # for i in range(state_minus.nspecies):
         #    grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
         #        + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-        ext_grad_species_mass = \
-            grad_av_minus.species_mass - np.outer(grad_av_minus@nhat, nhat)
+        ext_grad_species_mass = (
+            grad_av_minus.species_mass
+            - np.outer(grad_av_minus.species_mass @ nhat, nhat))
 
         return make_conserved(
             discr.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
