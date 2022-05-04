@@ -15,7 +15,7 @@ succeeded_examples=""
 
 
 if [[ $(hostname) == "porter" ]]; then
-    mpi_launcher="$examples_dir/scripts/run_gpus_generic.sh"
+    mpi_launcher="bash $examples_dir/scripts/run_gpus_generic.sh"
 else
     mpi_launcher=""
 fi
