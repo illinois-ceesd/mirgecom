@@ -255,7 +255,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     wall_model = WallModel(
         density=fluid_density,
         heat_capacity=50*eos.heat_capacity_cp(),
-        thermal_conductivity=10*fluid_kappa)
+        thermal_conductivity=10*fluid_kappa*wall_ones)
 
     wall_time_scale = 20
 
@@ -327,7 +327,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from grudge.dt_utils import characteristic_lengthscales
     wall_lengthscales = characteristic_lengthscales(actx, discr, dd=dd_vol_wall)
-    h_wall = nodal_min(discr, dd_vol_wall, wall_lengthscales)
 
     initname = "multivolume"
     eosname = eos.__class__.__name__
@@ -348,7 +347,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             constant_cfl, fluid_volume_dd=dd_vol_fluid)
         if constant_cfl:
             wall_alpha = wall_time_scale * wall_model.thermal_diffusivity()
-            wall_dt = actx.to_numpy(h_wall**2 * current_cfl/wall_alpha)[()]
+            wall_dt = actx.to_numpy(
+                nodal_min(
+                    discr, dd_vol_wall,
+                    wall_lengthscales**2 * current_cfl/wall_alpha))[()]
         else:
             wall_dt = current_dt
         return min(fluid_dt, wall_dt)
@@ -371,7 +373,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     discr, dd_vol_fluid, get_viscous_cfl(
                         discr, dt, fluid_state, volume_dd=dd_vol_fluid)))
             wall_alpha = wall_time_scale * wall_model.thermal_diffusivity()
-            wall_cfl = actx.to_numpy(wall_alpha * dt/h_wall**2)
+            wall_cfl = actx.to_numpy(
+                nodal_max(
+                    discr, dd_vol_wall,
+                    wall_alpha * dt/wall_lengthscales**2))
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}\n"
                         f"----- Fluid CFL: {fluid_cfl}, Wall CFL: {wall_cfl}\n"
