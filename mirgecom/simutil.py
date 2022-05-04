@@ -378,7 +378,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     return distribute_mesh(comm, generate_mesh)
 
 
-def distribute_mesh(comm, get_mesh_data):
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     # FIXME: Out of date
     """Distribute a mesh among all ranks in *comm*.
 
@@ -412,6 +412,11 @@ def distribute_mesh(comm, get_mesh_data):
 
     num_ranks = comm.Get_size()
 
+    if partition_generator_func is None:
+        def partition_generator_func(mesh, tag_to_elements, num_ranks):
+            from meshmode.distributed import get_partition_by_pymetis
+            return get_partition_by_pymetis(mesh, num_ranks)
+
     if comm.Get_rank() == 0:
         global_data = get_mesh_data()
 
@@ -425,12 +430,11 @@ def distribute_mesh(comm, get_mesh_data):
         else:
             raise TypeError("Unexpected result from get_mesh_data")
 
-        from meshmode.distributed import get_partition_by_pymetis
         from meshmode.mesh.processing import partition_mesh
 
-        if tag_to_elements is None:
-            rank_per_element = get_partition_by_pymetis(mesh, num_ranks)
+        rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
 
+        if tag_to_elements is None:
             rank_to_elements = {
                 rank: np.where(rank_per_element == rank)[0]
                 for rank in range(num_ranks)}
@@ -452,8 +456,6 @@ def distribute_mesh(comm, get_mesh_data):
 
             if np.any(volume_index_per_element < 0):
                 raise ValueError("Missing volume specification for some elements.")
-
-            rank_per_element = get_partition_by_pymetis(mesh, num_ranks)
 
             part_id_to_elements = {
                 (rank, volumes[vol_idx]):
