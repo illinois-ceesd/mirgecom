@@ -200,6 +200,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
 
+    fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
+    wall_nodes = thaw(discr.nodes(dd_vol_wall), actx)
+
+    fluid_ones = 0*fluid_nodes[0] + 1
+    wall_ones = 0*wall_nodes[0] + 1
+
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
@@ -269,13 +275,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        fluid_ones = discr.zeros(actx, dd=dd_vol_fluid) + 1
         pressure = 4935.22/x_scale
 #         temperature = 658.7 * fluid_ones
         temperature = isothermal_wall_temp * fluid_ones
         sigma = 500/x_scale
         offset = 0
-        fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
         smoothing = (
             fluid_ones
             * smooth_step(actx, sigma*(fluid_nodes[1]+offset))
@@ -308,7 +312,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 #                                        center=orig)
 #         current_cv = acoustic_pulse(x_vec=fluid_nodes, cv=uniform_state, eos=eos)
 
-        wall_ones = discr.zeros(actx, dd=dd_vol_wall) + 1
         current_wall_temperature = isothermal_wall_temp * wall_ones
 
     current_state = make_obj_array([current_cv, current_wall_temperature])
