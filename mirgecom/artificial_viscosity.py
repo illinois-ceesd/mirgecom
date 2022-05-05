@@ -97,16 +97,16 @@ THE SOFTWARE.
 import numpy as np
 
 from pytools import memoize_in, keyed_memoize_in
-# from functools import partial
+from functools import partial
 from meshmode.dof_array import thaw, DOFArray
 
 from mirgecom.flux import divergence_flux_central
 from mirgecom.operators import div_operator
 
-# from grudge.trace_pair import (
-#    interior_trace_pairs,
-#    tracepair_with_discr_tag
-# )
+from grudge.trace_pair import (
+    interior_trace_pairs,
+    tracepair_with_discr_tag
+)
 
 from grudge.dof_desc import (
     DOFDesc,
@@ -167,6 +167,8 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     dd_vol = DOFDesc("vol", quadrature_tag)
     dd_faces = DOFDesc("all_faces", quadrature_tag)
 
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
+
     def interp_to_vol_quad(u):
         return op.project(discr, "vol", dd_vol, u)
 
@@ -181,8 +183,8 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     # Get smoothness indicator based on mass component
     kappa = kwargs.get("kappa", 1.0)
     s0 = kwargs.get("s0", -6.0)
-    indicator = smoothness_indicator(discr, fluid_state.mass, kappa=kappa,
-                                     s0=s0)
+    indicator = smoothness_indicator(discr, fluid_state.mass_density,
+                                     kappa=kappa, s0=s0)
 
     if grad_cv is None:
         from mirgecom.navierstokes import grad_cv_operator
@@ -191,25 +193,23 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
                                    operator_states_quad=operator_states_quad)
 
     # Compute R = alpha*grad(Q)
-    r_quad = interp_to_vol_quad(-alpha * indicator * grad_cv)
-
-    from grudge.trace_pair import TracePair
+    r = -alpha * indicator * grad_cv
+    r_quad = interp_to_vol_quad(r)
 
     def central_flux_div(utpair):
-        dd = utpair.dd.with_discr_tag(quadrature_tag)
+        dd = utpair.dd
         normal = thaw(actx, discr.normal(dd))
-        cv_pair = TracePair(dd=dd, interior=utpair.int.cv,
-                            exterior=utpair.ext.cv)
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-                          divergence_flux_central(cv_pair, normal))
+                          divergence_flux_central(utpair, normal))
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux_div(tpair)
-              for tpair in inter_elem_bnd_states_quad)
+        + sum(central_flux_div(interp_to_surf_quad(tpair=tpair))
+              for tpair in interior_trace_pairs(discr, r, tag=_AVRTag))
+
         # Contributions from boundary fluxes
         + sum(boundaries[btag].av_flux(
             discr,
