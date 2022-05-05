@@ -12,6 +12,14 @@ declare -i numsuccess=0
 echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
+
+
+if [[ $(hostname) == "porter" ]]; then
+    mpi_launcher="bash $examples_dir/scripts/run_gpus_generic.sh"
+else
+    mpi_launcher=""
+fi
+
 for example in $examples_dir/*.py
 do
     if [[ "$example" == *"-mpi-lazy.py" ]]
@@ -20,7 +28,7 @@ do
         mpiexec -n 1 python -m mpi4py ${example} --lazy
     elif [[ "$example" == *"-mpi.py" ]]; then
         echo "*** Running parallel example (2 ranks): $example"
-        mpiexec -n 2 python -m mpi4py ${example}
+        mpiexec -n 2 $mpi_launcher python -m mpi4py ${example}
     elif [[ "$example" == *"-lazy.py" ]]; then
         echo "*** Running serial lazy example: $example"
         python ${example} --lazy
@@ -46,7 +54,7 @@ if [[ $numfail -eq 0 ]]
 then
     echo "*** No errors."
 else
-    echo "*** Errors detected." 
+    echo "*** Errors detected."
     echo "*** Failed tests: ($numfail/$numtests): $failed_examples"
 fi
 echo "*** Successful tests: ($numsuccess/$numtests): $succeeded_examples"
