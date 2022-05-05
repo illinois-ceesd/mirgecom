@@ -9,7 +9,7 @@
 # handles GPU distribution.
 #
 # Run it like this:
-#   mpirun -n 2 bash run_gpus_generic.sh
+#   mpirun -n 2 bash run_gpus_generic.sh python -m mpi4py pulse-mpi.py --lazy
 
 set -ex
 
@@ -24,4 +24,4 @@ fi
 # Assumes POCL
 export PYOPENCL_TEST="port:nv"
 
-python -m mpi4py pulse-mpi.py --lazy
+"$@"
