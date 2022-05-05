@@ -170,11 +170,8 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     def interp_to_vol_quad(u):
         return op.project(discr, "vol", dd_vol, u)
 
-    if isinstance(alpha, DOFArray):
-        alpha = interp_to_vol_quad(alpha)
-
     if operator_states_quad is None:
-        from mirgecom.fluid import make_operator_fluid_states
+        from mirgecom.gas_model import make_operator_fluid_states
         operator_states_quad = make_operator_fluid_states(
             discr, fluid_state, gas_model, boundaries, quadrature_tag)
 
@@ -184,7 +181,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     # Get smoothness indicator based on mass component
     kappa = kwargs.get("kappa", 1.0)
     s0 = kwargs.get("s0", -6.0)
-    indicator = smoothness_indicator(discr, vol_state_quad.mass_density, kappa=kappa,
+    indicator = smoothness_indicator(discr, fluid_state.mass, kappa=kappa,
                                      s0=s0)
 
     if grad_cv is None:
@@ -194,12 +191,12 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
                                    operator_states_quad=operator_states_quad)
 
     # Compute R = alpha*grad(Q)
-    r = -alpha * indicator * grad_cv
+    r_quad = interp_to_vol_quad(-alpha * indicator * grad_cv)
 
     from grudge.trace_pair import TracePair
 
     def central_flux_div(utpair):
-        dd = utpair.dd
+        dd = utpair.dd.with_discr_tag(quadrature_tag)
         normal = thaw(actx, discr.normal(dd))
         cv_pair = TracePair(dd=dd, interior=utpair.int.cv,
                             exterior=utpair.ext.cv)
@@ -217,11 +214,11 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
         + sum(boundaries[btag].av_flux(
             discr,
             btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            diffusion=r) for btag in boundaries)
+            diffusion=r_quad) for btag in boundaries)
     )
 
     # Return the AV RHS term
-    return -div_operator(discr, dd_vol, dd_faces, r, r_bnd)
+    return -div_operator(discr, dd_vol, dd_faces, r_quad, r_bnd)
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):

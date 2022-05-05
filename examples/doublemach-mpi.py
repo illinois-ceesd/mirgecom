@@ -419,8 +419,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
             + av_laplacian_operator(discr, fluid_state=fluid_state,
                                     boundaries=boundaries,
-                                    boundary_kwargs={"time": t,
-                                                     "gas_model": gas_model},
+                                    time=t, gas_model=gas_model,
                                     alpha=alpha, s0=s0, kappa=kappa,
                                     quadrature_tag=quadrature_tag)
         )
