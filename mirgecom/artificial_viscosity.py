@@ -127,8 +127,8 @@ class _AVRTag:
 
 
 def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
-                          time=0, operator_states_quad=None,
-                          grad_cv=None, **kwargs):
+                          kappa=1., s0=-6., time=0, operator_states_quad=None,
+                          grad_cv=None, quadrature_tag=None):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -163,7 +163,6 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     """
     cv = fluid_state.cv
     actx = cv.array_context
-    quadrature_tag = kwargs.get("quadrature_tag", None)
     dd_vol = DOFDesc("vol", quadrature_tag)
     dd_faces = DOFDesc("all_faces", quadrature_tag)
 
@@ -181,8 +180,6 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
         operator_states_quad
 
     # Get smoothness indicator based on mass component
-    kappa = kwargs.get("kappa", 1.0)
-    s0 = kwargs.get("s0", -6.0)
     indicator = smoothness_indicator(discr, fluid_state.mass_density,
                                      kappa=kappa, s0=s0)
 
@@ -194,7 +191,6 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
 
     # Compute R = alpha*grad(Q)
     r = -alpha * indicator * grad_cv
-    r_quad = interp_to_vol_quad(r)
 
     def central_flux_div(utpair):
         dd = utpair.dd
@@ -214,11 +210,11 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
         + sum(boundaries[btag].av_flux(
             discr,
             btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            diffusion=r_quad) for btag in boundaries)
+            diffusion=r) for btag in boundaries)
     )
 
     # Return the AV RHS term
-    return -div_operator(discr, dd_vol, dd_faces, r_quad, r_bnd)
+    return -div_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
 
 
 def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
