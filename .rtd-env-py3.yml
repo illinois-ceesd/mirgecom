@@ -1,9 +1,10 @@
+# Conda env file for the readthedocs build
 name: rtd-env-py3
 channels:
 - conda-forge
 - nodefaults
 dependencies:
-- python=3.8
+- python=3.9
 - mpi4py
 - islpy
 - pip
