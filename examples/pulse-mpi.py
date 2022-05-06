@@ -118,7 +118,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = rk4_step
     t_final = 0.1
     current_cfl = 1.0
-    current_dt = .01
+    current_dt = .005
     current_t = 0
     constant_cfl = False
 
@@ -128,7 +128,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 10
     nhealth = 1
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
