@@ -8,8 +8,8 @@ set -x
 # The production capability may be in a CEESD-local mirgecom branch or in a
 # fork, and is specified through the following settings:
 #
-export PRODUCTION_BRANCH=""   # The base production branch to be installed by emirge
-export PRODUCTION_FORK=""  # The fork/home of production changes (if any)
+# export PRODUCTION_BRANCH=""   # The base production branch to be installed by emirge
+# export PRODUCTION_FORK=""  # The fork/home of production changes (if any)
 #
 # Multiple production drivers are supported. The user should provide a ':'-delimited
 # list of driver locations, where each driver location is of the form:
