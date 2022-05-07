@@ -40,7 +40,15 @@ THE SOFTWARE.
 import numpy as np  # noqa
 
 
-def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
+# These low-level flux functions match the presentation of them in
+# the [Toro_2009]_ reference on which they are based.  These arguments
+# require no data structure constructs and are presented here as pure
+# functions which easily be tested with plain ole numbers, numpy arrays
+# or DOFArrays as appropriate.
+#
+# {{{ low-level flux interfaces
+
+def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -82,7 +90,7 @@ def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
     return (f_minus_normal + f_plus_normal + lam*(q_minus - q_plus))/2
 
 
-def num_flux_central(f_minus_normal, f_plus_normal, **kwargs):
+def num_flux_central(f_minus_normal, f_plus_normal):
     r"""Central low-level numerical flux.
 
     The central flux is calculated as:
@@ -174,6 +182,11 @@ def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus
 
     return f
 
+# }}} low-level flux interfaces
+
+
+# {{{ Tracepair flux interfaces for operators
+
 
 def gradient_flux(u_tpair, normal, beta=0):
     r"""Compute a central flux for the gradient operator.
@@ -247,3 +260,4 @@ def divergence_flux(trace_pair, normal, alpha=0, beta=0):
         scalar component.
     """
     return (trace_pair.avg + beta*trace_pair.diff/2 + alpha)@normal
+# }}} Tracepair interafces for operators
