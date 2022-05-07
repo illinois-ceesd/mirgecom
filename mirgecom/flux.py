@@ -40,7 +40,12 @@ THE SOFTWARE.
 import numpy as np  # noqa
 
 
-def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
+# These low-level flux functions match the presentation of them in
+# the [Toro_2009]_ reference on which they are based.  These arguments
+# require no data structure constructs and are presented here as pure
+# functions which easily be tested with plain ole numbers, numpy arrays
+# or DOFArrays as appropriate.
+def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -82,7 +87,12 @@ def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam, **kwargs):
     return (f_minus_normal + f_plus_normal + lam*(q_minus - q_plus))/2
 
 
-def num_flux_central(f_minus_normal, f_plus_normal, **kwargs):
+# These low-level flux functions match the presentation of them in
+# the [Toro_2009]_ reference on which they are based.  These arguments
+# require no data structure constructs and are presented here as pure
+# functions which easily be tested with plain ole numbers, numpy arrays
+# or DOFArrays as appropriate.
+def num_flux_central(f_minus_normal, f_plus_normal):
     r"""Central low-level numerical flux.
 
     The central flux is calculated as:
@@ -108,6 +118,11 @@ def num_flux_central(f_minus_normal, f_plus_normal, **kwargs):
     return (f_plus_normal + f_minus_normal)/2
 
 
+# These low-level flux functions match the presentation of them in
+# the [Toro_2009]_ reference on which they are based.  These arguments
+# require no data structure constructs and are presented here as pure
+# functions which easily be tested with plain ole numbers, numpy arrays
+# or DOFArrays as appropriate.
 def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus):
     r"""HLL low-level numerical flux.
 
