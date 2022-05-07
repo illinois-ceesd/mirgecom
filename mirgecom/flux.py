@@ -200,7 +200,7 @@ def gradient_flux(u_tpair, normal, beta=0):
     ----------
     u_tpair: :class:`~grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
-    beta: Number or :class:`~grudge.dof_array.DOFArray`
+    beta: Number or :class:`~meshmode.dof_array.DOFArray`
         Optional dissipation strength term
     normal: numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
