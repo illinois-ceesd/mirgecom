@@ -75,12 +75,11 @@ from mirgecom.inviscid import (
 )
 from mirgecom.viscous import (
     viscous_flux,
-    viscous_flux_central,
+    viscous_divergence_flux as viscous_div_num_flux,
     viscous_flux_on_element_boundary
 )
-from mirgecom.flux import (
-    gradient_flux_central
-)
+from mirgecom.flux import gradient_flux as gradient_num_flux
+
 from mirgecom.operators import (
     div_operator, grad_operator
 )
@@ -108,7 +107,7 @@ def _gradient_flux_interior(discr, numerical_flux_func, tpair):
 
 def grad_cv_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
-        numerical_flux_func=gradient_flux_central,
+        numerical_flux_func=gradient_num_flux,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -187,7 +186,7 @@ def grad_cv_operator(
 
 def grad_t_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
-        numerical_flux_func=gradient_flux_central,
+        numerical_flux_func=gradient_num_flux,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -270,8 +269,8 @@ def grad_t_operator(
 
 def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
                 inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                gradient_numerical_flux_func=gradient_flux_central,
-                viscous_numerical_flux_func=viscous_flux_central,
+                gradient_numerical_flux_func=gradient_num_flux,
+                viscous_numerical_flux_func=viscous_div_num_flux,
                 quadrature_tag=DISCR_TAG_BASE, return_gradients=False,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
