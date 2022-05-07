@@ -332,8 +332,8 @@ an inviscid-only wall condition, so no section on viscous or gradient fluxes are
 for this particular wall treatment.
 
 In practice, when the fluid operators in :mod:`~mirgecom.euler`, :mod:`~mirgecom.inviscid`,
-:mod:`~mirgecom.viscous` and the forthcoming Compressible Navier-Stokes modules
-go to calculate the flux for the divergence of the inviscid transport flux, they call the
+:mod:`~mirgecom.viscous` and :mod:`~mirgecom.navierstokes` modules
+go to calculate the flux for the divergence of physical transport fluxes, they call the
 `~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
 :meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_state`, and returns the
