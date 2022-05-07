@@ -36,7 +36,7 @@ import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
-from mirgecom.flux import gradient_flux_central
+from mirgecom.flux import gradient_flux as gradient_num_flux
 from mirgecom.fluid import (
     ConservedVars,
     make_conserved
@@ -125,7 +125,7 @@ def _cv_test_func(dim):
 def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
     normal = thaw(actx, discr.normal(int_tpair.dd))
-    flux_weak = gradient_flux_central(int_tpair, normal)
+    flux_weak = gradient_num_flux(int_tpair, normal)
     dd_all_faces = int_tpair.dd.with_dtag("all_faces")
     return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
 
@@ -138,7 +138,7 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     bnd_nhat = thaw(actx, discr.normal(btag))
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
-    flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
+    flux_weak = gradient_num_flux(bnd_tpair, bnd_nhat)
     dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
     return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
 
