@@ -54,15 +54,16 @@ from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-from mirgecom.viscous import viscous_flux_central
+from mirgecom.viscous import viscous_divergence_flux as viscous_div_num_flux
 from mirgecom.flux import (
-    gradient_flux_central,
-    divergence_flux_central
+    gradient_flux as gradient_num_flux,
+    divergence_flux as divergence_num_flux
 )
 from mirgecom.gas_model import (
     make_fluid_state,
     project_fluid_state,
 )
+
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
 
 from abc import ABCMeta, abstractmethod
@@ -154,7 +155,7 @@ class FluidBoundary(metaclass=ABCMeta):
             Function should return the numerical flux corresponding to
             the divergence of the viscous transport flux. This function
             is typically backed by a helper, such as
-            :func:`~mirgecom.inviscid.viscous_flux_central`.
+            :func:`~mirgecom.inviscid.viscous_divergence_flux`.
 
         Returns
         -------
@@ -271,7 +272,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         self._viscous_flux_func = viscous_flux_func
         self._bnd_grad_cv_func = boundary_gradient_cv_func
         self._bnd_grad_temperature_func = boundary_gradient_temperature_func
-        self._av_div_num_flux_func = divergence_flux_central
+        self._av_div_num_flux_func = divergence_num_flux
         self._bnd_grad_av_func = boundary_grad_av_func
 
         if not self._bnd_grad_av_func:
@@ -290,7 +291,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
-            self._grad_num_flux_func = gradient_flux_central
+            self._grad_num_flux_func = gradient_num_flux
 
         if not self._cv_gradient_flux_func:
             self._cv_gradient_flux_func = self._gradient_flux_for_prescribed_cv
@@ -402,7 +403,7 @@ class PrescribedFluidBoundary(FluidBoundary):
     # prescribed CV(+).
     def _viscous_flux_for_prescribed_state(self, discr, btag, gas_model, state_minus,
                                            grad_cv_minus, grad_t_minus,
-                                           numerical_flux_func=viscous_flux_central,
+                                           numerical_flux_func=viscous_div_num_flux,
                                            **kwargs):
         state_pair = self._boundary_state_pair(discr=discr, btag=btag,
                                                gas_model=gas_model,
@@ -422,12 +423,9 @@ class PrescribedFluidBoundary(FluidBoundary):
                     state_minus=state_minus, grad_cv_minus=grad_cv_minus,
                     grad_t_minus=grad_t_minus))
 
-        return self._boundary_quantity(
-            discr, btag,
-            quantity=numerical_flux_func(discr=discr, gas_model=gas_model,
-                                         state_pair=state_pair,
-                                         grad_cv_pair=grad_cv_pair,
-                                         grad_t_pair=grad_t_pair))
+        return numerical_flux_func(
+            discr=discr, gas_model=gas_model, state_pair=state_pair,
+            grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair)
 
     # }}} Default boundary helpers
 
@@ -453,7 +451,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def viscous_divergence_flux(self, discr, btag, gas_model, state_minus,
                                 grad_cv_minus, grad_t_minus,
-                                numerical_flux_func=viscous_flux_central, **kwargs):
+                                numerical_flux_func=viscous_div_num_flux, **kwargs):
         """Get the viscous flux for *btag* for use in the divergence operator."""
         return self._viscous_flux_func(discr=discr, btag=btag, gas_model=gas_model,
                                        state_minus=state_minus,
@@ -979,13 +977,8 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                                       temperature_seed=state_minus.temperature)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        from mirgecom.inviscid import inviscid_facial_flux
-        return self._boundary_quantity(
-            discr, btag,
-            inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
-                                 numerical_flux_func=numerical_flux_func,
-                                 local=True),
-            **kwargs)
+        normal = thaw(discr.normal(btag), state_minus.array_context)
+        return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -1015,7 +1008,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
     def viscous_wall_flux(self, discr, btag, gas_model, state_minus,
                                            grad_cv_minus, grad_t_minus,
-                                           numerical_flux_func=viscous_flux_central,
+                                           numerical_flux_func=viscous_div_num_flux,
                                            **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
@@ -1092,13 +1085,8 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
             discr, btag, gas_model, state_minus)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        from mirgecom.inviscid import inviscid_facial_flux
-        return self._boundary_quantity(
-            discr, btag,
-            inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
-                                 numerical_flux_func=numerical_flux_func,
-                                 local=True),
-            **kwargs)
+        normal = thaw(discr.normal(btag), state_minus.array_context)
+        return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -1131,7 +1119,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def viscous_wall_flux(self, discr, btag, gas_model, state_minus,
                                            grad_cv_minus, grad_t_minus,
-                                           numerical_flux_func=viscous_flux_central,
+                                           numerical_flux_func=viscous_div_num_flux,
                                            **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
@@ -1229,13 +1217,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             discr, btag, gas_model, state_minus)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        from mirgecom.inviscid import inviscid_facial_flux
-        return self._boundary_quantity(
-            discr, btag,
-            inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
-                                 numerical_flux_func=numerical_flux_func,
-                                 local=True),
-            **kwargs)
+        normal = thaw(discr.normal(btag), state_minus.array_context)
+        return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -1268,7 +1251,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def viscous_wall_flux(self, discr, btag, gas_model, state_minus,
                                            grad_cv_minus, grad_t_minus,
-                                           numerical_flux_func=viscous_flux_central,
+                                           numerical_flux_func=viscous_div_num_flux,
                                            **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux

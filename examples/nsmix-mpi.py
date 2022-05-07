@@ -538,10 +538,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array([cv, fluid_state.temperature]), dt
 
     flux_beta = .25
-    from mirgecom.viscous import viscous_flux_central
-    from mirgecom.flux import gradient_flux_central
-    grad_num_flux_func = partial(gradient_flux_central, beta=flux_beta)
-    viscous_num_flux_func = partial(viscous_flux_central, beta=-flux_beta)
+    from mirgecom.viscous import viscous_divergence_flux as viscous_div_num_flux
+    from mirgecom.flux import gradient_flux as gradient_num_flux
+    grad_num_flux_func = partial(gradient_num_flux, beta=flux_beta)
+    viscous_num_flux_func = partial(viscous_div_num_flux, beta=-flux_beta)
 
     def my_rhs(t, state):
         cv, tseed = state

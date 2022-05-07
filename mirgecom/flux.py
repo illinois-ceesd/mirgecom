@@ -10,9 +10,8 @@ Low-level interfaces
 Flux pair interfaces for operators
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: gradient_flux_central
-.. autofunction:: divergence_flux_central
-.. autofunction:: gradient_flux_dissipative
+.. autofunction:: gradient_flux
+.. autofunction:: divergence_flux
 """
 
 __copyright__ = """
@@ -176,46 +175,8 @@ def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus
     return f
 
 
-def gradient_flux_central(u_tpair, normal, beta=0):
-    r"""Compute a central flux for the gradient operator.
-
-    The central gradient flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated
-    as:
-
-    .. math::
-
-        \mathbf{h}({u}^-, {u}^+; \mathbf{n}) = \frac{1}{2}
-        \left({u}^{+}+{u}^{-}\right)\mathbf{\hat{n}}
-
-    where ${u}^-, {u}^+$, are the scalar function values on the interior
-    and exterior of the face on which the central flux is to be calculated, and
-    $\mathbf{\hat{n}}$ is the *normal* vector.
-
-    *u_tpair* is the :class:`~grudge.trace_pair.TracePair` representing the scalar
-    quantities ${u}^-, {u}^+$. *u_tpair* may also represent a vector-quantity
-    :class:`~grudge.trace_pair.TracePair`, and in this case the central scalar flux
-    is computed on each component of the vector quantity as an independent scalar.
-
-    Parameters
-    ----------
-    u_tpair: :class:`~grudge.trace_pair.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
-    normal: numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
-        normals
-
-    Returns
-    -------
-    numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
-        scalar component.
-    """
-    from arraycontext import outer
-    return outer(u_tpair.avg + beta*u_tpair.diff/2, normal)
-
-
-def gradient_flux_dissipative(u_tpair, normal, beta):
-    r"""Compute a central flux for the gradient operator.
+def gradient_flux(u_tpair, normal, beta=0):
+    r"""Compute a numerical flux for the gradient operator.
 
     The dissipative central gradient flux, $\mathbf{h}$, of a scalar quantity
     $u$ is calculated as:
@@ -239,6 +200,8 @@ def gradient_flux_dissipative(u_tpair, normal, beta):
     ----------
     u_tpair: :class:`~grudge.trace_pair.TracePair`
         Trace pair for the face upon which flux calculation is to be performed
+    beta: Number or :class:`~grudge.dof_array.DOFArray`
+        Optional dissipation strength term
     normal: numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
@@ -253,19 +216,21 @@ def gradient_flux_dissipative(u_tpair, normal, beta):
     return outer(u_tpair.avg + .5*beta*u_tpair.diff, normal)
 
 
-def divergence_flux_central(trace_pair, normal, jump_term=0, beta=0):
-    r"""Compute a central flux for the divergence operator.
+def divergence_flux(trace_pair, normal, alpha=0, beta=0):
+    r"""Compute a numerical flux for the divergence operator.
 
-    The central divergence flux, $h$, is calculated as:
+    The divergence flux, $h$, is calculated as:
 
     .. math::
 
         h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
-        \left(\mathbf{v}^{+}+\mathbf{v}^{-}\right) \cdot \hat{n}
+        \left(\mathbf{v}^{+}+\mathbf{v}^{-}+\beta(\mathbf{v}^{+}-\mathbf{v}^{-}
+        +\alpha\right) \cdot \hat{n}
 
     where $\mathbf{v}^-, \mathbf{v}^+$, are the vectors on the interior and exterior
     of the face across which the central flux is to be calculated, and $\hat{n}$ is
-    the unit normal to the face.
+    the unit normal to the face.  \alpha and \beta are optional terms for adding
+    dissipation to the otherwise central flux.
 
     Parameters
     ----------
@@ -281,5 +246,4 @@ def divergence_flux_central(trace_pair, normal, jump_term=0, beta=0):
         object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
         scalar component.
     """
-    # return (trace_pair.avg + beta*trace_pair.diff + jump_term)@normal
-    return (trace_pair.avg + beta*trace_pair.diff/2 + jump_term)@normal
+    return (trace_pair.avg + beta*trace_pair.diff/2 + alpha)@normal
