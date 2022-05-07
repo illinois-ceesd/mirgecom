@@ -228,8 +228,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                  inviscid_flux_func=None,
                  # returns CV+, to be used in num flux func (prescribed soln)
                  boundary_state_func=None,
-                 # Inviscid facial flux func given CV(+/-)
-                 # inviscid_numerical_flux_func=None,
                  # Flux to be used in grad(Temperature) op
                  temperature_gradient_flux_func=None,
                  # Function returns boundary temperature_plus
@@ -247,8 +245,8 @@ class PrescribedFluidBoundary(FluidBoundary):
                  ):
         """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_state_func = boundary_state_func
-        self._inviscid_flux_func = inviscid_flux_func
         self._temperature_grad_flux_func = temperature_gradient_flux_func
+        self._inviscid_flux_func = inviscid_flux_func
         self._bnd_temperature_func = boundary_temperature_func
         self._grad_num_flux_func = gradient_numerical_flux_func
         self._cv_gradient_flux_func = cv_gradient_flux_func
@@ -261,9 +259,8 @@ class PrescribedFluidBoundary(FluidBoundary):
             warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
         if not self._inviscid_flux_func:
-            self._inviscid_flux_func = self._inviscid_flux_for_prescribed_state
-        # if not self._inviscid_num_flux_func:
-        #     self._inviscid_num_flux_func = inviscid_facial_flux
+            self._invsisc_flux_func = self._inviscid_flux_for_prescribed_state
+
         if not self._bnd_state_func:
             self._bnd_state_func = self._identical_state
 
@@ -287,11 +284,8 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def _boundary_quantity(self, discr, btag, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if local:
-            return quantity
-        from grudge.dof_desc import as_dofdesc
-        btag = as_dofdesc(btag)
-        return discr.project(btag, btag.with_dtag("all_faces"), quantity)
+        return quantity if local else discr.project(
+            btag, btag.with_dtag("all_faces"), quantity)
 
     def _boundary_state_pair(self, discr, btag, gas_model, state_minus, **kwargs):
         return TracePair(btag,
@@ -371,15 +365,8 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                         gas_model=gas_model,
                                                         state_minus=state_minus,
                                                         **kwargs)
-
-        from mirgecom.inviscid import inviscid_facial_flux
-        return self._boundary_quantity(
-            discr, btag,
-            inviscid_facial_flux(discr, gas_model=gas_model,
-                                 state_pair=boundary_state_pair,
-                                 numerical_flux_func=numerical_flux_func,
-                                 local=True),
-            **kwargs)
+        normal = thaw(discr.normal(btag), state_minus.array_context)
+        return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
     # Returns the flux to be used by the divergence operator when computing the
     # divergence of viscous fluid transport flux using the boundary's
