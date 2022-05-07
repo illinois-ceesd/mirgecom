@@ -100,7 +100,10 @@ from pytools import memoize_in, keyed_memoize_in
 
 from meshmode.dof_array import thaw, DOFArray
 
-from mirgecom.flux import gradient_flux_central, divergence_flux_central
+from mirgecom.flux import (
+    gradient_flux as gradient_num_flux,
+    divergence_flux as divergence_num_flux
+)
 from mirgecom.operators import div_operator, grad_operator
 
 from grudge.trace_pair import (
@@ -183,7 +186,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central scalar flux along nhat:
                           # flux = 1/2 * (Q- + Q+) * nhat
-                          gradient_flux_central(utpair, normal))
+                          gradient_num_flux(utpair, normal))
 
     cv_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
@@ -206,7 +209,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-                          divergence_flux_central(utpair, normal))
+                          divergence_num_flux(utpair, normal))
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
