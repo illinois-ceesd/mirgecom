@@ -29,7 +29,7 @@ import numpy.linalg as la  # noqa
 import logging
 import pytest
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
@@ -75,10 +75,10 @@ def test_slipwall_identity(actx_factory, dim):
 
     order = 3
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    nhat = thaw(discr.normal(BTAG_ALL), actx)
     gas_model = GasModel(eos=eos)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -155,8 +155,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
-        nhat = thaw(actx, discr.normal(BTAG_ALL))
+        nodes = thaw(discr.nodes(), actx)
+        nhat = thaw(discr.normal(BTAG_ALL), actx)
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
@@ -196,10 +196,9 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, gas_model, state_pair,
-                                                numerical_flux_func=flux_func,
-                                                local=True)
+                normal = thaw(discr.normal(BTAG_ALL), actx)
+                bnd_flux = flux_func(state_pair, gas_model, normal)
+
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 
