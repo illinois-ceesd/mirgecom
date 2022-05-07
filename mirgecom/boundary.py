@@ -393,12 +393,9 @@ class PrescribedFluidBoundary(FluidBoundary):
                     state_minus=state_minus, grad_cv_minus=grad_cv_minus,
                     grad_t_minus=grad_t_minus))
 
-        return self._boundary_quantity(
-            discr, btag,
-            quantity=numerical_flux_func(discr=discr, gas_model=gas_model,
-                                         state_pair=state_pair,
-                                         grad_cv_pair=grad_cv_pair,
-                                         grad_t_pair=grad_t_pair))
+        return numerical_flux_func(
+            discr=discr, gas_model=gas_model, state_pair=state_pair,
+            grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair)
 
     # }}} Default boundary helpers
 
