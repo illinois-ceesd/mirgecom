@@ -259,7 +259,7 @@ class PrescribedFluidBoundary(FluidBoundary):
             warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
         if not self._inviscid_flux_func:
-            self._invsisc_flux_func = self._inviscid_flux_for_prescribed_state
+            self._inviscid_flux_func = self._inviscid_flux_for_prescribed_state
 
         if not self._bnd_state_func:
             self._bnd_state_func = self._identical_state
@@ -284,6 +284,8 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def _boundary_quantity(self, discr, btag, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        from grudge.dof_desc import as_dofdesc
+        btag = as_dofdesc(btag)
         return quantity if local else discr.project(
             btag, btag.with_dtag("all_faces"), quantity)
 

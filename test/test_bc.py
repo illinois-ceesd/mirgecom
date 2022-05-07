@@ -37,6 +37,7 @@ from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
+from grudge.dof_desc import as_dofdesc
 from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
@@ -248,14 +249,14 @@ def test_noslip(actx_factory, dim, flux_func):
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    nodes = thaw(discr.nodes(), actx)
+    nhat = thaw(discr.normal(BTAG_ALL), actx)
     print(f"{nhat=}")
 
     from mirgecom.flux import gradient_flux_central
 
     def scalar_flux_interior(int_tpair):
-        normal = thaw(actx, discr.normal(int_tpair.dd))
+        normal = thaw(discr.normal(int_tpair.dd), actx)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
@@ -313,6 +314,8 @@ def test_noslip(actx_factory, dim, flux_func):
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
             i_flux_int = discr.project(dd, dd_allfaces, bnd_flux)
+            bc_dd = as_dofdesc(BTAG_ALL)
+            i_flux_bc = discr.project(bc_dd, dd_allfaces, i_flux_bc)
 
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -321,7 +324,6 @@ def test_noslip(actx_factory, dim, flux_func):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            from grudge.dof_desc import as_dofdesc
             dd_vol = as_dofdesc("vol")
             dd_faces = as_dofdesc("all_faces")
             grad_cv_minus = \
@@ -396,14 +398,14 @@ def test_prescribedviscous(actx_factory, dim, flux_func):
     #     boundaries[DTAG_BOUNDARY("+"+str(i+1))] = 0
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    nodes = thaw(discr.nodes(), actx)
+    nhat = thaw(discr.normal(BTAG_ALL), actx)
     print(f"{nhat=}")
 
     from mirgecom.flux import gradient_flux_central
 
     def scalar_flux_interior(int_tpair):
-        normal = thaw(actx, discr.normal(int_tpair.dd))
+        normal = thaw(discr.normal(int_tpair.dd), actx)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = gradient_flux_central(int_tpair, normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
@@ -458,6 +460,8 @@ def test_prescribedviscous(actx_factory, dim, flux_func):
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
+            bc_dd = as_dofdesc(BTAG_ALL)
+            i_flux_bc = discr.project(bc_dd, dd_allfaces, i_flux_bc)
             i_flux_int = discr.project(dd, dd_allfaces, bnd_flux)
 
             i_flux_bnd = i_flux_bc + i_flux_int
@@ -467,7 +471,6 @@ def test_prescribedviscous(actx_factory, dim, flux_func):
             print(f"{i_flux_bnd=}")
 
             from mirgecom.operators import grad_operator
-            from grudge.dof_desc import as_dofdesc
             dd_vol = as_dofdesc("vol")
             dd_faces = as_dofdesc("all_faces")
             grad_cv = grad_operator(discr, dd_vol, dd_faces, cv, cv_flux_bnd)
