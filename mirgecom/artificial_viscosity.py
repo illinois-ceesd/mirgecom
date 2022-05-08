@@ -100,7 +100,9 @@ from pytools import memoize_in, keyed_memoize_in
 from functools import partial
 from meshmode.dof_array import thaw, DOFArray
 
-from mirgecom.flux import divergence_flux_central
+from mirgecom.flux import (
+    divergence_flux as divergence_num_flux
+)
 from mirgecom.operators import div_operator
 
 from grudge.trace_pair import (
@@ -198,7 +200,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-                          divergence_flux_central(utpair, normal))
+                          divergence_num_flux(utpair, normal))
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (

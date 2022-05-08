@@ -26,6 +26,8 @@ discussion.  The following references are useful:
 * NS with reactions, [Ihme_2014]_, and [Cook_2009]_
 * The BR2 method, [Bassi_2000]_
 * [Ayuso_2009]_
+* Shock handling [Woodward_1984]_
+* Artificial viscosity [Persson_2012]_
 
 *MIRGE-Com* currently employs a strategy akin to the BR1 algorithm outlined in
 [Bassi_1997]_, but with thermal terms and chemical reaction sources as outlined in
@@ -198,7 +200,7 @@ Viscous numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^
 The numerical flux function for the divergence of the viscous transport flux
 of the Navier-Stokes equations, $\b{h}_v$, is implemented in
-:func:`~mirgecom.viscous.viscous_flux_central` as follows:
+:func:`~mirgecom.viscous.viscous_divergence_flux` as follows:
 
 .. math::
    \b{h}_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
@@ -214,7 +216,7 @@ in a central flux.
 Gradient numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^^
 The numerical flux function used for the gradient of the fluid solution,
-$\b{H}_s$, is implemented in :func:`~mirgecom.flux.gradient_flux_central`
+$\b{H}_s$, is implemented in :func:`~mirgecom.flux.gradient_flux`
 as follows:
 
 .. math::
@@ -329,8 +331,9 @@ flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+)$. 
 an inviscid-only wall condition, so no section on viscous or gradient fluxes are included
 for this particular wall treatment.
 
-In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, and :mod:`~mirgecom.navierstokes`,
-go to calculate the flux for the divergence of the inviscid transport flux, they call the
+In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, :mod:`~mirgecom.euler`,
+and :mod:`~mirgecom.navierstokes`, go to calculate the flux for the divergence of the
+inviscid physical transport fluxes, they call the
 `~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
 :meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_state`, and returns the
