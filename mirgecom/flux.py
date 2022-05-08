@@ -189,7 +189,7 @@ def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus
 
 
 def gradient_flux(u_tpair, normal, beta=0):
-    r"""Compute a central flux for the gradient operator.
+    r"""Compute a numerical flux for the gradient operator.
 
     The dissipative central gradient flux, $\mathbf{h}$, of a scalar quantity
     $u$ is calculated as:
@@ -230,7 +230,7 @@ def gradient_flux(u_tpair, normal, beta=0):
 
 
 def divergence_flux(trace_pair, normal, alpha=0, beta=0):
-    r"""Compute a central flux for the divergence operator.
+    r"""Compute a numerical flux for the divergence operator.
 
     The divergence flux, $h$, is calculated as:
 
