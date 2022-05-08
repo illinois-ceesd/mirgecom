@@ -128,9 +128,10 @@ class _AVRTag:
     pass
 
 
-def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
+def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
                           kappa=1., s0=-6., time=0, operator_states_quad=None,
-                          grad_cv=None, quadrature_tag=None, **kwargs):
+                          grad_cv=None, quadrature_tag=None, boundary_kwargs=None,
+                          indicator=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -150,6 +151,12 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     alpha: float
         The maximum artificial viscosity coefficient to be applied
 
+    indicator: :class:`~meshmode.dof_array.DOFArray`
+        The indicator field used for locating where AV should be applied. If not
+        supplied by the user, then
+        :func:`~mirgecom.artificial_viscosity.smoothness_indicator` will be used
+        with fluid mass density as the indicator field.
+
     quadrature_tag
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
@@ -168,6 +175,16 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
     dd_vol = DOFDesc("vol", quadrature_tag)
     dd_faces = DOFDesc("all_faces", quadrature_tag)
 
+    from warnings import warn
+
+    if boundary_kwargs is not None:
+        warn("The AV boundary_kwargs interface is deprecated, please pass gas_model"
+             " and time directly.")
+        if gas_model is None:
+            gas_model = boundary_kwargs["gas_model"]
+            if "time" in boundary_kwargs:
+                time = boundary_kwargs["time"]
+
     interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     def interp_to_vol_quad(u):
@@ -182,8 +199,9 @@ def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
         operator_states_quad
 
     # Get smoothness indicator based on mass component
-    indicator = smoothness_indicator(discr, fluid_state.mass_density,
-                                     kappa=kappa, s0=s0)
+    if indicator is None:
+        indicator = smoothness_indicator(discr, fluid_state.mass_density,
+                                         kappa=kappa, s0=s0)
 
     if grad_cv is None:
         from mirgecom.navierstokes import grad_cv_operator
