@@ -189,7 +189,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     zeros = discr.zeros(actx)
 
     class TestBoundary:
-        def soln_gradient_flux(self, disc, btag, fluid_state, gas_model, **kwargs):
+        def cv_gradient_flux(self, disc, btag, state_minus, gas_model, **kwargs):
             fluid_state_int = project_fluid_state(disc, "vol", btag, fluid_state,
                                                   gas_model)
             cv_int = fluid_state_int.cv
@@ -225,9 +225,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     )
     gas_model = GasModel(eos=IdealSingleGas())
     fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-    boundary_kwargs = {"gas_model": gas_model}
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                boundary_kwargs=boundary_kwargs,
+                                gas_model=gas_model,
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
@@ -243,7 +242,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     )
     fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                boundary_kwargs=boundary_kwargs,
+                                gas_model=gas_model,
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(rhs, np.inf)
     assert err < tolerance
@@ -259,7 +258,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     )
     fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                boundary_kwargs=boundary_kwargs,
+                                gas_model=gas_model,
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
