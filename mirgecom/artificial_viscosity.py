@@ -130,7 +130,7 @@ class _AVRTag:
 
 def av_laplacian_operator(discr, boundaries, fluid_state, gas_model, alpha,
                           kappa=1., s0=-6., time=0, operator_states_quad=None,
-                          grad_cv=None, quadrature_tag=None):
+                          grad_cv=None, quadrature_tag=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
