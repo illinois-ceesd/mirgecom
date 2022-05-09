@@ -43,7 +43,7 @@ import numpy as np  # noqa
 # These low-level flux functions match the presentation of them in
 # the [Toro_2009]_ reference on which they are based.  These arguments
 # require no data structure constructs and are presented here as pure
-# functions which easily be tested with plain ole numbers, numpy arrays
+# functions which can easily be tested with plain ole numbers, numpy arrays
 # or DOFArrays as appropriate.
 #
 # {{{ low-level flux interfaces
