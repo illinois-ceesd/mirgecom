@@ -84,7 +84,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_facial_flux_rusanov(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_rusanov(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
@@ -134,7 +134,7 @@ def inviscid_facial_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
-def inviscid_facial_flux_hll(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_hll(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
     The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
