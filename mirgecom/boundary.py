@@ -364,6 +364,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
         actx = state_minus.array_context
         nhat = thaw(discr.normal(btag), actx)
+        # return self._grad_num_flux_func(cv_pair, nhat)
         return self._boundary_quantity(
             discr, btag=btag,
             quantity=self._grad_num_flux_func(cv_pair, nhat), **kwargs)
@@ -1031,10 +1032,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         # *not* the numerical viscous flux as advised by [Bassi_1997]_.
         f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
                              grad_t=grad_t_plus)
-
-        return self._boundary_quantity(
-            discr, btag,
-            quantity=f_ext@normal)
+        return f_ext@normal
 
 
 class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
@@ -1139,9 +1137,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
                              grad_t=grad_t_plus)
 
-        return self._boundary_quantity(
-            discr, btag,
-            quantity=f_ext@normal)
+        return f_ext@normal
 
 
 class SymmetryBoundary(PrescribedFluidBoundary):
@@ -1271,9 +1267,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
                              grad_t=grad_t_plus)
 
-        return self._boundary_quantity(
-            discr, btag,
-            quantity=f_ext@normal)
+        return f_ext@normal
 
     def adiabatic_slip_grad_av(self, discr, btag, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
