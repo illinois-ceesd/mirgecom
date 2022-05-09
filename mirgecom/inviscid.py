@@ -84,7 +84,7 @@ def inviscid_flux(state):
                           momentum=mom_flux, species_mass=species_mass_flux)
 
 
-def inviscid_facial_flux_rusanov(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_rusanov(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using Rusanov numerical flux.
 
     The Rusanov or Local Lax-Friedrichs (LLF) inviscid numerical flux is calculated
@@ -134,7 +134,7 @@ def inviscid_facial_flux_rusanov(state_pair, gas_model, normal, **kwargs):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
-def inviscid_facial_flux_hll(state_pair, gas_model, normal, **kwargs):
+def inviscid_facial_flux_hll(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
     The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
@@ -150,6 +150,31 @@ def inviscid_facial_flux_hll(state_pair, gas_model, normal, **kwargs):
 
     Details about how the parameters and fluxes are calculated can be found in
     Section 10.3 of [Toro_2009]_.
+
+    Parameters
+    ----------
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
     """
     # calculate left/right wavespeeds
     actx = state_pair.int.array_context
