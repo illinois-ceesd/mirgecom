@@ -278,7 +278,7 @@ def viscous_flux(state, grad_cv, grad_t):
 
 
 def viscous_divergence_flux(discr, state_pair, grad_cv_pair, grad_t_pair,
-                         beta=0., gamma=0, **kwargs):
+                         beta=0., gamma=0):
     r"""Return a viscous facial flux for the divergence operator.
 
     The flux is defined as:
@@ -343,7 +343,7 @@ def viscous_flux_on_element_boundary(
         numerical_flux_func=viscous_divergence_flux, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
-    This routine encapsulates the computation of the inviscid contributions
+    This routine encapsulates the computation of the viscous contributions
     to the boundary fluxes for use by the divergence operator. Its existence
     is intended to allow multiple operators (e.g. Euler and Navier-Stokes) to
     perform the computation without duplicating code.
