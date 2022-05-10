@@ -250,17 +250,15 @@ treatment strategies outlined by [Mengaldo_2014]_.
 
 The relevant quantities for the boundary treatments are as follows:
 
-.. math::
-   
-  \b{Q}^{\pm} &\equiv \text{conserved quantities on the exterior/interior of the boundary face} \\
-  \b{Q}_{bc} &\equiv \text{boundary condition for the fluid conserved quantities} \\
-  \b{\Sigma}^{\pm} &\equiv \text{gradient of conserved quantities on ext/int of boundary face} \\
-  \b{\Sigma}_{bc} &\equiv \text{boundary condition for grad of soln } \\
-  \b{v}^{\pm} &\equiv \text{Flow velocity on the ext/int of boundary face} \\
-  h^*_e &\equiv \text{boundary flux for the divergence of inviscid flux} \\
-  h^*_v &\equiv \text{boundary flux for divergence of viscous flux} \\
-  \b{H}_s^* &\equiv \text{boundary flux for the gradient of the conserved quantities} \\
-  \hat{\b{n}} &\equiv \text{outward pointing normal for the boundary face}
+:$\b{Q}^{\pm}:$: Conserved quantities on the exterior/interior of the boundary face
+:$\b{Q}_{bc}:$: Boundary condition for the fluid conserved quantities
+:$\b{\Sigma}^{\pm}:$: Gradient of conserved quantities on ext/int of boundary face
+:$\b{\Sigma}_{bc}:$: Boundary condition for gradient of the conserved quantities
+:$\b{v}^{\pm}:$: Flow velocity on the exterior/interior of boundary face
+:$h^*_e:$: Boundary facial flux for the divergence of the inviscid flux
+:$h^*_v:$: Boundary facial flux for divergence of viscous flux
+:$\b{H}_s^*:$: Boundary flux vector for the gradient of the conserved quantities
+:$\hat{\b{n}}:$: Outward pointing unit normal for the boundary face
 
 For all $\partial E \cap \partial\Omega$ the $+$ side is on the domain boundary. 
 Boundary conditions ($\b{Q}_{bc}, \b{\Sigma}_{bc}$) are set by prescribing one or more
