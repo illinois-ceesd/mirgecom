@@ -212,7 +212,8 @@ of the Navier-Stokes equations, $\b{h}_v$, is implemented in
 where $\b{F}^V_{\pm} \equiv \b{F}^V(\b{Q}_h^{\pm}, \b{\Sigma}_h^{\pm})$, is the viscous
 flux function computed for the ($\pm$) sides of the element boundary, respectively.  The
 dissipative term coefficient, $\beta$, is a parameter which defaults to $0$, resulting
-in a central flux.
+in a central flux.  A proper central flux function is also provided in
+:func:`~mirgecom.viscous.viscous_facial_flux_central`.
 
 Gradient numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^^

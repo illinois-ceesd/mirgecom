@@ -3,7 +3,7 @@
 Boundary Treatment Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass FluidBoundary
+.. autoclass:: FluidBoundary
 
 Inviscid Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -57,6 +57,7 @@ class FluidBoundary(metaclass=ABCMeta):
     def inviscid_divergence_flux(self, discr, btag, eos, cv_minus, dv_minus,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
+        pass
 
 
 class PrescribedFluidBoundary(FluidBoundary):
