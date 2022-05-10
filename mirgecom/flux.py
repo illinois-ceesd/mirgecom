@@ -237,12 +237,12 @@ def divergence_flux(trace_pair, normal, alpha=0, beta=0):
     .. math::
 
         h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
-        \left(\mathbf{v}^{+}+\mathbf{v}^{-}+\beta(\mathbf{v}^{+}-\mathbf{v}^{-}
+        \left(\mathbf{v}^{+}+\mathbf{v}^{-}+\beta(\mathbf{v}^{+}-\mathbf{v}^{-})
         +\alpha\right) \cdot \hat{n}
 
     where $\mathbf{v}^-, \mathbf{v}^+$, are the vectors on the interior and exterior
     of the face across which the central flux is to be calculated, and $\hat{n}$ is
-    the unit normal to the face.  \alpha and \beta are optional terms for adding
+    the unit normal to the face.  $\alpha$ and $\beta$ are optional terms for adding
     dissipation to the otherwise central flux.
 
     Parameters
