@@ -136,17 +136,18 @@ fluxes for the divergence operator must satisfy the consistency relations:
 where $\b{h}$ is the numerical flux function, and $\b{F}$ is the flux function at
 the element boundary the numerical flux function is intended to replace. 
 
-Specifically, |mirgecom| employs the following numerical fluxes:
+The following is a list of the numerical flux functions used by |mirgecom|, and
+the physical fluxes to which they correspond:
 
 $$
-\b{h}_e(\b{Q}_h^+, \b{Q}^-_h; \b{n}) &\approx \b{F}^I(\b{Q}_h)
+h_e(\b{Q}_h^+, \b{Q}^-_h; \b{n}) &\approx \b{F}^I(\b{Q}_h)
 \cdot\b{n}, \\
-\b{h}_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
+h_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
 \b{n}) &\approx \b{F}^V(\b{Q}_h, \b{\Sigma}_h)\cdot\b{n}\\
 \b{H}_s(\b{Q}^+_h, \b{Q}_h^-; \b{n}) &\approx \b{Q}_h\b{n}.
 $$
 
-The $\b{h}_e$, and $\b{h}_v$ numerical flux functions are responsible for
+The $h_e$, and $h_v$ numerical flux functions are responsible for
 calculating the numerical fluxes for the divergence of the inviscid and viscous
 transport fluxes, respectively.  The $\b{H}_s$ numerical flux function is
 responsible for calculating the numerical flux for the gradient operator, and
@@ -275,8 +276,8 @@ boundary treatments follow in the next few sections.
    :align: center
 
 
-Adiabtic slip wall
-------------------
+Adiabatic slip wall
+-------------------
 The slip wall condition is a symmetry condition in which the velocity of the fluid in
 the direction of the wall normal vanishes. That is:
 
@@ -315,9 +316,9 @@ our particular system of equations we set:
 
 .. math::
 
-   \b{Q}^+ = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\(\rho{v_b})_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
+   \b{Q}^+ = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\(\rho{v^+})_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
 
-where $\mathbf{v}_b = \mathbf{v}^{-} - 2(\mathbf{v}^{-}\cdot\hat{\mathbf{n}})\hat{\mathbf{n}}$. Note that
+where $\mathbf{v}^{+} = \mathbf{v}^{-} - 2(\mathbf{v}^{-}\cdot\hat{\mathbf{n}})\hat{\mathbf{n}}$. Note that
 the boundary solution, $\b{Q}^+$ is set such that $\frac{1}{2}(\b{Q}^- + \b{Q}^+) = \b{Q}_{bc}$.  When
 using a Riemann solver to transmit the boundary condition to the boundary element, it is important that
 the ($\pm$) state inputs to the solver result in an intermediate state in which the normal components of
@@ -327,9 +328,7 @@ Inviscid fluxes (advection terms)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
 
 The flux for the divergence of the inviscid flux is then calculated with the same numerical
-flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+)$.  This is
-an inviscid-only wall condition, so no section on viscous or gradient fluxes are included
-for this particular wall treatment.
+flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+)$.
 
 In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, :mod:`~mirgecom.euler`,
 and forthcoming (mirgecom.navierstokes) module go to calculate the flux for the divergence of the
@@ -445,7 +444,7 @@ at the wall; a non-physical result.
 
 .. note::
 
-   For the adiabatic state, the wall temperature is simply extrapolated from the interior solution and
+   For the adiabatic state, the wall temperature is simply taken from the interior solution and
    we use the interior temperature, ${T}_{in}$. This choice means the difference in total energy between the
    $(\pm)$ states vanishes and $(\rho{E})^+ = (\rho{E})^-$.
 
