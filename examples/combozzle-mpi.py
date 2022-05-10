@@ -228,6 +228,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     timestepping_on = 1
     av_on = 1
     sponge_on = 1
+    health_pres_min = 0.
+    health_pres_max = 10000000.
+    init_temperature = 1500.0
+    init_pressure = 101325.
+    init_density = 0.23397065362031969
 
     # }}}
 
