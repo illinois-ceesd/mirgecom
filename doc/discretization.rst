@@ -334,7 +334,7 @@ for this particular wall treatment.
 In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, :mod:`~mirgecom.euler`,
 and forthcoming (mirgecom.navierstokes) module go to calculate the flux for the divergence of the
 inviscid physical transport fluxes, they call the
-`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
+:meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
 :meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_state`, and returns the
 numerical flux ${h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+) \cdot \hat{\b{n}}$.
@@ -399,8 +399,8 @@ means the fluid state at the wall for this boundary condition is as follows:
    \b{Q}_{bc} = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\0\\0\\0\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
 
 
-In |mirgecom|, the no-slip boundary condition is enforced weakly by providing the fluxes
-at the element boundaries that correpsond to the given boundary condition.  For
+In |mirgecom|, the no-slip boundary condition is enforced indirectly by providing the fluxes
+at the element boundaries that correspond to the given boundary condition.  For
 inviscid fluxes, the numerical flux functions are used with a prescribed boundary
 state to get the fluxes.  For the viscous fluxes and for the auxilary equation
 (i.e. the gradient of the fluid solution), the fluxes are calculated using a
@@ -429,7 +429,7 @@ as follows:
 
 .. math::
 
-   \b{Q}^+ = \b{Q}^- - 2(\rho\b{v}^-),
+   (\rho\b{v})^+ = -(\rho\b{v})^-,
 
 where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$. Explicity, for our
 particular equations in *MIRGE-Com*, we set:
