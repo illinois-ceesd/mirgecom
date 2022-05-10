@@ -221,9 +221,8 @@ def gradient_flux(u_tpair, normal, beta=0):
 
     Returns
     -------
-    numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` face-normal directed
-        flux for each component of *u*.
+        object of type *u_tpair.int* face-normal directed flux for each component of
+        *u_tpair.int*.
     """
     from arraycontext import outer
     return outer(u_tpair.avg + .5*beta*u_tpair.diff, normal)
@@ -260,9 +259,8 @@ def divergence_flux(trace_pair, normal, alpha=0, beta=0):
 
     Returns
     -------
-    numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with the face-normal
-        flux for each vector function *v*.
+        object of type *trace_pair.int* face-normal flux for each vector function
+        in *trace_pair.int*
     """
     return (trace_pair.avg + beta*trace_pair.diff/2 + alpha)@normal
 # }}} Tracepair interafces for operators
