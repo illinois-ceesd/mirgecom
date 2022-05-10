@@ -201,7 +201,7 @@ Viscous numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^
 The numerical flux function for the divergence of the viscous transport flux
 of the Navier-Stokes equations, $\b{h}_v$, is implemented in
-:func:`~mirgecom.viscous.viscous_divergence_flux` as follows:
+:func:`~mirgecom.viscous.viscous_facial_flux_dissipative` as follows:
 
 .. math::
    \b{h}_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
@@ -306,13 +306,6 @@ used in the numerical flux function to *induce* the desired boundary condition, 
 The adiabatic slip wall boundary treatment is implemented by the
 :class:`~mirgecom.boundary.AdiabaticSlipBoundary`. The boundary solution
 is prescribed as follows:
-
-.. math::
-
-   \b{Q}^+ = \b{Q}^- - 2*\left(\rho\b{v}^-\cdot\hat{\b{n}}\right)\hat{\b{n}},
-
-where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.  More explicity for
-our particular system of equations we set:
 
 .. math::
 
