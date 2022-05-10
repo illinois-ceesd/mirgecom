@@ -136,23 +136,6 @@ fluxes for the divergence operator must satisfy the consistency relations:
 where $h$ is the numerical flux function, and $\b{F}$ is the flux function at
 the element boundary the numerical flux function is intended to replace. 
 
-The following is a list of the numerical flux functions used by |mirgecom|, and
-the physical fluxes to which they correspond:
-
-$$
-h_e(\b{Q}_h^+, \b{Q}^-_h; \b{n}) &\approx \b{F}^I(\b{Q}_h)
-\cdot\b{n}, \\
-h_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
-\b{n}) &\approx \b{F}^V(\b{Q}_h, \b{\Sigma}_h)\cdot\b{n}\\
-\b{H}_s(\b{Q}^+_h, \b{Q}_h^-; \b{n}) &\approx \b{Q}_h\b{n}.
-$$
-
-The $h_e$, and $h_v$ numerical flux functions are responsible for
-calculating the numerical fluxes for the divergence of the inviscid and viscous
-transport fluxes, respectively.  The $\b{H}_s$ numerical flux function is
-responsible for calculating the numerical flux for the gradient operator, and
-so is employed, for example, in the auxiliary equation.
-
 Inviscid numerical flux
 -----------------------
 
