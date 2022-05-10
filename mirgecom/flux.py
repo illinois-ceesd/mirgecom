@@ -209,6 +209,9 @@ def gradient_flux(u_tpair, normal, beta=0):
     :class:`~grudge.trace_pair.TracePair`, and in this case the central scalar flux
     is computed on each component of the vector quantity as an independent scalar.
 
+    This function returns an object of type *u_tpair.int* with the face-normal
+    directed flux for each scalar function in *u_tpair.int*.
+
     Parameters
     ----------
     u_tpair: :class:`~grudge.trace_pair.TracePair`
@@ -218,11 +221,6 @@ def gradient_flux(u_tpair, normal, beta=0):
     normal: numpy.ndarray
         object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
         normals
-
-    Returns
-    -------
-        object of type (u_tpair.int) face-normal directed flux for each component of
-        (u_tpair.int).
     """
     from arraycontext import outer
     return outer(u_tpair.avg + .5*beta*u_tpair.diff, normal)
@@ -244,6 +242,9 @@ def divergence_flux(trace_pair, normal, alpha=0, beta=0):
     the unit normal to the face.  $\alpha$ and $\beta$ are optional terms for adding
     dissipation to the otherwise central flux.
 
+    This function returns an object of type *trace_pair.int* with the face-normal
+    flux for each vector function in *trace_pair.int*.
+
     Parameters
     ----------
     trace_pair: :class:`~grudge.trace_pair.TracePair`
@@ -256,11 +257,6 @@ def divergence_flux(trace_pair, normal, alpha=0, beta=0):
         Dissipation term strength parameter
     alpha: float or :class:`~meshmode.dof_array.DOFArray`
         Dissipation term strength parameter
-
-    Returns
-    -------
-        object of type (trace_pair.int) face-normal flux for each vector function
-        in (trace_pair.int).
     """
     return (trace_pair.avg + beta*trace_pair.diff/2 + alpha)@normal
 # }}} Tracepair interafces for operators
