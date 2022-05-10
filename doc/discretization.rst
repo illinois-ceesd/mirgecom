@@ -170,11 +170,10 @@ the :mod:`~mirgecom.inviscid` module.
 
 The LFR numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov` as follows:
 
-$$
-h_{e}(\b{Q}_h^+, \b{Q}^-_h; \b{n}) = \frac{1}{2}\left[\left(
-\b{F}^{I}(\b{Q}_h^+)+\b{F}^{I}(\b{Q}_h^-)\right) - \frac{\lambda}
-{2}\left(\b{Q}_h^+ - \b{Q}_h^-\right)\b{n}\right] \cdot \b{n},
-$$
+.. math::
+   h_{e}(\b{Q}_h^+, \b{Q}^-_h; \b{n}) = \frac{1}{2}\left[\left(
+   \b{F}^{I}(\b{Q}_h^+)+\b{F}^{I}(\b{Q}_h^-)\right) - \lambda\left(\b{Q}_h^+
+   - \b{Q}_h^-\right)\b{n}\right] \cdot \b{n},
 
 where $\lambda$ is the characteristic max wave-speed of the fluid. Numerical fluxes
 which penalize the ''jump'' of the state $\left(\b{Q}_h^+ - \b{Q}_h^-\right)

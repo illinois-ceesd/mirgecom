@@ -288,7 +288,7 @@ def viscous_facial_flux_dissipative(discr, state_pair, grad_cv_pair, grad_t_pair
 
         f_{\text{face}} = \frac{1}{2}\left[\left(\mathbf{f}_v^+
         + \mathbf{f}_v^-\right)
-        + \beta}\left(\mathbf{f}_v^+ - \mathbf{f}_v^-\right)\right]
+        + \beta\left(\mathbf{f}_v^+ - \mathbf{f}_v^-\right)\right]
         \cdot\hat{\mathbf{n}} - \gamma\left(q^+ -q^-\right),
 
     with viscous fluxes ($\mathbf{f}_v$), and the outward pointing
