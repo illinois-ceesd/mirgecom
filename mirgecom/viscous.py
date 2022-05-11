@@ -9,7 +9,6 @@ Viscous Flux Calculation
 .. autofunction:: conductive_heat_flux
 .. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux_central
-.. autofunction:: viscous_facial_flux_dissipative
 .. autofunction:: viscous_flux_on_element_boundary
 
 Viscous Time Step Computation
@@ -45,11 +44,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from grudge.trace_pair import TracePair
 from meshmode.dof_array import DOFArray
 from arraycontext import thaw
 
-from mirgecom.flux import divergence_flux
 from mirgecom.fluid import (
     velocity_gradient,
     species_mass_fraction_gradient,
@@ -278,75 +275,6 @@ def viscous_flux(state, grad_cv, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_facial_flux_dissipative(discr, state_pair, grad_cv_pair, grad_t_pair,
-                                    beta=0., gamma=0.):
-    r"""Return a dissipative facial flux for the divergence operator.
-
-    The flux is defined as:
-
-    .. math::
-
-        f_{\text{face}} = \frac{1}{2}\left[\left(\mathbf{f}_v^+
-        + \mathbf{f}_v^-\right)
-        + \beta\left(\mathbf{f}_v^+ - \mathbf{f}_v^-\right)\right]
-        \cdot\hat{\mathbf{n}} - \gamma\left(q^+ -q^-\right),
-
-    with viscous fluxes ($\mathbf{f}_v$), and the outward pointing
-    face normal ($\hat{\mathbf{n}}$).
-
-    Parameters
-    ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
-
-        The discretization to use
-
-    state_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of :class:`~mirgecom.gas_model.FluidState` with the full fluid
-        conserved and thermal state on the faces
-
-    grad_cv_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
-        fluid solution on the faces
-
-    grad_t_pair: :class:`~grudge.trace_pair.TracePair`
-
-        Trace pair of temperature gradient on the faces.
-
-    beta: float or :class:`~meshmode.dof_array.DOFArray`
-
-        Flux dissipation term strength parameter.
-
-    gamma: float or :class:`~meshmode.dof_array.DOFArray`
-
-        Jump dissipation term strength parameter.
-
-    Returns
-    -------
-    :class:`~mirgecom.fluid.ConservedVars`
-
-        The viscous transport flux in the face-normal direction on "all_faces" or
-        local to the sub-discretization depending on *local* input parameter
-    """
-    actx = state_pair.int.array_context
-    normal = thaw(discr.normal(state_pair.dd), actx)
-
-    f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
-                         grad_t_pair.int)
-    f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
-                         grad_t_pair.ext)
-    f_pair = TracePair(state_pair.dd, interior=f_int, exterior=f_ext)
-    q_pair = TracePair(state_pair.dd, interior=state_pair.int.cv,
-                       exterior=state_pair.ext.cv)
-
-    from arraycontext import outer
-    jump_term = -gamma*outer(q_pair.diff, normal)/2
-
-    return divergence_flux(trace_pair=f_pair, normal=normal,
-                           alpha=jump_term, beta=beta)
-
-
 def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair):
     r"""Return a central facial flux for the divergence operator.
 
@@ -387,6 +315,7 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair):
         The viscous transport flux in the face-normal direction on "all_faces" or
         local to the sub-discretization depending on *local* input parameter
     """
+    from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
     normal = thaw(discr.normal(state_pair.dd), actx)
 
@@ -394,9 +323,8 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair):
                          grad_t_pair.int)
     f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
                          grad_t_pair.ext)
-    f_pair = TracePair(state_pair.dd, interior=f_int, exterior=f_ext)
 
-    return divergence_flux(trace_pair=f_pair, normal=normal)
+    return num_flux_central(f_int, f_ext)@normal
 
 
 def viscous_flux_on_element_boundary(
