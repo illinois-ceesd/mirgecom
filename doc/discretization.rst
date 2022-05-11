@@ -126,15 +126,15 @@ Numerical fluxes
 Numerical fluxes are responsible for calculating the fluxes at the DG element boundaries.  
 Numerical fluxes must account for the discontinuities at element faces, and calculate
 a single valued flux that both elements agree on.  That is, they must be functions
-of both $\pm$ states, and must produce a consistent flux. In general, numerical
-fluxes for the divergence operator must satisfy the consistency relations:
+of both $\pm$ states, and must produce a consistent flux.
+
+For a conservation law $\frac{\partial \b{Q}}{\partial t} + \nabla \cdot \b{F}(\b{Q}) = \b{S}$,
+the numerical flux $h$ must satisfy the consistency relations
 
 .. math::
    h(\b{Q}, \b{Q}; \b{n}) = \b{F}(\b{Q})\cdot\b{n}~~~~~~
-   h(\b{Q}^+,\b{Q}^-;\b{n}) = -h(\b{Q}^-, \b{Q}^+;-\b{n}),
+   h(\b{Q}^+,\b{Q}^-;\b{n}) = -h(\b{Q}^-, \b{Q}^+;-\b{n}).
 
-where $h$ is the numerical flux function, and $\b{F}$ is the flux function at
-the element boundary the numerical flux function is intended to replace. 
 
 Inviscid numerical flux
 -----------------------
