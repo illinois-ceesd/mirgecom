@@ -187,7 +187,7 @@ of the Navier-Stokes equations, $\b{h}_v$, is implemented in
 
 .. math::
    h_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
-   \b{n}) = \frac{1}{2}\left((\b{F}^V_+ + \b{F}^V_-) \cdot \b{n},
+   \b{n}) = \frac{1}{2}\left(\b{F}^V_+ + \b{F}^V_-\right) \cdot \b{n},
 
 where $\b{F}^V_{\pm} \equiv \b{F}^V(\b{Q}_h^{\pm}, \b{\Sigma}_h^{\pm})$, is the viscous
 flux function computed for the ($\pm$) sides of the element boundary, respectively.
