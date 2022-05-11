@@ -183,38 +183,23 @@ Viscous numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^
 The numerical flux function for the divergence of the viscous transport flux
 of the Navier-Stokes equations, $\b{h}_v$, is implemented in
-:func:`~mirgecom.viscous.viscous_facial_flux_dissipative` as follows:
+:func:`~mirgecom.viscous.viscous_facial_flux_central` as follows:
 
 .. math::
    h_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
-   \b{n}) = \frac{1}{2}\left((\b{F}^V_+ + \b{F}^V_-)\pm
-   \beta(\b{F}^V_+ - \b{F}^V_-)\right)
-   \cdot \b{n},
+   \b{n}) = \frac{1}{2}\left((\b{F}^V_+ + \b{F}^V_-) \cdot \b{n},
 
 where $\b{F}^V_{\pm} \equiv \b{F}^V(\b{Q}_h^{\pm}, \b{\Sigma}_h^{\pm})$, is the viscous
-flux function computed for the ($\pm$) sides of the element boundary, respectively.  The
-dissipative term coefficient, $\beta$, is a parameter which defaults to $0$, resulting
-in a central flux.  A proper central flux function is also provided in
-:func:`~mirgecom.viscous.viscous_facial_flux_central`.
+flux function computed for the ($\pm$) sides of the element boundary, respectively.
 
 Gradient numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^^
-The numerical flux function used for the gradient of the fluid solution,
-$\b{H}_s$, is implemented in :func:`~mirgecom.flux.gradient_flux`
-as follows:
+The available numerical flux functions used for the gradient of the fluid solution,
+$\b{H}_s$, uses :func:`~mirgecom.flux.num_flux_central` as follows:
 
 .. math::
    \b{H}_s(\b{Q}_h^+, \b{Q}_h^- ; \b{n}) = \frac{1}{2}\left(
-   (\b{Q}_h^+ + \b{Q}_h^-) \mp \beta(\b{Q}_h^+ - \b{Q}_h^-))\right)\b{n},
-
-where again, $\beta$ is an optional parameter to add a dissipative term
-to the gradient fluxes. $\beta$ defaults to $0$, resulting in a centered
-numerical flux for the gradient.
-
-.. note::
-   The dissipative term coefficient $\beta$ used for the viscous numerical
-   flux function, $h_v$, and for the gradient numerical flux function,
-   $\b{H}_s$, should be equal and opposite.
+   (\b{Q}_h^+ + \b{Q}_h^-) \mp \beta(\b{Q}_h^+ - \b{Q}_h^-))\right)\b{n}
 
 Domain boundary treatments
 ==========================
