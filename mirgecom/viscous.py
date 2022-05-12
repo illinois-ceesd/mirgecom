@@ -8,7 +8,7 @@ Viscous Flux Calculation
 .. autofunction:: diffusive_flux
 .. autofunction:: conductive_heat_flux
 .. autofunction:: diffusive_heat_flux
-.. autofunction:: viscous_divergence_flux
+.. autofunction:: viscous_facial_flux_central
 .. autofunction:: viscous_flux_on_element_boundary
 
 Viscous Time Step Computation
@@ -44,11 +44,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from grudge.trace_pair import TracePair
 from meshmode.dof_array import DOFArray
 from arraycontext import thaw
 
-from mirgecom.flux import divergence_flux
 from mirgecom.fluid import (
     velocity_gradient,
     species_mass_fraction_gradient,
@@ -277,17 +275,16 @@ def viscous_flux(state, grad_cv, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_divergence_flux(discr, state_pair, grad_cv_pair, grad_t_pair,
-                         beta=0., gamma=0, **kwargs):
-    r"""Return a viscous facial flux for the divergence operator.
+def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
+                                gas_model=None):
+    r"""Return a central facial flux for the divergence operator.
 
     The flux is defined as:
 
     .. math::
 
         f_{\text{face}} = \frac{1}{2}\left(\mathbf{f}_v^+
-        + \mathbf{f}_v^-\right)\cdot\hat{\mathbf{n}}
-        + \frac{\beta}{2}\left(\mathbf{f}_v^+ - \mathbf{f}_v^-\right),
+        + \mathbf{f}_v^-\right)\cdot\hat{\mathbf{n}},
 
     with viscous fluxes ($\mathbf{f}_v$), and the outward pointing
     face normal ($\hat{\mathbf{n}}$).
@@ -297,6 +294,9 @@ def viscous_divergence_flux(discr, state_pair, grad_cv_pair, grad_t_pair,
     discr: :class:`~grudge.eager.EagerDGDiscretization`
 
         The discretization to use
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model for the gas. Unused for this numerical flux function.
 
     state_pair: :class:`~grudge.trace_pair.TracePair`
 
@@ -319,6 +319,7 @@ def viscous_divergence_flux(discr, state_pair, grad_cv_pair, grad_t_pair,
         The viscous transport flux in the face-normal direction on "all_faces" or
         local to the sub-discretization depending on *local* input parameter
     """
+    from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
     normal = thaw(discr.normal(state_pair.dd), actx)
 
@@ -326,27 +327,19 @@ def viscous_divergence_flux(discr, state_pair, grad_cv_pair, grad_t_pair,
                          grad_t_pair.int)
     f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
                          grad_t_pair.ext)
-    f_pair = TracePair(state_pair.dd, interior=f_int, exterior=f_ext)
-    q_pair = TracePair(state_pair.dd, interior=state_pair.int.cv,
-                       exterior=state_pair.ext.cv)
-    from arraycontext import outer
-    jump_term = -gamma*outer(q_pair.diff, normal)/2
 
-    return divergence_flux(trace_pair=f_pair, normal=normal,
-                           alpha=jump_term, beta=beta)
+    return num_flux_central(f_int, f_ext)@normal
 
 
 def viscous_flux_on_element_boundary(
         discr, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
         grad_t, interior_grad_t_pairs, quadrature_tag=None,
-        numerical_flux_func=viscous_divergence_flux, time=0.0):
-    """Compute the inviscid boundary fluxes for the divergence operator.
+        numerical_flux_func=viscous_facial_flux_central, time=0.0):
+    """Compute the viscous boundary fluxes for the divergence operator.
 
-    This routine encapsulates the computation of the inviscid contributions
-    to the boundary fluxes for use by the divergence operator. Its existence
-    is intended to allow multiple operators (e.g. Euler and Navier-Stokes) to
-    perform the computation without duplicating code.
+    This routine encapsulates the computation of the viscous contributions
+    to the boundary fluxes for use by the divergence operator.
 
     Parameters
     ----------

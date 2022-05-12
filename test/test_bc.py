@@ -253,12 +253,13 @@ def test_noslip(actx_factory, dim, flux_func):
     nhat = thaw(discr.normal(BTAG_ALL), actx)
     print(f"{nhat=}")
 
-    from mirgecom.flux import gradient_flux as gradient_num_flux
+    from mirgecom.flux import num_flux_central
 
     def scalar_flux_interior(int_tpair):
+        from arraycontext import outer
         normal = thaw(discr.normal(int_tpair.dd), actx)
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = gradient_num_flux(int_tpair, normal)
+        flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     # utility to compare stuff on the boundary only
@@ -402,12 +403,14 @@ def test_prescribedviscous(actx_factory, dim, flux_func):
     nhat = thaw(discr.normal(BTAG_ALL), actx)
     print(f"{nhat=}")
 
-    from mirgecom.flux import gradient_flux as gradient_num_flux
+    from mirgecom.flux import num_flux_central
 
     def scalar_flux_interior(int_tpair):
+        from arraycontext import outer
         normal = thaw(discr.normal(int_tpair.dd), actx)
         # Hard-coding central per [Bassi_1997]_ eqn 13
-        flux_weak = gradient_num_flux(int_tpair, normal)
+        flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext),
+                          normal)
         return discr.project(int_tpair.dd, "all_faces", flux_weak)
 
     # utility to compare stuff on the boundary only
