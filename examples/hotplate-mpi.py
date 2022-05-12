@@ -121,7 +121,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # timestepping control
     timestepper = rk4_step
-    t_final = 1e-6
+    t_final = 2e-7
     current_cfl = .1
     current_dt = 1e-8
     current_t = 0
