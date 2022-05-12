@@ -100,9 +100,7 @@ from pytools import memoize_in, keyed_memoize_in
 from functools import partial
 from meshmode.dof_array import thaw, DOFArray
 
-from mirgecom.flux import (
-    divergence_flux as divergence_num_flux
-)
+from mirgecom.flux import num_flux_central
 from mirgecom.operators import div_operator
 
 from grudge.trace_pair import (
@@ -131,7 +129,8 @@ class _AVRTag:
 def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
                           kappa=1., s0=-6., time=0, operator_states_quad=None,
                           grad_cv=None, quadrature_tag=None, boundary_kwargs=None,
-                          indicator=None, **kwargs):
+                          indicator=None, divergence_numerical_flux=num_flux_central,
+                          **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -218,7 +217,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-                          divergence_num_flux(utpair, normal))
+                          divergence_numerical_flux(utpair.int, utpair.ext)@normal)
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (

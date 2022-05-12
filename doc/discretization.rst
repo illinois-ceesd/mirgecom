@@ -126,37 +126,21 @@ Numerical fluxes
 Numerical fluxes are responsible for calculating the fluxes at the DG element boundaries.  
 Numerical fluxes must account for the discontinuities at element faces, and calculate
 a single valued flux that both elements agree on.  That is, they must be functions
-of both $\pm$ states, and must produce a consistent flux. In general, numerical
-fluxes for the divergence operator must satisfy the consistency relations:
+of both $\pm$ states, and must produce a consistent flux.
+
+For a conservation law $\frac{\partial \b{Q}}{\partial t} + \nabla \cdot \b{F}(\b{Q}) = \b{S}$,
+the numerical flux $h$ must satisfy the consistency relations
 
 .. math::
-   \b{h}(\b{Q}, \b{Q}; \b{n}) = \b{F}(\b{Q})\cdot\b{n}~~~~~~
-   \b{h}(\b{Q}^+,\b{Q}^-;\b{n}) = -\b{h}(\b{Q}^-, \b{Q}^+;-\b{n}),
+   h(\b{Q}, \b{Q}; \b{n}) = \b{F}(\b{Q})\cdot\b{n}~~~~~~
+   h(\b{Q}^+,\b{Q}^-;\b{n}) = -h(\b{Q}^-, \b{Q}^+;-\b{n}).
 
-where $\b{h}$ is the numerical flux function, and $\b{F}$ is the flux function at
-the element boundary the numerical flux function is intended to replace. 
-
-Specifically, |mirgecom| employs the following numerical fluxes:
-
-$$
-\b{h}_e(\b{Q}_h^+, \b{Q}^-_h; \b{n}) &\approx \b{F}^I(\b{Q}_h)
-\cdot\b{n}, \\
-\b{h}_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
-\b{n}) &\approx \b{F}^V(\b{Q}_h, \b{\Sigma}_h)\cdot\b{n}\\
-\b{H}_s(\b{Q}^+_h, \b{Q}_h^-; \b{n}) &\approx \b{Q}_h\b{n}.
-$$
-
-The $\b{h}_e$, and $\b{h}_v$ numerical flux functions are responsible for
-calculating the numerical fluxes for the divergence of the inviscid and viscous
-transport fluxes, respectively.  The $\b{H}_s$ numerical flux function is
-responsible for calculating the numerical flux for the gradient operator, and
-so is employed, for example, in the auxiliary equation.
 
 Inviscid numerical flux
 -----------------------
 
 Approximate and exact Riemann solvers are typically used for inviscid numerical flux
-functions, $\b{h}_e(\b{Q}_h^+, \b{Q}^-_h; \b{n})$.  Typical choices include,
+functions, $h_e(\b{Q}_h^+, \b{Q}^-_h; \b{n})$.  Typical choices include,
 but are not limited to:
 
 * Local Lax-Friedrichs or Rusanov (LFR)
@@ -169,11 +153,10 @@ the :mod:`~mirgecom.inviscid` module.
 
 The LFR numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov` as follows:
 
-$$
-\b{h}_{e}(\b{Q}_h^+, \b{Q}^-_h; \b{n}) = \frac{1}{2}\left(
-\b{F}^{I}(\b{Q}_h^+)+\b{F}^{I}(\b{Q}_h^-)\right) - \frac{\lambda}
-{2}\left(\b{Q}_h^+ - \b{Q}_h^-\right)\b{n},
-$$
+.. math::
+   h_{e}(\b{Q}_h^+, \b{Q}^-_h; \b{n}) = \frac{1}{2}\left[\left(
+   \b{F}^{I}(\b{Q}_h^+)+\b{F}^{I}(\b{Q}_h^-)\right) - \lambda\left(\b{Q}_h^+
+   - \b{Q}_h^-\right)\b{n}\right] \cdot \b{n},
 
 where $\lambda$ is the characteristic max wave-speed of the fluid. Numerical fluxes
 which penalize the ''jump'' of the state $\left(\b{Q}_h^+ - \b{Q}_h^-\right)
@@ -183,7 +166,7 @@ on the numerics.
 The HLL numerical flux is implemented by :func:`~mirgecom.inviscid.inviscid_facial_flux_hll` as follows:
 
 .. math::
-   \b{h}_{e}(\b{Q}_h^+, \b{Q}^-_h;\b{n}) =
+   h_{e}(\b{Q}_h^+, \b{Q}^-_h;\b{n}) =
    \frac{\left(s^+\b{F}^{I}(\b{Q}_h^-)-s^-\b{F}^{I}(\b{Q}_h^+)\right)+s^+s^-(\b{Q}_h^+ - \b{Q}_h^-)\b{n}}
    {\left(s^+ - s^-\right)} \cdot \b{n}
 
@@ -200,37 +183,23 @@ Viscous numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^
 The numerical flux function for the divergence of the viscous transport flux
 of the Navier-Stokes equations, $\b{h}_v$, is implemented in
-:func:`~mirgecom.viscous.viscous_divergence_flux` as follows:
+:func:`~mirgecom.viscous.viscous_facial_flux_central` as follows:
 
 .. math::
-   \b{h}_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
-   \b{n}) = \frac{1}{2}\left((\b{F}^V_+ + \b{F}^V_-)\pm
-   \beta(\b{F}^V_+ - \b{F}^V_-)\right)
-   \cdot \b{n},
+   h_v(\b{Q}_h^+, \b{\Sigma}_h^+, \b{Q}_h^-, \b{\Sigma}_h^-;
+   \b{n}) = \frac{1}{2}\left(\b{F}^V_+ + \b{F}^V_-\right) \cdot \b{n},
 
 where $\b{F}^V_{\pm} \equiv \b{F}^V(\b{Q}_h^{\pm}, \b{\Sigma}_h^{\pm})$, is the viscous
-flux function computed for the ($\pm$) sides of the element boundary, respectively.  The
-dissipative term coefficient, $\beta$, is a parameter which defaults to $0$, resulting
-in a central flux.
+flux function computed for the ($\pm$) sides of the element boundary, respectively.
 
 Gradient numerical flux
 ^^^^^^^^^^^^^^^^^^^^^^^
-The numerical flux function used for the gradient of the fluid solution,
-$\b{H}_s$, is implemented in :func:`~mirgecom.flux.gradient_flux`
-as follows:
+The available numerical flux functions used for the gradient of the fluid solution,
+$\b{H}_s$, uses :func:`~mirgecom.flux.num_flux_central` as follows:
 
 .. math::
    \b{H}_s(\b{Q}_h^+, \b{Q}_h^- ; \b{n}) = \frac{1}{2}\left(
-   (\b{Q}_h^+ + \b{Q}_h^-) \mp \beta(\b{Q}_h^+ - \b{Q}_h^-))\right)\b{n},
-
-where again, $\beta$ is an optional parameter to add a dissipative term
-to the gradient fluxes. $\beta$ defaults to $0$, resulting in a centered
-numerical flux for the gradient.
-
-.. note::
-   The dissipative term coefficient $\beta$ used for the viscous numerical
-   flux fucntion, $\b{h}_v$, and for the gradient numerical flux function,
-   $\b{H}_s$, should be equal and opposite.
+   (\b{Q}_h^+ + \b{Q}_h^-) \mp \beta(\b{Q}_h^+ - \b{Q}_h^-))\right)\b{n}
 
 Domain boundary treatments
 ==========================
@@ -239,10 +208,9 @@ What happens when $\partial E \cap \partial\Omega \neq \emptyset$?
 
 In DG, fluxes are responsible for handling the flow of information
 between adjacent cells, and for transferring the boundary conditions
-into the domain from the domain boundary.  In this sense, all of the
-boundary conditions are *weak*, in that they are weakly enforced
-through the flux, as opposed to directly setting the solution of the
-boundary elements (a *strong* enforcement).
+into the domain from the domain boundary.  In DG the boundary conditions
+boundary conditions are enforced weakly through the fluxes used at the
+domain boundary faces.
 
 Boundary treatments in *MIRGE-Com* follow the prescriptions of the
 the so-called BR1 method descibed by [Bassi_1997]_, and the boundary
@@ -250,23 +218,21 @@ treatment strategies outlined by [Mengaldo_2014]_.
 
 The relevant quantities for the boundary treatments are as follows:
 
-.. math::
-   
-  \b{Q}^{\pm} &\equiv \text{conserved quantities on the exterior/interior of the boundary face} \\
-  \b{Q}_{bc} &\equiv \text{boundary condition for the fluid conserved quantities} \\
-  \b{\Sigma}^{\pm} &\equiv \text{gradient of conserved quantities on ext/int of boundary face} \\
-  \b{\Sigma}_{bc} &\equiv \text{boundary condition for grad of soln } \\
-  \b{v}^{\pm} &\equiv \text{Flow velocity on the ext/int of boundary face} \\
-  \b{h}^*_e &\equiv \text{boundary flux for the divergence of inviscid flux} \\
-  \b{h}^*_v &\equiv \text{boundary flux for divergence of viscous flux} \\
-  \b{H}_s^* &\equiv \text{boundary flux for the gradient of the conserved quantities} \\
-  \hat{\b{n}} &\equiv \text{outward pointing normal for the boundary face}
+:$\b{Q}^{\pm}:$: Conserved quantities on the exterior/interior of the boundary face
+:$\b{Q}_{bc}:$: Boundary condition for the fluid conserved quantities
+:$\b{\Sigma}^{\pm}:$: Gradient of conserved quantities on ext/int of boundary face
+:$\b{\Sigma}_{bc}:$: Boundary condition for gradient of the conserved quantities
+:$\b{v}^{\pm}:$: Flow velocity on the exterior/interior of boundary face
+:$h^*_e:$: Boundary facial flux for the divergence of the inviscid flux
+:$h^*_v:$: Boundary facial flux for divergence of viscous flux
+:$\b{H}_s^*:$: Boundary flux vector for the gradient of the conserved quantities
+:$\hat{\b{n}}:$: Outward pointing unit normal for the boundary face
 
 For all $\partial E \cap \partial\Omega$ the $+$ side is on the domain boundary. 
 Boundary conditions ($\b{Q}_{bc}, \b{\Sigma}_{bc}$) are set by prescribing one or more
 components of the solution or its gradient on the (+) side of the boundary,
 ($\b{Q}^+, \b{\Sigma}^+$), respectively, or by prescribing one or more components of the
-boundary fluxes $\b{h}^*_e$, $\b{h}^*_v$, and $\b{H}^*_s$.  Descriptions of particular
+boundary fluxes $h^*_e$, $h^*_v$, and $\b{H}^*_s$.  Descriptions of particular
 boundary treatments follow in the next few sections.
 
 .. image:: figures/ElementBoundary.png
@@ -275,8 +241,8 @@ boundary treatments follow in the next few sections.
    :align: center
 
 
-Adiabtic slip wall
-------------------
+Adiabatic slip wall
+-------------------
 The slip wall condition is a symmetry condition in which the velocity of the fluid in
 the direction of the wall normal vanishes. That is:
 
@@ -308,16 +274,9 @@ is prescribed as follows:
 
 .. math::
 
-   \b{Q}^+ = \b{Q}^- - 2*\left(\rho\b{v}^-\cdot\hat{\b{n}}\right)\hat{\b{n}},
+   \b{Q}^+ = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\(\rho{v^+})_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
 
-where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$.  More explicity for
-our particular system of equations we set:
-
-.. math::
-
-   \b{Q}^+ = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\(\rho{v_b})_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
-
-where $\mathbf{v}_b = \mathbf{v}^{-} - 2(\mathbf{v}^{-}\cdot\hat{\mathbf{n}})\hat{\mathbf{n}}$. Note that
+where $\mathbf{v}^{+} = \mathbf{v}^{-} - 2(\mathbf{v}^{-}\cdot\hat{\mathbf{n}})\hat{\mathbf{n}}$. Note that
 the boundary solution, $\b{Q}^+$ is set such that $\frac{1}{2}(\b{Q}^- + \b{Q}^+) = \b{Q}_{bc}$.  When
 using a Riemann solver to transmit the boundary condition to the boundary element, it is important that
 the ($\pm$) state inputs to the solver result in an intermediate state in which the normal components of
@@ -327,17 +286,15 @@ Inviscid fluxes (advection terms)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
 
 The flux for the divergence of the inviscid flux is then calculated with the same numerical
-flux function as used in the volume: $\b{h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+)$.  This is
-an inviscid-only wall condition, so no section on viscous or gradient fluxes are included
-for this particular wall treatment.
+flux function as used in the volume: $h^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
 
 In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, :mod:`~mirgecom.euler`,
 and :mod:`~mirgecom.navierstokes`, go to calculate the flux for the divergence of the
 inviscid physical transport fluxes, they call the
-`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
+:meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
 :meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_state`, and returns the
-numerical flux ${h}^*_e = \b{h}_{e}(\b{Q}^-, \b{Q}^+) \cdot \hat{\b{n}}$.
+numerical flux ${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
  
 
 Viscous fluxes (diffusion terms)
@@ -379,7 +336,7 @@ in the volume by:
 
 .. math::
 
-   h_v^* = \b{h}_v(\b{Q}^-, \b{Q}_{bc}, \nabla{\b{Q}}^-, \nabla{\b{Q}}^+) \cdot \hat{\b{n}}
+   h_v^* = h_v(\b{Q}^-, \b{Q}_{bc}, \nabla{\b{Q}}^-, \nabla{\b{Q}}^+)
 
 
 Adiabatic No-slip Wall
@@ -399,8 +356,8 @@ means the fluid state at the wall for this boundary condition is as follows:
    \b{Q}_{bc} = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\0\\0\\0\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
 
 
-In |mirgecom|, the no-slip boundary condition is enforced weakly by providing the fluxes
-at the element boundaries that correpsond to the given boundary condition.  For
+In |mirgecom|, the no-slip boundary condition is enforced indirectly by providing the fluxes
+at the element boundaries that correspond to the given boundary condition.  For
 inviscid fluxes, the numerical flux functions are used with a prescribed boundary
 state to get the fluxes.  For the viscous fluxes and for the auxilary equation
 (i.e. the gradient of the fluid solution), the fluxes are calculated using a
@@ -414,7 +371,7 @@ Inviscid fluxes
 
 For the inviscid fluxes, following [Mengaldo_2014]_,  Step 1 is to prescribe $\b{Q}^+$
 at the wall and Step 2. is to use the approximate Riemann solver
-(i.e. the numerical flux function, $\b{h}_e$) to provide the element flux for the
+(i.e. the numerical flux function, $h_e$) to provide the element flux for the
 divergence operator.
 
 In this section the boundary state, $\b{Q}^+$, used for each no-slip wall is described.
@@ -429,7 +386,7 @@ as follows:
 
 .. math::
 
-   \b{Q}^+ = \b{Q}^- - 2(\rho\b{v}^-),
+   (\rho\b{v})^+ = -(\rho\b{v})^-,
 
 where $\b{v}^-$ is the fluid velocity corresponding to $\b{Q}^-$. Explicity, for our
 particular equations in *MIRGE-Com*, we set:
@@ -445,7 +402,7 @@ at the wall; a non-physical result.
 
 .. note::
 
-   For the adiabatic state, the wall temperature is simply extrapolated from the interior solution and
+   For the adiabatic state, the wall temperature is simply taken from the interior solution and
    we use the interior temperature, ${T}_{in}$. This choice means the difference in total energy between the
    $(\pm)$ states vanishes and $(\rho{E})^+ = (\rho{E})^-$.
 
@@ -463,10 +420,10 @@ interfacial fluxes in the volume:
 
 .. math::
 
-   \b{h}^*_e = \b{h}_e(\b{Q}^-, \b{Q}^+)
+   h^*_e = h_e(\b{Q}^-, \b{Q}^+)
 
-Intuitively, we expect $\b{h}^*_e$ is equal to the (interior; - side) pressure contribution of
-$\b{F}^I(\b{Q}_{bc})\cdot\b{n}$ (since $\b{V}\cdot\b{n} = 0$).
+Intuitively, we expect $h^*_e$ is equal to the (interior; - side) pressure contribution of
+$\b{F}^I(\b{Q}_{bc})\cdot\hat{\b{n}}$ (since $\b{V}\cdot\hat{\b{n}} = 0$).
 
 Viscous fluxes
 ^^^^^^^^^^^^^^
@@ -492,11 +449,11 @@ The viscous boundary flux at solid walls is computed as:
 
 .. math::
 
-   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{F}_V(\b{Q}_{bc},\b{\Sigma}_{bc})\cdot\b{n},
+   h^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{F}_V(\b{Q}_{bc},\b{\Sigma}_{bc}) \cdot \hat{\b{n}},
 
-where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
+where $\b{Q}_{bc}$ are the same values used to prescribe $h^*_e$.
 
-If there are no conditions on $\nabla\b{Q}\cdot\b{n}$, then:
+If there are no conditions on $\nabla\b{Q}\cdot\hat{\b{n}}$, then:
 $$
 \b{\Sigma}_{bc} = \b{\Sigma}_h^-.
 $$
@@ -508,15 +465,15 @@ MIRGE-Com currently does the following:
 
 .. math::
 
-   \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \b{h}_v\left(\b{Q}^-,\b{\Sigma}^-,\b{Q}_{bc},\b{\Sigma}_{bc}\right),
+   h^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = h_v\left(\b{Q}^-,\b{\Sigma}^-,\b{Q}_{bc},\b{\Sigma}_{bc}\right),
 
-where $\b{Q}_{bc}$ are the same values used to prescribe $\b{h}^*_e$.
+where $\b{Q}_{bc}$ are the same values used to prescribe $h^*_e$.
 
 In *MIRGE-Com*, we use the central flux to transfer viscous BCs to the domain:
 
 .. math::
 
-     \b{h}^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \frac{1}{2}\left(\mathbf{F}_v(\mathbf{Q}_{bc},\mathbf{\Sigma}_{bc}) + \mathbf{F}_v(\mathbf{Q}^{-},\mathbf{\Sigma}^{-})\right)
+     h^*_v(\b{Q}_{bc}, \b{\Sigma}_{bc}) = \frac{1}{2}\left(\mathbf{F}_v(\mathbf{Q}_{bc},\mathbf{\Sigma}_{bc}) + \mathbf{F}_v(\mathbf{Q}^{-},\mathbf{\Sigma}^{-})\right)
 
 
 --------
@@ -529,7 +486,7 @@ flux as follows:
 
 .. math::
 
-   \b{H}^*(\b{Q}_{bc}) = \b{H}_s(\b{Q}^-, \b{Q}_{bc}) = \frac{1}{2}\left(\b{Q}^- + \b{Q}_{bc}\right)\b{n},
+   \b{H}^*(\b{Q}_{bc}) = \b{H}_s(\b{Q}^-, \b{Q}_{bc}) = \frac{1}{2}\left(\b{Q}^- + \b{Q}_{bc}\right)\hat{\b{n}},
 
 using the no-slip boundary solution, $\b{Q}_{bc}$, as defined above. The note above about [Mengaldo_2014]_ using a distinct $\b{Q}_{bc}$ is relevant here. 
 
@@ -558,22 +515,22 @@ Inflow/outflow boundaries
 Inviscid boundary flux
 """"""""""""""""""""""
 $$
-\b{h}^*_e(\b{Q}_{bc}) = \b{h}_e(\b{Q}_{bc}, \b{Q}^-_{h};
-\b{n}).
+h^*_e(\b{Q}_{bc}) = h_e(\b{Q}_{bc}, \b{Q}^-_{h};
+\hat{\b{n}}).
 $$
 
 Viscous boundary flux
 """""""""""""""""""""
 $$
-\b{h}^*_v = \b{h}_v(\b{Q}_{bc}, \b{\Sigma}_h^-, \b{Q}_h^-,
-\b{\Sigma}_h^-; \b{n}),
+h^*_v = h_v(\b{Q}_{bc}, \b{\Sigma}_h^-, \b{Q}_h^-,
+\b{\Sigma}_h^-; \hat{\b{n}}),
 $$
-where $\b{Q}_{bc}$ are the same values used for $\b{h}^*_e$.
+where $\b{Q}_{bc}$ are the same values used for $h^*_e$.
 
 
 Gradient boundary flux
 """"""""""""""""""""""
 $\b{Q}_{bc}$ is also used to define the gradient boundary flux:
 $$
-\b{H}^*_s(\b{Q}_{bc}) = \b{Q}_{bc}\b{n}.
+\b{H}^*_s(\b{Q}_{bc}) = \b{Q}_{bc}\hat{\b{n}}.
 $$
