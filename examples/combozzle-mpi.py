@@ -1093,7 +1093,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         pre_step_func = my_pre_step
         post_step_func = my_post_step
 
-    from mirgecom.flux import gradient_flux as gradient_num_flux_central
+    from mirgecom.flux import num_flux_central
     from mirgecom.gas_model import make_operator_fluid_states
     from mirgecom.navierstokes import grad_cv_operator
 
@@ -1117,7 +1117,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
                                        time=t,
-                                       numerical_flux_func=gradient_num_flux_central,
+                                       numerical_flux_func=num_flux_central,
                                        quadrature_tag=quadrature_tag,
                                        operator_states_quad=fluid_operator_states)
             fluid_rhs = \

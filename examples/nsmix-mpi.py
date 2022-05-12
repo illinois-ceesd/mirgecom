@@ -538,10 +538,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array([cv, fluid_state.temperature]), dt
 
     flux_beta = .25
-    from mirgecom.viscous import viscous_divergence_flux as viscous_div_num_flux
-    from mirgecom.flux import gradient_flux as gradient_num_flux
-    grad_num_flux_func = partial(gradient_num_flux, beta=flux_beta)
-    viscous_num_flux_func = partial(viscous_div_num_flux, beta=-flux_beta)
+
+    from mirgecom.viscous import viscous_flux
+    from mirgecom.flux import num_flux_central
+
+    def _num_flux_dissipative(u_minus, u_plus, beta):
+        return num_flux_central(u_minus, u_plus) + beta*(u_plus - u_minus)/2
+
+    def _viscous_facial_flux_dissipative(discr, state_pair, grad_cv_pair,
+                                         grad_t_pair, beta=0., gas_model=None):
+        actx = state_pair.int.array_context
+        normal = thaw(discr.normal(state_pair.dd), actx)
+
+        f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
+                             grad_t_pair.int)
+        f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
+                             grad_t_pair.ext)
+
+        return _num_flux_dissipative(f_int, f_ext, beta=beta)@normal
+
+    grad_num_flux_func = partial(_num_flux_dissipative, beta=flux_beta)
+    viscous_num_flux_func = partial(_viscous_facial_flux_dissipative,
+                                    beta=-flux_beta)
 
     def my_rhs(t, state):
         cv, tseed = state
