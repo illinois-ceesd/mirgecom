@@ -75,10 +75,10 @@ from mirgecom.inviscid import (
 )
 from mirgecom.viscous import (
     viscous_flux,
-    viscous_divergence_flux as viscous_div_num_flux,
+    viscous_facial_flux_central,
     viscous_flux_on_element_boundary
 )
-from mirgecom.flux import gradient_flux as gradient_num_flux
+from mirgecom.flux import num_flux_central
 
 from mirgecom.operators import (
     div_operator, grad_operator
@@ -98,16 +98,17 @@ class _NSGradTemperatureTag:
 
 def _gradient_flux_interior(discr, numerical_flux_func, tpair):
     """Compute interior face flux for gradient operator."""
+    from arraycontext import outer
     actx = tpair.int.array_context
     dd = tpair.dd
     normal = thaw(discr.normal(dd), actx)
-    flux = numerical_flux_func(tpair, normal)
+    flux = outer(numerical_flux_func(tpair.int, tpair.ext), normal)
     return op.project(discr, dd, dd.with_dtag("all_faces"), flux)
 
 
 def grad_cv_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
-        numerical_flux_func=gradient_num_flux,
+        numerical_flux_func=num_flux_central,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -186,7 +187,7 @@ def grad_cv_operator(
 
 def grad_t_operator(
         discr, gas_model, boundaries, state, *, time=0.0,
-        numerical_flux_func=gradient_num_flux,
+        numerical_flux_func=num_flux_central,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -269,8 +270,8 @@ def grad_t_operator(
 
 def ns_operator(discr, gas_model, state, boundaries, *, time=0.0,
                 inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                gradient_numerical_flux_func=gradient_num_flux,
-                viscous_numerical_flux_func=viscous_div_num_flux,
+                gradient_numerical_flux_func=num_flux_central,
+                viscous_numerical_flux_func=viscous_facial_flux_central,
                 quadrature_tag=DISCR_TAG_BASE, return_gradients=False,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
