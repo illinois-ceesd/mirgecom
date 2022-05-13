@@ -412,20 +412,9 @@ class PrescribedFluidBoundary(FluidBoundary):
                                  numerical_flux_func=inviscid_facial_flux_rusanov,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
-        # This one is when the user specified a function that directly
-        # prescribes the flux components at the boundary
-        if self._inviscid_flux_func is not None:
-            return self._inviscid_flux_func(discr, btag, gas_model, state_minus,
-                                            numerical_flux_func=numerical_flux_func,
-                                            **kwargs)
-
-        state_plus = self._bnd_state_func(discr=discr, btag=btag,
-                                          gas_model=gas_model,
-                                          state_minus=state_minus, **kwargs)
-        boundary_state_pair = TracePair(btag, interior=state_minus,
-                                        exterior=state_plus)
-        normal = thaw(discr.normal(btag), state_minus.array_context)
-        return numerical_flux_func(boundary_state_pair, gas_model, normal)
+        return self._inviscid_flux_func(discr, btag, gas_model, state_minus,
+                                        numerical_flux_func=numerical_flux_func,
+                                        **kwargs)
 
     def cv_gradient_flux(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the cv flux for *btag* for use in the gradient operator."""
