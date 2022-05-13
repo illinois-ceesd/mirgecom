@@ -3,7 +3,7 @@
 Boundary Treatment Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass FluidBoundary
+.. autoclass:: FluidBoundary
 
 Inviscid Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -38,11 +38,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-from mirgecom.inviscid import inviscid_facial_flux
+from mirgecom.inviscid import inviscid_facial_flux_rusanov  # default num flux
 
 from abc import ABCMeta, abstractmethod
 
@@ -57,6 +57,7 @@ class FluidBoundary(metaclass=ABCMeta):
     def inviscid_divergence_flux(self, discr, btag, eos, cv_minus, dv_minus,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
+        pass
 
 
 class PrescribedFluidBoundary(FluidBoundary):
@@ -71,8 +72,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                  inviscid_boundary_flux_func=None,
                  # returns CV+, to be used in num flux func (prescribed soln)
                  boundary_state_func=None,
-                 # Inviscid facial flux func given CV(+/-)
-                 inviscid_facial_flux_func=None,
                  # Flux to be used in grad(Temperature) op
                  temperature_gradient_flux_func=None,
                  # Function returns boundary temperature_plus
@@ -80,15 +79,12 @@ class PrescribedFluidBoundary(FluidBoundary):
         """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_state_func = boundary_state_func
         self._inviscid_bnd_flux_func = inviscid_boundary_flux_func
-        self._inviscid_div_flux_func = inviscid_facial_flux_func
         self._bnd_temperature_func = boundary_temperature_func
 
         if not self._inviscid_bnd_flux_func and not self._bnd_state_func:
             from warnings import warn
             warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
-        if not self._inviscid_div_flux_func:
-            self._inviscid_div_flux_func = inviscid_facial_flux
         if not self._bnd_state_func:
             self._bnd_state_func = self._dummy_state_func
         if not self._bnd_temperature_func:
@@ -100,29 +96,29 @@ class PrescribedFluidBoundary(FluidBoundary):
     def _dummy_state_func(self, state_minus, **kwargs):
         return state_minus
 
-    def _boundary_quantity(self, discr, btag, quantity, **kwargs):
+    def _boundary_quantity(self, discr, btag, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        if "local" in kwargs:
-            if kwargs["local"]:
-                return quantity
-        return discr.project(btag, btag.with_dtag("all_faces"), quantity)
+        return quantity if local else discr.project(
+            btag, btag.with_dtag("all_faces"), quantity)
 
     def inviscid_divergence_flux(self, discr, btag, gas_model, state_minus,
+                                 numerical_flux_func=inviscid_facial_flux_rusanov,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
         # This one is when the user specified a function that directly
         # prescribes the flux components at the boundary
         if self._inviscid_bnd_flux_func:
-            return self._inviscid_bnd_flux_func(discr, btag, gas_model, state_minus,
-                                                **kwargs)
+            return self._inviscid_bnd_flux_func(
+                discr, btag, gas_model, state_minus,
+                numerical_flux_func=numerical_flux_func, **kwargs)
 
         state_plus = self._bnd_state_func(discr=discr, btag=btag,
                                           gas_model=gas_model,
                                           state_minus=state_minus, **kwargs)
         boundary_state_pair = TracePair(btag, interior=state_minus,
                                         exterior=state_plus)
-
-        return self._inviscid_div_flux_func(discr, state_tpair=boundary_state_pair)
+        normal = thaw(discr.normal(btag), state_minus.array_context)
+        return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
 
 class DummyBoundary(PrescribedFluidBoundary):
@@ -173,7 +169,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(actx, discr.normal(btag))
+        nhat = thaw(discr.normal(btag), actx)
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to

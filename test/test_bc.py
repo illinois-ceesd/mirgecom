@@ -29,11 +29,15 @@ import numpy.linalg as la  # noqa
 import logging
 import pytest
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
+from mirgecom.inviscid import (
+    inviscid_facial_flux_rusanov,
+    inviscid_facial_flux_hll
+)
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state,
@@ -71,10 +75,10 @@ def test_slipwall_identity(actx_factory, dim):
 
     order = 3
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = thaw(actx, discr.normal(BTAG_ALL))
+    nhat = thaw(discr.normal(BTAG_ALL), actx)
     gas_model = GasModel(eos=eos)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -127,7 +131,9 @@ def test_slipwall_identity(actx_factory, dim):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-def test_slipwall_flux(actx_factory, dim, order):
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
+def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """Check for zero boundary flux.
 
     Check for vanishing flux across the slipwall.
@@ -149,8 +155,8 @@ def test_slipwall_flux(actx_factory, dim, order):
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
-        nhat = thaw(actx, discr.normal(BTAG_ALL))
+        nodes = thaw(discr.nodes(), actx)
+        nhat = thaw(discr.normal(BTAG_ALL), actx)
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
@@ -190,9 +196,9 @@ def test_slipwall_flux(actx_factory, dim, order):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.inviscid import inviscid_facial_flux
-                bnd_flux = inviscid_facial_flux(discr, state_pair,
-                                                           local=True)
+                normal = thaw(discr.normal(BTAG_ALL), actx)
+                bnd_flux = flux_func(state_pair, gas_model, normal)
+
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 

@@ -1,12 +1,11 @@
-""":mod:`mirgecom.flux` provides inter-facial flux routines.
+""":mod:`mirgecom.flux` provides generic inter-elemental flux routines.
 
-Numerical Flux Routines
-^^^^^^^^^^^^^^^^^^^^^^^
+Low-level interfaces
+^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: gradient_flux_central
-.. autofunction:: divergence_flux_central
-.. autofunction:: flux_lfr
-.. autofunction:: divergence_flux_lfr
+.. autofunction:: num_flux_lfr
+.. autofunction:: num_flux_central
+.. autofunction:: num_flux_hll
 """
 
 __copyright__ = """
@@ -35,179 +34,144 @@ THE SOFTWARE.
 import numpy as np  # noqa
 
 
-def gradient_flux_central(u_tpair, normal):
-    r"""Compute a central flux for the gradient operator.
+# These low-level flux functions match the presentation of them in
+# the [Toro_2009]_ reference on which they are based.  These arguments
+# require no data structure constructs and are presented here as pure
+# functions which can easily be tested with plain ole numbers, numpy arrays
+# or DOFArrays as appropriate.
+#
+# {{{ low-level flux interfaces
 
-    The central gradient flux, $\mathbf{h}$, of a scalar quantity $u$ is calculated
-    as:
-
-    .. math::
-
-        \mathbf{h}({u}^-, {u}^+; \mathbf{n}) = \frac{1}{2}
-        \left({u}^{+}+{u}^{-}\right)\mathbf{\hat{n}}
-
-    where ${u}^-, {u}^+$, are the scalar function values on the interior
-    and exterior of the face on which the central flux is to be calculated, and
-    $\mathbf{\hat{n}}$ is the *normal* vector.
-
-    *u_tpair* is the :class:`~grudge.trace_pair.TracePair` representing the scalar
-    quantities ${u}^-, {u}^+$. *u_tpair* may also represent a vector-quantity
-    :class:`~grudge.trace_pair.TracePair`, and in this case the central scalar flux
-    is computed on each component of the vector quantity as an independent scalar.
-
-    Parameters
-    ----------
-    u_tpair: :class:`~grudge.trace_pair.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
-    normal: numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
-        normals
-
-    Returns
-    -------
-    numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
-        scalar component.
-    """
-    from arraycontext import outer
-    return outer(u_tpair.avg, normal)
-
-
-def divergence_flux_central(trace_pair, normal):
-    r"""Compute a central flux for the divergence operator.
-
-    The central divergence flux, $h$, is calculated as:
-
-    .. math::
-
-        h(\mathbf{v}^-, \mathbf{v}^+; \mathbf{n}) = \frac{1}{2}
-        \left(\mathbf{v}^{+}+\mathbf{v}^{-}\right) \cdot \hat{n}
-
-    where $\mathbf{v}^-, \mathbf{v}^+$, are the vectors on the interior and exterior
-    of the face across which the central flux is to be calculated, and $\hat{n}$ is
-    the unit normal to the face.
-
-    Parameters
-    ----------
-    trace_pair: :class:`~grudge.trace_pair.TracePair`
-        Trace pair for the face upon which flux calculation is to be performed
-    normal: numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
-        normals
-
-    Returns
-    -------
-    numpy.ndarray
-        object array of :class:`~meshmode.dof_array.DOFArray` with the flux for each
-        scalar component.
-    """
-    return trace_pair.avg@normal
-
-
-def divergence_flux_lfr(cv_tpair, f_tpair, normal, lam):
+def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam):
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
 
     .. math::
+        f_{\text{LFR}}=\frac{1}{2}\left(f^-+f^++\lambda\left(q^--q^+\right)\right)
 
-        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-) + \mathbf{F}(q^+)) \cdot
-        \hat{n} + \frac{\lambda}{2}(q^{-} - q^{+}),
-
-    where $q^-, q^+$ are the scalar solution components on the interior and the
-    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
-    the vector flux function, $\hat{n}$ is the face normal, and $\lambda$ is the
-    user-supplied jump term coefficient.
+    where $f^{\mp}$ and $q^{\mp}$ are the normal flux components and state components
+    on the interior and the exterior of the face over which the LFR flux is to be
+    calculated. $\lambda$ is the user-supplied dissipation/penalty coefficient.
 
     The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
-    it is the max eigenvalue of the flux Jacobian:
-
-    .. math::
-        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
-
-    Here, $\lambda$ is a function parameter, leaving the responsibility for the
-    calculation of the eigenvalues of the system-dependent flux Jacobian to the
-    caller.
+    it is the max eigenvalue of the flux jacobian.
 
     Parameters
     ----------
-    cv_tpair: :class:`~grudge.trace_pair.TracePair`
+    f_minus_normal
+        Normal component of physical flux interior to (left of) interface
 
-        Solution trace pair for faces for which numerical flux is to be calculated
+    f_plus_normal
+        Normal component of physical flux exterior to (right of) interface
 
-    f_tpair: :class:`~grudge.trace_pair.TracePair`
+    q_minus
+        Physical state on interior of interface
 
-        Physical flux trace pair on faces on which numerical flux is to be calculated
-
-    normal: numpy.ndarray
-
-        object array of :class:`meshmode.dof_array.DOFArray` with outward-pointing
-        normals
+    q_plus
+        Physical state on exterior of interface
 
     lam: :class:`~meshmode.dof_array.DOFArray`
-
-        lambda parameter for Lax-Friedrichs/Rusanov flux
+        State jump penalty parameter for dissipation term
 
     Returns
     -------
     numpy.ndarray
 
         object array of :class:`~meshmode.dof_array.DOFArray` with the
-        Lax-Friedrichs/Rusanov flux.
+        Lax-Friedrichs/Rusanov numerical flux.
     """
-    return flux_lfr(cv_tpair, f_tpair, normal, lam)@normal
+    return (f_minus_normal + f_plus_normal + lam*(q_minus - q_plus))/2
 
 
-def flux_lfr(cv_tpair, f_tpair, normal, lam):
-    r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
+def num_flux_central(f_minus_normal, f_plus_normal):
+    r"""Central low-level numerical flux.
 
-    The Lax-Friedrichs/Rusanov flux is calculated as:
-
-    .. math::
-
-        f_{\mathtt{LFR}} = \frac{1}{2}(\mathbf{F}(q^-) + \mathbf{F}(q^+))
-        + \frac{\lambda}{2}(q^{-} - q^{+})\hat{\mathbf{n}},
-
-    where $q^-, q^+$ are the scalar solution components on the interior and the
-    exterior of the face on which the LFR flux is to be calculated, $\mathbf{F}$ is
-    the vector flux function, $\hat{\mathbf{n}}$ is the face normal, and $\lambda$
-    is the user-supplied jump term coefficient.
-
-    The $\lambda$ parameter is system-specific. Specifically, for the Rusanov flux
-    it is the max eigenvalue of the flux jacobian:
+    The central flux is calculated as:
 
     .. math::
-        \lambda = \text{max}\left(|\mathbb{J}_{F}(q^-)|,|\mathbb{J}_{F}(q^+)|\right)
-
-    Here, $\lambda$ is a function parameter, leaving the responsibility for the
-    calculation of the eigenvalues of the system-dependent flux Jacobian to the
-    caller.
+        f_{\text{central}} = \frac{\left(f^++f^-\right)}{2}
 
     Parameters
     ----------
-    cv_tpair: :class:`~grudge.trace_pair.TracePair`
+    f_minus_normal
+        Normal component of physical flux interior to (left of) interface
 
-        Solution trace pair for faces for which numerical flux is to be calculated
-
-    f_tpair: :class:`~grudge.trace_pair.TracePair`
-
-        Physical flux trace pair on faces on which numerical flux is to be calculated
-
-    normal: numpy.ndarray
-
-        object array of :class:`~meshmode.dof_array.DOFArray` with outward-pointing
-        normals
-
-    lam: :class:`~meshmode.dof_array.DOFArray`
-
-        lambda parameter for Lax-Friedrichs/Rusanov flux
+    f_plus_normal
+        Normal component of physical flux exterior to (right of) interface
 
     Returns
     -------
     numpy.ndarray
 
         object array of :class:`~meshmode.dof_array.DOFArray` with the
-        Lax-Friedrichs/Rusanov flux.
+        central numerical flux.
     """
-    from arraycontext import outer
-    return f_tpair.avg - lam*outer(cv_tpair.diff, normal)/2
+    return (f_plus_normal + f_minus_normal)/2
+
+
+def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus):
+    r"""HLL low-level numerical flux.
+
+    The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:
+
+    .. math::
+
+        f^{*}_{\text{HLL}} = \frac{\left(s^+f^--s^-f^++s^+s^-\left(q^+-q^-\right)
+        \right)}{\left(s^+ - s^-\right)}
+
+    where $f^{\mp}$, $q^{\mp}$, and $s^{\mp}$ are the interface-normal fluxes, the
+    states, and the wavespeeds for the interior (-) and exterior (+) of the
+    interface, respectively.
+
+    Details about this approximate Riemann solver can be found in Section 10.3 of
+    [Toro_2009]_.
+
+    Parameters
+    ----------
+    f_minus_normal
+        Normal component of physical flux interior to (left of) interface
+
+    f_plus_normal
+        Normal component of physical flux exterior to (right of) interface
+
+    q_minus
+        Physical state on interior of interface
+
+    q_plus
+        Physical state on exterior of interface
+
+    q_minus
+        Physical state on interior of interface
+
+    q_plus
+        Physical state on exterior of interface
+
+    s_minus: :class:`~meshmode.dof_array.DOFArray`
+        Interface wave-speed parameter for interior of interface
+
+    s_plus: :class:`~meshmode.dof_array.DOFArray`
+        Interface wave-speed parameter for exterior of interface
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        HLL numerical flux.
+    """
+    actx = q_minus.array_context
+    f_star = (s_plus*f_minus_normal - s_minus*f_plus_normal
+              + s_plus*s_minus*(q_plus - q_minus))/(s_plus - s_minus)
+
+    # choose the correct f contribution based on the wave speeds
+    f_check_minus = \
+        actx.np.greater_equal(s_minus, 0*s_minus)*(0*f_minus_normal + 1.0)
+    f_check_plus = \
+        actx.np.less_equal(s_plus, 0*s_plus)*(0*f_minus_normal + 1.0)
+
+    f = f_star
+    f = actx.np.where(f_check_minus, f_minus_normal, f)
+    f = actx.np.where(f_check_plus, f_plus_normal, f)
+
+    return f
