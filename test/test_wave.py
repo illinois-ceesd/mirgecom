@@ -79,7 +79,7 @@ def get_standing_wave(dim):
         return generate_regular_rect_mesh(
             a=(-0.5*np.pi,)*dim,
             b=(0.5*np.pi,)*dim,
-            n=(n,)*dim)
+            nelements_per_axis=(n,)*dim)
     c = 2.
     sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
@@ -101,7 +101,7 @@ def get_manufactured_cubic(dim):
         return generate_regular_rect_mesh(
             a=(-1.,)*dim,
             b=(1.,)*dim,
-            n=(n,)*dim)
+            nelements_per_axis=(n,)*dim)
     sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     sym_cos = pmbl.var("cos")
@@ -119,23 +119,22 @@ def sym_wave(dim, sym_phi):
     """
 
     sym_c = pmbl.var("c")
-    sym_coords = prim.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
 
     # f = phi_tt - c^2 * div(grad(phi))
     sym_f = sym.diff(sym_t)(sym.diff(sym_t)(sym_phi)) - sym_c**2\
-                * sym.div(sym.grad(dim, sym_phi))
+                * sym.div(dim, sym.grad(dim, sym_phi))
 
     # u = phi_t
     sym_u = sym.diff(sym_t)(sym_phi)
 
     # v = c*grad(phi)
-    sym_v = [sym_c * sym.diff(sym_coords[i])(sym_phi) for i in range(dim)]
+    sym_v = sym_c * sym.grad(dim, sym_phi)
 
     # rhs(u part) = c*div(v) + f
     # rhs(v part) = c*grad(u)
     sym_rhs = flat_obj_array(
-        sym_c * sym.div(sym_v) + sym_f,
+        sym_c * sym.div(dim, sym_v) + sym_f,
         make_obj_array([sym_c]) * sym.grad(dim, sym_u))
 
     return sym_u, sym_v, sym_f, sym_rhs
@@ -161,7 +160,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for n in [8, 10, 12] if p.dim == 3 else [4, 8, 16]:
+    for n in [8, 10, 12] if p.dim == 3 else [8, 12, 16]:
         mesh = p.mesh_factory(n)
 
         from grudge.eager import EagerDGDiscretization
@@ -184,7 +183,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
-        rel_linf_err = (
+        rel_linf_err = actx.to_numpy(
             discr.norm(rhs - expected_rhs, np.inf)
             / discr.norm(expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
@@ -250,7 +249,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     from mirgecom.integrators import rk4_step
     dt = timestep_scale/order**2
-    for istep in range(10):
+    for _ in range(10):
         fields = rk4_step(fields, t, dt, get_rhs)
         t += dt
 
@@ -269,8 +268,11 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
                     ("v_expected", expected_fields[1:]),
                     ])
 
-    err = discr.norm(fields-expected_fields, np.inf)
-    max_err = discr.norm(expected_fields, np.inf)
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
+    err = inf_norm(fields-expected_fields)
+    max_err = inf_norm(expected_fields)
 
     assert err < max_err
 

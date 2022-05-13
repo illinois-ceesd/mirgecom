@@ -31,11 +31,17 @@ import pytest
 
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import split_conserved
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state,
+    project_fluid_state
+)
+from grudge.eager import (
+    EagerDGDiscretization,
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -60,7 +66,7 @@ def test_slipwall_identity(actx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -69,9 +75,7 @@ def test_slipwall_identity(actx_factory, dim):
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
     nhat = thaw(actx, discr.normal(BTAG_ALL))
-    #    normal_mag = actx.np.sqrt(np.dot(normal, normal))
-    #    nhat_mult = 1.0 / normal_mag
-    #    nhat = normal * make_obj_array([nhat_mult])
+    gas_model = GasModel(eos=eos)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -85,27 +89,37 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
-            from functools import partial
-            bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+            fluid_state = make_fluid_state(uniform_state, gas_model)
 
-            bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                          btag=BTAG_ALL, eos=eos)
-            bnd_cv_int = split_conserved(dim, bnd_pair.int)
-            bnd_cv_ext = split_conserved(dim, bnd_pair.ext)
+            def bnd_norm(vec):
+                return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
+
+            interior_soln = \
+                project_fluid_state(discr, "vol", BTAG_ALL, gas_model=gas_model,
+                                    state=fluid_state)
+
+            bnd_soln = \
+                wall.adiabatic_slip_state(discr, btag=BTAG_ALL, gas_model=gas_model,
+                                          state_minus=interior_soln)
+
+            from grudge.trace_pair import TracePair
+            bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
+                                 exterior=bnd_soln.cv)
 
             # check that mass and energy are preserved
-            mass_resid = bnd_cv_int.mass - bnd_cv_ext.mass
+            mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
             mass_err = bnd_norm(mass_resid)
             assert mass_err == 0.0
-            energy_resid = bnd_cv_int.energy - bnd_cv_ext.energy
+
+            energy_resid = bnd_pair.int.energy - bnd_pair.ext.energy
             energy_err = bnd_norm(energy_resid)
             assert energy_err == 0.0
 
             # check that exterior momentum term is mom_interior - 2 * mom_normal
-            mom_norm_comp = np.dot(bnd_cv_int.momentum, nhat)
+            mom_norm_comp = np.dot(bnd_pair.int.momentum, nhat)
             mom_norm = nhat * mom_norm_comp
-            expected_mom_ext = bnd_cv_int.momentum - 2.0 * mom_norm
-            mom_resid = bnd_cv_ext.momentum - expected_mom_ext
+            expected_mom_ext = bnd_pair.int.momentum - 2.0 * mom_norm
+            mom_resid = bnd_pair.ext.momentum - expected_mom_ext
             mom_err = bnd_norm(mom_resid)
 
             assert mom_err == 0.0
@@ -122,24 +136,25 @@ def test_slipwall_flux(actx_factory, dim, order):
 
     wall = AdiabaticSlipBoundary()
     eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
 
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
 
-    for np1 in [4, 8, 12]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
 
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, n=(np1,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
         discr = EagerDGDiscretization(actx, mesh, order=order)
         nodes = thaw(actx, discr.nodes())
         nhat = thaw(actx, discr.normal(BTAG_ALL))
-        h = 1.0 / np1
+        h = 1.0 / nel_1d
 
-        from functools import partial
-        bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+        def bnd_norm(vec):
+            return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
@@ -153,19 +168,31 @@ def test_slipwall_flux(actx_factory, dim, order):
                 from mirgecom.initializers import Uniform
                 initializer = Uniform(dim=dim, velocity=vel)
                 uniform_state = initializer(nodes)
-                bnd_pair = wall.boundary_pair(discr, uniform_state, t=0.0,
-                                              btag=BTAG_ALL, eos=eos)
+                fluid_state = make_fluid_state(uniform_state, gas_model)
+
+                interior_soln = project_fluid_state(discr, "vol", BTAG_ALL,
+                                                    state=fluid_state,
+                                                    gas_model=gas_model)
+
+                bnd_soln = wall.adiabatic_slip_state(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=interior_soln)
+
+                from grudge.trace_pair import TracePair
+                bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
+                                     exterior=bnd_soln.cv)
+                state_pair = TracePair(BTAG_ALL, interior=interior_soln,
+                                       exterior=bnd_soln)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
                 # numerical fluxes cannot be zero.
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
-                acv = split_conserved(dim, avg_state)
-                err_max = max(err_max, bnd_norm(np.dot(acv.momentum, nhat)))
+                err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                from mirgecom.euler import _facial_flux
-                bnd_flux = split_conserved(dim, _facial_flux(discr, eos,
-                                                             bnd_pair, local=True))
+                from mirgecom.inviscid import inviscid_facial_flux
+                bnd_flux = inviscid_facial_flux(discr, state_pair,
+                                                           local=True)
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
                               bnd_norm(bnd_flux.energy))
 

@@ -28,6 +28,10 @@ jsrun_cmd="jsrun -g 1 -a 1 -n $nproc"
 # on why this is important
 export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
 
+# Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
+# (each rank needs its own POCL cache dir)
+export POCL_CACHE_DIR_ROOT="/tmp/$USER/pocl-cache"
+
 # Print task allocation
 $jsrun_cmd js_task_info
 
@@ -35,4 +39,5 @@ echo "----------------------------"
 
 # Run application
 # -O: switch on optimizations
-$jsrun_cmd python -O -m mpi4py ./vortex-mpi.py
+# POCL_CACHE_DIR=...: each rank needs its own POCL cache dir
+$jsrun_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT/$$ python -O -m mpi4py ./pulse-mpi.py'

@@ -39,9 +39,6 @@ from mirgecom.initializers import Vortex2D
 from mirgecom.initializers import Lump
 from mirgecom.initializers import MulticomponentLump
 
-from mirgecom.euler import split_conserved
-from mirgecom.euler import get_num_species
-
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
@@ -69,7 +66,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -83,12 +80,11 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)])
 
     initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
-    init_soln = initializer(nodes)
-    cv = split_conserved(dim, init_soln)
+    cv = initializer(nodes)
 
     def inf_norm(data):
         if len(data) > 0:
-            return discr.norm(data, np.inf)
+            return actx.to_numpy(discr.norm(data, np.inf))
         else:
             return 0.0
 
@@ -125,7 +121,7 @@ def test_lump_init(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -140,14 +136,13 @@ def test_lump_init(ctx_factory):
     center[0] = 5
     velocity[0] = 1
     lump = Lump(dim=dim, center=center, velocity=velocity)
-    lump_soln = lump(nodes)
+    cv = lump(nodes)
 
-    cv = split_conserved(dim, lump_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = actx.to_numpy(discr.norm(p - exp_p, np.inf))
 
-    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
@@ -167,7 +162,7 @@ def test_vortex_init(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], n=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -178,14 +173,13 @@ def test_vortex_init(ctx_factory):
 
     # Init soln with Vortex
     vortex = Vortex2D()
-    vortex_soln = vortex(nodes)
+    cv = vortex(nodes)
     gamma = 1.4
-    cv = split_conserved(dim, vortex_soln)
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
-    errmax = discr.norm(p - exp_p, np.inf)
+    errmax = actx.to_numpy(discr.norm(p - exp_p, np.inf))
 
-    logger.info(f"vortex_soln = {vortex_soln}")
+    logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15
@@ -206,7 +200,7 @@ def test_shock_init(ctx_factory):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], n=(nel_1d,) * dim
+        a=[(0.0,), (1.0,)], b=[(-0.5,), (0.5,)], nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -216,17 +210,18 @@ def test_shock_init(ctx_factory):
     nodes = thaw(actx, discr.nodes())
 
     initr = SodShock1D()
-    initsoln = initr(t=0.0, x_vec=nodes)
+    initsoln = initr(time=0.0, x_vec=nodes)
     print("Sod Soln:", initsoln)
+
     xpl = 1.0
     xpr = 0.1
     tol = 1e-15
     nodes_x = nodes[0]
     eos = IdealSingleGas()
-    cv = split_conserved(dim, initsoln)
-    p = eos.pressure(cv)
+    p = eos.pressure(initsoln)
 
-    assert discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf) < tol
+    assert actx.to_numpy(
+        discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf)) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -244,7 +239,7 @@ def test_uniform(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -257,20 +252,21 @@ def test_uniform(ctx_factory, dim):
 
     from mirgecom.initializers import Uniform
     initr = Uniform(dim=dim)
-    initsoln = initr(t=0.0, x_vec=nodes)
+    initsoln = initr(time=0.0, x_vec=nodes)
     tol = 1e-15
-    ssoln = split_conserved(dim, initsoln)
 
-    assert discr.norm(ssoln.mass - 1.0, np.inf) < tol
-    assert discr.norm(ssoln.energy - 2.5, np.inf) < tol
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
+    assert inf_norm(initsoln.mass - 1.0) < tol
+    assert inf_norm(initsoln.energy - 2.5) < tol
 
     print(f"Uniform Soln:{initsoln}")
     eos = IdealSingleGas()
-    cv = split_conserved(dim, initsoln)
-    p = eos.pressure(cv)
+    p = eos.pressure(initsoln)
     print(f"Press:{p}")
 
-    assert discr.norm(p - 1.0, np.inf) < tol
+    assert inf_norm(p - 1.0) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -288,7 +284,7 @@ def test_pulse(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, n=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 1
@@ -309,30 +305,33 @@ def test_pulse(ctx_factory, dim):
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     print(f"Pulse = {pulse}")
 
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
+
     # does it return the expected exponential?
     pulse_check = actx.np.exp(-.5 * r2)
     print(f"exact: {pulse_check}")
     pulse_resid = pulse - pulse_check
     print(f"pulse residual: {pulse_resid}")
-    assert(discr.norm(pulse_resid, np.inf) < tol)
+    assert(inf_norm(pulse_resid) < tol)
 
     # proper scaling with amplitude?
     amp = 2.0
     pulse = 0
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     pulse_resid = pulse - (pulse_check + pulse_check)
-    assert(discr.norm(pulse_resid, np.inf) < tol)
+    assert(inf_norm(pulse_resid) < tol)
 
     # proper scaling with r?
     amp = 1.0
     rcheck = np.sqrt(2.0) * nodes
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
-    assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
+    assert(inf_norm(pulse - (pulse_check * pulse_check)) < tol)
 
     # proper scaling with w?
     w = w / np.sqrt(2.0)
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
-    assert(discr.norm(pulse - (pulse_check * pulse_check), np.inf) < tol)
+    assert(inf_norm(pulse - (pulse_check * pulse_check)) < tol)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -348,7 +347,7 @@ def test_multilump(ctx_factory, dim):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-1.0,) * dim, b=(1.0,) * dim, n=(nel_1d,) * dim
+        a=(-1.0,) * dim, b=(1.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3
@@ -374,19 +373,19 @@ def test_multilump(ctx_factory, dim):
                               spec_centers=centers, velocity=velocity,
                               spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
-    lump_soln = lump(nodes)
-    numcvspec = get_num_species(dim, lump_soln)
+    cv = lump(nodes)
+    numcvspec = len(cv.species_mass)
     print(f"get_num_species = {numcvspec}")
 
-    assert get_num_species(dim, lump_soln) == nspecies
+    def inf_norm(x):
+        return actx.to_numpy(discr.norm(x, np.inf))
 
-    cv = split_conserved(dim, lump_soln)
-    assert discr.norm(cv.mass - rho0) == 0.0
+    assert numcvspec == nspecies
+    assert inf_norm(cv.mass - rho0) == 0.0
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = discr.norm(p - exp_p, np.inf)
-    assert len(cv.species_mass) == nspecies
+    errmax = inf_norm(p - exp_p)
     species_mass = cv.species_mass
 
     spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
@@ -400,9 +399,9 @@ def test_multilump(ctx_factory, dim):
     print(f"exp_mass = {exp_mass}")
     print(f"mass_resid = {mass_resid}")
 
-    assert discr.norm(mass_resid, np.inf) == 0.0
+    assert inf_norm(mass_resid) == 0.0
 
-    logger.info(f"lump_soln = {lump_soln}")
+    logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
     assert errmax < 1e-15

@@ -27,7 +27,7 @@ What's the point of array contexts?
 -----------------------------------
 
 Arrays are the central large-scale data structure that :mod:`mirgecom` operates on.
-:class:`meshmode.array_context.ArrayContext` allows us flexibility in how those are
+:class:`arraycontext.ArrayContext` allows us flexibility in how those are
 created (and which ones we use) just by changing which array context we run with.
 Some array types you might choose include :class:`pyopencl.array.Array`\ s on the GPU
 through OpenCL, or lazily-evaluated :class:`pytato.Array`\ s.

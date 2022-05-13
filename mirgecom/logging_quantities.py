@@ -31,7 +31,7 @@ __doc__ = """
 .. autoclass:: PythonMemoryUsage
 .. autoclass:: DeviceMemoryUsage
 .. autofunction:: initialize_logmgr
-.. autofunction:: logmgr_add_device_name
+.. autofunction:: logmgr_add_cl_device_info
 .. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: add_package_versions
@@ -39,8 +39,10 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
-from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
+from logpyle import (LogQuantity, PostLogQuantity, LogManager,
+    MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
+from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
@@ -73,9 +75,21 @@ def initialize_logmgr(enable_logmgr: bool,
     return logmgr
 
 
-def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
-    """Add the OpenCL device name to the log."""
-    logmgr.set_constant("cl_device_name", str(queue.device))
+def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue):
+    """Add information about the OpenCL device to the log."""
+    dev = queue.device
+    logmgr.set_constant("cl_device_name", str(dev))
+    logmgr.set_constant("cl_device_version", dev.version)
+    logmgr.set_constant("cl_platform_version", dev.platform.version)
+
+
+def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
+    """Deprecated. Do not use in new code."""
+    from warnings import warn
+    warn("logmgr_add_device_name is deprecated and will disappear in Q3 2021. "
+         "Use logmgr_add_cl_device_info instead.", DeprecationWarning,
+         stacklevel=2)
+    logmgr_add_cl_device_info(logmgr, queue)
 
 
 def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
@@ -218,7 +232,7 @@ class StateConsumer:
 # {{{ Discretization-based quantities
 
 
-class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
+class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
     Possible rank aggregation operations (``op``) are: min, max, L2_norm.
@@ -266,17 +280,19 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
+        actx = get_container_context_recursively(quantity)
+
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return self._discr_reduction(quantity)
+        return actx.to_numpy(self._discr_reduction(quantity))[()]
 
 # }}}
 
 
 # {{{ Kernel profile quantities
 
-class KernelProfile(MultiLogQuantity):
+class KernelProfile(MultiPostLogQuantity):
     """Logging support for statistics of the OpenCL kernel profiling (num_calls, \
     time, flops, bytes_accessed, footprint).
 
@@ -324,7 +340,7 @@ class KernelProfile(MultiLogQuantity):
 
 # {{{ Memory profiling
 
-class PythonMemoryUsage(LogQuantity):
+class PythonMemoryUsage(PostLogQuantity):
     """Logging support for Python memory usage (RSS, host).
 
     Uses :mod:`psutil` to track memory usage. Virtually no overhead.
@@ -345,7 +361,7 @@ class PythonMemoryUsage(LogQuantity):
         return self.process.memory_info()[0] / 1024 / 1024
 
 
-class DeviceMemoryUsage(LogQuantity):
+class DeviceMemoryUsage(PostLogQuantity):
     """Logging support for GPU memory usage (Nvidia only currently)."""
 
     def __init__(self, name: str = None) -> None:

@@ -34,7 +34,7 @@ import sys
 if sys.version_info < (3, 9):
     # importlib.resources either doesn't exist or lacks the files()
     # function, so use the PyPI version:
-    import importlib_resources
+    import importlib_resources  # pylint: disable=import-error
 else:
     # importlib.resources has files(), so use that:
     import importlib.resources as importlib_resources

@@ -1,11 +1,11 @@
-====================================
-Welcome to mirgecom's documentation!
-====================================
+======================================
+Welcome to |mirgecom|'s documentation!
+======================================
 
 .. module:: mirgecom
 
 Math, Intermediate Representation, Compressible Flow, For Scramjets.
-MirgeCOM aims to be a library of parts from which scramjet simulations
+|mirgecom| aims to be a library of parts from which scramjet simulations
 for the Center for Exascale-Enabled Scramjet Design (CEESD) at the
 University of Illinois can be built.
 
@@ -61,7 +61,7 @@ Here’s an example, to give you an impression:
        istep += 1
 
 (This example is derived from
-:download:`examples/wave-eager.py <../examples/wave-eager.py>` in the MirgeCOM
+:download:`examples/wave.py <../examples/wave.py>` in the |mirgecom|
 source distribution.)
 
 Table of Contents
@@ -70,7 +70,8 @@ Table of Contents
 .. toctree::
     :numbered:
 
-    model/model
+    fluid
+    discretization
     operators/operators
     support/support
     development/development

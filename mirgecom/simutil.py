@@ -1,14 +1,30 @@
 """Provide some utilities for building simulation applications.
 
+General utilities
+-----------------
+
 .. autofunction:: check_step
-.. autofunction:: inviscid_sim_timestep
-.. autoexception:: ExactSolutionMismatch
-.. autofunction:: sim_checkpoint
+.. autofunction:: get_sim_timestep
+.. autofunction:: write_visfile
+.. autofunction:: global_reduce
+
+Diagnostic utilities
+--------------------
+
+.. autofunction:: compare_fluid_solutions
+.. autofunction:: componentwise_norms
+.. autofunction:: max_component_norm
+.. autofunction:: check_naninf_local
+.. autofunction:: check_range_local
+
+Mesh utilities
+--------------
+
 .. autofunction:: generate_and_distribute_mesh
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -30,15 +46,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
 import logging
-
 import numpy as np
-from meshmode.dof_array import thaw
-from mirgecom.io import make_status_message
-from mirgecom.euler import (
-    get_inviscid_timestep,
-)
+import grudge.op as op
+
+from arraycontext import map_array_container, flatten
+
+from functools import partial
+
+from meshmode.dof_array import DOFArray
+
+from typing import List
+from grudge.discretization import DiscretizationCollection
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,104 +84,260 @@ def check_step(step, interval):
     return False
 
 
-def inviscid_sim_timestep(discr, state, t, dt, cfl, eos,
-                          t_final, constant_cfl=False):
-    """Return the maximum stable dt."""
-    mydt = dt
-    if constant_cfl is True:
-        mydt = get_inviscid_timestep(discr=discr, q=state,
-                                     cfl=cfl, eos=eos)
-    if (t + mydt) > t_final:
-        mydt = t_final - t
-    return mydt
+def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
+    """Return the maximum stable timestep for a typical fluid simulation.
 
+    This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
+    maximum domain-wide stability-limited timestep for a fluid simulation.
 
-class ExactSolutionMismatch(Exception):
-    """Exception class for solution mismatch.
+    .. important::
+        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
+        which makes it domain-wide regardless of parallel domain decomposition. Thus
+        this routine must be called *collectively* (i.e. by all ranks).
 
-    .. attribute:: step
-    .. attribute:: t
-    .. attribute:: state
+    Two modes are supported:
+        - Constant DT mode: returns the minimum of (t_final-t, dt)
+        - Constant CFL mode: returns (cfl * max_dt)
+
+    Parameters
+    ----------
+    discr
+        Grudge discretization or discretization collection?
+    state: :class:`~mirgecom.gas_model.FluidState`
+        The full fluid conserved and thermal state
+    t: float
+        Current time
+    t_final: float
+        Final time
+    dt: float
+        The current timestep
+    cfl: float
+        The current CFL number
+    constant_cfl: bool
+        True if running constant CFL mode
+
+    Returns
+    -------
+    float
+        The maximum stable DT based on a viscous fluid.
     """
+    t_remaining = max(0, t_final - t)
+    mydt = dt
+    if constant_cfl:
+        from mirgecom.viscous import get_viscous_timestep
+        from grudge.op import nodal_min
+        mydt = state.array_context.to_numpy(
+            cfl * nodal_min(
+                discr, "vol",
+                get_viscous_timestep(discr=discr, state=state)))[()]
+    return min(t_remaining, mydt)
 
-    def __init__(self, step, t, state):
-        """Record the simulation state on creation."""
-        self.step = step
-        self.t = t
-        self.state = state
 
+def write_visfile(discr, io_fields, visualizer, vizname,
+                  step=0, t=0, overwrite=False, vis_timer=None):
+    """Write VTK output for the fields specified in *io_fields*.
 
-def sim_checkpoint(discr, visualizer, eos, q, vizname, exact_soln=None,
-                   step=0, t=0, dt=0, cfl=1.0, nstatus=-1, nviz=-1, exittol=1e-16,
-                   constant_cfl=False, comm=None, viz_fields=None, overwrite=False,
-                   vis_timer=None):
-    """Check simulation health, status, viz dumps, and restart."""
-    do_viz = check_step(step=step, interval=nviz)
-    do_status = check_step(step=step, interval=nstatus)
-    if do_viz is False and do_status is False:
-        return 0
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
 
-    from mirgecom.euler import split_conserved
-    cv = split_conserved(discr.dim, q)
-    dependent_vars = eos.dependent_vars(cv)
+    Parameters
+    ----------
+    visualizer:
+        A :class:`meshmode.discretization.visualization.Visualizer`
+        VTK output object.
+    io_fields:
+        List of tuples indicating the (name, data) for each field to write.
+    """
+    from contextlib import nullcontext
+    from mirgecom.io import make_rank_fname, make_par_fname
 
+    comm = discr.mpi_communicator
     rank = 0
-    if comm is not None:
+
+    if comm:
         rank = comm.Get_rank()
 
-    maxerr = 0.0
-    if exact_soln is not None:
-        actx = cv.mass.array_context
-        nodes = thaw(actx, discr.nodes())
-        expected_state = exact_soln(x_vec=nodes, t=t, eos=eos)
-        exp_resid = q - expected_state
-        err_norms = [discr.norm(v, np.inf) for v in exp_resid]
-        maxerr = max(err_norms)
+    rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
-    if do_viz:
-        io_fields = [
-            ("cv", cv),
-            ("dv", dependent_vars)
-        ]
-        if exact_soln is not None:
-            exact_list = [
-                ("exact_soln", expected_state),
-            ]
-            io_fields.extend(exact_list)
-        if viz_fields is not None:
-            io_fields.extend(viz_fields)
+    if rank == 0:
+        import os
+        viz_dir = os.path.dirname(rank_fn)
+        if viz_dir and not os.path.exists(viz_dir):
+            os.makedirs(viz_dir)
 
-        from mirgecom.io import make_rank_fname, make_par_fname
-        rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
+    if comm:
+        comm.barrier()
 
-        from contextlib import nullcontext
+    if vis_timer:
+        ctm = vis_timer.start_sub_timer()
+    else:
+        ctm = nullcontext()
 
-        if vis_timer:
-            ctm = vis_timer.start_sub_timer()
+    with ctm:
+        visualizer.write_parallel_vtk_file(
+            comm, rank_fn, io_fields,
+            overwrite=overwrite,
+            par_manifest_filename=make_par_fname(
+                basename=vizname, step=step, t=t
+            )
+        )
+
+
+def global_reduce(local_values, op, *, comm=None):
+    """Perform a global reduction (allreduce if MPI comm is provided).
+
+    This routine is a convenience wrapper for the MPI AllReduce operation
+    that also works outside of an MPI context.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+
+    Parameters
+    ----------
+    local_values:
+        The (:mod:`mpi4py`-compatible) value or array of values on which the
+        reduction operation is to be performed.
+
+    op: str
+        Reduction operation to be performed. Must be one of "min", "max", "sum",
+        "prod", "lor", or "land".
+
+    comm:
+        Optional parameter specifying the MPI communicator on which the
+        reduction operation (if any) is to be performed
+
+    Returns
+    -------
+    Any ( like *local_values* )
+        Returns the result of the reduction operation on *local_values*
+    """
+    if comm is not None:
+        from mpi4py import MPI
+        op_to_mpi_op = {
+            "min": MPI.MIN,
+            "max": MPI.MAX,
+            "sum": MPI.SUM,
+            "prod": MPI.PROD,
+            "lor": MPI.LOR,
+            "land": MPI.LAND,
+        }
+        return comm.allreduce(local_values, op=op_to_mpi_op[op])
+    else:
+        if np.ndim(local_values) == 0:
+            return local_values
         else:
-            ctm = nullcontext()
+            op_to_numpy_func = {
+                "min": np.minimum,
+                "max": np.maximum,
+                "sum": np.add,
+                "prod": np.multiply,
+                "lor": np.logical_or,
+                "land": np.logical_and,
+            }
+            from functools import reduce
+            return reduce(op_to_numpy_func[op], local_values)
 
-        with ctm:
-            visualizer.write_parallel_vtk_file(comm, rank_fn, io_fields,
-                overwrite=overwrite, par_manifest_filename=make_par_fname(
-                    basename=vizname, step=step, t=t))
 
-    if do_status is True:
-        #        if constant_cfl is False:
-        #            current_cfl = get_inviscid_cfl(discr=discr, q=q,
-        #                                           eos=eos, dt=dt)
-        statusmesg = make_status_message(discr=discr, t=t, step=step, dt=dt,
-                                         cfl=cfl, dependent_vars=dependent_vars)
-        if exact_soln is not None:
-            statusmesg += (
-                "\n------- errors="
-                + ", ".join("%.3g" % en for en in err_norms))
+def allsync(local_values, comm=None, op=None):
+    """
+    Perform allreduce if MPI comm is provided.
 
-        if rank == 0:
-            logger.info(statusmesg)
+    Deprecated. Do not use in new code.
+    """
+    from warnings import warn
+    warn("allsync is deprecated and will disappear in Q1 2022. "
+         "Use global_reduce instead.", DeprecationWarning, stacklevel=2)
 
-    if maxerr > exittol:
-        raise ExactSolutionMismatch(step, t=t, state=q)
+    if comm is None:
+        return local_values
+
+    from mpi4py import MPI
+
+    if op is None:
+        op = MPI.MAX
+
+    if op == MPI.MIN:
+        op_string = "min"
+    elif op == MPI.MAX:
+        op_string = "max"
+    elif op == MPI.SUM:
+        op_string = "sum"
+    elif op == MPI.PROD:
+        op_string = "prod"
+    elif op == MPI.LOR:
+        op_string = "lor"
+    elif op == MPI.LAND:
+        op_string = "land"
+    else:
+        raise ValueError(f"Unrecognized MPI reduce op {op}.")
+
+    return global_reduce(local_values, op_string, comm=comm)
+
+
+def check_range_local(discr: DiscretizationCollection, dd: str, field: DOFArray,
+                      min_value: float, max_value: float) -> List[float]:
+    """Return the values that are outside the range [min_value, max_value]."""
+    actx = field.array_context
+    local_min = np.asscalar(actx.to_numpy(op.nodal_min_loc(discr, dd, field)))
+    local_max = np.asscalar(actx.to_numpy(op.nodal_max_loc(discr, dd, field)))
+
+    failing_values = []
+
+    if local_min < min_value:
+        failing_values.append(local_min)
+    if local_max > max_value:
+        failing_values.append(local_max)
+
+    return failing_values
+
+
+def check_naninf_local(discr: DiscretizationCollection, dd: str,
+                       field: DOFArray) -> bool:
+    """Return True if there are any NaNs or Infs in the field."""
+    actx = field.array_context
+    s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
+    return not np.isfinite(s)
+
+
+def compare_fluid_solutions(discr, red_state, blue_state):
+    """Return inf norm of (*red_state* - *blue_state*) for each component.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
+    actx = red_state.array_context
+    resid = red_state - blue_state
+    resid_errs = actx.to_numpy(
+        flatten(componentwise_norms(discr, resid, order=np.inf), actx))
+
+    return resid_errs.tolist()
+
+
+def componentwise_norms(discr, fields, order=np.inf):
+    """Return the *order*-norm for each component of *fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
+    if not isinstance(fields, DOFArray):
+        return map_array_container(
+            partial(componentwise_norms, discr, order=order), fields)
+    if len(fields) > 0:
+        return discr.norm(fields, order)
+    else:
+        # FIXME: This work-around for #575 can go away after #569
+        return 0
+
+
+def max_component_norm(discr, fields, order=np.inf):
+    """Return the max *order*-norm over the components of *fields*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+    """
+    actx = fields.array_context
+    return max(actx.to_numpy(flatten(
+        componentwise_norms(discr, fields, order), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
@@ -170,6 +346,9 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     Generate the mesh with the user-supplied mesh generation function
     *generate_mesh*, partition the mesh, and distribute it to every
     rank in the provided MPI communicator *comm*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
 
     Parameters
     ----------

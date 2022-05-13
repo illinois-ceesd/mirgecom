@@ -32,7 +32,7 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 
 
@@ -56,6 +56,10 @@ def _flux(discr, c, w_tpair):
         )
 
     return discr.project(w_tpair.dd, "all_faces", c*flux_weak)
+
+
+class _WaveTag:
+    pass
 
 
 def wave_operator(discr, c, w):
@@ -96,7 +100,7 @@ def wave_operator(discr, c, w):
                     w_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc))
                 + sum(
                     _flux(discr, c=c, w_tpair=tpair)
-                    for tpair in cross_rank_trace_pairs(discr, w))
+                    for tpair in cross_rank_trace_pairs(discr, w, _WaveTag))
                 )
             )
         )
