@@ -38,6 +38,7 @@ from grudge.eager import EagerDGDiscretization
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
 from grudge.dof_desc import as_dofdesc
+
 from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
