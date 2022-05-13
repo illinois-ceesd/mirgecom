@@ -51,7 +51,7 @@ from grudge.trace_pair import TracePair
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state
-from mirgecom.inviscid import inviscid_facial_flux_rusanov
+from mirgecom.inviscid import inviscid_facial_flux_rusanov  # default num flux
 
 from abc import ABCMeta, abstractmethod
 
@@ -411,9 +411,15 @@ class PrescribedFluidBoundary(FluidBoundary):
                                  numerical_flux_func=inviscid_facial_flux_rusanov,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
-        return self._inviscid_flux_func(discr, btag, gas_model, state_minus,
-                                        numerical_flux_func=numerical_flux_func,
-                                        **kwargs)
+        # This one is when the user specified a function that directly
+        # prescribes the flux components at the boundary
+        state_plus = self._bnd_state_func(discr=discr, btag=btag,
+                                          gas_model=gas_model,
+                                          state_minus=state_minus, **kwargs)
+        boundary_state_pair = TracePair(btag, interior=state_minus,
+                                        exterior=state_plus)
+        normal = thaw(discr.normal(btag), state_minus.array_context)
+        return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
     def cv_gradient_flux(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the cv flux for *btag* for use in the gradient operator."""
