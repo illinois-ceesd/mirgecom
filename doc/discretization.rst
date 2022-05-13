@@ -123,7 +123,7 @@ $$
 Numerical fluxes
 ================
 
-Numerical fluxes are responsible for calculating the fluxes at the DG element boundaries.  
+Numerical fluxes are responsible for calculating the fluxes at the DG element boundaries.
 Numerical fluxes must account for the discontinuities at element faces, and calculate
 a single valued flux that both elements agree on.  That is, they must be functions
 of both $\pm$ states, and must produce a consistent flux.
@@ -228,18 +228,22 @@ The relevant quantities for the boundary treatments are as follows:
 :$\b{H}_s^*:$: Boundary flux vector for the gradient of the conserved quantities
 :$\hat{\b{n}}:$: Outward pointing unit normal for the boundary face
 
-For all $\partial E \cap \partial\Omega$ the $+$ side is on the domain boundary. 
+For all $\partial E \cap \partial\Omega$ the $+$ side is on the domain boundary.
 Boundary conditions ($\b{Q}_{bc}, \b{\Sigma}_{bc}$) are set by prescribing one or more
 components of the solution or its gradient on the (+) side of the boundary,
 ($\b{Q}^+, \b{\Sigma}^+$), respectively, or by prescribing one or more components of the
 boundary fluxes $h^*_e$, $h^*_v$, and $\b{H}^*_s$.  Descriptions of particular
 boundary treatments follow in the next few sections.
 
-.. image:: figures/ElementBoundary.png
-   :width: 300
-   :alt: Quantities at element boundary.
-   :align: center
-
+.. tikz:: [scale=0.8]
+   \draw [thick] (0,3) coordinate (top) -- (0,-3) coordinate (bot)
+      node [pos=0.33, anchor=west] {$\boldsymbol q^+$}
+      node [pos=0.33, anchor=east] {$\boldsymbol q^-$}
+      node [pos=0.66, anchor=west] {$\boldsymbol \Sigma^+=\nabla \boldsymbol q^+$}
+      node [pos=0.66, anchor=east] {$\boldsymbol \Sigma^-=\nabla \boldsymbol q^-$};
+   \draw [thick,dashed] (top) -- (-5,0) -- (bot);
+   \draw [thick,->] (0,0) -- (++1,0)
+        node [pos=1,anchor=north] { $\boldsymbol{\hat n}$ };
 
 Adiabatic slip wall
 -------------------
@@ -258,7 +262,7 @@ More specifically, for the fixed wall in |mirgecom|, the fluid solution correspo
 boundary condition is this:
 
 .. math::
-   
+
    \b{Q}_{bc} = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\(\rho{v_b})_{i}\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
 
 where $\mathbf{v}_b = \mathbf{v}^{-} - (\mathbf{v}^{-}\cdot\hat{\mathbf{n}})\hat{\mathbf{n}}$.
@@ -283,7 +287,7 @@ the ($\pm$) state inputs to the solver result in an intermediate state in which 
 velocity vanish.
 
 Inviscid fluxes (advection terms)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The flux for the divergence of the inviscid flux is then calculated with the same numerical
 flux function as used in the volume: $h^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
@@ -295,7 +299,7 @@ inviscid physical transport fluxes, they call the
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
 :meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_state`, and returns the
 numerical flux ${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
- 
+
 
 Viscous fluxes (diffusion terms)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -315,8 +319,8 @@ The solution of the auxiliary equations yields $\nabla{\b{Q}}^-$, and the gradie
 the species fractions $Y$ and temperature $T$, are calculated using the product rule:
 
 .. math::
-   
-   \nabla{Y} &= \frac{1}{\rho}\left(\nabla{(\rho{Y})} - Y\nabla{\rho}\right) \\  
+
+   \nabla{Y} &= \frac{1}{\rho}\left(\nabla{(\rho{Y})} - Y\nabla{\rho}\right) \\
    \nabla{E} &= \frac{1}{\rho}\left(\nabla{(\rho{E})} - E\nabla{\rho}\right)
 
 We enforce no penetration for the species fractions by setting:
@@ -328,7 +332,7 @@ We enforce no penetration for the species fractions by setting:
 We set the heat flux through the wall to zero by setting:
 
 .. math::
- 
+
    \nabla{T}^+ = \nabla{T}^- - \left(\nabla{T}^-\cdot\hat{\b{n}}\right)~\hat{\b{n}}
 
 The boundary viscous flux is then calculated using the same flux function as that
@@ -352,7 +356,7 @@ For fixed walls, this boundary condition is $\b{v}_{fluid} = 0$. Specifically, t
 means the fluid state at the wall for this boundary condition is as follows:
 
 .. math::
-   
+
    \b{Q}_{bc} = \begin{bmatrix}\rho^{-}\\(\rho{E})^{-}\\0\\0\\0\\(\rho{Y})^{-}_{\alpha}\end{bmatrix},
 
 
@@ -488,7 +492,7 @@ flux as follows:
 
    \b{H}^*(\b{Q}_{bc}) = \b{H}_s(\b{Q}^-, \b{Q}_{bc}) = \frac{1}{2}\left(\b{Q}^- + \b{Q}_{bc}\right)\hat{\b{n}},
 
-using the no-slip boundary solution, $\b{Q}_{bc}$, as defined above. The note above about [Mengaldo_2014]_ using a distinct $\b{Q}_{bc}$ is relevant here. 
+using the no-slip boundary solution, $\b{Q}_{bc}$, as defined above. The note above about [Mengaldo_2014]_ using a distinct $\b{Q}_{bc}$ is relevant here.
 
 Since:
 
@@ -503,7 +507,7 @@ We compute $\nabla{Y}$ and $\nabla{E}$ from the product rule:
 
 .. math::
 
-   \nabla{Y} &= \frac{1}{\rho}\left(\nabla{(\rho{Y})} - Y\nabla{\rho}\right) \\  
+   \nabla{Y} &= \frac{1}{\rho}\left(\nabla{(\rho{Y})} - Y\nabla{\rho}\right) \\
    \nabla{E} &= \frac{1}{\rho}\left(\nabla{(\rho{E})} - E\nabla{\rho}\right)
 
 

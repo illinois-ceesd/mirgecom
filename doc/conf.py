@@ -48,6 +48,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_math_dollar",
     "sphinx_copybutton",
+    "sphinxcontrib.tikz",
     ]
 
 # Add any paths that contain templates here, relative to this directory.

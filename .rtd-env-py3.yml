@@ -21,4 +21,5 @@ dependencies:
   - "sphinx-math-dollar"
   - "sphinx-copybutton"
   - "furo"
+  - "sphinxcontrib-tikz"
 
