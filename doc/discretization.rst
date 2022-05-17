@@ -289,7 +289,7 @@ The flux for the divergence of the inviscid flux is then calculated with the sam
 flux function as used in the volume: $h^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
 
 In practice, when the fluid operators in :mod:`~mirgecom.inviscid`, :mod:`~mirgecom.euler`,
-and forthcoming (mirgecom.navierstokes) module go to calculate the flux for the divergence of the
+and :mod:`~mirgecom.navierstokes`, go to calculate the flux for the divergence of the
 inviscid physical transport fluxes, they call the
 :meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
