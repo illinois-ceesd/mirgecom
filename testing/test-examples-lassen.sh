@@ -40,9 +40,8 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
 
-for example_name in $examples_dir/*.py
+for example in $examples_dir/*.py
 do
-    example="$examples_dir/\$example_name"
     if [[ "\$example" == *"-mpi-lazy.py" ]]
     then
         echo "*** Running parallel lazy example (1 rank): \$example"
