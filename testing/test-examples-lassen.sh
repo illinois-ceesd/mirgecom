@@ -7,6 +7,7 @@ EXAMPLES_HOME=$2
 BATCH_SCRIPT_NAME="examples-lassen-batch.sh"
 examples_dir="${EXAMPLES_HOME}"
 
+rm -rf ${BATCH_SCRIPT_NAME}
 cat <<EOF > ${BATCH_SCRIPT_NAME}
 #!/bin/bash
 
@@ -79,6 +80,7 @@ else
 fi
 echo "*** Successful tests: (\$numsuccess/\$numtests): \$succeeded_examples"
 
+rm -rf example-testing-results
 printf "\$numfail\n" > example-testing-results
 touch example-testing-done
 exit \$numfail
