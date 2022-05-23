@@ -339,10 +339,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         actx = state_minus.array_context
         nhat = thaw(discr.normal(btag), actx)
         from arraycontext import outer
-        grad_flux = outer(self._grad_num_flux_func(cv_pair.int, cv_pair.ext),
-                          nhat)
-        return self._boundary_quantity(
-            discr, btag=btag, quantity=grad_flux, **kwargs)
+        return outer(self._grad_num_flux_func(cv_pair.int, cv_pair.ext), nhat)
 
     # Returns the flux to be used by the gradient operator when computing the
     # gradient of fluid temperature using prescribed fluid temperature(+).
@@ -357,9 +354,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                   discr=discr, btag=btag, gas_model=gas_model,
                                   state_minus=state_minus, **kwargs))
         from arraycontext import outer
-        grad_flux = outer(self._grad_num_flux_func(bnd_tpair.int, bnd_tpair.ext),
-                          nhat)
-        return self._boundary_quantity(discr, btag, grad_flux, **kwargs)
+        return outer(self._grad_num_flux_func(bnd_tpair.int, bnd_tpair.ext), nhat)
 
     # Returns the flux to be used by the divergence operator when computing the
     # divergence of inviscid fluid transport flux using the boundary's

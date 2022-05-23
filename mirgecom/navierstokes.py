@@ -165,15 +165,18 @@ def grad_cv_operator(
     cv_flux_bnd = (
 
         # Domain boundaries
-        sum(bdry.cv_gradient_flux(
-            discr,
-            # Make sure we get the state on the quadrature grid
-            # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            gas_model=gas_model,
-            state_minus=domain_bnd_states_quad[btag],
-            time=time,
-            numerical_flux_func=numerical_flux_func)
+        sum(op.project(
+            discr, as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            as_dofdesc(btag).with_discr_tag(quadrature_tag).with_dtag("all_faces"),
+            bdry.cv_gradient_flux(
+                discr,
+                # Make sure we get the state on the quadrature grid
+                # restricted to the tag *btag*
+                as_dofdesc(btag).with_discr_tag(quadrature_tag),
+                gas_model=gas_model,
+                state_minus=domain_bnd_states_quad[btag],
+                time=time,
+                numerical_flux_func=numerical_flux_func))
             for btag, bdry in boundaries.items())
 
         # Interior boundaries
@@ -248,15 +251,18 @@ def grad_t_operator(
     t_flux_bnd = (
 
         # Domain boundaries
-        sum(bdry.temperature_gradient_flux(
-            discr,
-            # Make sure we get the state on the quadrature grid
-            # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            gas_model=gas_model,
-            state_minus=domain_bnd_states_quad[btag],
-            time=time,
-            numerical_flux_func=numerical_flux_func)
+        sum(op.project(
+            discr, as_dofdesc(btag).with_discr_tag(quadrature_tag),
+            as_dofdesc(btag).with_discr_tag(quadrature_tag).with_dtag("all_faces"),
+            bdry.temperature_gradient_flux(
+                discr,
+                # Make sure we get the state on the quadrature grid
+                # restricted to the tag *btag*
+                as_dofdesc(btag).with_discr_tag(quadrature_tag),
+                gas_model=gas_model,
+                state_minus=domain_bnd_states_quad[btag],
+                time=time,
+                numerical_flux_func=numerical_flux_func))
             for btag, bdry in boundaries.items())
 
         # Interior boundaries

@@ -83,7 +83,7 @@ def sym_viscous_flux(sym_cv, sym_temperature, mu=1, kappa=0,
     sp_flux = sym_diffusive_flux(sym_cv, species_diffusivities=species_diffusivities)
 
     return make_conserved(dim=dim, mass=0*mom, energy=e_flux, momentum=tau,
-                          species_mass=sp_flux)
+                          species_mass=-sp_flux)
 
 
 def sym_ns(sym_cv, sym_pressure, sym_temperature, mu=1, kappa=0,

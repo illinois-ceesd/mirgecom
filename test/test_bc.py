@@ -49,6 +49,8 @@ from mirgecom.gas_model import (
     project_fluid_state,
     make_fluid_state_trace_pairs
 )
+import grudge.op as op
+
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -297,6 +299,10 @@ def test_noslip(actx_factory, dim, flux_func):
             cv_flux_bc = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
                                                gas_model=gas_model,
                                                state_minus=state_minus)
+            cv_flux_bc = op.project(discr, as_dofdesc(BTAG_ALL),
+                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    cv_flux_bc)
+
             print(f"{cv_flux_bc=}")
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
@@ -305,6 +311,11 @@ def test_noslip(actx_factory, dim, flux_func):
             t_flux_bc = wall.temperature_gradient_flux(discr, btag=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
+
+            t_flux_bc = op.project(discr, as_dofdesc(BTAG_ALL),
+                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    t_flux_bc)
+
             t_flux_bnd = t_flux_bc + t_flux_int
 
             i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
@@ -444,6 +455,10 @@ def test_prescribedviscous(actx_factory, dim, flux_func):
                                                gas_model=gas_model,
                                                state_minus=state_minus)
 
+            cv_flux_bc = op.project(discr, as_dofdesc(BTAG_ALL),
+                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    cv_flux_bc)
+
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
             t_int_tpair = interior_trace_pair(discr, temper)
@@ -451,6 +466,9 @@ def test_prescribedviscous(actx_factory, dim, flux_func):
             t_flux_bc = wall.temperature_gradient_flux(discr, btag=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
+            t_flux_bc = op.project(discr, as_dofdesc(BTAG_ALL),
+                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    t_flux_bc)
             t_flux_bnd = t_flux_bc + t_flux_int
 
             i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
