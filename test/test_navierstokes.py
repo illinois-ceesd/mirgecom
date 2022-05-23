@@ -791,25 +791,14 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     n = 2
     mesh = man_soln.get_mesh(n)
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from grudge.eager import EagerDGDiscretization
-    from meshmode.discretization.poly_element import \
-        QuadratureSimplexGroupFactory, \
-        PolynomialWarpAndBlendGroupFactory
-    discr = EagerDGDiscretization(
-        actx, mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
-        }
-    )
+    from mirgecom.discretization import create_discretization_collection
+    discr = create_discretization_collection(actx, mesh, order)
 
     nodes = thaw(discr.nodes(), actx)
 
     source_eval = evaluate(sym_source, t=0, x=nodes)
 
-    if isinstance(source_eval.mass, DOFArray):
-        source_norms = componentwise_norms(discr, source_eval)
+    source_norms = componentwise_norms(discr, source_eval)
 
     assert source_norms.mass < tol
     assert source_norms.energy < tol
@@ -1023,11 +1012,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         from mirgecom.simutil import max_component_norm
         err_scale = max_component_norm(discr, cv_exact)
-        initial_fluid_state = make_fluid_state(cv=cv_exact, gas_model=gas_model)
-        rhs_val = (ns_operator(discr, boundaries=boundaries,
-                               state=initial_fluid_state, gas_model=gas_model)
-                   + source_eval) / err_scale
-        print(f"{max_component_norm(discr, rhs_val)=}")
 
         def get_rhs(t, cv):
             from mirgecom.gas_model import make_fluid_state
@@ -1051,6 +1035,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         soln_resid = compare_fluid_solutions(discr, cv, cv_exact)
         cv_err_scales = componentwise_norms(discr, cv_exact)
+
         max_err = soln_resid[0]/cv_err_scales.mass
         max_err = max(max_err, soln_resid[1]/cv_err_scales.energy)
         for i in range(dim):
