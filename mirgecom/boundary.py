@@ -553,7 +553,7 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         )
 
     def isothermal_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
-        """Get the interior and exterior solution (*state_minus*) on the boundary.
+        r"""Get the interior and exterior solution (*state_minus*) on the boundary.
 
         Sets the external state s.t. $v^+ = -v^-$, giving vanishing contact velocity
         in the approximate Riemann solver used to compute the inviscid flux.
@@ -579,7 +579,7 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
                                 temperature_seed=tseed)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Get temperature value to weakly prescribe wall bc.
+        r"""Get temperature value to weakly prescribe wall bc.
 
         Returns $2*T_\text{wall} - T^-$ so that a central gradient flux
         will get the correct $T_\text{wall}$ BC.
