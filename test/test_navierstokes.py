@@ -379,7 +379,6 @@ def test_poiseuille_rhs(actx_factory, order):
         for i in range(dim):
             assert mom_err[i] < tol_fudge
 
-        # err_max = actx.to_numpy(discr.norm(rho_resid, np.inf)
         eoc_rec.add_data_point(1.0 / nfac, err_max)
 
     logger.info(
@@ -432,7 +431,7 @@ class FluidCase(metaclass=ABCMeta):
 class FluidManufacturedSolution(FluidCase):
     """Generic fluid manufactured solution for fluid."""
 
-    def __init__(self, dim, n=2, lx=None, nx=None, gamma=1.4, gas_const=287.):
+    def __init__(self, dim, lx=None, gamma=1.4, gas_const=287.):
         """Initialize it."""
         import warnings
         super().__init__(dim)
@@ -445,18 +444,11 @@ class FluidManufacturedSolution(FluidCase):
         self._gas_const = gas_const
         self._lx = lx
 
-    @abstractmethod
     def get_mesh(self, n=2, periodic=None):
         """Return the mesh: [-pi, pi] by default."""
         nx = (n,)*self._dim
-        a = (-self._lx[0]/2,)
-        b = (self._lx[0]/2,)
-        if self._dim == 2:
-            a = (a[0], -self._lx[1]/2)
-            b = (b[0], self._lx[1]/2)
-        if self._dim == 3:
-            a = (a[0], -self._lx[1]/2, -self._lx[2]/2)
-            b = (b[0], self._lx[1]/2, self._lx[2]/2)
+        a = tuple(-lx_i/2 for lx_i in self._lx)
+        b = tuple(lx_i/2 for lx_i in self._lx)
         return _get_box_mesh(self.dim, a, b, nx, periodic)
 
     @abstractmethod
@@ -464,7 +456,6 @@ class FluidManufacturedSolution(FluidCase):
         """Return the symbolically-compatible solution."""
         pass
 
-    @abstractmethod
     def get_boundaries(self):
         """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
@@ -669,7 +660,7 @@ class IsentropicVortex(FluidManufacturedSolution):
 class TrigSolution1(FluidManufacturedSolution):
     """CNS manufactured solution designed to vanish on the domain boundary."""
 
-    def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
+    def __init__(self, dim, q_coeff, x_coeff, lx=None,
                  gamma=1.4, gas_const=287.):
         """Initialize it."""
         super().__init__(dim, lx, gamma, gas_const)
@@ -729,10 +720,6 @@ class TestSolution(FluidManufacturedSolution):
                               energy=energy), pressure, temperature
 
 
-def _compute_mms_source(sym_operator, sym_soln, sym_t):
-    return sym_diff(sym_soln)(sym_t) - sym_operator(sym_soln)
-
-
 # @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),
@@ -778,11 +765,11 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     sym_ns_source = dcv_dt - sym_ns_rhs
     sym_euler_source = dcv_dt - sym_euler_rhs
 
-    sym_source = sym_euler_source
     tol = 1e-15
 
     if mu == 0:
         assert sym_ns_source == sym_euler_source
+        sym_source = sym_euler_source
     else:
         sym_source = sym_ns_source
 
@@ -791,25 +778,14 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     n = 2
     mesh = man_soln.get_mesh(n)
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from grudge.eager import EagerDGDiscretization
-    from meshmode.discretization.poly_element import \
-        QuadratureSimplexGroupFactory, \
-        PolynomialWarpAndBlendGroupFactory
-    discr = EagerDGDiscretization(
-        actx, mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
-        }
-    )
+    from mirgecom.discretization import create_discretization_collection
+    discr = create_discretization_collection(actx, mesh, order)
 
     nodes = thaw(discr.nodes(), actx)
 
     source_eval = evaluate(sym_source, t=0, x=nodes)
 
-    if isinstance(source_eval.mass, DOFArray):
-        source_norms = componentwise_norms(discr, source_eval)
+    source_norms = componentwise_norms(discr, source_eval)
 
     assert source_norms.mass < tol
     assert source_norms.energy < tol
@@ -820,8 +796,8 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 class RoySolution(FluidManufacturedSolution):
     """CNS manufactured solution from [Roy_2017]__."""
 
-    def __init__(self, dim, q_coeff=None, x_coeff=None, n=2, lx=None, nx=None,
-                 gamma=1.4, gas_const=287.):
+    def __init__(self, dim, q_coeff=None, x_coeff=None, lx=None, gamma=1.4,
+                 gas_const=287.):
         """Initialize it."""
         super().__init__(dim=dim, lx=lx, gamma=gamma, gas_const=gas_const)
         if q_coeff is None:
@@ -951,11 +927,11 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     sym_ns_source = dcv_dt - sym_ns_rhs
     sym_euler_source = dcv_dt - sym_euler_rhs
 
-    sym_source = sym_euler_source
     tol = 1e-12
 
     if mu == 0:
         assert sym_ns_source == sym_euler_source
+        sym_source = sym_euler_source
     else:
         sym_source = sym_ns_source
 
@@ -970,8 +946,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         mesh = man_soln.get_mesh(n)
 
-        from mirgecom.discretization import create_dg_discretization
-        discr = create_dg_discretization(actx, mesh, order)
+        from mirgecom.discretization import create_discretization_collection
+        discr = create_discretization_collection(actx, mesh, order)
         nodes = thaw(discr.nodes(), actx)
 
         from grudge.dt_utils import characteristic_lengthscales
@@ -1007,7 +983,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         logger.info(f"{source_norms=}")
         logger.info(f"{source_eval=}")
 
-        # pu.db
         def _boundary_state_func(discr, btag, gas_model, state_minus, time=0,
                                  **kwargs):
             actx = state_minus.array_context
@@ -1023,11 +998,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         from mirgecom.simutil import max_component_norm
         err_scale = max_component_norm(discr, cv_exact)
-        initial_fluid_state = make_fluid_state(cv=cv_exact, gas_model=gas_model)
-        rhs_val = (ns_operator(discr, boundaries=boundaries,
-                               state=initial_fluid_state, gas_model=gas_model)
-                   + source_eval) / err_scale
-        print(f"{max_component_norm(discr, rhs_val)=}")
 
         def get_rhs(t, cv):
             from mirgecom.gas_model import make_fluid_state
@@ -1051,6 +1021,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         soln_resid = compare_fluid_solutions(discr, cv, cv_exact)
         cv_err_scales = componentwise_norms(discr, cv_exact)
+
         max_err = soln_resid[0]/cv_err_scales.mass
         max_err = max(max_err, soln_resid[1]/cv_err_scales.energy)
         for i in range(dim):

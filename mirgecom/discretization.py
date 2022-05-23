@@ -3,8 +3,7 @@
 Discretization creation
 -----------------------
 
-.. autofunction:: create_dg_discretization
-.. autofunction:: create_dg_discretization_collection
+.. autofunction:: create_discretization_collection
 """
 
 __copyright__ = """
@@ -35,7 +34,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_dg_discretization(actx, mesh, order):
+# Centralize the discretization collection creation routine so that
+# we can replace it more easily when we refactor the drivers and
+# examples to use discretization collections, and change it centrally
+# when we want to change it.
+# TODO: Make this return an actual grudge `DiscretizationCollection`
+#       when we are ready to change mirgecom to support that change.
+def create_discretization_collection(actx, mesh, order):
     """Create and return a grudge DG discretization object."""
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.eager import EagerDGDiscretization
