@@ -970,8 +970,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         mesh = man_soln.get_mesh(n)
 
-        from mirgecom.discretization import create_dg_discretization
-        discr = create_dg_discretization(actx, mesh, order)
+        from mirgecom.discretization import create_discretization_collection
+        discr = create_discretization_collection(actx, mesh, order)
         nodes = thaw(discr.nodes(), actx)
 
         from grudge.dt_utils import characteristic_lengthscales
