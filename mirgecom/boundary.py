@@ -525,7 +525,11 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         self._wall_velocity = wall_velocity
 
     def adiabatic_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
+        """Get the exterior solution on the boundary.
+
+        Sets the external state s.t. $v^+ = -v^-$, giving vanishing contact velocity
+        in the approximate Riemann solver used to compute the inviscid flux.
+        """
         wall_pen = 2.0 * self._wall_velocity * state_minus.mass_density
         ext_mom = wall_pen - state_minus.momentum_density  # no-slip
 
@@ -541,10 +545,8 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     r"""Isothermal no-slip viscous wall boundary.
 
-    This class implements an isothermal no-slip wall by:
-    (TBD)
-    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
-    boundary conditions described in detail in [Poinsot_1992]_.
+    .. automethod:: isothermal_noslip_state
+    .. automethod:: temperature_bc
     """
 
     def __init__(self, wall_temperature=300):
@@ -556,7 +558,11 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         )
 
     def isothermal_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
-        """Get the interior and exterior solution (*state_minus*) on the boundary."""
+        """Get the interior and exterior solution (*state_minus*) on the boundary.
+
+        Sets the external state s.t. $v^+ = -v^-$, giving vanishing contact velocity
+        in the approximate Riemann solver used to compute the inviscid flux.
+        """
         temperature_wall = self._wall_temp + 0*state_minus.mass_density
         velocity_plus = -state_minus.velocity
         mass_frac_plus = state_minus.species_mass_fractions
@@ -578,5 +584,9 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
                                 temperature_seed=tseed)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Get temperature value to weakly prescribe wall bc."""
+        """Get temperature value to weakly prescribe wall bc.
+
+        Returns $2*T_\text{wall} - T^-$ so that a central gradient flux
+        will get the correct $T_\text{wall}$ BC.
+        """
         return 2*self._wall_temp - state_minus.temperature
