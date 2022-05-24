@@ -31,14 +31,13 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from pytools.obj_array import make_obj_array, obj_array_vectorize
+from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
-    ConservedVars,
     make_conserved
 )
 import mirgecom.symbolic as sym
@@ -145,19 +144,6 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
 
 
-# TODO: Generalize mirgecom.symbolic to work with array containers
-def sym_grad(dim, expr):
-    """Do symbolic grad."""
-    if isinstance(expr, ConservedVars):
-        return make_conserved(
-            dim, q=sym_grad(dim, expr.join()))
-    elif isinstance(expr, np.ndarray):
-        return np.stack(
-            obj_array_vectorize(lambda e: sym.grad(dim, e), expr))
-    else:
-        return sym.grad(dim, expr)
-
-
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("sym_test_func_factory", [
@@ -213,7 +199,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
             return result * (0*x_vec[0] + 1)
 
         test_func = partial(sym_eval, sym_test_func)
-        grad_test_func = partial(sym_eval, sym_grad(dim, sym_test_func))
+        grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
 
         nodes = thaw(actx, discr.nodes())
         int_flux = partial(central_flux_interior, actx, discr)
