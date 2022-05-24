@@ -190,13 +190,13 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         h_max = h_max_from_volume(discr)
 
         def sym_eval(expr, x_vec):
-            # FIXME: When pymbolic supports array containers
             mapper = sym.EvaluationMapper({"x": x_vec})
             from arraycontext import rec_map_array_container
-            result = rec_map_array_container(mapper, expr)
-            # If expressions don't depend on coords (e.g., order 0), evaluated result
-            # will be scalar-valued, so promote to DOFArray(s) before returning
-            return result * (0*x_vec[0] + 1)
+            return rec_map_array_container(
+                # If expressions don't depend on coords (e.g., order 0), evaluated
+                # result will be scalar-valued, so promote to DOFArray
+                lambda comp_expr: mapper(comp_expr) + 0*x_vec[0],
+                expr)
 
         test_func = partial(sym_eval, sym_test_func)
         grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
