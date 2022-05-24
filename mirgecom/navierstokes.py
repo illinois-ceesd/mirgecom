@@ -239,7 +239,7 @@ def grad_t_operator(
     get_interior_flux = partial(
         _gradient_flux_interior, discr, numerical_flux_func)
 
-    # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (3b)
+    # Temperature gradient for conductive heat flux: [Ihme_2014]_ eqn (4c)
     # Capture the temperature for the interior faces for grad(T) calc
     # Note this is *all interior faces*, including partition boundaries
     # due to the use of *interior_state_pairs*.
