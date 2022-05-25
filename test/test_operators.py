@@ -31,14 +31,13 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
-from pytools.obj_array import make_obj_array, obj_array_vectorize
+from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
-    ConservedVars,
     make_conserved
 )
 import mirgecom.symbolic as sym
@@ -145,46 +144,6 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
 
 
-# TODO: Generalize mirgecom.symbolic to work with array containers
-def sym_grad(dim, expr):
-    """Do symbolic grad."""
-    if isinstance(expr, ConservedVars):
-        return make_conserved(
-            dim, q=sym_grad(dim, expr.join()))
-    elif isinstance(expr, np.ndarray):
-        return np.stack(
-            obj_array_vectorize(lambda e: sym.grad(dim, e), expr))
-    else:
-        return sym.grad(dim, expr)
-
-
-def _contextize_expression(expr, ones):
-
-    if isinstance(expr, ConservedVars):
-        dim = expr.dim
-        if isinstance(expr.mass, np.ndarray):
-            mass = make_obj_array([expr.mass[i]*ones for i in range(dim)])
-            energy = make_obj_array([expr.energy[i]*ones for i in range(dim)])
-            spec_mass = 0*expr.species_mass
-            for i in range(expr.nspecies):
-                spec_mass[i] = make_obj_array([expr.species_mass[j]*ones
-                                               for j in range(dim)])
-            mom = 0*expr.momentum
-            for i in range(dim):
-                for j in range(dim):
-                    mom[i][j] = expr.momentum[i][j]*ones
-        else:
-            mom = make_obj_array([expr.momentum[i]*ones for i in range(dim)])
-            mass = expr.mass*ones
-            energy = expr.energy*ones
-            spec_mass = make_obj_array([expr.species_mass[i]*ones
-                                        for i in range(expr.nspecies)])
-
-        return make_conserved(dim=dim, mass=mass, momentum=mom, energy=energy,
-                              species_mass=spec_mass)
-    return expr
-
-
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("sym_test_func_factory", [
@@ -232,18 +191,16 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         h_max = h_max_from_volume(discr)
 
         def sym_eval(expr, x_vec):
-            # FIXME: When pymbolic supports array containers
             mapper = sym.EvaluationMapper({"x": x_vec})
             from arraycontext import rec_map_array_container
-            result = rec_map_array_container(mapper, expr)
-            # If expressions don't depend on coords (e.g., order 0), evaluated result
-            # will be scalar-valued, so promote to DOFArray(s) before returning
-            ones = 0*x_vec[0] + 1.0
-            result = _contextize_expression(result, ones)
-            return result * (0*x_vec[0] + 1)
+            return rec_map_array_container(
+                # If expressions don't depend on coords (e.g., order 0), evaluated
+                # result will be scalar-valued, so promote to DOFArray
+                lambda comp_expr: mapper(comp_expr) + 0*x_vec[0],
+                expr)
 
         test_func = partial(sym_eval, sym_test_func)
-        grad_test_func = partial(sym_eval, sym_grad(dim, sym_test_func))
+        grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
 
         nodes = thaw(discr.nodes(), actx)
         int_flux = partial(central_flux_interior, actx, discr)

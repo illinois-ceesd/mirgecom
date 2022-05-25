@@ -16,8 +16,6 @@ Symbolic fluid operators
 """
 import numpy as np
 import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
@@ -60,6 +58,9 @@ def sym_diffusive_flux(sym_cv, species_diffusivities=None):
              * sym_grad(sym_cv.dim, sym_cv.species_mass_fractions))
 
 
+# Diffusive heat flux is neglected atm.  Full multispecies
+# support in the symbolic infrastructure is a WIP.
+# TODO: Add diffusive heat flux
 def sym_heat_flux(dim, sym_temperature, kappa=0):
     """Symbolic heat flux calculator."""
     return -kappa * sym_grad(dim, sym_temperature)
@@ -83,7 +84,7 @@ def sym_viscous_flux(sym_cv, sym_temperature, mu=1, kappa=0,
     sp_flux = sym_diffusive_flux(sym_cv, species_diffusivities=species_diffusivities)
 
     return make_conserved(dim=dim, mass=0*mom, energy=e_flux, momentum=tau,
-                          species_mass=sp_flux)
+                          species_mass=-sp_flux)
 
 
 def sym_ns(sym_cv, sym_pressure, sym_temperature, mu=1, kappa=0,
