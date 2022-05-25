@@ -113,6 +113,8 @@ class EvaluationMapper(BaseEvaluationMapper):
         return getattr(mm, expr.function.name)(self.rec(par))
 
 
+# TODO: Figure out how to reconcile this with the need for evaluation that promotes
+# scalar values to DOF arrays (see test_operators.py)
 def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
     """Evaluate a symbolic expression using a specified mapper."""
     mapper = mapper_type(kwargs)
