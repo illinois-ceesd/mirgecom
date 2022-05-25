@@ -16,8 +16,6 @@ Symbolic fluid operators
 """
 import numpy as np
 import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
