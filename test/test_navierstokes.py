@@ -40,12 +40,10 @@ from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 from mirgecom.fluid import make_conserved
-from grudge.dof_desc import DTAG_BOUNDARY
 
 from mirgecom.boundary import (
     DummyBoundary,
     PrescribedFluidBoundary,
-    AdiabaticNoslipMovingBoundary
 )
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -90,7 +88,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
     # for nel_1d in [4, 8, 12]:
-    for nel_1d in [4, 8]:
+    for nel_1d in [2, 4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
@@ -120,7 +118,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         energy_input = discr.zeros(actx) + 2.5
 
         mom_input = make_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim)]
+            [float(i)*ones for i in range(discr.dim)]
         )
 
         mass_frac_input = flat_obj_array(
@@ -138,8 +136,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
                                    for i in range(num_equations)])
         )
         mu = 1.0
-        kappa = 0.0
-        spec_diffusivity = 0 * np.ones(nspecies)
+        kappa = 1.0
+        spec_diffusivity = .5 * np.ones(nspecies)
 
         gas_model = GasModel(
             eos=IdealSingleGas(),
@@ -240,160 +238,6 @@ def _get_box_mesh(dim, a, b, n, t=None, periodic=None):
                periodic=periodic)
 
 
-@pytest.mark.parametrize("order", [2, 3])
-def test_poiseuille_rhs(actx_factory, order):
-    """Test the Navier-Stokes operator using a Poiseuille state.
-
-    This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
-    and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
-    """
-    actx = actx_factory()
-    dim = 2
-    tolerance = 1e-9
-
-    from pytools.convergence import EOCRecorder
-    eoc_rec = EOCRecorder()
-
-    base_pressure = 100000.0
-    pressure_ratio = 1.001
-    mu = 1.0
-    left_boundary_location = 0
-    right_boundary_location = 0.1
-    ybottom = 0.
-    ytop = .02
-    nspecies = 0
-    mu = 1.0
-    kappa = 0.0
-    spec_diffusivity = 0 * np.ones(nspecies)
-    from mirgecom.gas_model import GasModel, make_fluid_state
-    gas_model = GasModel(
-        eos=IdealSingleGas(),
-        transport=SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
-                                  species_diffusivity=spec_diffusivity))
-
-    def poiseuille_2d(x_vec, eos, cv=None, **kwargs):
-        y = x_vec[1]
-        x = x_vec[0]
-        x0 = left_boundary_location
-        xmax = right_boundary_location
-        xlen = xmax - x0
-        p_low = base_pressure
-        p_hi = pressure_ratio*base_pressure
-        dp = p_hi - p_low
-        dpdx = dp/xlen
-        h = ytop - ybottom
-        u_x = dpdx*y*(h - y)/(2*mu)
-        p_x = p_hi - dpdx*x
-        rho = 1.0
-        mass = 0*x + rho
-        u_y = 0*x
-        velocity = make_obj_array([u_x, u_y])
-        ke = .5*np.dot(velocity, velocity)*mass
-        gamma = eos.gamma()
-        if cv is not None:
-            mass = cv.mass
-            vel = cv.velocity
-            ke = .5*np.dot(vel, vel)*mass
-
-        rho_e = p_x/(gamma-1) + ke
-        return make_conserved(2, mass=mass, energy=rho_e,
-                              momentum=mass*velocity)
-
-    initializer = poiseuille_2d
-
-    # for nel_1d in [4, 8, 12]:
-    for nfac in [1, 2, 4, 8]:
-
-        npts_axis = nfac*(12, 20)
-        box_ll = (left_boundary_location, ybottom)
-        box_ur = (right_boundary_location, ytop)
-        mesh = _get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
-
-        logger.info(
-            f"Number of {dim}d elements: {mesh.nelements}"
-        )
-
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=mesh.dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
-        nodes = thaw(discr.nodes(), actx)
-
-        cv_input = initializer(x_vec=nodes, eos=gas_model.eos)
-        num_eqns = dim + 2
-        expected_rhs = make_conserved(
-            dim, q=make_obj_array([discr.zeros(actx)
-                                   for i in range(num_eqns)])
-        )
-
-        def boundary_func(discr, btag, gas_model, state_minus, **kwargs):
-            actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
-            return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
-                                                **kwargs), gas_model)
-
-        boundaries = {
-            DTAG_BOUNDARY("-1"):
-            PrescribedFluidBoundary(boundary_state_func=boundary_func),
-            DTAG_BOUNDARY("+1"):
-            PrescribedFluidBoundary(boundary_state_func=boundary_func),
-            DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
-            DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
-
-        state = make_fluid_state(gas_model=gas_model, cv=cv_input)
-        ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
-                             state=state, time=0.0)
-
-        rhs_resid = ns_rhs - expected_rhs
-        rho_resid = rhs_resid.mass
-        # rhoe_resid = rhs_resid.energy
-        mom_resid = rhs_resid.momentum
-
-        rho_rhs = ns_rhs.mass
-        # rhoe_rhs = ns_rhs.energy
-        rhov_rhs = ns_rhs.momentum
-        # rhoy_rhs = ns_rhs.species_mass
-
-        print(
-            f"rho_rhs  = {rho_rhs}\n"
-            # f"rhoe_rhs = {rhoe_rhs}\n"
-            f"rhov_rhs = {rhov_rhs}\n"
-            # f"rhoy_rhs = {rhoy_rhs}\n"
-        )
-
-        tol_fudge = 2e-4
-        assert actx.to_numpy(discr.norm(rho_resid, np.inf)) < tolerance
-        # assert actx.to_numpy(discr.norm(rhoe_resid, np.inf)) < tolerance
-        mom_err = [actx.to_numpy(discr.norm(mom_resid[i], np.inf))
-                   for i in range(dim)]
-        err_max = max(mom_err)
-        for i in range(dim):
-            assert mom_err[i] < tol_fudge
-
-        # err_max = actx.to_numpy(discr.norm(rho_resid, np.inf)
-        eoc_rec.add_data_point(1.0 / nfac, err_max)
-
-    logger.info(
-        f"V != 0 Errors:\n{eoc_rec}"
-    )
-
-    if order <= 1:
-        assert eoc_rec.order_estimate() >= order - 0.5
-    else:
-        # Poiseuille is a quadratic profile, exactly represented by
-        # quadratic and higher
-        assert eoc_rec.max_error() < tol_fudge
-
-
 class FluidCase(metaclass=ABCMeta):
     """
     A manufactured fluid solution on a mesh.
@@ -432,7 +276,7 @@ class FluidCase(metaclass=ABCMeta):
 class FluidManufacturedSolution(FluidCase):
     """Generic fluid manufactured solution for fluid."""
 
-    def __init__(self, dim, n=2, lx=None, nx=None, gamma=1.4, gas_const=287.):
+    def __init__(self, dim, lx=None, gamma=1.4, gas_const=287.):
         """Initialize it."""
         import warnings
         super().__init__(dim)
@@ -445,18 +289,11 @@ class FluidManufacturedSolution(FluidCase):
         self._gas_const = gas_const
         self._lx = lx
 
-    @abstractmethod
     def get_mesh(self, n=2, periodic=None):
         """Return the mesh: [-pi, pi] by default."""
         nx = (n,)*self._dim
-        a = (-self._lx[0]/2,)
-        b = (self._lx[0]/2,)
-        if self._dim == 2:
-            a = (a[0], -self._lx[1]/2)
-            b = (b[0], self._lx[1]/2)
-        if self._dim == 3:
-            a = (a[0], -self._lx[1]/2, -self._lx[2]/2)
-            b = (b[0], self._lx[1]/2, self._lx[2]/2)
+        a = tuple(-lx_i/2 for lx_i in self._lx)
+        b = tuple(lx_i/2 for lx_i in self._lx)
         return _get_box_mesh(self.dim, a, b, nx, periodic)
 
     @abstractmethod
@@ -464,7 +301,6 @@ class FluidManufacturedSolution(FluidCase):
         """Return the symbolically-compatible solution."""
         pass
 
-    @abstractmethod
     def get_boundaries(self):
         """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
@@ -538,7 +374,7 @@ class UniformSolution(FluidManufacturedSolution):
 
 
 class ShearFlow(FluidManufacturedSolution):
-    """Trivial manufactured solution."""
+    """ShearFlow from [Hesthaven_2008]_."""
 
     def __init__(self, dim=2, density=1, pressure=1, gamma=3/2, velocity=None,
                  mu=.01):
@@ -563,27 +399,40 @@ class ShearFlow(FluidManufacturedSolution):
         a = (0,)*self._dim
         b = (1,)*self._dim
         periodic = (False,)*self._dim
-        return _get_box_mesh(self.dim, a, b, nx, periodic=periodic)
+        return _get_box_mesh(self._dim, a, b, nx, periodic=periodic)
 
     def get_boundaries(self, discr, actx, t):
         """Get the boundaries."""
-        return super().get_boundaries(discr, actx, t)
+        return super().get_boundaries()
 
     def get_solution(self, x, t):
         """Return sym soln."""
         x_c = x[0]
         y_c = x[1]
+
         zeros = mm.sin(x_c - x_c)*mm.sin(t - t)
         ones = mm.cos(x_c - x_c)*mm.cos(t - t)
+
         v_x = y_c**2
         v_y = 1.*zeros
+        if self._dim > 2:
+            v_z = 1.*zeros
+
         density = self._rho * ones
-        mom = make_obj_array([self._rho*v_x, self._rho*v_y])
+
+        if self._dim == 2:
+            mom = make_obj_array([self._rho*v_x, self._rho*v_y])
+        else:
+            mom = make_obj_array([self._rho*v_z, self._rho*v_y, self._rho*v_z])
+
         pressure = 2*self._mu*x_c + 10
+
         ie = pressure/(self._gamma - 1)
         ke = (density*y_c**4)/2
         total_energy = (ie + ke)*ones
+
         temperature = (pressure*ones) / (self._gas_const * density)
+
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=total_energy), pressure, temperature
 
@@ -669,7 +518,7 @@ class IsentropicVortex(FluidManufacturedSolution):
 class TrigSolution1(FluidManufacturedSolution):
     """CNS manufactured solution designed to vanish on the domain boundary."""
 
-    def __init__(self, dim, q_coeff, x_coeff, n=2, lx=None, nx=None,
+    def __init__(self, dim, q_coeff, x_coeff, lx=None,
                  gamma=1.4, gas_const=287.):
         """Initialize it."""
         super().__init__(dim, lx, gamma, gas_const)
@@ -729,10 +578,6 @@ class TestSolution(FluidManufacturedSolution):
                               energy=energy), pressure, temperature
 
 
-def _compute_mms_source(sym_operator, sym_soln, sym_t):
-    return sym_diff(sym_soln)(sym_t) - sym_operator(sym_soln)
-
-
 # @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),
@@ -778,11 +623,11 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     sym_ns_source = dcv_dt - sym_ns_rhs
     sym_euler_source = dcv_dt - sym_euler_rhs
 
-    sym_source = sym_euler_source
     tol = 1e-15
 
     if mu == 0:
         assert sym_ns_source == sym_euler_source
+        sym_source = sym_euler_source
     else:
         sym_source = sym_ns_source
 
@@ -791,25 +636,14 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     n = 2
     mesh = man_soln.get_mesh(n)
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from grudge.eager import EagerDGDiscretization
-    from meshmode.discretization.poly_element import \
-        QuadratureSimplexGroupFactory, \
-        PolynomialWarpAndBlendGroupFactory
-    discr = EagerDGDiscretization(
-        actx, mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
-        }
-    )
+    from mirgecom.discretization import create_discretization_collection
+    discr = create_discretization_collection(actx, mesh, order)
 
     nodes = thaw(discr.nodes(), actx)
 
     source_eval = evaluate(sym_source, t=0, x=nodes)
 
-    if isinstance(source_eval.mass, DOFArray):
-        source_norms = componentwise_norms(discr, source_eval)
+    source_norms = componentwise_norms(discr, source_eval)
 
     assert source_norms.mass < tol
     assert source_norms.energy < tol
@@ -817,11 +651,120 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
         assert source_norms.momentum[i] < tol
 
 
+@pytest.mark.parametrize(("dim", "flow_direction"),
+                         [(2, 0), (2, 1), (3, 0), (3, 1), (3, 2)])
+@pytest.mark.parametrize("order", [2, 3])
+def test_shear_flow(actx_factory, dim, flow_direction, order):
+    """Test the Navier-Stokes operator using an exact shear flow solution.
+
+    The shear flow solution is defined in [Hesthaven_2008]_, Section 7.5.3.
+
+    We expect convergence here to be *order* at best as we are checking
+    the RHS directly, not a time-integrated solution, which takes far too
+    long to perform in unit testing.
+    """
+    visualize = False  # set to True for debugging viz
+    actx = actx_factory()
+    transverse_direction = (flow_direction + 1) % dim
+
+    mu = .01
+    kappa = 0.
+
+    eos = IdealSingleGas(gamma=3/2, gas_const=287.0)
+    transport = SimpleTransport(viscosity=mu, thermal_conductivity=kappa)
+    from mirgecom.gas_model import GasModel, make_fluid_state
+    gas_model = GasModel(eos=eos, transport=transport)
+
+    tol = 1e-8
+
+    from mirgecom.initializers import ShearFlow as ExactShearFlow
+    exact_soln = ExactShearFlow(dim=dim, flow_dir=flow_direction,
+                                trans_dir=transverse_direction)
+
+    # Only the energy eqn is non-trivial at all orders
+    # Continuity eqn is solved exactly at any order
+    from pytools.convergence import EOCRecorder
+    eoc_energy = EOCRecorder()
+
+    def _boundary_state_func(discr, btag, gas_model, state_minus, time=0,
+                             **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = discr.discr_from_dd(btag)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        boundary_cv = exact_soln(x=nodes)
+        return make_fluid_state(boundary_cv, gas_model)
+
+    boundaries = {
+        BTAG_ALL:
+        PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)
+    }
+
+    base_n = 8
+    if dim > 2:
+        base_n = 4
+
+    for n in [1, 2, 4, 8]:
+
+        nx = (n*base_n,)*dim
+
+        a = (0,)*dim
+        b = (1,)*dim
+
+        print(f"{nx=}")
+        mesh = _get_box_mesh(dim, a, b, n=nx)
+
+        from mirgecom.discretization import create_discretization_collection
+        discr = create_discretization_collection(actx, mesh, order)
+        from grudge.dt_utils import h_max_from_volume
+        h_max = actx.to_numpy(h_max_from_volume(discr))
+
+        nodes = thaw(discr.nodes(), actx)
+        print(f"{nodes=}")
+
+        cv_exact = exact_soln(x=nodes)
+        print(f"{cv_exact=}")
+        exact_fluid_state = make_fluid_state(cv=cv_exact, gas_model=gas_model)
+
+        fluid_state = exact_fluid_state
+
+        # Exact solution should have RHS=0, so the RHS itself is the residual
+        ns_rhs, grad_cv, grad_t = ns_operator(discr, gas_model=gas_model,
+                                              state=fluid_state,
+                                              boundaries=boundaries,
+                                              return_gradients=True)
+
+        if visualize:
+            from grudge.shortcuts import make_visualizer
+            vis = make_visualizer(discr, discr.order)
+            vis.write_vtk_file("shear_flow_test_{order}_{n}.vtu".format(
+                order=order, n=n), [
+                    ("shear_flow", exact_fluid_state.cv),
+                    ("rhs", ns_rhs),
+                    ("grad(E)", grad_cv.energy),
+                    ], overwrite=True)
+
+        print(f"{grad_cv=}")
+        rhs_norms = componentwise_norms(discr, ns_rhs)
+
+        # these ones should be exact at all orders
+        assert rhs_norms.mass < tol
+        assert rhs_norms.momentum[transverse_direction] < tol
+
+        print(f"{rhs_norms=}")
+
+        eoc_energy.add_data_point(h_max, actx.to_numpy(rhs_norms.energy))
+
+    expected_eoc = order - 0.5
+    print(f"{eoc_energy.pretty_print()}")
+
+    assert eoc_energy.order_estimate() >= expected_eoc
+
+
 class RoySolution(FluidManufacturedSolution):
     """CNS manufactured solution from [Roy_2017]__."""
 
-    def __init__(self, dim, q_coeff=None, x_coeff=None, n=2, lx=None, nx=None,
-                 gamma=1.4, gas_const=287.):
+    def __init__(self, dim, q_coeff=None, x_coeff=None, lx=None, gamma=1.4,
+                 gas_const=287.):
         """Initialize it."""
         super().__init__(dim=dim, lx=lx, gamma=gamma, gas_const=gas_const)
         if q_coeff is None:
@@ -944,20 +887,14 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     dcv_dt = sym_diff(sym_t)(sym_cv)
     print(f"{dcv_dt=}")
 
-    from mirgecom.symbolic_fluid import sym_euler, sym_ns
-    sym_euler_rhs = sym_euler(sym_cv, sym_prs)
+    from mirgecom.symbolic_fluid import sym_ns
     sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=mu, kappa=kappa)
 
     sym_ns_source = dcv_dt - sym_ns_rhs
-    sym_euler_source = dcv_dt - sym_euler_rhs
 
-    sym_source = sym_euler_source
     tol = 1e-12
 
-    if mu == 0:
-        assert sym_ns_source == sym_euler_source
-    else:
-        sym_source = sym_ns_source
+    sym_source = sym_ns_source
 
     logger.info(f"{sym_source=}")
 
@@ -970,8 +907,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         mesh = man_soln.get_mesh(n)
 
-        from mirgecom.discretization import create_dg_discretization
-        discr = create_dg_discretization(actx, mesh, order)
+        from mirgecom.discretization import create_discretization_collection
+        discr = create_discretization_collection(actx, mesh, order)
         nodes = thaw(discr.nodes(), actx)
 
         from grudge.dt_utils import characteristic_lengthscales
@@ -1007,7 +944,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         logger.info(f"{source_norms=}")
         logger.info(f"{source_eval=}")
 
-        # pu.db
         def _boundary_state_func(discr, btag, gas_model, state_minus, time=0,
                                  **kwargs):
             actx = state_minus.array_context
@@ -1023,11 +959,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         from mirgecom.simutil import max_component_norm
         err_scale = max_component_norm(discr, cv_exact)
-        initial_fluid_state = make_fluid_state(cv=cv_exact, gas_model=gas_model)
-        rhs_val = (ns_operator(discr, boundaries=boundaries,
-                               state=initial_fluid_state, gas_model=gas_model)
-                   + source_eval) / err_scale
-        print(f"{max_component_norm(discr, rhs_val)=}")
 
         def get_rhs(t, cv):
             from mirgecom.gas_model import make_fluid_state
@@ -1051,6 +982,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         soln_resid = compare_fluid_solutions(discr, cv, cv_exact)
         cv_err_scales = componentwise_norms(discr, cv_exact)
+
         max_err = soln_resid[0]/cv_err_scales.mass
         max_err = max(max_err, soln_resid[1]/cv_err_scales.energy)
         for i in range(dim):
