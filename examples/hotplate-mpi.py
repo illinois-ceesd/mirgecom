@@ -383,7 +383,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
 
-            if do_status:  # needed because logging fails to make output
+            if do_status:
                 if component_errors is None:
                     from mirgecom.simutil import compare_fluid_solutions
                     component_errors = compare_fluid_solutions(discr, state, exact)

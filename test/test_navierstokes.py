@@ -657,7 +657,8 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 def test_shear_flow(actx_factory, dim, flow_direction, order):
     """Test the Navier-Stokes operator using an exact shear flow solution.
 
-    The shear flow solution is defined in [Hesthaven_2008]_, Section 7.5.3.
+    The shear flow solution is defined in [Hesthaven_2008]_, Section 7.5.3
+    and documented in :class:`~mirgecom.iniitalizers.ShearFlow`.
 
     We expect convergence here to be *order* at best as we are checking
     the RHS directly, not a time-integrated solution, which takes far too
@@ -699,9 +700,9 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)
     }
 
-    base_n = 8
+    base_n = 4
     if dim > 2:
-        base_n = 4
+        base_n = 2
 
     for n in [1, 2, 4, 8]:
 

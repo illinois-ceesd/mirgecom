@@ -89,6 +89,10 @@ class FluidBoundary(metaclass=ABCMeta):
             quantities for the (-) side of the boundary specified by
             *btag*.
 
+        btag:
+
+            Boundary tag indicating which domain boundary to process
+
         gas_model: :class:`~mirgecom.gas_model.GasModel`
 
             Physical gas model including equation of state, transport,
@@ -108,7 +112,8 @@ class FluidBoundary(metaclass=ABCMeta):
 
     @abstractmethod
     def viscous_divergence_flux(self, discr, btag, gas_model, state_minus,
-                                grad_cv_minus, grad_t_minus, **kwargs):
+                                grad_cv_minus, grad_t_minus,
+                                numerical_flux_func, **kwargs):
         """Get the viscous boundary flux for the divergence operator.
 
         This routine returns the facial flux used in the divergence
@@ -119,6 +124,10 @@ class FluidBoundary(metaclass=ABCMeta):
         discr: :class:`~grudge.eager.EagerDGDiscretization`
 
             A discretization collection encapsulating the DG elements
+
+        btag:
+
+            Boundary tag indicating which domain boundary to process
 
         state_minus: :class:`~mirgecom.gas_model.FluidState`
 
@@ -166,6 +175,10 @@ class FluidBoundary(metaclass=ABCMeta):
 
             A discretization collection encapsulating the DG elements
 
+        btag:
+
+            Boundary tag indicating which domain boundary to process
+
         state_minus: :class:`~mirgecom.gas_model.FluidState`
 
             Fluid state object with the conserved state, and dependent
@@ -196,6 +209,10 @@ class FluidBoundary(metaclass=ABCMeta):
         discr: :class:`~grudge.eager.EagerDGDiscretization`
 
             A discretization collection encapsulating the DG elements
+
+        btag:
+
+            Boundary tag indicating which domain boundary to process
 
         state_minus: :class:`~mirgecom.gas_model.FluidState`
 
