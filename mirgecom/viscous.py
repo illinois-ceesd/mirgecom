@@ -275,7 +275,8 @@ def viscous_flux(state, grad_cv, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair):
+def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
+                                gas_model=None):
     r"""Return a central facial flux for the divergence operator.
 
     The flux is defined as:
@@ -293,6 +294,9 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair):
     discr: :class:`~grudge.eager.EagerDGDiscretization`
 
         The discretization to use
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model for the gas. Unused for this numerical flux function.
 
     state_pair: :class:`~grudge.trace_pair.TracePair`
 

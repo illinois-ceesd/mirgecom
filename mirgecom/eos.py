@@ -112,6 +112,7 @@ class GasEOS(metaclass=ABCMeta):
     .. automethod:: kinetic_energy
     .. automethod:: gamma
     .. automethod:: get_internal_energy
+    .. automethod:: get_density
     """
 
     @abstractmethod
@@ -157,8 +158,12 @@ class GasEOS(metaclass=ABCMeta):
         """Get the ratio of gas specific heats Cp/Cv."""
 
     @abstractmethod
-    def get_internal_energy(self, temperature, *, mass, species_mass_fractions):
-        """Get the fluid internal energy from temperature and mass."""
+    def get_density(self, pressure, temperature, species_mass_fractions=None):
+        """Get the density from pressure, and temperature."""
+
+    @abstractmethod
+    def get_internal_energy(self, temperature, species_mass_fractions=None):
+        """Get the fluid internal energy from temperature."""
 
     def dependent_vars(
             self, cv: ConservedVars,
@@ -300,6 +305,17 @@ class IdealSingleGas(GasEOS):
     def gas_const(self, cv: ConservedVars = None):
         """Get specific gas constant R."""
         return self._gas_const
+
+    def get_density(self, pressure, temperature, species_mass_fractions=None):
+        r"""Get gas density from pressure and temperature.
+
+        The gas density is calculated as:
+
+        .. math::
+
+            \rho = \frac{p}{R_s T}
+        """
+        return pressure / (self._gas_const * temperature)
 
     def kinetic_energy(self, cv: ConservedVars):
         r"""Get kinetic (i.e. not internal) energy of gas.
@@ -458,21 +474,19 @@ class IdealSingleGas(GasEOS):
         return (pressure / (self._gamma - 1.0)
                 + self.kinetic_energy(cv))
 
-    def get_internal_energy(self, temperature, **kwargs):
-        r"""Get the gas thermal energy from temperature, and fluid density.
+    def get_internal_energy(self, temperature, species_mass_fractions=None):
+        r"""Get the gas thermal energy from temperature.
 
         The gas internal energy $e$ is calculated from:
 
         .. math::
 
-            e = R_s T \frac{\rho}{\left(\gamma - 1\right)}
+            e = \frac{R_s T}{\left(\gamma - 1\right)}
 
         Parameters
         ----------
         temperature: :class:`~meshmode.dof_array.DOFArray`
             The fluid temperature
-        mass: float or :class:`~meshmode.dof_array.DOFArray`
-            The fluid mass density
         species_mass_fractions:
             Unused
         """
@@ -669,12 +683,6 @@ class PyrometheusMixture(MixtureEOS):
     def get_density(self, pressure, temperature, species_mass_fractions):
         r"""Get the density from pressure, temperature, and species fractions (Y).
 
-        The gas density $\rho$ is calculated from pressure, temperature and $R$ as:
-
-        .. math::
-
-            \rho = \frac{p}{R_s T}
-
         Parameters
         ----------
         pressure: :class:`~meshmode.dof_array.DOFArray`
@@ -692,8 +700,7 @@ class PyrometheusMixture(MixtureEOS):
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_mass_fractions)
 
-    def get_internal_energy(self, temperature, species_mass_fractions,
-                            mass=None):
+    def get_internal_energy(self, temperature, species_mass_fractions):
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
         The gas internal energy $e$ is calculated from:
@@ -708,8 +715,6 @@ class PyrometheusMixture(MixtureEOS):
             The fluid temperature
         species_mass_fractions: numpy.ndarray
             Object array of species mass fractions
-        mass:
-            Unused
         """
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
             temperature, species_mass_fractions)
