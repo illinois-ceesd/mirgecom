@@ -422,7 +422,8 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
 
     Returns
     -------
-    :class:`~mirgecom.gas_model.FluidState`
+    (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
+     dict)
 
         Thermally consistent fluid state for the volume, fluid state trace pairs
         for the internal boundaries, and a dictionary of fluid states keyed by
