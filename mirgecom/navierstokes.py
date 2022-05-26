@@ -17,7 +17,7 @@ where:
    ,J_{\alpha}]$
 -  viscous stress tensor $\mathbf{\tau} = \mu(\nabla\mathbf{v}+(\nabla\mathbf{v})^T)
    + (\mu_B - \frac{2}{3}\mu)(\nabla\cdot\mathbf{v})$
--  diffusive flux for each species $J_\alpha = \rho{D}_{\alpha}\nabla{Y}_{\alpha}$
+-  diffusive flux for each species $J_\alpha = -\rho{D}_{\alpha}\nabla{Y}_{\alpha}$
 -  total heat flux $\mathbf{q}=\mathbf{q}_c+\mathbf{q}_d$, is the sum of:
     -  conductive heat flux $\mathbf{q}_c = -\kappa\nabla{T}$
     -  diffusive heat flux $\mathbf{q}_d = \sum{h_{\alpha} J_{\alpha}}$

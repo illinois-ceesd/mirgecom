@@ -387,8 +387,8 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
                                quadrature_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
-    This routine prepares a model-constistent fluid state for each of the volume and
-    all interior and domain boundaries using the quadrature representation if
+    This routine prepares a model-consistent fluid state for each of the volume and
+    all interior and domain boundaries, using the quadrature representation if
     one is given. The input *volume_state* is projected to the quadrature domain
     (if any), along with the model-consistent dependent quantities.
 
