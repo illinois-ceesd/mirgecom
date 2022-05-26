@@ -978,24 +978,32 @@ class ShearFlow:
     r"""Shear flow exact Navier-Stokes solution from [Hesthaven_2008]_.
 
     The shear flow solution is described in Section 7.5.3 of
-    [Hesthaven_2008]_ as:
+    [Hesthaven_2008]_. It is generalized to major-axis-aligned
+    3-dimensional cases here and defined as:
 
     .. math::
-        \rho &= 1
-        \v_x &= y^2
-        \v_y &= v_z = 0
-        E &= \frac{2\mu{x} + 10}{\gamma-1} + \frac{y^4}{2}
-        \gamma &= \frac{3}{2}, \mu = 0.01,
 
-    with fluid total energy {E}, viscosity $\mu$, and specific heat ratio
-    $\gamma$. This solution is exact when neglecting thermal terms; i.e.,
-    when thermal conductivity $\kappa=0$.  This solution requires a 2d or
-    3d domain.
+        \rho &= 1\\
+        v_\parallel &= r_{t}^2\\
+        \mathbf{v}_\bot &= 0\\
+        E &= \frac{2\mu{r_\parallel} + 10}{\gamma-1}
+        + \frac{r_{t}^4}{2}\\
+        \gamma &= \frac{3}{2}, \mu=0.01, \kappa=0
+
+    with fluid total energy $E$, viscosity $\mu$, and specific heat ratio
+    $\gamma$. The flow velocity is $\mathbf{v}$ with flow speed and direction
+    $v_\parallel$, and $r_\parallel$, respectively. The flow velocity in
+    all directions other than $r_\parallel$, is denoted as $\mathbf{v}_\bot$.
+    One major-axis-aligned flow-transverse direction, $r_t$ is set by the
+    user. This shear flow solution is an exact solution to the fully
+    compressible Navier-Stokes equations when neglecting thermal terms;
+    i.e., when thermal conductivity $\kappa=0$.  This solution requires a 2d
+    or 3d domain.
     """
 
     def __init__(self, dim=2, mu=.01, gamma=3./2., density=1.,
                  flow_dir=0, trans_dir=1):
-        """Init the solution object.
+        r"""Init the solution object.
 
         Parameters
         ----------
@@ -1006,12 +1014,13 @@ class ShearFlow:
         gamma: float
             Ratio of specific heats for the fluid
         density: float
-            Fluid mass density
+            Fluid mass density, $\rho$
         flow_dir
-            Flow direction for the shear flow, 0=x, 1=y, 2=z. Defaults to x.
+            Flow direction, $r_\parallel$, for the shear flow, 0=x, 1=y,
+            2=z. Defaults to x.
         trans_dir
-            Transverse direction for setting up the shear flow,
-            must be other than flow_dir, defaults to y.
+            Transverse direction, $r_t$, for setting up the shear flow,
+            must be other than flow direction, $r_\parallel$, defaults to y.
         """
         if (flow_dir == trans_dir or trans_dir > (dim-1) or flow_dir > (dim-1)
                 or flow_dir < 0 or trans_dir < 0):
