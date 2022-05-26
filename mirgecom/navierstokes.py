@@ -133,6 +133,11 @@ def grad_cv_operator(
         Physical gas model including equation of state, transport,
         and kinetic properties as required by fluid state
 
+    numerical_flux_func:
+
+       Optional callable function to return the numerical flux to be used when
+       computing gradients. Defaults to :class:`~mirgecom.flux.num_flux_central`.
+
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
@@ -214,6 +219,11 @@ def grad_t_operator(
 
         Physical gas model including equation of state, transport,
         and kinetic properties as required by fluid state
+
+    numerical_flux_func:
+
+       Optional callable function to return the numerical flux to be used when
+       computing gradients. Defaults to :class:`~mirgecom.flux.num_flux_central`.
 
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
