@@ -290,14 +290,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _get_temperature_update(cv, temperature):
         y = cv.species_mass_fractions
         e = gas_model.eos.internal_energy(cv) / cv.mass
-        return pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y)
+        return actx.np.abs(
+            pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y))
 
     def _get_fluid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model,
                                 temperature_seed=temp_seed)
 
-    compute_temperature_update = actx.compile(_get_temperature_update)
-    construct_fluid_state = actx.compile(_get_fluid_state)
+    get_temperature_update = actx.compile(_get_temperature_update)
+    get_fluid_state = actx.compile(_get_fluid_state)
 
     tseed = can_t
     if rst_filename:
@@ -314,7 +315,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(x_vec=nodes, eos=gas_model.eos)
         tseed = tseed * ones
 
-    current_state = construct_fluid_state(current_cv, tseed)
+    current_state = get_fluid_state(current_cv, tseed)
 
     # Inspection at physics debugging time
     if debug:
@@ -452,18 +453,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         # This check is the temperature convergence check
-        # The current *temperature* is what Pyrometheus gets
-        # after a fixed number of Newton iterations, *n_iter*.
-        # Calling `compute_temperature` here with *temperature*
-        # input as the guess returns the calculated gas temperature after
-        # yet another *n_iter*.
-        # The difference between those two temperatures is the
-        # temperature residual, which can be used as an indicator of
-        # convergence in Pyrometheus `get_temperature`.
         # Note: The local max jig below works around a very long compile
         # in lazy mode.
         from grudge import op
-        temp_resid = compute_temperature_update(cv, dv.temperature) / dv.temperature
+        temp_resid = get_temperature_update(cv, dv.temperature) / dv.temperature
         temp_err = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
         if temp_err > 1e-8:
             health_error = True
@@ -473,7 +466,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
+        fluid_state = get_fluid_state(cv, tseed)
         dv = fluid_state.dv
         try:
 
@@ -526,7 +519,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_post_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
+        fluid_state = get_fluid_state(cv, tseed)
 
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -590,7 +583,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
 
     current_cv, tseed = current_stepper_state
-    current_state = construct_fluid_state(current_cv, tseed)
+    current_state = get_fluid_state(current_cv, tseed)
     final_dv = current_state.dv
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
