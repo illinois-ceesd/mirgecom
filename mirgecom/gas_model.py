@@ -387,8 +387,8 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
                                quadrature_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
-    This routine prepares a model-constistent fluid state for each of the volume and
-    all interior and domain boundaries using the quadrature representation if
+    This routine prepares a model-consistent fluid state for each of the volume and
+    all interior and domain boundaries, using the quadrature representation if
     one is given. The input *volume_state* is projected to the quadrature domain
     (if any), along with the model-consistent dependent quantities.
 
@@ -422,7 +422,8 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
 
     Returns
     -------
-    :class:`~mirgecom.gas_model.FluidState`
+    (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
+     dict)
 
         Thermally consistent fluid state for the volume, fluid state trace pairs
         for the internal boundaries, and a dictionary of fluid states keyed by

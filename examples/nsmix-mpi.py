@@ -215,7 +215,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
     nspecies = cantera_soln.n_species
 
-    # Initial temperature, pressure, and mixutre mole fractions are needed to
+    # Initial temperature, pressure, and mixture mole fractions are needed to
     # set up the initial state in Cantera.
     init_temperature = 1500.0  # Initial temperature hot enough to burn
     # Parameters for calculating the amounts of fuel, oxidizer, and inert species
