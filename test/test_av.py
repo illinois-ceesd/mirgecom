@@ -200,8 +200,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
             nhat = thaw(actx, disc.normal(btag))
             from mirgecom.flux import num_flux_central
             from arraycontext import outer
-            flux_weak = outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
-            return disc.project(btag, "all_faces", flux_weak)
+            # Do not project to "all_faces" as now we use built-in grad_cv_operator
+            return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
         def av_flux(self, disc, btag, diffusion, **kwargs):
             nhat = thaw(actx, disc.normal(btag))
