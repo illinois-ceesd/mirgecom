@@ -144,7 +144,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
     fluid_state: :class:`mirgecom.gas_model.FluidState`
         Fluid state object with the conserved and thermal state.
 
-    boundaries: float
+    boundaries: dict
         Dictionary of boundary functions, one for each valid boundary tag
 
     alpha: float
@@ -155,6 +155,16 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
         supplied by the user, then
         :func:`~mirgecom.artificial_viscosity.smoothness_indicator` will be used
         with fluid mass density as the indicator field.
+
+    kappa
+        An optional argument that controls the width of the transition from 0 to 1,
+        $\kappa$. This parameter defaults to $\kappa=1$.
+
+    s0
+        An optional argument that sets the smoothness level to limit
+        on, $s_0$. Values in the range $(-\infty,0]$ are allowed, where $-\infty$
+        results in all cells being tagged and 0 results in none.  This parameter
+        defaults to $s_0=-6$.
 
     quadrature_tag
         An optional identifier denoting a particular quadrature
@@ -246,6 +256,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
 
     kappa
         An optional argument that controls the width of the transition from 0 to 1.
+
     s0
         An optional argument that sets the smoothness level to limit
         on. Values in the range $(-\infty,0]$ are allowed, where $-\infty$ results in
