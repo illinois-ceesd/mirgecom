@@ -251,10 +251,10 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     .. automethod:: __init__
     .. automethod:: inviscid_divergence_flux
-    .. automethod:: temperature_gradient_flux
     .. automethod:: viscous_divergence_flux
-    .. automethod:: av_flux
     .. automethod:: cv_gradient_flux
+    .. automethod:: temperature_gradient_flux
+    .. automethod:: av_flux
     .. automethod:: soln_gradient_flux
     """
 
