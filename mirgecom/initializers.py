@@ -11,10 +11,10 @@ Solution Initializers
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
-.. autoclass:: MulticomponentTrig
 .. autoclass:: ShearFlow
+.. autoclass:: PlanarDiscontinuity
+.. autoclass:: MulticomponentTrig
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
@@ -61,27 +61,26 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
                            density=None, velocity=None, mass_fractions=None):
     """Create a fluid state from a set of minimal input data."""
     if gas_model is None:
-        raise ValueError("Gas model is required to create a CV.")
+        raise ValueError("Gas model is required to create a FluidState.")
+
+    if (pressure is not None and temperature is not None and density is not None):
+        raise ValueError("State is overspecified, require only 2 of (pressure, "
+                         "temperature, density)")
+
+    if ((pressure is not None and (temperature is None or density is not None))
+          or (temperature is not None and (pressure is None or density is None))):
+        raise ValueError("State is underspecified, require 2 of (pressure, "
+                         "temperature, density)")
 
     if velocity is None:
         velocity = np.zeros(dim)
 
-    if pressure is not None and temperature is not None and density is not None:
-        raise ValueError("State is overspecified, require only 2 of (pressure, "
-                         "temperature, density)")
-
     if pressure is None:
-        if temperature is None or density is None:
-            raise ValueError("State is underspecified, require 2 of (pressure, "
-                             "temperature, density)")
         pressure = gas_model.eos.get_pressure(density, temperature, mass_fractions)
 
     if temperature is None:
-        if density is None:
-            raise ValueError("State is underspecified, require 2 of (pressure, "
-                             "temperature, density)")
-        temperature = gas_model.eos.get_temperature(
-            density, pressure, mass_fractions)
+        temperature = gas_model.eos.get_temperature(density, pressure,
+                                                    mass_fractions)
 
     if density is None:
         density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
@@ -89,9 +88,7 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
     internal_energy = gas_model.eos.get_internal_energy(
         temperature=temperature, mass=density, mass_fractions=mass_fractions)
 
-    species_mass = None
-    if mass_fractions is not None:
-        species_mass = density * mass_fractions
+    species_mass = None if mass_fractions is None else density * mass_fractions
 
     total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
     momentum = density*velocity
