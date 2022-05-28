@@ -1,7 +1,7 @@
 r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`..
 
-.. autofunction:: make_pyrometheus_mechanism_class
-.. autofunction:: make_pyrometheus_mechanism
+.. autofunction:: get_pyrometheus_wrapper_class
+.. autofunction:: get_pyrometheus_wrapper_class_from_cantera
 """
 
 __copyright__ = """
@@ -29,28 +29,27 @@ THE SOFTWARE.
 """
 
 
-def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
+def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Dynamically creates a class that inherits from a
     :class:`pyrometheus.Thermochemistry` class and overrides a couple of the methods
     to adapt it to :mod:`mirgecom`'s needs.
 
-        - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
-        of  the same function, pinning any negative concentrations due to slightly
-        negative massfractions (which are OK) back to 0.
-        - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
-        to find a temperature from an input state.
+    - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
+      of  the same function, pinning any negative concentrations due to slightly
+      negative massfractions (which are OK) back to 0.
+
+    - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
+      to find a temperature from an input state.
 
     Parameters
     ----------
-    cantera_soln: Cantera solution
-        Cantera solution from which to create the thermochemical mechanism
-    temperature_niter: integer
+    pyro_class: :class:`pyrometheus.Thermochemistry`
+        Pyro thermochemical mechanism to wrap
+    temperature_niter: int
         Number of Newton iterations in `get_temperature` (default=5)
     """
-    import pyrometheus as pyro
-    pyro_class = pyro.get_thermochem_class(cantera_soln)
 
     class PyroWrapper(pyro_class):
 
@@ -109,46 +108,40 @@ def _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
     return PyroWrapper
 
 
-def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5):
-    """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism class.
+def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5):
+    """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
-    This routine creates and returns an instance of a :mod:`pyrometheus`
-    thermochemical mechanism for use in a MIRGE-Com fluid EOS.
+    Cantera-based interface that creates a Pyrometheus mechanism
+    :class:`pyrometheus.Thermochemistry` class on-the-fly using
+    a Cantera solution.
 
     Parameters
     ----------
-    actx: :class:`arraycontext.ArrayContext`
-        Array context from which to get the numpy-like namespace for
-        :mod:`pyrometheus`
     cantera_soln:
-        Cantera Solution for the thermochemical mechanism to be used
-
-    Returns
-    -------
-    :mod:`pyrometheus` ThermoChem class
+        Cantera solution from which to create the thermochemical mechanism
+    temperature_niter: int
+        Number of Newton iterations in `get_temperature` (default=5)
     """
-    return _pyro_thermochem_wrapper_class(cantera_soln, temperature_niter)
+    import pyrometheus as pyro
+    pyro_class = pyro.get_thermochem_class(cantera_soln)
+    return get_pyrometheus_wrapper_class(pyro_class,
+                                         temperature_niter=temperature_niter)
 
 
 # backwards compat
-def make_pyrometheus_mechanism(actx, cantera_soln):
-    """Create a :mod:`pyrometheus` thermochemical (or equivalent) mechanism.
-
-    This routine creates and returns an instance of a :mod:`pyrometheus`
-    thermochemical mechanism for use in a MIRGE-Com fluid EOS.
-
-    Parameters
-    ----------
-    actx: :class:`arraycontext.ArrayContext`
-        Array context from which to get the numpy-like namespace for
-        :mod:`pyrometheus`
-    cantera_soln:
-        Cantera Solution for the thermochemical mechanism to be used
-
-    Returns
-    -------
-    :mod:`pyrometheus` ThermoChem class
-    """
+def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5):
+    """Deprecate this interface to get_pyrometheus_mechanism_class."""
     from warnings import warn
-    warn("make_pyrometheus_mechanism is deprecated and will disappear in Q1/2022")
-    return _pyro_thermochem_wrapper_class(cantera_soln)(actx.np)
+    warn("make_pyrometheus_mechanism_class is deprecated."
+         " use get_pyrometheus_wrapper_class_from_cantera.")
+    return get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=temperature_niter)
+
+
+def make_pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
+    """Deprecate this interface to pyro_wrapper_class_from_cantera."""
+    from warnings import warn
+    warn("make_pyrometheus_mechanism is deprecated."
+         " use get_pyrometheus_wrapper_class_from_cantera.")
+    return get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=temperature_niter)
