@@ -4,3 +4,5 @@
   val: all
 - arg: enable
   val: E
+- arg: ignore
+  val: mirgecom/mechanisms
