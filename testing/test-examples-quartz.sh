@@ -92,14 +92,14 @@ rm -f example-testing-done
 chmod +x ${BATCH_SCRIPT_NAME}
 # ---- Submit the batch script and wait for the job to finish
 sbatch ${BATCH_SCRIPT_NAME}
-# ---- Wait 30 minutes right off the bat
+# ---- Wait 60 minutes right off the bat
 printf "Waiting for the batch job to finish."
-sleep 1800
+sleep 3600
 printf "."
 iwait=0
 while [ ! -f ./example-testing-done ]; do 
     iwait=$((iwait+1))
-    if [ "$iwait" -gt 89 ]; then # give up after almost 2 hours
+    if [ "$iwait" -gt 180 ]; then # give up after 4 hours
         printf "\nTimed out waiting on batch job, aborting tests.\n"
         exit 1 # skip the rest of the script
     fi
