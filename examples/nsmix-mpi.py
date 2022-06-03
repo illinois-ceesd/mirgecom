@@ -192,10 +192,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # -- Pick up a CTI for the thermochemistry config
     # --- Note: Users may add their own CTI file by dropping it into
     # ---       mirgecom/mechanisms alongside the other CTI files.
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
+    from mirgecom.mechanisms import get_mechanism_config
+    mech_config = get_mechanism_config("uiuc")
 
-    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+    cantera_soln = cantera.Solution(mech_config, "gas")
     nspecies = cantera_soln.n_species
 
     # Initial temperature, pressure, and mixture mole fractions are needed to

@@ -1,8 +1,8 @@
 """:mod:`mirgecom.mechanisms`: Utilities for managing thermochemistry mechanisms.
 
 .. autofunction:: get_mechanisms_pkgname
-.. autofunction:: get_mechanism_file_name
-.. autofunction:: get_mechanism_cti
+.. autofunction:: get_mechanism_config_file_name
+.. autofunction:: get_mechanism_config
 .. autofunction:: import_mechdata
 """
 
@@ -66,4 +66,5 @@ def get_mechanism_config(mechanism_name: str) -> str:
     """Get the contents of a mechanism config file."""
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_config_file_name(mechanism_name)
-    return mech_file.read_text()
+    import os
+    return os.fspath(mech_file)
