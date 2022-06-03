@@ -100,8 +100,8 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
     discr_lazy = EagerDGDiscretization(actx_lazy, mesh, order=order)
 
     # Pyrometheus initialization
-    mech_cti = get_mechanism_cti(mechname)
-    sol = cantera.Solution(phase_id="gas", source=mech_cti)
+    mech_config = get_mechanism_config(mechname)
+    sol = cantera.Solution(name="gas", yaml=mech_config)
 
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyro_eager = make_pyrometheus_mechanism_class(sol)(actx_eager.np)
@@ -129,7 +129,7 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+        cantera_soln = cantera.Solution(phase_id="gas", source=mech_config)
         cantera_soln.TPY = tempin, pressin, y0s
         cantera_soln.equilibrate("UV")
         can_t, can_rho, can_y = cantera_soln.TDY
@@ -254,7 +254,7 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
                          [("uiuc", 1e-12),
-                          ("sanDiego", 1e-8)])
+                          ("sandiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus mechanisms.
@@ -363,7 +363,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
             assert inf_norm(prom_omega[i] - rate) < rate_tol
 
 
-@pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
+@pytest.mark.parametrize("mechname", ["uiuc", "sandiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
@@ -462,7 +462,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
                          [("uiuc", 1e-12),
-                          ("sanDiego", 1e-8)])
+                          ("sandiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus reaction mechanisms.
