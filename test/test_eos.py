@@ -57,7 +57,7 @@ from grudge.eager import EagerDGDiscretization
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from mirgecom.mechanisms import get_mechanism_cti
+from mirgecom.mechanisms import get_mechanism_config
 
 logger = logging.getLogger(__name__)
 
@@ -283,10 +283,11 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     discr = EagerDGDiscretization(actx, mesh, order=order)
 
     # Pyrometheus initialization
-    mech_cti = get_mechanism_cti(mechname)
-    sol = cantera.Solution(phase_id="gas", source=mech_cti)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
+    mech_config = get_mechanism_config(mechname)
+    sol = cantera.Solution(name="gas", yaml=mech_config)
+
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+    prometheus_mechanism = get_pyrometheus_wrapper_class_from_cantera(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
@@ -303,7 +304,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+        cantera_soln = cantera.Solution(name="gas", yaml=mech_config)
         cantera_soln.TPY = tempin, pressin, y0s
         cantera_soln.equilibrate("UV")
         can_t, can_rho, can_y = cantera_soln.TDY
@@ -393,8 +394,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     nodes = thaw(actx, discr.nodes())
 
     # Pyrometheus initialization
-    mech_cti = get_mechanism_cti(mechname)
-    sol = cantera.Solution(phase_id="gas", source=mech_cti)
+    mech_config = get_mechanism_config(mechname)
+    sol = cantera.Solution(name="gas", yaml=mech_config)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
@@ -494,8 +495,10 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     ones = discr.zeros(actx) + 1.0
 
     # Pyrometheus initialization
-    mech_cti = get_mechanism_cti(mechname)
-    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+    from mirgecom.mechanisms import get_mechanism_config
+    mech_config = get_mechanism_config(mechname)
+
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_config)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
 

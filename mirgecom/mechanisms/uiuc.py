@@ -1,4 +1,3 @@
-# noqa
 """
 .. autoclass:: Thermochemistry
 """
@@ -65,7 +64,7 @@ class Thermochemistry:
         """
 
         self.usr_np = usr_np
-        self.model_name = 'mechs/uiuc.cti'
+        self.model_name = 'mechs/uiuc.yaml'
         self.num_elements = 4
         self.num_species = 7
         self.num_reactions = 3
@@ -232,8 +231,8 @@ class Thermochemistry:
         g0_rt = self.get_species_gibbs_rt(temperature)
         return self._pyro_make_array([
                     -0.17364695002734*temperature,
-                    g0_rt[2] + -1*-0.5*c0 + -1*(g0_rt[3] + 0.5*g0_rt[1]),
-                    g0_rt[4] + -1*-0.5*c0 + -1*(g0_rt[5] + 0.5*g0_rt[1]),
+                    g0_rt[2] + -1*(g0_rt[3] + 0.5*g0_rt[1]) + -1*-0.5*c0,
+                    g0_rt[4] + -1*(g0_rt[5] + 0.5*g0_rt[1]) + -1*-0.5*c0,
                 ])
 
     def get_temperature(self, enthalpy_or_energy, t_guess, y, do_energy=False):
@@ -262,9 +261,9 @@ class Thermochemistry:
     def get_fwd_rate_coefficients(self, temperature, concentrations):
         ones = self._pyro_zeros_like(temperature) + 1.0
         k_fwd = [
-            self.usr_np.exp(26.594857854425133 + -1*(17864.293439206183 / temperature)) * ones,
-            self.usr_np.exp(12.693776816787125 + 0.7*self.usr_np.log(temperature) + -1*(6038.634401985189 / temperature)) * ones,
-            self.usr_np.exp(18.302572655472037 + -1*(17612.683672456802 / temperature)) * ones,
+            self.usr_np.exp(26.594857824081227 + -1*(17864.293439206183 / temperature)) * ones,
+            self.usr_np.exp(12.693776813708796 + 0.7*self.usr_np.log(temperature) + -1*(6038.634401985189 / temperature)) * ones,
+            self.usr_np.exp(18.302572680800996 + -1*(17612.683672456802 / temperature)) * ones,
                 ]
 
         return self._pyro_make_array(k_fwd)
@@ -272,11 +271,10 @@ class Thermochemistry:
     def get_net_rates_of_progress(self, temperature, concentrations):
         k_fwd = self.get_fwd_rate_coefficients(temperature, concentrations)
         log_k_eq = self.get_equilibrium_constants(temperature)
-        k_eq = self.usr_np.exp(log_k_eq)
         return self._pyro_make_array([
                     k_fwd[0]*concentrations[0]**0.5*concentrations[1]**0.65,
-                    k_fwd[1]*(concentrations[3]*concentrations[1]**0.5 + -1*k_eq[1]*concentrations[2]),
-                    k_fwd[2]*(concentrations[5]*concentrations[1]**0.5 + -1*k_eq[2]*concentrations[4]),
+                    k_fwd[1]*(concentrations[3]*concentrations[1]**0.5 + -1*self.usr_np.exp(log_k_eq[1])*concentrations[2]),
+                    k_fwd[2]*(concentrations[5]*concentrations[1]**0.5 + -1*self.usr_np.exp(log_k_eq[2])*concentrations[4]),
                ])
 
     def get_net_production_rates(self, rho, temperature, mass_fractions):
