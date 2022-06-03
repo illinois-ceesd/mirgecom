@@ -19,4 +19,4 @@ export PRODUCTION_BRANCH="yaml-cantera-configs-production"   # The base producti
 # export PRODUCTION_DRIVERS=""
 #
 # Example:
-# PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
+PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:illinois-ceesd/drivers_y2-isolator@main:illinois-ceesd/drivers_flame1d@yaml"
