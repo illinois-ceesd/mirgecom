@@ -8,7 +8,7 @@ set -x
 # The production capability may be in a CEESD-local mirgecom branch or in a
 # fork, and is specified through the following settings:
 #
-# export PRODUCTION_BRANCH=""   # The base production branch to be installed by emirge
+export PRODUCTION_BRANCH="yaml-cantera-configs-production"   # The base production branch to be installed by emirge
 # export PRODUCTION_FORK=""  # The fork/home of production changes (if any)
 #
 # Multiple production drivers are supported. The user should provide a ':'-delimited
@@ -19,4 +19,4 @@ set -x
 # export PRODUCTION_DRIVERS=""
 #
 # Example:
-# PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
+PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:illinois-ceesd/drivers_y2-isolator@main:illinois-ceesd/drivers_flame1d@yaml"
