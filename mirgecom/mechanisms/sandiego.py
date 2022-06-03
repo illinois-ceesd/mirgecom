@@ -1,4 +1,3 @@
-# noqa
 """
 .. autoclass:: Thermochemistry
 """
@@ -65,7 +64,7 @@ class Thermochemistry:
         """
 
         self.usr_np = usr_np
-        self.model_name = 'mechs/sanDiego.cti'
+        self.model_name = 'mechs/sandiego.yaml'
         self.num_elements = 3
         self.num_species = 9
         self.num_reactions = 24
@@ -245,19 +244,19 @@ class Thermochemistry:
                     g0_rt[1] + g0_rt[4] + -1*(g0_rt[0] + g0_rt[3]),
                     g0_rt[1] + g0_rt[7] + -1*(g0_rt[0] + g0_rt[4]),
                     2.0*g0_rt[4] + -1*(g0_rt[7] + g0_rt[3]),
-                    g0_rt[0] + -1*-1.0*c0 + -1*2.0*g0_rt[1],
-                    g0_rt[7] + -1*-1.0*c0 + -1*(g0_rt[1] + g0_rt[4]),
-                    g0_rt[2] + -1*-1.0*c0 + -1*2.0*g0_rt[3],
-                    g0_rt[4] + -1*-1.0*c0 + -1*(g0_rt[1] + g0_rt[3]),
-                    g0_rt[5] + -1*-1.0*c0 + -1*(g0_rt[3] + g0_rt[4]),
-                    g0_rt[5] + -1*-1.0*c0 + -1*(g0_rt[1] + g0_rt[2]),
+                    g0_rt[0] + -1*2.0*g0_rt[1] + -1*-1.0*c0,
+                    g0_rt[7] + -1*(g0_rt[1] + g0_rt[4]) + -1*-1.0*c0,
+                    g0_rt[2] + -1*2.0*g0_rt[3] + -1*-1.0*c0,
+                    g0_rt[4] + -1*(g0_rt[1] + g0_rt[3]) + -1*-1.0*c0,
+                    g0_rt[5] + -1*(g0_rt[3] + g0_rt[4]) + -1*-1.0*c0,
+                    g0_rt[5] + -1*(g0_rt[1] + g0_rt[2]) + -1*-1.0*c0,
                     2.0*g0_rt[4] + -1*(g0_rt[1] + g0_rt[5]),
                     g0_rt[0] + g0_rt[2] + -1*(g0_rt[1] + g0_rt[5]),
                     g0_rt[7] + g0_rt[3] + -1*(g0_rt[1] + g0_rt[5]),
                     g0_rt[2] + g0_rt[4] + -1*(g0_rt[5] + g0_rt[3]),
                     g0_rt[7] + g0_rt[2] + -1*(g0_rt[5] + g0_rt[4]),
                     g0_rt[7] + g0_rt[2] + -1*(g0_rt[5] + g0_rt[4]),
-                    g0_rt[6] + -1*-1.0*c0 + -1*2.0*g0_rt[4],
+                    g0_rt[6] + -1*2.0*g0_rt[4] + -1*-1.0*c0,
                     g0_rt[6] + g0_rt[2] + -1*2.0*g0_rt[5],
                     g0_rt[6] + g0_rt[2] + -1*2.0*g0_rt[5],
                     g0_rt[0] + g0_rt[5] + -1*(g0_rt[1] + g0_rt[6]),
@@ -293,13 +292,13 @@ class Thermochemistry:
     def get_falloff_rates(self, temperature, concentrations, k_fwd):
         ones = self._pyro_zeros_like(temperature) + 1.0
         k_high = self._pyro_make_array([
-            4650000000.0*temperature**0.44,
-            95500000000.0*temperature**-0.27,
+            4650000000.000001*temperature**0.44,
+            95500000000.00002*temperature**-0.27,
                 ])
 
         k_low = self._pyro_make_array([
-            57500000000000.0*temperature**-1.4,
-            2.76e+19*temperature**-3.2,
+            57500000000000.01*temperature**-1.4,
+            2.760000000000001e+19*temperature**-3.2,
                 ])
 
         reduced_pressure = self._pyro_make_array([
@@ -326,18 +325,18 @@ class Thermochemistry:
         k_fwd = [
             self.usr_np.exp(31.192067198532598 + -0.7*self.usr_np.log(temperature) + -1*(8589.851597151493 / temperature)) * ones,
             self.usr_np.exp(3.92395157629342 + 2.67*self.usr_np.log(temperature) + -1*(3165.568384724549 / temperature)) * ones,
-            self.usr_np.exp(13.972514306773938 + 1.3*self.usr_np.log(temperature) + -1*(1829.342520199863 / temperature)) * ones,
-            self.usr_np.exp(6.551080335043404 + 2.33*self.usr_np.log(temperature) + -1*(7320.978251450734 / temperature)) * ones,
-            1300000000000.0*temperature**-1.0 * ones,
-            4e+16*temperature**-2.0 * ones,
-            6170000000.0*temperature**-0.5 * ones,
-            4710000000000.0*temperature**-1.0 * ones,
-            8000000000.0 * ones,
+            self.usr_np.exp(13.97251430677394 + 1.3*self.usr_np.log(temperature) + -1*(1829.342520199863 / temperature)) * ones,
+            self.usr_np.exp(6.551080335043405 + 2.33*self.usr_np.log(temperature) + -1*(7320.978251450734 / temperature)) * ones,
+            1300000000000.0002*temperature**-1.0 * ones,
+            4.000000000000001e+16*temperature**-2.0 * ones,
+            6170000000.000001*temperature**-0.5 * ones,
+            4710000000000.001*temperature**-1.0 * ones,
+            8000000000.000002 * ones,
             0*temperature,
             self.usr_np.exp(24.983124837646084 + -1*(148.41608612272393 / temperature)) * ones,
             self.usr_np.exp(23.532668532308907 + -1*(414.09771841210573 / temperature)) * ones,
             self.usr_np.exp(24.157253041431556 + -1*(865.9609563076275 / temperature)) * ones,
-            20000000000.0 * ones,
+            20000000000.000004 * ones,
             self.usr_np.exp(26.832513419710775 + -1*(5500.054796103862 / temperature)) * ones,
             self.usr_np.exp(24.11777423045777 + -1*(-250.16649848887016 / temperature)) * ones,
             0*temperature,
@@ -361,32 +360,31 @@ class Thermochemistry:
     def get_net_rates_of_progress(self, temperature, concentrations):
         k_fwd = self.get_fwd_rate_coefficients(temperature, concentrations)
         log_k_eq = self.get_equilibrium_constants(temperature)
-        k_eq = self.usr_np.exp(log_k_eq)
         return self._pyro_make_array([
-                    k_fwd[0]*(concentrations[1]*concentrations[2] + -1*k_eq[0]*concentrations[3]*concentrations[4]),
-                    k_fwd[1]*(concentrations[0]*concentrations[3] + -1*k_eq[1]*concentrations[1]*concentrations[4]),
-                    k_fwd[2]*(concentrations[0]*concentrations[4] + -1*k_eq[2]*concentrations[1]*concentrations[7]),
-                    k_fwd[3]*(concentrations[7]*concentrations[3] + -1*k_eq[3]*concentrations[4]**2.0),
-                    k_fwd[4]*(concentrations[1]**2.0 + -1*k_eq[4]*concentrations[0]),
-                    k_fwd[5]*(concentrations[1]*concentrations[4] + -1*k_eq[5]*concentrations[7]),
-                    k_fwd[6]*(concentrations[3]**2.0 + -1*k_eq[6]*concentrations[2]),
-                    k_fwd[7]*(concentrations[1]*concentrations[3] + -1*k_eq[7]*concentrations[4]),
-                    k_fwd[8]*(concentrations[3]*concentrations[4] + -1*k_eq[8]*concentrations[5]),
-                    k_fwd[9]*(concentrations[1]*concentrations[2] + -1*k_eq[9]*concentrations[5]),
-                    k_fwd[10]*(concentrations[1]*concentrations[5] + -1*k_eq[10]*concentrations[4]**2.0),
-                    k_fwd[11]*(concentrations[1]*concentrations[5] + -1*k_eq[11]*concentrations[0]*concentrations[2]),
-                    k_fwd[12]*(concentrations[1]*concentrations[5] + -1*k_eq[12]*concentrations[7]*concentrations[3]),
-                    k_fwd[13]*(concentrations[5]*concentrations[3] + -1*k_eq[13]*concentrations[2]*concentrations[4]),
-                    k_fwd[14]*(concentrations[5]*concentrations[4] + -1*k_eq[14]*concentrations[7]*concentrations[2]),
-                    k_fwd[15]*(concentrations[5]*concentrations[4] + -1*k_eq[15]*concentrations[7]*concentrations[2]),
-                    k_fwd[16]*(concentrations[4]**2.0 + -1*k_eq[16]*concentrations[6]),
-                    k_fwd[17]*(concentrations[5]**2.0 + -1*k_eq[17]*concentrations[6]*concentrations[2]),
-                    k_fwd[18]*(concentrations[5]**2.0 + -1*k_eq[18]*concentrations[6]*concentrations[2]),
-                    k_fwd[19]*(concentrations[1]*concentrations[6] + -1*k_eq[19]*concentrations[0]*concentrations[5]),
-                    k_fwd[20]*(concentrations[1]*concentrations[6] + -1*k_eq[20]*concentrations[7]*concentrations[4]),
-                    k_fwd[21]*(concentrations[6]*concentrations[4] + -1*k_eq[21]*concentrations[7]*concentrations[5]),
-                    k_fwd[22]*(concentrations[6]*concentrations[4] + -1*k_eq[22]*concentrations[7]*concentrations[5]),
-                    k_fwd[23]*(concentrations[6]*concentrations[3] + -1*k_eq[23]*concentrations[5]*concentrations[4]),
+                    k_fwd[0]*(concentrations[1]*concentrations[2] + -1*self.usr_np.exp(log_k_eq[0])*concentrations[3]*concentrations[4]),
+                    k_fwd[1]*(concentrations[0]*concentrations[3] + -1*self.usr_np.exp(log_k_eq[1])*concentrations[1]*concentrations[4]),
+                    k_fwd[2]*(concentrations[0]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[2])*concentrations[1]*concentrations[7]),
+                    k_fwd[3]*(concentrations[7]*concentrations[3] + -1*self.usr_np.exp(log_k_eq[3])*concentrations[4]**2.0),
+                    k_fwd[4]*(concentrations[1]**2.0 + -1*self.usr_np.exp(log_k_eq[4])*concentrations[0]),
+                    k_fwd[5]*(concentrations[1]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[5])*concentrations[7]),
+                    k_fwd[6]*(concentrations[3]**2.0 + -1*self.usr_np.exp(log_k_eq[6])*concentrations[2]),
+                    k_fwd[7]*(concentrations[1]*concentrations[3] + -1*self.usr_np.exp(log_k_eq[7])*concentrations[4]),
+                    k_fwd[8]*(concentrations[3]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[8])*concentrations[5]),
+                    k_fwd[9]*(concentrations[1]*concentrations[2] + -1*self.usr_np.exp(log_k_eq[9])*concentrations[5]),
+                    k_fwd[10]*(concentrations[1]*concentrations[5] + -1*self.usr_np.exp(log_k_eq[10])*concentrations[4]**2.0),
+                    k_fwd[11]*(concentrations[1]*concentrations[5] + -1*self.usr_np.exp(log_k_eq[11])*concentrations[0]*concentrations[2]),
+                    k_fwd[12]*(concentrations[1]*concentrations[5] + -1*self.usr_np.exp(log_k_eq[12])*concentrations[7]*concentrations[3]),
+                    k_fwd[13]*(concentrations[5]*concentrations[3] + -1*self.usr_np.exp(log_k_eq[13])*concentrations[2]*concentrations[4]),
+                    k_fwd[14]*(concentrations[5]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[14])*concentrations[7]*concentrations[2]),
+                    k_fwd[15]*(concentrations[5]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[15])*concentrations[7]*concentrations[2]),
+                    k_fwd[16]*(concentrations[4]**2.0 + -1*self.usr_np.exp(log_k_eq[16])*concentrations[6]),
+                    k_fwd[17]*(concentrations[5]**2.0 + -1*self.usr_np.exp(log_k_eq[17])*concentrations[6]*concentrations[2]),
+                    k_fwd[18]*(concentrations[5]**2.0 + -1*self.usr_np.exp(log_k_eq[18])*concentrations[6]*concentrations[2]),
+                    k_fwd[19]*(concentrations[1]*concentrations[6] + -1*self.usr_np.exp(log_k_eq[19])*concentrations[0]*concentrations[5]),
+                    k_fwd[20]*(concentrations[1]*concentrations[6] + -1*self.usr_np.exp(log_k_eq[20])*concentrations[7]*concentrations[4]),
+                    k_fwd[21]*(concentrations[6]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[21])*concentrations[7]*concentrations[5]),
+                    k_fwd[22]*(concentrations[6]*concentrations[4] + -1*self.usr_np.exp(log_k_eq[22])*concentrations[7]*concentrations[5]),
+                    k_fwd[23]*(concentrations[6]*concentrations[3] + -1*self.usr_np.exp(log_k_eq[23])*concentrations[5]*concentrations[4]),
                ])
 
     def get_net_production_rates(self, rho, temperature, mass_fractions):
