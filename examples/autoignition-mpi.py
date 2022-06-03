@@ -226,7 +226,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.mechanisms import get_mechanism_config
     mech_config = get_mechanism_config("uiuc")
 
-    cantera_soln = cantera.Solution(mech_config, "gas")
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_config)
     nspecies = cantera_soln.n_species
 
     # Initial temperature, pressure, and mixutre mole fractions are needed to

@@ -183,7 +183,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Pyrometheus initialization
     from mirgecom.mechanisms import get_mechanism_config
     mech_config = get_mechanism_config("uiuc")
-    sol = cantera.Solution(mech_config, "gas")
+    sol = cantera.Solution(name="gas", yaml=mech_config)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 

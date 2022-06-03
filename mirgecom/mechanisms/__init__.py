@@ -66,5 +66,4 @@ def get_mechanism_config(mechanism_name: str) -> str:
     """Get the contents of a mechanism config file."""
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_config_file_name(mechanism_name)
-    import os
-    return os.fspath(mech_file)
+    return mech_file.read_text()
