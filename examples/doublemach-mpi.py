@@ -33,7 +33,6 @@ from functools import partial
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 
@@ -60,7 +59,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -189,22 +188,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
+    from mirgecom.discretization import create_discretization_collection
     order = 3
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
-    )
+    discr = create_discretization_collection(actx, local_mesh, order, comm)
     nodes = thaw(discr.nodes(), actx)
 
+    from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
@@ -212,7 +204,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     dim = 2
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
@@ -275,8 +267,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
-    visualizer = make_visualizer(discr,
-                                 discr.order if discr.dim == 2 else discr.order)
+    visualizer = make_visualizer(discr, order)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -332,9 +323,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        from mirgecom.simutil import allsync
-        if allsync(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
-                   comm, op=MPI.LOR):
+        if global_reduce(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
+                         op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
@@ -345,9 +335,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if allsync(
+        if global_reduce(
                 check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.071e-2),
-                comm, op=MPI.LOR):
+                op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
@@ -370,9 +360,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_health = check_step(step=step, interval=nhealth)
 
             if do_health:
-                from mirgecom.simutil import allsync
-                health_errors = allsync(my_health_check(state, dv), comm,
-                                        op=MPI.LOR)
+                health_errors = \
+                    global_reduce(my_health_check(state, dv), op="lor")
+
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
