@@ -777,9 +777,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             eos = PyrometheusMixture(pyro_mechanism,
                                      temperature_guess=temperature_seed)
         else:
-            from mirgecom.thermochemistry import get_pyrometheus_wrapper_class
-            from mirgecom.mechanisms.uiuc import Thermochemistry
-            pyro_mechanism = get_pyrometheus_wrapper_class(Thermochemistry)(actx.np)
+            from mirgecom.thermochemistry \
+                import get_thermochemistry_class_by_mechanism_name
+            pyro_mechanism = \
+                get_thermochemistry_class_by_mechanism_name("uiuc")(actx.np)
             nspecies = pyro_mechanism.num_species
             # species_names = pyro_mechanism.species_names
             eos = PyrometheusMixture(pyro_mechanism,
