@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # when we want to change it.
 # TODO: Make this return an actual grudge `DiscretizationCollection`
 #       when we are ready to change mirgecom to support that change.
-def create_discretization_collection(actx, mesh, order):
+def create_discretization_collection(actx, mesh, order, comm=None):
     """Create and return a grudge DG discretization object."""
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.eager import EagerDGDiscretization
@@ -52,6 +52,7 @@ def create_discretization_collection(actx, mesh, order):
         discr_tag_to_group_factory={
             DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
             DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
-        }
+        },
+        mpi_communicator=comm
     )
     return discr
