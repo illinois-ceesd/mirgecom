@@ -346,6 +346,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
                 for grp in discr.discr_from_dd("vol").groups
             )
         )
+
     indicator = actx.np.log10(indicator + 1.0e-12)
 
     # Compute artificial viscosity percentage based on indicator and set parameters
