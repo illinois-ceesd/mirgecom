@@ -62,8 +62,13 @@ logger = logging.getLogger(__name__)
 def test_tag_cells(ctx_factory, dim, order):
     """Test tag_cells.
 
-    Tests that the cells tagging properly tags cells
-    given prescribed solutions.
+    This test checks that tag_cells properly tags cells near
+    discontinuous or nearly-discontinuous features in 1d test solutions.
+    The following tests/functions are used:
+    - Discontinuity detection/Heaviside step discontinuity
+    - Detection smoothness/Element basis functions for each mode
+    - Detection thresholding/(p, p-1) polynomials greater/less/equal to s0
+    - Detection bounds checking for s_e = s_0 +/- delta
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -87,10 +92,9 @@ def test_tag_cells(ctx_factory, dim, order):
     nele = mesh.nelements
     zeros = 0.0*nodes[0]
 
-    # test jump discontinuity
+    # Test jump discontinuity
     soln = actx.np.where(nodes[0] > 0.0+zeros, 1.0+zeros, zeros)
     err = norm_indicator(1.0, discr, soln)
-
     assert err < tolerance,  "Jump discontinuity should trigger indicator (1.0)"
 
     # get meshmode polynomials
@@ -157,11 +161,13 @@ def test_tag_cells(ctx_factory, dim, order):
     err = norm_indicator(0.0, discr, soln, s0=s0+kappa-shift, kappa=kappa)
     assert err > tolerance,  "s_e>s_0-kappa should trigger indicator"
 
-    # lower bound
+    # upper bound
     err = norm_indicator(1.0, discr, soln, s0=s0-(kappa+shift), kappa=kappa)
-    assert err < tolerance,  "s_e>s_0+kappa should fully trigger indicator (1.0)"
+    # s_e>s_0+kappa should fully trigger indicator (1.0)
+    assert err < tolerance
     err = norm_indicator(1.0, discr, soln, s0=s0-(kappa-shift), kappa=kappa)
-    assert err > tolerance,  "s_e<s_0+kappa should not fully trigger indicator (1.0)"
+    # s_e<s_0+kappa should not fully trigger indicator (1.0)
+    assert err > tolerance
 
 
 @pytest.mark.parametrize("dim",  [1, 2, 3])
@@ -169,24 +175,25 @@ def test_tag_cells(ctx_factory, dim, order):
 def test_artificial_viscosity(ctx_factory, dim, order):
     """Test artificial_viscosity.
 
-    Tests the application on a few simple functions
-    to confirm artificial viscosity returns the analytical result.
+    Test AV operator for some test functions to verify artificial viscosity
+    returns the analytical result.
+    - 1d x^n (expected rhs = n*(n-1)*x^(n-2)
+    - x^2 + y^2 + z^2  (expected rhs = 2*dim)
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 10
-    tolerance = 1.e-8
+    tolerance = 1.e-6
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim, b=(1.0, )*dim, nelements_per_axis=(nel_1d, )*dim
+        a=(1.0, )*dim, b=(2.0, )*dim, nelements_per_axis=(nel_1d, )*dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
     nodes = thaw(actx, discr.nodes())
-    zeros = discr.zeros(actx)
 
     class TestBoundary:
         def cv_gradient_flux(self, disc, btag, state_minus, gas_model, **kwargs):
@@ -215,40 +222,29 @@ def test_artificial_viscosity(ctx_factory, dim, order):
             return disc.project(btag, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
-    # Uniform field return 0 rhs
-    soln = zeros + 1.0
-    cv = make_conserved(
-        dim,
-        mass=soln,
-        energy=soln,
-        momentum=make_obj_array([soln for _ in range(dim)]),
-        species_mass=make_obj_array([soln for _ in range(dim)])
-    )
-    gas_model = GasModel(eos=IdealSingleGas())
-    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-    rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                gas_model=gas_model,
-                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
-    err = discr.norm(rhs, np.inf)
-    assert err < tolerance
 
-    # Linear field return 0 rhs
-    soln = nodes[0]
-    cv = make_conserved(
-        dim,
-        mass=soln,
-        energy=soln,
-        momentum=make_obj_array([soln for _ in range(dim)]),
-        species_mass=make_obj_array([soln for _ in range(dim)])
-    )
-    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-    rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                gas_model=gas_model,
-                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
-    err = discr.norm(rhs, np.inf)
-    assert err < tolerance
+    # Up to quadratic 1d
+    for nsol in range(3):
+        soln = nodes[0]**nsol
+        exp_rhs_1d = nsol * (nsol-1) * nodes[0]**(nsol - 2)
+        print(f"{nsol=},{soln=},{exp_rhs_1d=}")
+        cv = make_conserved(
+            dim,
+            mass=soln,
+            energy=soln,
+            momentum=make_obj_array([soln for _ in range(dim)]),
+            species_mass=make_obj_array([soln for _ in range(dim)])
+        )
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
+        rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                    gas_model=gas_model,
+                                    fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
+        print(f"{rhs=}")
+        err = discr.norm(rhs-exp_rhs_1d, np.inf)
+        assert err < tolerance
 
-    # Quadratic field return constant 2
+    # Quadratic field return constant 2*dim
     soln = np.dot(nodes, nodes)
     cv = make_conserved(
         dim,
