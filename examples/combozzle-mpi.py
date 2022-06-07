@@ -182,7 +182,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{ Some discretization parameters
 
     dim = 3
-    order = 1
+    order = 3
 
     # - scales the size of the domain
     x_scale = 1
@@ -260,7 +260,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # coarse-scale grid/domain control
     n_refine = 1  # scales npts/axis uniformly
-    weak_scale = 1  # scales domain and npts/axis keeping dt constant
+    weak_scale = 2  # scales domain uniformly, keeping dt constant
 
     # AV / Shock-capturing parameters
     alpha_sc = 0.5
@@ -642,6 +642,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     timestepper = rk4_step
     use_local_timestepping = False
+    integrator = "compiled_lsrk45"
 
     if integrator == "euler":
         timestepper = euler_step
@@ -1026,7 +1027,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = construct_fluid_state(cv, tseed)
-        fluid_state = thaw(freeze(fluid_state, actx), actx)
+        # fluid_state = thaw(freeze(fluid_state, actx), actx)
 
         dv = fluid_state.dv
 
@@ -1197,8 +1198,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     pre_step_func(state=current_state, step=istep, t=current_t,
                                       dt=current_dt)
 
-                current_state = timestepper(state=current_state, t=current_t,
-                                            dt=current_dt, rhs=compiled_rhs)
+                current_state = timestepper(current_state, current_t, current_dt,
+                                            compiled_rhs)
 
                 current_t = current_t + current_dt
                 istep = istep + 1
