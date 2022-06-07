@@ -327,7 +327,7 @@ class DoubleMachReflection:
         At times $t > 0$, calls to this routine create an advanced solution
         under the assumption of constant normal shock speed *shock_speed*.
         The advanced solution *is not* the exact solution, but is appropriate
-        for use as an exact boundary solution on the top and upstream (left)
+        for use as a boundary solution on the top and upstream (left)
         side of the domain.
 
         Parameters
