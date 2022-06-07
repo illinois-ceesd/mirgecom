@@ -52,6 +52,7 @@ from mirgecom.integrators import (
     rk4_step, euler_step,
     lsrk54_step, lsrk144_step
 )
+from grudge.shortcuts import compiled_lsrk45_step
 from mirgecom.steppers import advance_state
 from mirgecom.initializers import (
     MixtureInitializer,
@@ -63,7 +64,7 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw
+from arraycontext import thaw, freeze
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
@@ -477,7 +478,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             pass
 
     # param sanity check
-    allowed_integrators = ["rk4", "euler", "lsrk54", "lsrk144"]
+    allowed_integrators = ["rk4", "euler", "lsrk54", "lsrk144", "compiled_lsrk45"]
     if integrator not in allowed_integrators:
         error_message = "Invalid time integrator: {}".format(integrator)
         raise RuntimeError(error_message)
@@ -532,14 +533,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             print("\tDependent variable logging is OFF.")
         print("#### Simluation control data: ####")
-
-    timestepper = rk4_step
-    if integrator == "euler":
-        timestepper = euler_step
-    if integrator == "lsrk54":
-        timestepper = lsrk54_step
-    if integrator == "lsrk144":
-        timestepper = lsrk144_step
 
     xsize = domain_xlen*x_scale*weak_scale
     ysize = domain_ylen*y_scale*weak_scale
@@ -646,6 +639,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     nodes = thaw(discr.nodes(), actx)
     ones = discr.zeros(actx) + 1.0
+
+    timestepper = rk4_step
+    use_local_timestepping = False
+
+    if integrator == "euler":
+        timestepper = euler_step
+    if integrator == "lsrk54":
+        timestepper = lsrk54_step
+    if integrator == "lsrk144":
+        timestepper = lsrk144_step
+    if integrator == "compiled_lsrk45":
+        timestepper = partial(compiled_lsrk45_step, actx)
+        use_local_timestepping = True
 
     def vol_min(x):
         from grudge.op import nodal_min
@@ -1020,6 +1026,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = construct_fluid_state(cv, tseed)
+        fluid_state = thaw(freeze(fluid_state, actx), actx)
+
         dv = fluid_state.dv
 
         dt = get_sim_timestep(discr, fluid_state, t=t, dt=dt, cfl=current_cfl,
@@ -1173,19 +1181,38 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             print(f"Timestepping: {current_step=}, {current_t=}, {t_final=},"
                   f" {current_dt=}")
+        if use_local_timestepping is False:
+            current_step, current_t, current_state = \
+                advance_state(rhs=my_rhs, timestepper=timestepper,
+                              pre_step_callback=pre_step_func, istep=current_step,
+                              post_step_callback=post_step_func, dt=current_dt,
+                              state=current_state, t=current_t, t_final=t_final)
+        else:
+            compiled_rhs = actx.compile(my_rhs)
+            istep = 0
 
-        current_step, current_t, current_state = \
-            advance_state(rhs=my_rhs, timestepper=timestepper,
-                          pre_step_callback=pre_step_func, istep=current_step,
-                          post_step_callback=post_step_func, dt=current_dt,
-                          state=make_obj_array([current_cv, temperature_seed]),
-                          t=current_t, t_final=t_final)
+            while current_t < t_final:
+
+                current_state, current_dt = \
+                    pre_step_func(state=current_state, step=istep, t=current_t,
+                                      dt=current_dt)
+
+                current_state = timestepper(state=current_state, t=current_t,
+                                            dt=current_dt, rhs=compiled_rhs)
+
+                current_t = current_t + current_dt
+                istep = istep + 1
+
+                current_state, current_dt = \
+                    post_step_func(state=current_state, step=istep, t=current_t,
+                                   dt=current_dt)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_cv, tseed = current_state
+    final_cv, tseed = thaw(freeze(current_state, actx), actx)
+
     final_fluid_state = construct_fluid_state(final_cv, tseed)
     final_dv = final_fluid_state.dv
     dt = get_sim_timestep(discr, final_fluid_state, current_t, current_dt,
