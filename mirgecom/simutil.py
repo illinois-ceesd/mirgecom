@@ -32,7 +32,7 @@ Simulation support utilities
 Lazy eval utilities
 -------------------
 
-.. autofunction:: force_eval
+.. autofunction:: force_evaluation
 """
 
 __copyright__ = """
@@ -497,6 +497,7 @@ def species_fraction_anomaly_relaxation(cv, alpha=1.):
     return 0.*cv
 
 
-def force_eval(actx, expn):
+def force_evaluation(actx, expn):
     """Convenience wrapper for forcing evaluation of expressions."""
+    from arraycontext import thaw, freeze
     return thaw(freeze(expn, actx), actx)

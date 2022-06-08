@@ -45,6 +45,7 @@ from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
     write_visfile,
+    force_evaluation
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -64,7 +65,7 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw, freeze
+from arraycontext import thaw
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
@@ -1044,7 +1045,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 # If we plan on doing anything with the state, then
                 # we need to make sure it is evaluated first.
                 if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
-                    fluid_state=force_eval(actx, fluid_state)
+                    fluid_state = force_eval(actx, fluid_state)
 
                 dt = get_sim_timestep(discr, fluid_state, t=t, dt=dt,
                                       cfl=current_cfl, t_final=t_final,
@@ -1185,19 +1186,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             print(f"Timestepping: {current_step=}, {current_t=}, {t_final=},"
                   f" {current_dt=}")
         current_step, current_t, current_state = \
-                    advance_state(rhs=my_rhs, timestepper=timestepper,
-                                  pre_step_callback=pre_step_func, istep=current_step,
-                                  post_step_callback=post_step_func, dt=current_dt,
-                                  state=current_state, t=current_t, t_final=t_final,
-                                  force_eval=force_eval)
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          pre_step_callback=pre_step_func, istep=current_step,
+                          post_step_callback=post_step_func, dt=current_dt,
+                          state=current_state, t=current_t, t_final=t_final,
+                          force_eval=force_eval)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    final_cv, tseed = thaw(freeze(current_state, actx), actx)
+    final_cv, tseed = force_evaluation(actx, current_state)
     final_fluid_state = construct_fluid_state(final_cv, tseed)
-    final_fluid_state = thaw(freeze(current_state, actx) actx)
+    final_fluid_state = force_evaluation(actx, final_fluid_state)
 
     final_dv = final_fluid_state.dv
     dt = get_sim_timestep(discr, final_fluid_state, current_t, current_dt,
