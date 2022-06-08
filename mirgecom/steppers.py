@@ -305,6 +305,7 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
     force_eval
         An optional boolean indicating whether to force lazy evaluation between
         timesteps.  Defaults to True.
+
     Returns
     -------
     istep: int
