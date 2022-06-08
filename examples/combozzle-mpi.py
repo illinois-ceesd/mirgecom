@@ -212,7 +212,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_dt = 1e-9
     current_t = 0
     constant_cfl = False
-    integrator = "compiled_lsrk45"
+    integrator = "euler"
 
     # i.o frequencies
     nstatus = 100
@@ -652,6 +652,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = lsrk144_step
     if integrator == "compiled_lsrk45":
         timestepper = _compiled_stepper_wrapper
+        force_eval = False
 
     def vol_min(x):
         from grudge.op import nodal_min
@@ -1045,7 +1046,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 # If we plan on doing anything with the state, then
                 # we need to make sure it is evaluated first.
                 if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
-                    fluid_state = force_eval(actx, fluid_state)
+                    fluid_state = force_evaluation(actx, fluid_state)
 
                 dt = get_sim_timestep(discr, fluid_state, t=t, dt=dt,
                                       cfl=current_cfl, t_final=t_final,
