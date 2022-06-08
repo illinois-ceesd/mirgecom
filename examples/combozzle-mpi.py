@@ -187,7 +187,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
 
     # - scales the size of the domain
-    x_scale = 2
+    x_scale = 1
     y_scale = 1
     z_scale = 1
 
@@ -262,7 +262,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # coarse-scale grid/domain control
     n_refine = 1  # scales npts/axis uniformly
-    weak_scale = 4  # scales domain uniformly, keeping dt constant
+    weak_scale = 1  # scales domain uniformly, keeping dt constant
 
     # AV / Shock-capturing parameters
     alpha_sc = 0.5
