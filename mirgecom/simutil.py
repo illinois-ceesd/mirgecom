@@ -28,6 +28,11 @@ Simulation support utilities
 
 .. autofunction:: limit_species_mass_fractions
 .. autofunction:: species_fraction_anomaly_relaxation
+
+Lazy eval utilities
+-------------------
+
+.. autofunction:: force_eval
 """
 
 __copyright__ = """
@@ -490,3 +495,8 @@ def species_fraction_anomaly_relaxation(cv, alpha=1.):
                               momentum=0.*cv.momentum, energy=0.*cv.energy,
                               species_mass=alpha*cv.mass*new_y)
     return 0.*cv
+
+
+def force_eval(actx, expn):
+    """Convenience wrapper for forcing evaluation of expressions."""
+    return thaw(freeze(expn, actx), actx)

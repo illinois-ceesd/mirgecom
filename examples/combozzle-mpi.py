@@ -1,4 +1,4 @@
-"""Prediction-adjacent performance tester."""
+"""Predictionf-adjacent performance tester."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -163,7 +163,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_overintegration=False,
          use_profiling=False, casename=None, lazy=False,
          rst_filename=None, actx_class=PyOpenCLArrayContext,
-         log_dependent=False, input_file=None):
+         log_dependent=False, input_file=None,
+         force_eval=True):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -185,7 +186,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
 
     # - scales the size of the domain
-    x_scale = 1
+    x_scale = 2
     y_scale = 1
     z_scale = 1
 
@@ -210,7 +211,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_dt = 1e-9
     current_t = 0
     constant_cfl = False
-    integrator = "euler"
+    integrator = "compiled_lsrk45"
 
     # i.o frequencies
     nstatus = 100
@@ -260,7 +261,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # coarse-scale grid/domain control
     n_refine = 1  # scales npts/axis uniformly
-    weak_scale = 2  # scales domain uniformly, keeping dt constant
+    weak_scale = 4  # scales domain uniformly, keeping dt constant
 
     # AV / Shock-capturing parameters
     alpha_sc = 0.5
@@ -381,6 +382,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except KeyError:
             pass
         try:
+            if force_eval:
+                force_eval = bool(input_data["force_eval"])
+        except KeyError:
+            pass
+        try:
             nviz = int(input_data["nviz"])
         except KeyError:
             pass
@@ -491,6 +497,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         print(f"\t{single_gas_only=},{dummy_rhs_only=}")
         print(f"\t{periodic_boundary=},{adiabatic_boundary=}")
         print(f"\t{timestepping_on=}, {inviscid_only=}")
+        print(f"\t{force_eval=}")
         print(f"\t{av_on=}, {sponge_on=}, {do_callbacks=}")
         print(f"\t{nspecies=}, {init_only=}")
         print(f"\t{health_pres_min=}, {health_pres_max=}")
@@ -624,25 +631,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if grid_only:
         return 0
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    from mirgecom.discretization import create_discretization_collection
 
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
-    )
+    discr = create_discretization_collection(actx, local_mesh, order, comm)
     nodes = thaw(discr.nodes(), actx)
     ones = discr.zeros(actx) + 1.0
 
+    def _compiled_stepper_wrapper(state, t, dt, rhs):
+        return compiled_lsrk45_step(actx, state, t, dt, rhs)
+
     timestepper = rk4_step
-    use_local_timestepping = False
-    integrator = "compiled_lsrk45"
 
     if integrator == "euler":
         timestepper = euler_step
@@ -651,8 +650,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if integrator == "lsrk144":
         timestepper = lsrk144_step
     if integrator == "compiled_lsrk45":
-        timestepper = partial(compiled_lsrk45_step, actx)
-        use_local_timestepping = True
+        timestepper = _compiled_stepper_wrapper
 
     def vol_min(x):
         from grudge.op import nodal_min
@@ -1026,13 +1024,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
-        # fluid_state = thaw(freeze(fluid_state, actx), actx)
-
-        dv = fluid_state.dv
-
-        dt = get_sim_timestep(discr, fluid_state, t=t, dt=dt, cfl=current_cfl,
-                              t_final=t_final, constant_cfl=constant_cfl)
 
         try:
 
@@ -1040,11 +1031,24 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 logmgr.tick_before()
 
             if do_checkpoint:
+
+                fluid_state = construct_fluid_state(cv, tseed)
+                dv = fluid_state.dv
+
                 from mirgecom.simutil import check_step
                 do_viz = check_step(step=step, interval=nviz)
                 do_restart = check_step(step=step, interval=nrestart)
                 do_health = check_step(step=step, interval=nhealth)
                 do_status = check_step(step=step, interval=nstatus)
+
+                # If we plan on doing anything with the state, then
+                # we need to make sure it is evaluated first.
+                if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
+                    fluid_state=force_eval(actx, fluid_state)
+
+                dt = get_sim_timestep(discr, fluid_state, t=t, dt=dt,
+                                      cfl=current_cfl, t_final=t_final,
+                                      constant_cfl=constant_cfl)
 
                 if do_health:
                     health_errors = global_reduce(my_health_check(cv, dv), op="lor")
@@ -1073,8 +1077,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_post_step(step, t, dt, state):
         cv, tseed = state
 
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
             if log_dependent:
@@ -1182,42 +1184,24 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             print(f"Timestepping: {current_step=}, {current_t=}, {t_final=},"
                   f" {current_dt=}")
-        if use_local_timestepping is False:
-            current_step, current_t, current_state = \
-                advance_state(rhs=my_rhs, timestepper=timestepper,
-                              pre_step_callback=pre_step_func, istep=current_step,
-                              post_step_callback=post_step_func, dt=current_dt,
-                              state=current_state, t=current_t, t_final=t_final)
-        else:
-            compiled_rhs = actx.compile(my_rhs)
-            istep = 0
-
-            while current_t < t_final:
-
-                current_state, current_dt = \
-                    pre_step_func(state=current_state, step=istep, t=current_t,
-                                      dt=current_dt)
-
-                current_state = timestepper(current_state, current_t, current_dt,
-                                            compiled_rhs)
-
-                current_t = current_t + current_dt
-                istep = istep + 1
-
-                current_state, current_dt = \
-                    post_step_func(state=current_state, step=istep, t=current_t,
-                                   dt=current_dt)
+        current_step, current_t, current_state = \
+                    advance_state(rhs=my_rhs, timestepper=timestepper,
+                                  pre_step_callback=pre_step_func, istep=current_step,
+                                  post_step_callback=post_step_func, dt=current_dt,
+                                  state=current_state, t=current_t, t_final=t_final,
+                                  force_eval=force_eval)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
     final_cv, tseed = thaw(freeze(current_state, actx), actx)
-
     final_fluid_state = construct_fluid_state(final_cv, tseed)
+    final_fluid_state = thaw(freeze(current_state, actx) actx)
+
     final_dv = final_fluid_state.dv
     dt = get_sim_timestep(discr, final_fluid_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
+                          current_cfl, t_final, constant_cfl)
 
     my_write_viz(step=current_step, t=current_t, cv=final_cv, dv=final_dv)
     my_write_status(dt=dt, cfl=current_cfl, dv=final_dv)
@@ -1252,6 +1236,8 @@ if __name__ == "__main__":
                         nargs="?", action="store", help="simulation config file")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
+    parser.add_argument("--no-force", action="store_true",
+        help="Turn off force lazy eval between timesteps")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
@@ -1265,6 +1251,7 @@ if __name__ == "__main__":
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     lazy = args.lazy
     log_dependent = False
+    force_eval = not args.no_force
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -1290,6 +1277,6 @@ if __name__ == "__main__":
          use_overintegration=args.overintegration,
          use_profiling=args.profiling, lazy=lazy,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent)
+         log_dependent=log_dependent, force_eval=force_eval)
 
 # vim: foldmethod=marker
