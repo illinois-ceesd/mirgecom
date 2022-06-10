@@ -112,7 +112,8 @@ def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
 
         for quantity in ["mass", "energy"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
@@ -261,13 +262,13 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._discr_reduction = partial(op.nodal_min, self.discr, "vol")
+            self._discr_reduction = partial(oper.nodal_min, self.discr, "vol")
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(op.nodal_max, self.discr, "vol")
+            self._discr_reduction = partial(oper.nodal_max, self.discr, "vol")
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(op.norm, self.discr, p=2)
+            self._discr_reduction = partial(oper.norm, self.discr, p=2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
