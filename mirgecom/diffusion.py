@@ -268,9 +268,10 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
                 "Must be an instance of DiffusionBoundary.")
 
     dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
+    dd_vol_quad = DOFDesc("vol", quadrature_tag)
 
     return op.inverse_mass(discr,
-        op.weak_grad(discr, -u)
+        op.weak_local_grad(discr, dd_vol_quad, -u)
         - 1.0  # noqa: W504
         * op.face_mass(discr,
             dd_allfaces_quad,
@@ -388,7 +389,7 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
     grad_u_quad = op.project(discr, "vol", dd_quad, grad_u)
 
     diff_u = op.inverse_mass(discr,
-        op.weak_div(discr, dd_quad, -kappa_quad*grad_u_quad)
+        op.weak_local_div(discr, dd_quad, -kappa_quad*grad_u_quad)
         - 1.  # noqa: W504
         * op.face_mass(discr,
             dd_allfaces_quad,

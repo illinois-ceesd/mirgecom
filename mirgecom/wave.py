@@ -91,8 +91,8 @@ def wave_operator(discr, c, w):
     return (
         op.inverse_mass(discr,
             flat_obj_array(
-                -c*op.weak_div(discr, v),
-                -c*op.weak_grad(discr, u)
+                -c*op.weak_local_div(discr, "vol", v),
+                -c*op.weak_local_grad(discr, "vol", u)
                 )
             +  # noqa: W504
             op.face_mass(discr,
