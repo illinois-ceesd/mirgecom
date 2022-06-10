@@ -39,10 +39,10 @@ def grad_operator(discr, dd_vol, dd_faces, u, flux):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     dd_vol: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the volume discrezation.
+        the degree-of-freedom tag associated with the volume discretization.
         This determines the type of quadrature to be used.
     dd_faces: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the surface discrezation.
+        the degree-of-freedom tag associated with the surface discretization.
         This determines the type of quadrature to be used.
     u: meshmode.dof_array.DOFArray or numpy.ndarray
         the function (or container of functions) for which gradient is to be
@@ -56,10 +56,9 @@ def grad_operator(discr, dd_vol, dd_faces, u, flux):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg gradient operator applied to *u*
     """
-    return -discr.inverse_mass(
-        op.weak_local_grad(discr, dd_vol, u)
-        - op.face_mass(discr, dd_faces, flux)
-    )
+    return -1. * op.inverse_mass(discr,
+                                 op.weak_local_grad(discr, dd_vol, u)
+                                 - op.face_mass(discr, dd_faces, flux))
 
 
 def div_operator(discr, dd_vol, dd_faces, v, flux):
@@ -70,10 +69,10 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
     discr: grudge.eager.EagerDGDiscretization
         the discretization to use
     dd_vol: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the volume discrezation.
+        the degree-of-freedom tag associated with the volume discretization.
         This determines the type of quadrature to be used.
     dd_faces: grudge.dof_desc.DOFDesc
-        the degree-of-freedom tag associated with the surface discrezation.
+        the degree-of-freedom tag associated with the surface discretization.
         This determines the type of quadrature to be used.
     v: numpy.ndarray
         obj array of :class:`~meshmode.dof_array.DOFArray` (or container of such)
@@ -87,7 +86,6 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
     meshmode.dof_array.DOFArray or numpy.ndarray
         the dg divergence operator applied to vector-valued function(s) *v*.
     """
-    return -op.inverse_mass(discr,
-        op.weak_local_div(discr, dd_vol, v)
-        - op.face_mass(discr, dd_faces, flux)
-    )
+    return -1. * op.inverse_mass(discr,
+                                 op.weak_local_div(discr, dd_vol, v)
+                                 - op.face_mass(discr, dd_faces, flux))

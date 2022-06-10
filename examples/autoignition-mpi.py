@@ -29,20 +29,9 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from grudge.array_context import (
-    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
-)
-
-from meshmode.array_context import (
-    PyOpenCLArrayContext
-)
-
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -83,11 +72,10 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_overintegration=False,
-         use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
-         log_dependent=True):
+def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_overintegration=False, use_profiling=False,
+         casename=None, lazy=False, rst_filename=None, log_dependent=True,
+         viscous_terms_on=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -111,12 +99,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    if actx_class == PytatoPyOpenCLArrayContext:
-        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
-        actx = actx_class(
-            queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     # Some discretization parameters
     dim = 2
@@ -284,7 +273,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
-    gas_model = GasModel(eos=eos)
+    # {{{ Initialize simple transport model
+    from mirgecom.transport import SimpleTransport
+    transport_model = None
+    if viscous_terms_on:
+        kappa = 1e-5
+        spec_diffusivity = 1e-5 * np.ones(nspecies)
+        sigma = 1e-5
+        transport_model = SimpleTransport(viscosity=sigma,
+                                          thermal_conductivity=kappa,
+                                          species_diffusivity=spec_diffusivity)
+    # }}}
+
+    gas_model = GasModel(eos=eos, transport=transport_model)
     from pytools.obj_array import make_obj_array
 
     def get_temperature_update(cv, temperature):
@@ -469,17 +470,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-    from mirgecom.inviscid import get_inviscid_timestep
+    from mirgecom.viscous import get_viscous_timestep
 
     def get_dt(state):
-        return get_inviscid_timestep(discr, state=state)
+        return get_viscous_timestep(discr, state=state)
 
     compute_dt = actx.compile(get_dt)
 
-    from mirgecom.inviscid import get_inviscid_cfl
+    from mirgecom.viscous import get_viscous_cfl
 
     def get_cfl(state, dt):
-        return get_inviscid_cfl(discr, dt=dt, state=state)
+        return get_viscous_cfl(discr, dt=dt, state=state)
 
     compute_cfl = actx.compile(get_cfl)
 
@@ -563,22 +564,34 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, cv, gas_model.eos)
             logmgr.tick_after()
+
         return make_obj_array([cv, fluid_state.temperature]), dt
 
-    from mirgecom.inviscid import inviscid_flux_rusanov
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov as inv_num_flux_func
+    from mirgecom.gas_model import make_operator_fluid_states
+    from mirgecom.navierstokes import ns_operator
+
+    fluid_operator = euler_operator
+    if viscous_terms_on:
+        fluid_operator = ns_operator
 
     def my_rhs(t, state):
         cv, tseed = state
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        return make_obj_array([
-            euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
-                           gas_model=gas_model,
-                           inviscid_numerical_flux_func=inviscid_flux_rusanov,
-                           quadrature_tag=quadrature_tag)
-            + eos.get_species_source_terms(cv, fluid_state.temperature),
-            0*tseed])
+        fluid_operator_states = make_operator_fluid_states(
+            discr, fluid_state, gas_model, boundaries=boundaries,
+            quadrature_tag=quadrature_tag)
+        fluid_rhs = fluid_operator(
+            discr, state=fluid_state, gas_model=gas_model, time=t,
+            boundaries=boundaries, operator_states_quad=fluid_operator_states,
+            quadrature_tag=quadrature_tag,
+            inviscid_numerical_flux_func=inv_num_flux_func)
+        chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
+        tseed_rhs = fluid_state.temperature - tseed
+        cv_rhs = fluid_rhs + chem_rhs
+        return make_obj_array([cv_rhs, tseed_rhs])
 
     current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -623,6 +636,8 @@ if __name__ == "__main__":
         help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
+    parser.add_argument("--navierstokes", action="store_true",
+                        help="turns on compressible Navier-Stokes RHS")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
@@ -635,16 +650,14 @@ if __name__ == "__main__":
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
+    lazy = args.lazy
+    viscous_terms_on = args.navierstokes
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        if args.lazy:
-            log_dependent = False
-            actx_class = PytatoPyOpenCLArrayContext
-        else:
-            actx_class = PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -653,10 +666,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration,
-         use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent)
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+         use_overintegration=args.overintegration, use_profiling=args.profiling,
+         lazy=lazy, casename=casename, rst_filename=rst_filename,
+         log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
 
 # vim: foldmethod=marker

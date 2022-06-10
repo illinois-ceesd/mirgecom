@@ -22,6 +22,17 @@ Mesh utilities
 --------------
 
 .. autofunction:: generate_and_distribute_mesh
+
+Simulation support utilities
+----------------------------
+
+.. autofunction:: limit_species_mass_fractions
+.. autofunction:: species_fraction_anomaly_relaxation
+
+Lazy eval utilities
+-------------------
+
+.. autofunction:: force_evaluation
 """
 
 __copyright__ = """
@@ -56,6 +67,9 @@ from arraycontext import map_array_container, flatten
 from functools import partial
 
 from meshmode.dof_array import DOFArray
+
+from typing import List
+from grudge.discretization import DiscretizationCollection
 
 
 logger = logging.getLogger(__name__)
@@ -272,17 +286,26 @@ def allsync(local_values, comm=None, op=None):
     return global_reduce(local_values, op_string, comm=comm)
 
 
-def check_range_local(discr, dd, field, min_value, max_value):
-    """Check for any negative values."""
+def check_range_local(discr: DiscretizationCollection, dd: str, field: DOFArray,
+                      min_value: float, max_value: float) -> List[float]:
+    """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    return (
-        actx.to_numpy(op.nodal_min_loc(discr, dd, field)) < min_value
-        or actx.to_numpy(op.nodal_max_loc(discr, dd, field)) > max_value
-    )
+    local_min = np.asscalar(actx.to_numpy(op.nodal_min_loc(discr, dd, field)))
+    local_max = np.asscalar(actx.to_numpy(op.nodal_max_loc(discr, dd, field)))
+
+    failing_values = []
+
+    if local_min < min_value:
+        failing_values.append(local_min)
+    if local_max > max_value:
+        failing_values.append(local_max)
+
+    return failing_values
 
 
-def check_naninf_local(discr, dd, field):
-    """Check for any NANs or Infs in the field."""
+def check_naninf_local(discr: DiscretizationCollection, dd: str,
+                       field: DOFArray) -> bool:
+    """Return True if there are any NaNs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
     return not np.isfinite(s)
@@ -371,6 +394,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     else:
         local_mesh = mesh_dist.receive_mesh_part()
 
+    global_nelements = comm.bcast(global_nelements)
     return local_mesh, global_nelements
 
 
@@ -428,11 +452,52 @@ def create_parallel_grid(comm, generate_grid):
 
 def limit_species_mass_fractions(cv):
     """Keep the species mass fractions from going negative."""
-    y = cv.species_mass_fractions
-    if len(y) > 0:
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
         actx = cv.array_context
+        new_y = 1.*y
         zero = 0 * y[0]
-        for y_spec in y:
-            y_spec = actx.np.where(y_spec < 0, zero, y_spec)
-        cv = cv.replace(species_mass=cv.mass*y)
-    return(cv)
+        one = zero + 1.
+
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 1e-14),
+                                     zero, new_y[i])
+            new_y[i] = actx.np.where(actx.np.greater(new_y[i], 1.),
+                                     one, new_y[i])
+        new_rho_y = cv.mass*new_y
+
+        for i in range(cv.nspecies):
+            new_rho_y[i] = actx.np.where(actx.np.less(new_rho_y[i], 1e-16),
+                                         zero, new_rho_y[i])
+            new_rho_y[i] = actx.np.where(actx.np.greater(new_rho_y[i], 1.),
+                                         one, new_rho_y[i])
+
+        return make_conserved(dim=cv.dim, mass=cv.mass,
+                              momentum=cv.momentum, energy=cv.energy,
+                              species_mass=new_rho_y)
+    return cv
+
+
+def species_fraction_anomaly_relaxation(cv, alpha=1.):
+    """Pull negative species fractions back towards 0 with a RHS contribution."""
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
+        actx = cv.array_context
+        new_y = 1.*y
+        zero = 0. * y[0]
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 0.),
+                                     -new_y[i], zero)
+            # y_spec = actx.np.where(y_spec > 1., y_spec-1., zero)
+        return make_conserved(dim=cv.dim, mass=0.*cv.mass,
+                              momentum=0.*cv.momentum, energy=0.*cv.energy,
+                              species_mass=alpha*cv.mass*new_y)
+    return 0.*cv
+
+
+def force_evaluation(actx, expn):
+    """Wrap freeze/thaw forcing evaluation of expressions."""
+    from arraycontext import thaw, freeze
+    return thaw(freeze(expn, actx), actx)

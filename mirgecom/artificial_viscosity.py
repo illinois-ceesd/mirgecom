@@ -97,16 +97,17 @@ THE SOFTWARE.
 import numpy as np
 
 from pytools import memoize_in, keyed_memoize_in
-
+from functools import partial
 from meshmode.dof_array import thaw, DOFArray
 
-from mirgecom.flux import gradient_flux_central, divergence_flux_central
-from mirgecom.operators import div_operator, grad_operator
+from mirgecom.flux import num_flux_central
+from mirgecom.operators import div_operator
 
 from grudge.trace_pair import (
-    TracePair,
-    interior_trace_pairs
+    interior_trace_pairs,
+    tracepair_with_discr_tag
 )
+
 from grudge.dof_desc import (
     DOFDesc,
     as_dofdesc,
@@ -125,8 +126,11 @@ class _AVRTag:
     pass
 
 
-def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
-                          boundary_kwargs=None, **kwargs):
+def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
+                          kappa=1., s0=-6., time=0, operator_states_quad=None,
+                          grad_cv=None, quadrature_tag=None, boundary_kwargs=None,
+                          indicator=None, divergence_numerical_flux=num_flux_central,
+                          **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -140,11 +144,27 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     fluid_state: :class:`mirgecom.gas_model.FluidState`
         Fluid state object with the conserved and thermal state.
 
-    boundaries: float
+    boundaries: dict
         Dictionary of boundary functions, one for each valid boundary tag
 
     alpha: float
         The maximum artificial viscosity coefficient to be applied
+
+    indicator: :class:`~meshmode.dof_array.DOFArray`
+        The indicator field used for locating where AV should be applied. If not
+        supplied by the user, then
+        :func:`~mirgecom.artificial_viscosity.smoothness_indicator` will be used
+        with fluid mass density as the indicator field.
+
+    kappa
+        An optional argument that controls the width of the transition from 0 to 1,
+        $\kappa$. This parameter defaults to $\kappa=1$.
+
+    s0
+        An optional argument that sets the smoothness level to limit
+        on, $s_0$. Values in the range $(-\infty,0]$ are allowed, where $-\infty$
+        results in all cells being tagged and 0 results in none.  This parameter
+        defaults to $s_0=-6$.
 
     quadrature_tag
         An optional identifier denoting a particular quadrature
@@ -159,54 +179,47 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
     :class:`mirgecom.fluid.ConservedVars`
         The artificial viscosity operator applied to *q*.
     """
-    if boundary_kwargs is None:
-        boundary_kwargs = dict()
-
     cv = fluid_state.cv
     actx = cv.array_context
-    quadrature_tag = kwargs.get("quadrature_tag", None)
     dd_vol = DOFDesc("vol", quadrature_tag)
     dd_faces = DOFDesc("all_faces", quadrature_tag)
+
+    from warnings import warn
+
+    if boundary_kwargs is not None:
+        warn("The AV boundary_kwargs interface is deprecated, please pass gas_model"
+             " and time directly.")
+        if gas_model is None:
+            gas_model = boundary_kwargs["gas_model"]
+            if "time" in boundary_kwargs:
+                time = boundary_kwargs["time"]
+
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     def interp_to_vol_quad(u):
         return op.project(discr, "vol", dd_vol, u)
 
-    def interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
-        return TracePair(
-            local_dd_quad,
-            interior=op.project(discr, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(discr, local_dd, local_dd_quad, utpair.ext)
-        )
+    if operator_states_quad is None:
+        from mirgecom.gas_model import make_operator_fluid_states
+        operator_states_quad = make_operator_fluid_states(
+            discr, fluid_state, gas_model, boundaries, quadrature_tag)
+
+    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
+        operator_states_quad
 
     # Get smoothness indicator based on mass component
-    kappa = kwargs.get("kappa", 1.0)
-    s0 = kwargs.get("s0", -6.0)
-    indicator = smoothness_indicator(discr, cv.mass, kappa=kappa, s0=s0)
+    if indicator is None:
+        indicator = smoothness_indicator(discr, fluid_state.mass_density,
+                                         kappa=kappa, s0=s0)
 
-    def central_flux(utpair):
-        dd = utpair.dd
-        normal = thaw(actx, discr.normal(dd))
-        return op.project(discr, dd, dd.with_dtag("all_faces"),
-                          # This uses a central scalar flux along nhat:
-                          # flux = 1/2 * (Q- + Q+) * nhat
-                          gradient_flux_central(utpair, normal))
-
-    cv_bnd = (
-        # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux(interp_to_surf_quad(tpair))
-              for tpair in interior_trace_pairs(discr, cv, tag=_AVCVTag))
-        # Contributions from boundary fluxes
-        + sum(boundaries[btag].soln_gradient_flux(
-            discr,
-            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            fluid_state=fluid_state, **boundary_kwargs) for btag in boundaries)
-    )
+    if grad_cv is None:
+        from mirgecom.navierstokes import grad_cv_operator
+        grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
+                                   time=time, quadrature_tag=quadrature_tag,
+                                   operator_states_quad=operator_states_quad)
 
     # Compute R = alpha*grad(Q)
-    r = -alpha * indicator \
-        * grad_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(cv), cv_bnd)
+    r = -alpha * indicator * grad_cv
 
     def central_flux_div(utpair):
         dd = utpair.dd
@@ -214,18 +227,19 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha,
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-                          divergence_flux_central(utpair, normal))
+                          divergence_numerical_flux(utpair.int, utpair.ext)@normal)
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux_div(interp_to_surf_quad(tpair))
+        + sum(central_flux_div(interp_to_surf_quad(tpair=tpair))
               for tpair in interior_trace_pairs(discr, r, tag=_AVRTag))
+
         # Contributions from boundary fluxes
         + sum(boundaries[btag].av_flux(
             discr,
             btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            diffusion=r, **boundary_kwargs) for btag in boundaries)
+            diffusion=r) for btag in boundaries)
     )
 
     # Return the AV RHS term
@@ -242,6 +256,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
 
     kappa
         An optional argument that controls the width of the transition from 0 to 1.
+
     s0
         An optional argument that sets the smoothness level to limit
         on. Values in the range $(-\infty,0]$ are allowed, where $-\infty$ results in
@@ -299,16 +314,39 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     uhat = modal_map(u)
 
     # Compute smoothness indicator value
-    indicator = DOFArray(
-        actx,
-        data=tuple(
-            actx.call_loopy(
-                indicator_prg(),
-                vec=uhat[grp.index],
-                modes_active_flag=highest_mode(grp))["result"]
-            for grp in discr.discr_from_dd("vol").groups
+    if actx.supports_nonscalar_broadcasting:
+        from meshmode.transform_metadata import DiscretizationDOFAxisTag
+        indicator = DOFArray(
+            actx,
+            data=tuple(
+                actx.tag_axis(
+                    1,
+                    DiscretizationDOFAxisTag(),
+                    actx.np.broadcast_to(
+                        ((actx.einsum("ek,k->e",
+                                      uhat[grp.index]**2,
+                                      highest_mode(grp))
+                          / (actx.einsum("ej->e",
+                                         (uhat[grp.index]**2+(1e-12/grp.nunit_dofs))
+                                         )))
+                         .reshape(-1, 1)),
+                        uhat[grp.index].shape))
+                for grp in discr.discr_from_dd("vol").groups
+            )
         )
-    )
+    else:
+        indicator = DOFArray(
+            actx,
+            data=tuple(
+                actx.call_loopy(
+                    indicator_prg(),
+                    vec=uhat[grp.index],
+                    modes_active_flag=highest_mode(grp)
+                )["result"]
+                for grp in discr.discr_from_dd("vol").groups
+            )
+        )
+
     indicator = actx.np.log10(indicator + 1.0e-12)
 
     # Compute artificial viscosity percentage based on indicator and set parameters

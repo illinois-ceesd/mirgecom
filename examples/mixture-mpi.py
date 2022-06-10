@@ -29,11 +29,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from grudge.array_context import (
-    PyOpenCLArrayContext,
-    MPISingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
-)
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -50,7 +45,10 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedFluidBoundary
+from mirgecom.boundary import (
+    PrescribedFluidBoundary,
+    AdiabaticSlipBoundary
+)
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
@@ -76,10 +74,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
-         log_dependent=True):
+def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+         use_leap=False, use_profiling=False, casename=None, rst_filename=None,
+         log_dependent=False, lazy=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -103,11 +100,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    if actx_class == PytatoPyOpenCLArrayContext:
-        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     # timestepping control
     if use_leap:
@@ -115,6 +114,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
+
     t_final = 1e-8
     current_cfl = 1.0
     current_dt = 1e-9
@@ -152,11 +152,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 3
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+    order = 1
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=local_mesh.dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+
+    use_overintegration = False
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     vis_timer = None
 
@@ -192,7 +208,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = pyrometheus_mechanism.num_species
-    eos = PyrometheusMixture(pyrometheus_mechanism)
+    eos = PyrometheusMixture(pyrometheus_mechanism, temperature_guess=300)
     from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
     from pytools.obj_array import make_obj_array
@@ -216,9 +232,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                             **kwargs), gas_model,
                                 temperature_seed=state_minus.temperature)
 
-    boundaries = {
-        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
-    }
+    if True:
+        my_boundary = AdiabaticSlipBoundary()
+        boundaries = {BTAG_ALL: my_boundary}
+    else:
+        boundaries = {
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
+        }
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -233,7 +253,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(x_vec=nodes, eos=eos)
         tseed = 300.0
 
-    current_state = make_fluid_state(current_cv, gas_model, temperature_seed=tseed)
+    def get_fluid_state(cv, tseed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=tseed)
+
+    construct_fluid_state = actx.compile(get_fluid_state)
+    current_state = construct_fluid_state(current_cv, tseed)
 
     visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
@@ -316,9 +341,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
+    def dummy_pre_step(step, t, dt, state):
+        return state, dt
+
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
         dv = fluid_state.dv
 
         try:
@@ -374,9 +402,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                               constant_cfl)
         return state, dt
 
+    def dummy_post_step(step, t, dt, state):
+        return state, dt
+
     def my_post_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
         tseed = fluid_state.temperature
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -386,12 +417,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return make_obj_array([fluid_state.cv, tseed]), dt
 
+    def dummy_rhs(t, state):
+        return make_obj_array([0*state[0], 0*state[1]])
+
     def my_rhs(t, state):
         cv, tseed = state
         fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
         return make_obj_array(
             [euler_operator(discr, state=fluid_state, time=t,
-                            boundaries=boundaries, gas_model=gas_model),
+                            boundaries=boundaries, gas_model=gas_model,
+                            quadrature_tag=quadrature_tag),
              0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
@@ -403,7 +438,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_state.cv,
                                             current_state.temperature]),
-                      t=current_t, t_final=t_final, eos=eos, dim=dim)
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
@@ -446,13 +481,13 @@ if __name__ == "__main__":
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
+    lazy = args.lazy
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
-            else PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -461,8 +496,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
+         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent)
 
 # vim: foldmethod=marker

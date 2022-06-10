@@ -38,8 +38,9 @@ from mirgecom.integrators import rk4_step
 
 from meshmode.array_context import (
     PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext
 )
+
 from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
@@ -87,7 +88,8 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy_eval:
-            actx = PytatoPyOpenCLArrayContext(queue)
+            actx = PytatoPyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
         else:
             actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))

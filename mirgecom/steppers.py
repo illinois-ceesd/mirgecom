@@ -29,8 +29,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from logpyle import set_dt
-from mirgecom.logging_quantities import set_sim_state
 from pytools import memoize_in
 from arraycontext import (
     freeze,
@@ -70,12 +68,9 @@ def _force_evaluation(actx, state):
     return thaw(freeze(state, actx), actx)
 
 
-def _advance_state_stepper_func(rhs, timestepper,
-                                state, t_final, dt=0,
-                                t=0.0, istep=0,
-                                pre_step_callback=None,
-                                post_step_callback=None,
-                                logmgr=None, eos=None, dim=None):
+def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
+                                t=0.0, istep=0, pre_step_callback=None,
+                                post_step_callback=None, force_eval=True):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -107,6 +102,9 @@ def _advance_state_stepper_func(rhs, timestepper,
         An optional user-defined function, with signature:
         ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
+    force_eval
+        An optional boolean indicating whether to force lazy evaluation between
+        timesteps.  Defaults to True.
 
     Returns
     -------
@@ -126,13 +124,12 @@ def _advance_state_stepper_func(rhs, timestepper,
     compiled_rhs = _compile_rhs(actx, rhs)
 
     while t < t_final:
-        state = _force_evaluation(actx, state)
-
-        if logmgr:
-            logmgr.tick_before()
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+
+        if force_eval:
+            state = _force_evaluation(actx, state)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
 
@@ -142,21 +139,13 @@ def _advance_state_stepper_func(rhs, timestepper,
         if post_step_callback is not None:
             state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if logmgr:
-            set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
-            logmgr.tick_after()
-
     return istep, t, state
 
 
-def _advance_state_leap(rhs, timestepper, state,
-                        t_final, dt=0,
-                        component_id="state",
-                        t=0.0, istep=0,
-                        pre_step_callback=None,
-                        post_step_callback=None,
-                        logmgr=None, eos=None, dim=None):
+def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
+                        component_id="state", t=0.0, istep=0,
+                        pre_step_callback=None, post_step_callback=None,
+                        force_eval=True):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -207,13 +196,15 @@ def _advance_state_leap(rhs, timestepper, state,
                                                     compiled_rhs, t, dt, state)
 
     while t < t_final:
-        state = _force_evaluation(actx, state)
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state,
                                           step=istep,
                                           t=t, dt=dt)
             stepper_cls.dt = dt
+
+        if force_eval:
+            state = _force_evaluation(actx, state)
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
@@ -271,12 +262,9 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     return stepper_cls
 
 
-def advance_state(rhs, timestepper, state, t_final,
-                  component_id="state",
-                  t=0.0, istep=0, dt=0,
-                  pre_step_callback=None,
-                  post_step_callback=None,
-                  logmgr=None, eos=None, dim=None):
+def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
+                  component_id="state", pre_step_callback=None,
+                  post_step_callback=None, force_eval=True):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -314,6 +302,9 @@ def advance_state(rhs, timestepper, state, t_final,
         An optional user-defined function, with signature:
         ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
+    force_eval
+        An optional boolean indicating whether to force lazy evaluation between
+        timesteps.  Defaults to True.
 
     Returns
     -------
@@ -329,12 +320,6 @@ def advance_state(rhs, timestepper, state, t_final,
     import sys
     leap_timestepper = False
 
-    if ((logmgr is not None) or (dim is not None) or (eos is not None)):
-        from warnings import warn
-        warn("Passing logmgr, dim, or eos into the stepper is a deprecated stepper "
-             "signature. See the examples for the current and preferred usage.",
-             DeprecationWarning, stacklevel=2)
-
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
@@ -349,8 +334,8 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                component_id=component_id,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
+                component_id=component_id, istep=istep,
+                force_eval=force_eval
             )
     else:
         (current_step, current_t, current_state) = \
@@ -359,7 +344,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim
+                istep=istep, force_eval=force_eval
             )
 
     return current_step, current_t, current_state

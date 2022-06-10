@@ -103,19 +103,21 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
-    for op in ["min", "max", "L2_norm"]:
+    for reduction_op in ["min", "max", "L2_norm"]:
         for quantity in ["pressure", "temperature"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging))
 
         for quantity in ["mass", "energy"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=d))
+                discr, "momentum", reduction_op, extract_vars_for_logging,
+                units_for_logging, axis=d))
 
 
 # {{{ Package versions

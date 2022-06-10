@@ -93,7 +93,9 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
         y1[i] = 2*(i+1)
     c1 = np.sqrt(gamma*p1/rho1)
 
-    mass_int = DOFArray(actx, data=(actx.from_numpy(np.array(rho0)), ))
+    rho0_dof_array = DOFArray(actx, data=(actx.from_numpy(np.array(rho0)),))
+
+    mass_int = 1.*rho0_dof_array
     vel_int = make_obj_array([vel0[idir] for idir in range(dim)])
     mom_int = mass_int*vel_int
     energy_int = p0/0.4 + 0.5 * np.dot(mom_int, mom_int)/mass_int
@@ -131,8 +133,8 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
 
     # code passes in fluxes in the direction of the surface normal,
     # so we will too
-    from mirgecom.inviscid import inviscid_flux_rusanov
-    flux_bnd = inviscid_flux_rusanov(state_pair, gas_model, normal)
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    flux_bnd = inviscid_facial_flux_rusanov(state_pair, gas_model, normal)
 
     print(f"{normal=}")
     print(f"{flux_ext@normal=}")
@@ -168,10 +170,19 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
     species_mass_flux_exact = make_obj_array([species_mass_flux_exact[ispec]
                                               for ispec in range(nspecies)])
 
-    flux_bnd_exact = make_conserved(dim, mass=mass_flux_exact,
-                                    energy=energy_flux_exact,
-                                    momentum=mom_flux_norm_exact,
-                                    species_mass=species_mass_flux_exact)
+    exact_massflux = DOFArray(actx, data=(actx.from_numpy(mass_flux_exact),))
+    exact_energyflux = DOFArray(actx, data=(actx.from_numpy(energy_flux_exact),))
+    exact_momflux = make_obj_array(
+        [DOFArray(actx, data=(actx.from_numpy(mom_flux_norm_exact[i]),))
+         for i in range(dim)])
+    exact_specflux = make_obj_array(
+        [DOFArray(actx, data=(actx.from_numpy(species_mass_flux_exact[i]),))
+         for i in range(nspecies)])
+
+    flux_bnd_exact = make_conserved(dim, mass=exact_massflux,
+                                    energy=exact_energyflux,
+                                    momentum=exact_momflux,
+                                    species_mass=exact_specflux)
 
     print(f"{flux_bnd=}")
     print(f"{flux_bnd_exact=}")
@@ -266,8 +277,8 @@ def test_hll_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
 
     state_pair = TracePair("vol", interior=fluid_state_int, exterior=fluid_state_ext)
 
-    from mirgecom.inviscid import inviscid_flux_hll
-    flux_bnd = inviscid_flux_hll(state_pair, gas_model, normal)
+    from mirgecom.inviscid import inviscid_facial_flux_hll
+    flux_bnd = inviscid_facial_flux_hll(state_pair, gas_model, normal)
 
     print(f"{normal=}")
     print(f"{flux_ext@normal=}")
@@ -362,10 +373,19 @@ def test_hll_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
         species_mass_flux_exact = make_obj_array([species_mass_flux_exact[ispec]
                                                   for ispec in range(nspecies)])
 
-    flux_bnd_exact = make_conserved(dim, mass=mass_flux_exact,
-                                    energy=energy_flux_exact,
-                                    momentum=mom_flux_norm_exact,
-                                    species_mass=species_mass_flux_exact)
+    exact_massflux = DOFArray(actx, data=(actx.from_numpy(mass_flux_exact),))
+    exact_energyflux = DOFArray(actx, data=(actx.from_numpy(energy_flux_exact),))
+    exact_momflux = make_obj_array(
+        [DOFArray(actx, data=(actx.from_numpy(mom_flux_norm_exact[i]),))
+         for i in range(dim)])
+    exact_specflux = make_obj_array(
+        [DOFArray(actx, data=(actx.from_numpy(species_mass_flux_exact[i]),))
+         for i in range(nspecies)])
+
+    flux_bnd_exact = make_conserved(dim, mass=exact_massflux,
+                                    energy=exact_energyflux,
+                                    momentum=exact_momflux,
+                                    species_mass=exact_specflux)
 
     print(f"{flux_bnd=}")
     print(f"{flux_bnd_exact=}")
