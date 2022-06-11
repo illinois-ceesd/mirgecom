@@ -34,7 +34,7 @@ import pytest
 from pytools.obj_array import make_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 from mirgecom.gas_model import (
