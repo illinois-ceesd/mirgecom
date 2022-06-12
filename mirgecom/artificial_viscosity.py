@@ -314,27 +314,50 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     uhat = modal_map(u)
 
     # Compute smoothness indicator value
-    indicator = DOFArray(
-        actx,
-        data=tuple(
-            actx.call_loopy(
-                indicator_prg(),
-                vec=uhat[grp.index],
-                modes_active_flag=highest_mode(grp)
-            )["result"]
-            for grp in discr.discr_from_dd("vol").groups
+    if actx.supports_nonscalar_broadcasting:
+        from meshmode.transform_metadata import DiscretizationDOFAxisTag
+        indicator = DOFArray(
+            actx,
+            data=tuple(
+                actx.tag_axis(
+                    1,
+                    DiscretizationDOFAxisTag(),
+                    actx.np.broadcast_to(
+                        ((actx.einsum("ek,k->e",
+                                      uhat[grp.index]**2,
+                                      highest_mode(grp))
+                          / (actx.einsum("ej->e",
+                                         (uhat[grp.index]**2+(1e-12/grp.nunit_dofs))
+                                         )))
+                         .reshape(-1, 1)),
+                        uhat[grp.index].shape))
+                for grp in discr.discr_from_dd("vol").groups
+            )
         )
-    )
+    else:
+        indicator = DOFArray(
+            actx,
+            data=tuple(
+                actx.call_loopy(
+                    indicator_prg(),
+                    vec=uhat[grp.index],
+                    modes_active_flag=highest_mode(grp)
+                )["result"]
+                for grp in discr.discr_from_dd("vol").groups
+            )
+        )
+
     indicator = actx.np.log10(indicator + 1.0e-12)
 
     # Compute artificial viscosity percentage based on indicator and set parameters
     yesnol = actx.np.greater(indicator, (s0 - kappa))
     yesnou = actx.np.greater(indicator, (s0 + kappa))
+    saintly_value = 1.0
     sin_indicator = actx.np.where(
         yesnol,
         0.5 * (1.0 + actx.np.sin(np.pi * (indicator - s0) / (2.0 * kappa))),
         0.0 * indicator,
     )
-    indicator = actx.np.where(yesnou, 1.0 + 0.0 * indicator, sin_indicator)
+    indicator = actx.np.where(yesnou, saintly_value, sin_indicator)
 
     return indicator
