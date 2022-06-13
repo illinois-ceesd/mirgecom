@@ -59,6 +59,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 import grudge.op as op
+from grudge.dof_desc import as_dofdesc
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import (
