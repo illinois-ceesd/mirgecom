@@ -500,7 +500,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
-        grad_av_minus = discr.project("vol", btag, diffusion)
+        grad_av_minus = op.project(discr, as_dofdesc("vol"), btag, diffusion)
         actx = grad_av_minus.mass[0].array_context
         nhat = thaw(discr.normal(btag), actx)
         grad_av_plus = self._bnd_grad_av_func(
