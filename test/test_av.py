@@ -259,3 +259,84 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
+
+@pytest.mark.parametrize("order",  [1, 2, 3])
+@pytest.mark.parametrize("dim",  [1, 2])
+def test_mms(ctx_factory, dim, order):
+    """Test artificial_viscosity.
+
+    Test AV operator for some test functions to verify artificial viscosity
+    returns the analytical result.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    #nel_1d = 10
+    olderr = None
+    print('\n')
+    for nel_1d in [8, 16, 32, 64]:
+        tolerance = 1.e-6
+
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(0.0, )*dim, b=(1.0, )*dim, nelements_per_axis=(nel_1d, )*dim
+        )
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(actx, discr.nodes())
+
+        class TestBoundary:
+            def cv_gradient_flux(self, disc, btag, state_minus, gas_model, **kwargs):
+                fluid_state_int = project_fluid_state(disc, "vol", btag, fluid_state,
+                                                      gas_model)
+                cv_int = fluid_state_int.cv
+                from grudge.trace_pair import TracePair
+                bnd_pair = TracePair(btag,
+                                     interior=cv_int,
+                                     exterior=cv_int)
+                nhat = thaw(actx, disc.normal(btag))
+                from mirgecom.flux import num_flux_central
+                from arraycontext import outer
+                # Do not project to "all_faces" as now we use built-in grad_cv_operator
+                return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
+
+            def av_flux(self, disc, btag, diffusion, **kwargs):
+                nhat = thaw(actx, disc.normal(btag))
+                diffusion_minus = discr.project("vol", btag, diffusion)
+                diffusion_plus = diffusion_minus
+                from grudge.trace_pair import TracePair
+                bnd_grad_pair = TracePair(btag, interior=diffusion_minus,
+                                          exterior=diffusion_plus)
+                from mirgecom.flux import num_flux_central
+                flux_weak = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
+                return disc.project(btag, "all_faces", flux_weak)
+
+        boundaries = {BTAG_ALL: TestBoundary()}
+
+        # u = sin(pi x)sin(pi y)sin(pi z)
+        # rhs  = -dim pi^2 u
+        soln = 1.0
+        exp_rhs = -dim * np.pi**2
+        for w in nodes:
+            soln *= actx.np.sin(w * np.pi)
+            exp_rhs  *= actx.np.sin(w * np.pi)
+
+        gas_model = GasModel(eos=IdealSingleGas())
+        cv = make_conserved(
+            dim,
+            mass=soln,
+            energy=soln,
+            momentum=make_obj_array([soln for _ in range(dim)]),
+            species_mass=make_obj_array([soln for _ in range(dim)])
+        )
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
+        rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                    gas_model=gas_model,
+                                    fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
+
+        err = discr.norm(rhs-exp_rhs, np.inf)
+        if olderr is not None:
+            rate = olderr / err
+            print(f'{dim=}, {nel_1d=}, {order=}, {rate=}, {err=}')
+        olderr = err
