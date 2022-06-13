@@ -29,7 +29,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+from functools import partial
+import grudge.op as op
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
@@ -55,9 +56,8 @@ def make_init_message(*, dim, order, dt, t_final,
 def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
     r"""Make simulation status and health message."""
     dv = dependent_vars
-    from functools import partial
-    _min = partial(discr.nodal_min, "vol")
-    _max = partial(discr.nodal_max, "vol")
+    _min = partial(op.nodal_min, discr, "vol")
+    _max = partial(op.nodal_max, discr, "vol")
     statusmsg = (
         f"Status: {step=} {t=}\n"
         f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"

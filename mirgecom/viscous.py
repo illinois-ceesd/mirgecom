@@ -47,6 +47,8 @@ import numpy as np
 from meshmode.dof_array import DOFArray
 from arraycontext import thaw
 
+import grudge.op as op
+
 from mirgecom.fluid import (
     velocity_gradient,
     species_mass_fraction_gradient,
@@ -384,7 +386,6 @@ def viscous_flux_on_element_boundary(
         Time
     """
     from grudge.dof_desc import as_dofdesc
-    from grudge.op import project
 
     dd_base = as_dofdesc("vol")
 
@@ -392,7 +393,7 @@ def viscous_flux_on_element_boundary(
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def _fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
-        return discr.project(
+        return op.project(discr,
             state_pair.dd, state_pair.dd.with_dtag("all_faces"),
             numerical_flux_func(
                 discr=discr, gas_model=gas_model, state_pair=state_pair,
@@ -402,13 +403,13 @@ def viscous_flux_on_element_boundary(
     def _fvisc_divergence_flux_boundary(dd_btag, boundary, state_minus):
         # Make sure we fields on the quadrature grid
         # restricted to the tag *btag*
-        return project(
+        return op.project(
             discr, dd_btag, dd_btag.with_dtag("all_faces"),
             boundary.viscous_divergence_flux(
                 discr=discr, btag=dd_btag, gas_model=gas_model,
                 state_minus=state_minus,
-                grad_cv_minus=project(discr, dd_base, dd_btag, grad_cv),
-                grad_t_minus=project(discr, dd_base, dd_btag, grad_t),
+                grad_cv_minus=op.project(discr, dd_base, dd_btag, grad_cv),
+                grad_t_minus=op.project(discr, dd_base, dd_btag, grad_t),
                 time=time, numerical_flux_func=numerical_flux_func))
 
     # }}} viscous flux helpers
