@@ -33,7 +33,6 @@ from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import thaw
 from grudge.trace_pair import TracePair
-from grudge.dof_desc import as_dofdesc
 from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
 import grudge.op as op
 
@@ -92,8 +91,8 @@ def wave_operator(discr, c, w):
     return (
         op.inverse_mass(discr,
             flat_obj_array(
-                -c*op.weak_local_div(discr, as_dofdesc("vol"), v),
-                -c*op.weak_local_grad(discr, as_dofdesc("vol"), u)
+                -c*op.weak_local_div(discr, "vol", v),
+                -c*op.weak_local_grad(discr, "vol", u)
                 )
             +  # noqa: W504
             op.face_mass(discr,

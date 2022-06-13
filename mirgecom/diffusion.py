@@ -270,7 +270,7 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
     dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
 
     return op.inverse_mass(discr,
-        op.weak_local_grad(discr, as_dofdesc("vol"), -u)
+        op.weak_local_grad(discr, "vol", -u)
         - 1.0  # noqa: W504
         * op.face_mass(discr,
             dd_allfaces_quad,

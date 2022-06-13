@@ -33,7 +33,6 @@ from pytools.obj_array import flat_obj_array
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 from grudge.op import nodal_min
-from grudge.dof_desc import as_dofdesc
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
