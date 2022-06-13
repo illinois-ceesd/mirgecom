@@ -109,7 +109,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
-    dt = actx.to_numpy(current_cfl * nodal_min(discr, as_dofdesc("vol"),
+    dt = actx.to_numpy(current_cfl * nodal_min(discr, "vol",
                                                nodal_dt))[()]
 
     print("%d elements" % mesh.nelements)
