@@ -86,8 +86,8 @@ the domain for the divergence operator:
 
 .. math::
 
-    \mathbf{R} \cdot \hat{mathbf{n}} = \frac{1}{2}\left(\frac{\mathbf{R}^-
-    + \mathbf{R}^+}\right) \cdot \hat{\mathbf{n}}
+    \mathbf{R} \cdot \hat{mathbf{n}} = \frac{1}{2}\left(\mathbf{R}^-
+    + \mathbf{R}^+\right) \cdot \hat{\mathbf{n}}
 
 
 Smoothness Indicator Evaluation
