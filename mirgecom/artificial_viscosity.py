@@ -59,6 +59,37 @@ where:
 - $s_0$ is a reference smoothness value
 - $\kappa$ controls the width of the transition between 0 to 1
 
+
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
+
+The artificial viscosity operator as currently implemented re-uses the fluid
+solution gradient $\nabla{\mathbf{Q}}$ for the auxiliary equation:
+
+.. math::
+
+\mathbf{R} = \varepsilon\nabla\mathbf{Q}_\text{fluid}
+
+As such, the fluid-system imposes the appropriate boundary solution $\mathbf{Q}^+$
+for the comptuation of $\nabla{\mathbf{Q}}$.  This approach leaves the boundary
+condition on $\mathbf{R}$ to be imposed by boundary treatment for the operator when
+computing the divergence for the RHS, $\nabla \cdot \mathbf{R}$.
+
+Similar to the fluid boundary treatments; when no boundary conditions are imposed
+on $\mathbf{R}$, the interior solution is simply extrapolated to the boundary,
+(i.e., $\mathbf{R}^+ = \mathbf{R}^-).  If such a boundary condition is imposed,
+usually for selected components of $\mathbf{R}$, then such boundary conditions
+are used directly:  $\mathbf{R}^+ = \mathbf{R}_\text{bc}$.
+
+A central numerical flux is then employed to transmit the boundary condition to
+the domain for the divergence operator:
+
+.. math::
+
+    \mathbf{R} \cdot \hat{mathbf{n}} = \frac{1}{2}\left(\frac{\mathbf{R}^-
+    + \mathbf{R}^+}\right) \cdot \hat{\mathbf{n}}
+
+
 Smoothness Indicator Evaluation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
