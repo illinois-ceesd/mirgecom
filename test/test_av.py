@@ -57,6 +57,15 @@ from pytools.obj_array import make_obj_array
 logger = logging.getLogger(__name__)
 
 
+# NOTE:  Testing of this av_laplacian_operator is currently
+# pretty limited.  This fact is somewhat indicative of the
+# limitations and shortcomings of this operator.  We intend
+# to soon replace our shock-handling approach with one that is
+# more robust in the presence of discontinuous coeffcients
+# and in which we understand the required boundary conditions.
+# Tracking the replacement endeavor:
+# https://github.com/illinois-ceesd/mirgecom/issues/684
+
 @pytest.mark.parametrize("dim",  [1, 2, 3])
 @pytest.mark.parametrize("order",  [1, 5])
 def test_tag_cells(ctx_factory, dim, order):

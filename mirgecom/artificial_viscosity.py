@@ -68,7 +68,7 @@ solution gradient $\nabla{\mathbf{Q}}$ for the auxiliary equation:
 
 .. math::
 
-\mathbf{R} = \varepsilon\nabla\mathbf{Q}_\text{fluid}
+    \mathbf{R} = \varepsilon\nabla\mathbf{Q}_\text{fluid}
 
 As such, the fluid-system imposes the appropriate boundary solution $\mathbf{Q}^+$
 for the comptuation of $\nabla{\mathbf{Q}}$.  This approach leaves the boundary
@@ -77,7 +77,7 @@ computing the divergence for the RHS, $\nabla \cdot \mathbf{R}$.
 
 Similar to the fluid boundary treatments; when no boundary conditions are imposed
 on $\mathbf{R}$, the interior solution is simply extrapolated to the boundary,
-(i.e., $\mathbf{R}^+ = \mathbf{R}^-).  If such a boundary condition is imposed,
+(i.e., $\mathbf{R}^+ = \mathbf{R}^-$).  If such a boundary condition is imposed,
 usually for selected components of $\mathbf{R}$, then such boundary conditions
 are used directly:  $\mathbf{R}^+ = \mathbf{R}_\text{bc}$.
 
