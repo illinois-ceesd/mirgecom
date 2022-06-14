@@ -50,10 +50,7 @@ from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
-from mirgecom.gas_model import (
-    make_fluid_state,
-    project_fluid_state
-)
+from mirgecom.gas_model import make_fluid_state
 
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
 
@@ -245,7 +242,6 @@ class PrescribedFluidBoundary(FluidBoundary):
     .. automethod:: cv_gradient_flux
     .. automethod:: temperature_gradient_flux
     .. automethod:: av_flux
-    .. automethod:: soln_gradient_flux
     """
 
     def __init__(self,
@@ -468,20 +464,6 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def _identical_grad_av(self, grad_av_minus, **kwargs):
         return grad_av_minus
-
-    def soln_gradient_flux(self, discr, btag, fluid_state, gas_model, **kwargs):
-        """Get the flux for solution gradient with AV API."""
-        # project the conserved and thermal state to the boundary
-        fluid_state_minus = project_fluid_state(discr=discr,
-                                                src="vol",
-                                                tgt=btag,
-                                                gas_model=gas_model,
-                                                state=fluid_state)
-        # get the boundary flux for the grad(CV)
-        return self.cv_gradient_flux(discr=discr, btag=btag,
-                                     gas_model=gas_model,
-                                     state_minus=fluid_state_minus,
-                                     **kwargs)
 
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
