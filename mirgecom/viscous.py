@@ -469,7 +469,6 @@ def get_viscous_timestep(discr, state):
                 state.array_context,
                 state.species_diffusivity
             )
-
     return(
         length_scales / (state.wavespeed
         + ((nu + d_alpha_max) / length_scales))
