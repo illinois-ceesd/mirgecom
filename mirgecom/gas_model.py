@@ -61,6 +61,7 @@ from mirgecom.transport import (
 )
 import grudge.op as op
 from grudge.dof_desc import DOFDesc, as_dofdesc
+import grudge.op as op
 from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag
@@ -322,7 +323,7 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
     cv_sd = op.project(discr, src, tgt, state.cv)
     temperature_seed = None
     if state.is_mixture:
-        temperature_seed = discr.project(src, tgt, state.dv.temperature)
+        temperature_seed = op.project(discr, src, tgt, state.dv.temperature)
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed)
 

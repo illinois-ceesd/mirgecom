@@ -42,6 +42,7 @@ THE SOFTWARE.
 import numpy as np
 import grudge.op as op
 from arraycontext import thaw
+import grudge.op as op
 from mirgecom.fluid import make_conserved
 
 

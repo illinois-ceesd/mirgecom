@@ -41,6 +41,7 @@ from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DOFDesc, as_dofdesc, DISCR_TAG_BASE
 from grudge.trace_pair import TracePair, interior_trace_pairs
+import grudge.op as op
 
 
 def grad_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
@@ -54,12 +55,12 @@ def grad_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
     normal_quad = thaw(discr.normal(dd_quad), actx)
 
     def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+        return op.project(discr, dd, dd_quad, a)
 
     def flux(u, normal):
         return -u * normal
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux(
+    return op.project(discr, dd_quad, dd_allfaces_quad, flux(
         to_quad(u_tpair.avg), normal_quad))
 
 
@@ -75,7 +76,7 @@ def diffusion_flux(
     normal_quad = thaw(discr.normal(dd_quad), actx)
 
     def to_quad(a):
-        return discr.project(dd, dd_quad, a)
+        return op.project(discr, dd, dd_quad, a)
 
     def flux(kappa, grad_u, normal):
         return -kappa * np.dot(grad_u, normal)
@@ -87,7 +88,7 @@ def diffusion_flux(
             to_quad(kappa_tpair.ext), to_quad(grad_u_tpair.ext), normal_quad)
         )
 
-    return discr.project(dd_quad, dd_allfaces_quad, flux_tpair.avg)
+    return op.project(discr, dd_quad, dd_allfaces_quad, flux_tpair.avg)
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
@@ -142,7 +143,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     def get_grad_flux(
             self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get gradient flux."""
-        u_int = discr.project("vol", dd, u)
+        u_int = op.project(discr, "vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
@@ -150,9 +151,9 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
             self, discr, dd, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get diffusion flux."""
-        kappa_int = discr.project("vol", dd, kappa)
+        kappa_int = op.project(discr, "vol", dd, kappa)
         kappa_tpair = TracePair(dd, interior=kappa_int, exterior=kappa_int)
-        grad_u_int = discr.project("vol", dd, grad_u)
+        grad_u_int = op.project(discr, "vol", dd, grad_u)
         grad_u_tpair = TracePair(dd, interior=grad_u_int, exterior=grad_u_int)
         return diffusion_flux(
             discr, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
@@ -197,7 +198,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def get_grad_flux(
             self, discr, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get gradient flux."""
-        u_int = discr.project("vol", dd, u)
+        u_int = op.project(discr, "vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
 
@@ -212,10 +213,10 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         # spatially-varying kappa case (the other approach would result in a
         # grad_u_tpair that lives in the quadrature discretization; diffusion_flux
         # would need to be modified to accept such values).
-        kappa_int_quad = discr.project("vol", dd_quad, kappa)
-        value_quad = discr.project(dd, dd_quad, self.value)
+        kappa_int_quad = op.project(discr, "vol", dd_quad, kappa)
+        value_quad = op.project(discr, dd, dd_quad, self.value)
         flux_quad = -kappa_int_quad*value_quad
-        return discr.project(dd_quad, dd_allfaces_quad, flux_quad)
+        return op.project(discr, dd_quad, dd_allfaces_quad, flux_quad)
 
 
 class _DiffusionStateTag:
@@ -272,10 +273,10 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
 
     dd_allfaces_quad = DOFDesc("all_faces", quadrature_tag)
 
-    return discr.inverse_mass(
-        discr.weak_grad(-u)
+    return op.inverse_mass(discr,
+        op.weak_local_grad(discr, "vol", -u)
         -  # noqa: W504
-        discr.face_mass(
+        op.face_mass(discr,
             dd_allfaces_quad,
             sum(
                 grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
@@ -387,13 +388,13 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
 
     grad_u = grad_operator(discr, boundaries, u, quadrature_tag=quadrature_tag)
 
-    kappa_quad = discr.project("vol", dd_quad, kappa)
-    grad_u_quad = discr.project("vol", dd_quad, grad_u)
+    kappa_quad = op.project(discr, "vol", dd_quad, kappa)
+    grad_u_quad = op.project(discr, "vol", dd_quad, grad_u)
 
-    diff_u = discr.inverse_mass(
-        discr.weak_div(dd_quad, -kappa_quad*grad_u_quad)
-        -  # noqa: W504
-        discr.face_mass(
+    diff_u = op.inverse_mass(discr,
+        op.weak_local_div(discr, dd_quad, -kappa_quad*grad_u_quad)
+        - 1.  # noqa: W504
+        * op.face_mass(discr,
             dd_allfaces_quad,
             sum(
                 diffusion_flux(

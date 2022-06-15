@@ -51,6 +51,8 @@ import grudge.op as op
 from typing import Optional, Callable
 import numpy as np
 
+import grudge.op as oper
+
 
 def initialize_logmgr(enable_logmgr: bool,
                       filename: str = None, mode: str = "wu",
@@ -284,14 +286,14 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
         from functools import partial
 
-        if operation == "min":
-            self._discr_reduction = partial(op.nodal_min, discr, "vol")
+        if op == "min":
+            self._discr_reduction = partial(oper.nodal_min, self.discr, "vol")
             self.rank_aggr = min
-        elif operation == "max":
-            self._discr_reduction = partial(op.nodal_max, discr, "vol")
+        elif op == "max":
+            self._discr_reduction = partial(oper.nodal_max, self.discr, "vol")
             self.rank_aggr = max
-        elif operation == "L2_norm":
-            self._discr_reduction = partial(op.norm, discr, p=2)
+        elif op == "L2_norm":
+            self._discr_reduction = partial(oper.norm, self.discr, p=2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
