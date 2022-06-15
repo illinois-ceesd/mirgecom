@@ -271,8 +271,8 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
 
     return op.inverse_mass(discr,
         op.weak_local_grad(discr, "vol", -u)
-        - 1.0  # noqa: W504
-        * op.face_mass(discr,
+        -  # noqa: W504
+        op.face_mass(discr,
             dd_allfaces_quad,
             sum(
                 grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
