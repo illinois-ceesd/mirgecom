@@ -32,7 +32,7 @@ from pytools.obj_array import flat_obj_array
 
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-
+from grudge.op import nodal_min
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
@@ -111,8 +111,8 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
-    from grudge.op import nodal_min
-    dt = actx.to_numpy(current_cfl * nodal_min(discr, "vol", nodal_dt))[()]
+    dt = actx.to_numpy(current_cfl * nodal_min(discr, "vol",
+                                               nodal_dt))[()]
 
     print("%d elements" % mesh.nelements)
 
