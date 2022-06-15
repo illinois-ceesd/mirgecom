@@ -48,6 +48,7 @@ from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
+import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state
@@ -314,7 +315,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
         from grudge.dof_desc import as_dofdesc
         btag = as_dofdesc(btag)
-        return quantity if local else discr.project(
+        return quantity if local else op.project(discr,
             btag, btag.with_dtag("all_faces"), quantity)
 
     def _boundary_state_pair(self, discr, btag, gas_model, state_minus, **kwargs):

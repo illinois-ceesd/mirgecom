@@ -323,7 +323,7 @@ def componentwise_norms(discr, fields, order=np.inf):
         return map_array_container(
             partial(componentwise_norms, discr, order=order), fields)
     if len(fields) > 0:
-        return discr.norm(fields, order)
+        return op.norm(discr, fields, order)
     else:
         # FIXME: This work-around for #575 can go away after #569
         return 0
