@@ -41,6 +41,7 @@ THE SOFTWARE.
 
 import numpy as np
 from arraycontext import thaw
+import grudge.op as op
 from mirgecom.fluid import make_conserved
 
 
@@ -265,14 +266,14 @@ def inviscid_flux_on_element_boundary(
     from grudge.dof_desc import as_dofdesc
 
     def _interior_flux(state_pair):
-        return discr.project(
+        return op.project(discr,
             state_pair.dd, state_pair.dd.with_dtag("all_faces"),
             numerical_flux_func(
                 state_pair, gas_model,
                 thaw(discr.normal(state_pair.dd), state_pair.int.array_context)))
 
     def _boundary_flux(dd_bdry, boundary, state_minus):
-        return discr.project(
+        return op.project(discr,
             dd_bdry, dd_bdry.with_dtag("all_faces"),
             boundary.inviscid_divergence_flux(
                 discr, dd_bdry, gas_model, state_minus=state_minus,

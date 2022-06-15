@@ -59,6 +59,37 @@ where:
 - $s_0$ is a reference smoothness value
 - $\kappa$ controls the width of the transition between 0 to 1
 
+
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
+
+The artificial viscosity operator as currently implemented re-uses the fluid
+solution gradient $\nabla{\mathbf{Q}}$ for the auxiliary equation:
+
+.. math::
+
+    \mathbf{R} = \varepsilon\nabla\mathbf{Q}_\text{fluid}
+
+As such, the fluid-system imposes the appropriate boundary solution $\mathbf{Q}^+$
+for the comptuation of $\nabla{\mathbf{Q}}$.  This approach leaves the boundary
+condition on $\mathbf{R}$ to be imposed by boundary treatment for the operator when
+computing the divergence for the RHS, $\nabla \cdot \mathbf{R}$.
+
+Similar to the fluid boundary treatments; when no boundary conditions are imposed
+on $\mathbf{R}$, the interior solution is simply extrapolated to the boundary,
+(i.e., $\mathbf{R}^+ = \mathbf{R}^-$).  If such a boundary condition is imposed,
+usually for selected components of $\mathbf{R}$, then such boundary conditions
+are used directly:  $\mathbf{R}^+ = \mathbf{R}_\text{bc}$.
+
+A central numerical flux is then employed to transmit the boundary condition to
+the domain for the divergence operator:
+
+.. math::
+
+    \mathbf{R} \cdot \hat{mathbf{n}} = \frac{1}{2}\left(\mathbf{R}^-
+    + \mathbf{R}^+\right) \cdot \hat{\mathbf{n}}
+
+
 Smoothness Indicator Evaluation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -352,11 +383,12 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
     # Compute artificial viscosity percentage based on indicator and set parameters
     yesnol = actx.np.greater(indicator, (s0 - kappa))
     yesnou = actx.np.greater(indicator, (s0 + kappa))
+    saintly_value = 1.0
     sin_indicator = actx.np.where(
         yesnol,
         0.5 * (1.0 + actx.np.sin(np.pi * (indicator - s0) / (2.0 * kappa))),
         0.0 * indicator,
     )
-    indicator = actx.np.where(yesnou, 1.0 + 0.0 * indicator, sin_indicator)
+    indicator = actx.np.where(yesnou, saintly_value, sin_indicator)
 
     return indicator
