@@ -38,7 +38,7 @@ from pytools.obj_array import (
 
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.symbolic.primitives import TracePair
+from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 from grudge.eager import EagerDGDiscretization
