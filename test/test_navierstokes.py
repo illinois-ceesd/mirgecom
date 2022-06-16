@@ -47,7 +47,8 @@ from mirgecom.boundary import (
 )
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -98,18 +99,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=mesh.dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order=order)
 
         zeros = discr.zeros(actx)
         ones = zeros + 1.0
@@ -118,7 +108,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         energy_input = discr.zeros(actx) + 2.5
 
         mom_input = make_obj_array(
-            [float(i)*ones for i in range(discr.dim)]
+            [float(i)*ones for i in range(dim)]
         )
 
         mass_frac_input = flat_obj_array(
@@ -168,14 +158,14 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert actx.to_numpy(discr.norm(rho_resid, np.inf)) < tolerance
-        assert actx.to_numpy(discr.norm(rhoe_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rho_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rhoe_resid, np.inf)) < tolerance
         for i in range(dim):
-            assert actx.to_numpy(discr.norm(mom_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, mom_resid[i], np.inf)) < tolerance
         for i in range(nspecies):
-            assert actx.to_numpy(discr.norm(rhoy_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], np.inf)) < tolerance
 
-        err_max = actx.to_numpy(discr.norm(rho_resid, np.inf))
+        err_max = actx.to_numpy(op.norm(discr, rho_resid, np.inf))
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
@@ -198,15 +188,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
 
-        assert actx.to_numpy(discr.norm(rho_resid, np.inf)) < tolerance
-        assert actx.to_numpy(discr.norm(rhoe_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rho_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rhoe_resid, np.inf)) < tolerance
 
         for i in range(dim):
-            assert actx.to_numpy(discr.norm(mom_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, mom_resid[i], np.inf)) < tolerance
         for i in range(nspecies):
-            assert actx.to_numpy(discr.norm(rhoy_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], np.inf)) < tolerance
 
-        err_max = actx.to_numpy(discr.norm(rho_resid, np.inf))
+        err_max = actx.to_numpy(op.norm(discr, rho_resid, np.inf))
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -714,7 +704,6 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         print(f"{nx=}")
         mesh = _get_box_mesh(dim, a, b, n=nx)
 
-        from mirgecom.discretization import create_discretization_collection
         discr = create_discretization_collection(actx, mesh, order)
         from grudge.dt_utils import h_max_from_volume
         h_max = actx.to_numpy(h_max_from_volume(discr))
@@ -736,7 +725,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order)
+            vis = make_visualizer(discr, order)
             vis.write_vtk_file("shear_flow_test_{order}_{n}.vtu".format(
                 order=order, n=n), [
                     ("shear_flow", exact_fluid_state.cv),
@@ -908,13 +897,12 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         mesh = man_soln.get_mesh(n)
 
-        from mirgecom.discretization import create_discretization_collection
         discr = create_discretization_collection(actx, mesh, order)
         nodes = thaw(discr.nodes(), actx)
 
         from grudge.dt_utils import characteristic_lengthscales
         char_len = actx.to_numpy(
-            discr.norm(characteristic_lengthscales(actx, discr), np.inf)
+            op.norm(discr, characteristic_lengthscales(actx, discr), np.inf)
         )
 
         source_eval = evaluate(sym_source, t=0, x=nodes)
@@ -927,8 +915,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         # prs_eos = eos.pressure(cv=cv_exact)
         # prs_resid = (prs_exact - prs_eos)/prs_exact
         # tmp_resid = (tmp_exact - tmp_eos)/tmp_exact
-        # prs_err = actx.to_numpy(discr.norm(prs_resid, np.inf))
-        # tmp_err = actx.to_numpy(discr.norm(tmp_resid, np.inf))
+        # prs_err = actx.to_numpy(op.norm(discr, prs_resid, np.inf))
+        # tmp_err = actx.to_numpy(op.norm(discr, tmp_resid, np.inf))
 
         # print(f"{prs_exact=}\n{prs_eos=}")
         # print(f"{tmp_exact=}\n{tmp_eos=}")

@@ -52,7 +52,10 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from grudge.eager import EagerDGDiscretization
+import grudge.op as op
+from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
+
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -102,18 +105,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -174,7 +166,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         )
 
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -262,18 +254,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -350,18 +331,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -447,18 +417,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -504,7 +463,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         print(f"expected_rhs = {expected_rhs}")
 
         err_max = actx.to_numpy(
-            discr.norm((inviscid_rhs-expected_rhs), np.inf))
+            op.norm(discr, (inviscid_rhs-expected_rhs), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -550,18 +509,7 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-    discr = EagerDGDiscretization(
-        actx, mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        }
-    )
+    discr = create_discretization_collection(actx, mesh, order)
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD

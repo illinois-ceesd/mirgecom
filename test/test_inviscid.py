@@ -41,7 +41,8 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -78,7 +79,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     eos = IdealSingleGas()
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -163,7 +164,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     eos = IdealSingleGas()
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -188,7 +189,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     flux = inviscid_flux(state)
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     assert inf_norm(p - p_exact) < tolerance
     logger.info(f"{dim}d flux = {flux}")
@@ -230,7 +231,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     nodes = thaw(discr.nodes(), actx)
 
     tolerance = 1e-15
@@ -249,7 +250,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
         state = make_fluid_state(cv, GasModel(eos=eos))
 
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         assert inf_norm(p - p_exact) < tolerance
         flux = inviscid_flux(state)
@@ -299,7 +300,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        discr = create_discretization_collection(actx, mesh, order=order)
         zeros = discr.zeros(actx)
         ones = zeros + 1.0
 
@@ -334,11 +335,11 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         bnd_flux = num_flux(interior_state_pair, gas_model, nhat)
         dd = interior_state_pair.dd
         dd_allfaces = dd.with_dtag("all_faces")
-        interior_face_flux = discr.project(dd, dd_allfaces, bnd_flux)
+        interior_face_flux = op.project(discr, dd, dd_allfaces, bnd_flux)
 
         def inf_norm(data):
             if len(data) > 0:
-                return actx.to_numpy(discr.norm(data, np.inf, dd="all_faces"))
+                return actx.to_numpy(op.norm(discr, data, np.inf, dd="all_faces"))
             else:
                 return 0.0
 
@@ -358,7 +359,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
         nhat = thaw(discr.normal("int_faces"), actx)
-        mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
+        mom_flux_exact = op.project(discr, "int_faces", "all_faces", p0*nhat)
         print(f"{mom_flux_exact=}")
         print(f"{interior_face_flux.momentum=}")
         momerr = inf_norm(interior_face_flux.momentum - mom_flux_exact)
@@ -366,10 +367,10 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
 
         # Check the boundary facial fluxes as called on a domain boundary
-        dir_mass = discr.project("vol", BTAG_ALL, mass_input)
-        dir_e = discr.project("vol", BTAG_ALL, energy_input)
-        dir_mom = discr.project("vol", BTAG_ALL, mom_input)
-        dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
+        dir_mass = op.project(discr, "vol", BTAG_ALL, mass_input)
+        dir_e = op.project(discr, "vol", BTAG_ALL, energy_input)
+        dir_mom = op.project(discr, "vol", BTAG_ALL, mom_input)
+        dir_mf = op.project(discr, "vol", BTAG_ALL, species_mass_input)
 
         dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                 momentum=dir_mom, species_mass=dir_mf)
@@ -383,14 +384,14 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         bnd_flux = num_flux(state_tpair, gas_model, nhat)
         dd = state_tpair.dd
         dd_allfaces = dd.with_dtag("all_faces")
-        boundary_flux = discr.project(dd, dd_allfaces, bnd_flux)
+        boundary_flux = op.project(discr, dd, dd_allfaces, bnd_flux)
 
         assert inf_norm(boundary_flux.mass) < tolerance
         assert inf_norm(boundary_flux.energy) < tolerance
         assert inf_norm(boundary_flux.species_mass) < tolerance
 
         nhat = thaw(discr.normal(BTAG_ALL), actx)
-        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
+        mom_flux_exact = op.project(discr, BTAG_ALL, "all_faces", p0*nhat)
         momerr = inf_norm(boundary_flux.momentum - mom_flux_exact)
         assert momerr < tolerance
 

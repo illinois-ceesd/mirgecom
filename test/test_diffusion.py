@@ -27,6 +27,7 @@ import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 from arraycontext import thaw
+import grudge.op as op
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
@@ -39,11 +40,10 @@ from mirgecom.diffusion import (
     NeumannDiffusionBoundary)
 from meshmode.dof_array import DOFArray
 from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE, DISCR_TAG_QUAD
-
+from mirgecom.discretization import create_discretization_collection
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-
 import pytest
 
 from numbers import Number
@@ -182,14 +182,14 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         for i in range(self.dim-1):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
-            upper_grad_u = discr.project("vol", upper_btag, exact_grad_u)
+            upper_grad_u = op.project(discr, "vol", upper_btag, exact_grad_u)
             normal = thaw(discr.normal(upper_btag), actx)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
         lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
         upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
-        upper_u = discr.project("vol", upper_btag, exact_u)
+        upper_u = op.project(discr, "vol", upper_btag, exact_u)
         boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_btag] = DirichletDiffusionBoundary(upper_u)
 
@@ -327,17 +327,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     for n in scales:
         mesh = p.get_mesh(n)
 
-        from grudge.eager import EagerDGDiscretization
-        from meshmode.discretization.poly_element import \
-                QuadratureSimplexGroupFactory, \
-                PolynomialWarpAndBlendGroupFactory
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: PolynomialWarpAndBlendGroupFactory(order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(3*order),
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order)
 
         nodes = thaw(discr.nodes(), actx)
 
@@ -366,13 +356,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         expected_u = p.get_solution(nodes, t)
 
         rel_linf_err = actx.to_numpy(
-            discr.norm(u - expected_u, np.inf)
-            / discr.norm(expected_u, np.inf))
+            op.norm(discr, u - expected_u, np.inf)
+            / op.norm(discr, expected_u, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order+3)
+            vis = make_visualizer(discr, order+3)
             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
                 order=order, n=n), [
                     ("u", u),
@@ -399,8 +389,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     mesh = get_box_mesh(1, -1, 1, n)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order)
 
     nodes = thaw(discr.nodes(), actx)
 
@@ -441,7 +430,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order+3)
+        vis = make_visualizer(discr, order+3)
         vis.write_vtk_file("diffusion_discontinuous_kappa_rhs_{order}.vtu"
             .format(order=order), [
                 ("kappa", kappa),
@@ -449,7 +438,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ("rhs", rhs),
                 ])
 
-    linf_err = actx.to_numpy(discr.norm(rhs, np.inf))
+    linf_err = actx.to_numpy(op.norm(discr, rhs, np.inf))
     assert(linf_err < 1e-11)
 
     # Now check stability
@@ -479,7 +468,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ("u_steady", u_steady),
                 ])
 
-    linf_diff = actx.to_numpy(discr.norm(u - u_steady, np.inf))
+    linf_diff = actx.to_numpy(op.norm(discr, u - u_steady, np.inf))
     assert linf_diff < 0.1
 
 
@@ -521,8 +510,8 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             t = 1.23456789
 
-            from grudge.eager import EagerDGDiscretization
-            discr_mirgecom = EagerDGDiscretization(actx, mesh, order=order)
+            discr_mirgecom = create_discretization_collection(actx, mesh,
+                                                              order=order)
             nodes_mirgecom = thaw(discr_mirgecom.nodes(), actx)
 
             u_mirgecom = p.get_solution(nodes_mirgecom, t)
@@ -593,8 +582,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     mesh = p.get_mesh(n)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=4)
+    discr = create_discretization_collection(actx, mesh, order=4)
 
     nodes = thaw(discr.nodes(), actx)
 
@@ -614,8 +602,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     expected_diffusion_u1 = evaluate(sym_diffusion_u1, x=nodes, t=t)
     rel_linf_err = actx.to_numpy(
-        discr.norm(diffusion_u1 - expected_diffusion_u1, np.inf)
-        / discr.norm(expected_diffusion_u1, np.inf))
+        op.norm(discr, diffusion_u1 - expected_diffusion_u1, np.inf)
+        / op.norm(discr, expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
 
     boundaries_vector = [boundaries, boundaries]
@@ -632,8 +620,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         evaluate(sym_diffusion_u2, x=nodes, t=t)
     ])
     rel_linf_err = actx.to_numpy(
-        discr.norm(diffusion_u_vector - expected_diffusion_u_vector, np.inf)
-        / discr.norm(expected_diffusion_u_vector, np.inf))
+        op.norm(discr, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
+        / op.norm(discr, expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
 
 
