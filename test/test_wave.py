@@ -228,8 +228,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     mesh = p.mesh_factory(8)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
 
     nodes = thaw(actx, discr.nodes())
 
@@ -260,7 +259,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order)
+        vis = make_visualizer(discr, order)
         vis.write_vtk_file("wave_stability.vtu",
                 [
                     ("u", fields[0]),
