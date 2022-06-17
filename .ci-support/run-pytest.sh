@@ -1,6 +1,8 @@
 declare -i numfail=0
 declare -i numsuccess=0
+
 echo "*** Running tests for mirgecom."
+
 failed_tests=""
 succeeded_tests=""
 

@@ -78,7 +78,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
             python -m pip install pytest
-            . .ci-support/run-pytest.sh
+            . ../.ci-support/run-pytest.sh
 
     examples:
         name: Examples
