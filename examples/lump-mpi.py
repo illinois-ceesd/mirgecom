@@ -31,10 +31,9 @@ from functools import partial
 
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
-
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -149,7 +148,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 3
-    discr = EagerDGDiscretization(
+    discr = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)

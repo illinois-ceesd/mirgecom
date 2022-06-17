@@ -37,9 +37,9 @@ from meshmode.array_context import (
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
@@ -156,7 +156,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    discr = EagerDGDiscretization(
+    discr = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
@@ -310,8 +310,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-    visualizer = make_visualizer(discr, order + 3
-                                 if discr.dim == 2 else order)
+    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
