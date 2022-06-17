@@ -193,8 +193,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    discr = create_discretization_collection(actx, local_mesh, order=order,
-                                             mpi_communicator=comm)
+    discr = create_discretization_collection(actx, local_mesh, order, comm)
     nodes = thaw(discr.nodes(), actx)
 
     from grudge.dof_desc import DISCR_TAG_QUAD
