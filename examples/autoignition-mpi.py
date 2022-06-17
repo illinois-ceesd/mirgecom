@@ -170,7 +170,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     discr = create_discretization_collection(actx, local_mesh, order=order,
-                                             comm=comm)
+                                             mpi_communicator=comm)
     nodes = thaw(discr.nodes(), actx)
     ones = discr.zeros(actx) + 1.0
 
