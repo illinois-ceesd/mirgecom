@@ -105,7 +105,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = create_discretization_collection(actx, mesh, order)
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -254,7 +255,8 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        discr = create_discretization_collection(actx, mesh, order)
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -331,7 +333,8 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = create_discretization_collection(actx, mesh, order)
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -417,7 +420,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = create_discretization_collection(actx, mesh, order)
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -509,7 +513,8 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    discr = create_discretization_collection(actx, mesh, order)
+    discr = create_discretization_collection(actx, mesh, order,
+                                             quadrature_order=2*order+1)
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD

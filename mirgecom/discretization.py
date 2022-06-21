@@ -49,7 +49,7 @@ def create_discretization_collection(actx, mesh, order, *, mpi_communicator=None
         QuadratureSimplexGroupFactory, \
         PolynomialWarpAndBlendGroupFactory
     if quadrature_order < 0:
-        quadrature_order = 3*order
+        quadrature_order = 2*order+1
     discr = EagerDGDiscretization(
         actx, mesh,
         discr_tag_to_group_factory={
