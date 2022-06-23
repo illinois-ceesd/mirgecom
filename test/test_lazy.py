@@ -32,7 +32,7 @@ import pyopencl.clmath as clmath  # noqa
 from arraycontext import freeze, thaw
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext
 )
 
 from meshmode.array_context import (  # noqa

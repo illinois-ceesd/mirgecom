@@ -28,6 +28,11 @@ Simulation support utilities
 
 .. autofunction:: limit_species_mass_fractions
 .. autofunction:: species_fraction_anomaly_relaxation
+
+Lazy eval utilities
+-------------------
+
+.. autofunction:: force_evaluation
 """
 
 __copyright__ = """
@@ -332,7 +337,11 @@ def componentwise_norms(discr, fields, order=np.inf):
     if not isinstance(fields, DOFArray):
         return map_array_container(
             partial(componentwise_norms, discr, order=order), fields)
-    return discr.norm(fields, order)
+    if len(fields) > 0:
+        return op.norm(discr, fields, order)
+    else:
+        # FIXME: This work-around for #575 can go away after #569
+        return 0
 
 
 def max_component_norm(discr, fields, order=np.inf):
@@ -601,3 +610,9 @@ def species_fraction_anomaly_relaxation(cv, alpha=1.):
                               momentum=0.*cv.momentum, energy=0.*cv.energy,
                               species_mass=alpha*cv.mass*new_y)
     return 0.*cv
+
+
+def force_evaluation(actx, expn):
+    """Wrap freeze/thaw forcing evaluation of expressions."""
+    from arraycontext import thaw, freeze
+    return thaw(freeze(expn, actx), actx)

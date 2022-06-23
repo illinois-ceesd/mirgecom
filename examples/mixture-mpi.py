@@ -45,7 +45,10 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedFluidBoundary
+from mirgecom.boundary import (
+    PrescribedFluidBoundary,
+    AdiabaticSlipBoundary
+)
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 
@@ -73,7 +76,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, rst_filename=None,
-         log_dependent=True, lazy=False):
+         log_dependent=False, lazy=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -111,6 +114,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
+
     t_final = 1e-8
     current_cfl = 1.0
     current_dt = 1e-9
@@ -148,11 +152,27 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 3
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
+
+    order = 1
     discr = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
+        actx, local_mesh,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: default_simplex_group_factory(
+                base_dim=local_mesh.dim, order=order),
+            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
+        },
+        mpi_communicator=comm
     )
     nodes = thaw(discr.nodes(), actx)
+
+    use_overintegration = False
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     vis_timer = None
 
@@ -188,7 +208,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = pyrometheus_mechanism.num_species
-    eos = PyrometheusMixture(pyrometheus_mechanism)
+    eos = PyrometheusMixture(pyrometheus_mechanism, temperature_guess=300)
     from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
     from pytools.obj_array import make_obj_array
@@ -212,9 +232,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                             **kwargs), gas_model,
                                 temperature_seed=state_minus.temperature)
 
-    boundaries = {
-        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
-    }
+    if True:
+        my_boundary = AdiabaticSlipBoundary()
+        boundaries = {BTAG_ALL: my_boundary}
+    else:
+        boundaries = {
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
+        }
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -229,7 +253,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(x_vec=nodes, eos=eos)
         tseed = 300.0
 
-    current_state = make_fluid_state(current_cv, gas_model, temperature_seed=tseed)
+    def get_fluid_state(cv, tseed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=tseed)
+
+    construct_fluid_state = actx.compile(get_fluid_state)
+    current_state = construct_fluid_state(current_cv, tseed)
 
     visualizer = make_visualizer(discr)
     initname = initializer.__class__.__name__
@@ -312,9 +341,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
+    def dummy_pre_step(step, t, dt, state):
+        return state, dt
+
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
         dv = fluid_state.dv
 
         try:
@@ -370,9 +402,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                               constant_cfl)
         return state, dt
 
+    def dummy_post_step(step, t, dt, state):
+        return state, dt
+
     def my_post_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
+        fluid_state = construct_fluid_state(cv, tseed)
         tseed = fluid_state.temperature
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -382,12 +417,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return make_obj_array([fluid_state.cv, tseed]), dt
 
+    def dummy_rhs(t, state):
+        return make_obj_array([0*state[0], 0*state[1]])
+
     def my_rhs(t, state):
         cv, tseed = state
         fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
         return make_obj_array(
             [euler_operator(discr, state=fluid_state, time=t,
-                            boundaries=boundaries, gas_model=gas_model),
+                            boundaries=boundaries, gas_model=gas_model,
+                            quadrature_tag=quadrature_tag),
              0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,

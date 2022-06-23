@@ -44,6 +44,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
+from functools import partial
 from meshmode.dof_array import DOFArray  # noqa
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
@@ -59,11 +60,11 @@ from mirgecom.transport import (
     GasTransportVars
 )
 from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
-from grudge.trace_pair import (
-    TracePair,
-    interior_trace_pairs
-)
 import grudge.op as op
+from grudge.trace_pair import (
+    interior_trace_pairs,
+    tracepair_with_discr_tag
+)
 
 
 @dataclass(frozen=True)
@@ -318,10 +319,10 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
 
         Thermally consistent fluid state
     """
-    cv_sd = discr.project(src, tgt, state.cv)
+    cv_sd = op.project(discr, src, tgt, state.cv)
     temperature_seed = None
     if state.is_mixture:
-        temperature_seed = discr.project(src, tgt, state.dv.temperature)
+        temperature_seed = op.project(discr, src, tgt, state.dv.temperature)
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed)
 
@@ -388,8 +389,8 @@ def make_operator_fluid_states(
         volume_dd=DD_VOLUME_ALL):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
-    This routine prepares a model-constistent fluid state for each of the volume and
-    all interior and domain boundaries using the quadrature representation if
+    This routine prepares a model-consistent fluid state for each of the volume and
+    all interior and domain boundaries, using the quadrature representation if
     one is given. The input *volume_state* is projected to the quadrature domain
     (if any), along with the model-consistent dependent quantities.
 
@@ -397,8 +398,7 @@ def make_operator_fluid_states(
 
         When running MPI-distributed, volume state conserved quantities
         (ConservedVars), and for mixtures, temperatures will be communicated over
-        partition boundaries inside this routine. Note the use of
-        :func:`~grudge.trace_pair.interior_trace_pairs`.
+        partition boundaries inside this routine.
 
     Parameters
     ----------
@@ -427,7 +427,8 @@ def make_operator_fluid_states(
 
     Returns
     -------
-    :class:`~mirgecom.gas_model.FluidState`
+    (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
+     dict)
 
         Thermally consistent fluid state for the volume, fluid state trace pairs
         for the internal boundaries, and a dictionary of fluid states keyed by
@@ -438,14 +439,7 @@ def make_operator_fluid_states(
     dd_quad_vol = dd_base_vol.with_discr_tag(quadrature_tag)
 
     # project pair to the quadrature discretization and update dd to quad
-    def _interp_to_surf_quad(utpair):
-        dd_trace = utpair.dd
-        dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
-        return TracePair(
-            dd_trace_quad,
-            interior=op.project(discr, dd_trace, dd_trace_quad, utpair.int),
-            exterior=op.project(discr, dd_trace, dd_trace_quad, utpair.ext)
-        )
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
 
     domain_boundary_states_quad = {
         bdtag: project_fluid_state(discr, dd_base_vol,
@@ -458,7 +452,7 @@ def make_operator_fluid_states(
     cv_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        _interp_to_surf_quad(tpair)
+        interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
             discr, volume_state.cv, volume_dd=dd_base_vol, tag=_FluidCVTag)
     ]
@@ -472,11 +466,10 @@ def make_operator_fluid_states(
         tseed_interior_pairs = [
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
-            _interp_to_surf_quad(tpair)
+            interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 discr, volume_state.temperature, volume_dd=dd_base_vol,
-                tag=_FluidTemperatureTag)
-        ]
+                tag=_FluidTemperatureTag)]
 
     interior_boundary_states_quad = \
         make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,

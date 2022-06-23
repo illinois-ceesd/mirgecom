@@ -170,11 +170,12 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
             compute_interior_flux(int_tpair)
             + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
 
-    from mirgecom.flux import gradient_flux_central
+    from mirgecom.flux import num_flux_central
 
     def cv_flux_interior(int_tpair):
         normal = thaw(actx, discr.normal(int_tpair.dd))
-        flux_weak = gradient_flux_central(int_tpair, normal)
+        from arraycontext import outer
+        flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         dd_all_faces = int_tpair.dd.with_dtag("all_faces")
         return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
 
@@ -185,7 +186,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         bnd_nhat = thaw(actx, discr.normal(dd_bdry))
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
-        flux_weak = gradient_flux_central(bnd_tpair, bnd_nhat)
+        from arraycontext import outer
+        flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
         dd_all_faces = dd_bdry.with_domain_tag(
             replace(dd_bdry.domain_tag, tag=FACE_RESTR_ALL))
         return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)

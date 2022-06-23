@@ -198,7 +198,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     tol = 1e-14
 
     logger.info(f"Max Errors (uniform field) = {max_errors}")
-    assert(np.max(max_errors) < tol)
+    assert actx.np.less(np.max(max_errors), tol)
 
     # construct polynomial field:
     # a0 + a1*x + a2*x*x + ....

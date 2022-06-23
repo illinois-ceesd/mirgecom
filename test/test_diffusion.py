@@ -281,7 +281,7 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
 def sym_diffusion(dim, sym_kappa, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
-    return sym_div(sym_kappa * sym_grad(dim, sym_u))
+    return sym_div(dim, sym_kappa * sym_grad(dim, sym_u))
 
 
 # Note: Must integrate in time for a while in order to achieve expected spatial

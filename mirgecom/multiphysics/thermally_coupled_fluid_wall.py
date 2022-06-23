@@ -53,9 +53,9 @@ from grudge.dof_desc import (
 
 from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.fluid import make_conserved
-from mirgecom.flux import gradient_flux_central
-from mirgecom.inviscid import inviscid_flux_rusanov
-from mirgecom.viscous import viscous_flux_central
+from mirgecom.flux import num_flux_central
+from mirgecom.inviscid import inviscid_facial_flux_rusanov
+from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.gas_model import (
     make_fluid_state,
     make_operator_fluid_states,
@@ -153,7 +153,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             ext_kappa)
 
     def inviscid_wall_flux(self, discr, dd_bdry, gas_model, state_minus,
-            numerical_flux_func=inviscid_flux_rusanov, **kwargs):
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
         """Return Riemann flux using state with mom opposite of interior state."""
         dd_bdry = as_dofdesc(dd_bdry)
         # NOTE: For the inviscid/advection part we set mom_+ = -mom_-, and
@@ -167,13 +167,10 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
                                       temperature_seed=state_minus.temperature)
         state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
 
-        from mirgecom.inviscid import inviscid_facial_flux
-        return self._boundary_quantity(
-            discr, dd_bdry,
-            inviscid_facial_flux(discr, gas_model=gas_model, state_pair=state_pair,
-                                 numerical_flux_func=numerical_flux_func,
-                                 local=True),
-            **kwargs)
+        # Grab a unit normal to the boundary
+        nhat = thaw(discr.normal(dd_bdry), state_minus.array_context)
+
+        return numerical_flux_func(state_pair, gas_model, nhat)
 
     def get_external_grad_av(self, discr, dd_bdry, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
@@ -226,7 +223,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
     def viscous_wall_flux(
             self, discr, dd_bdry, gas_model, state_minus, grad_cv_minus,
-            grad_t_minus, numerical_flux_func=viscous_flux_central, **kwargs):
+            grad_t_minus, numerical_flux_func=viscous_facial_flux_central, **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
         if self.heat_flux_penalty_amount is None:
             raise ValueError("Boundary does not have heat flux penalty amount.")
@@ -284,15 +281,11 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         # NS and diffusion use opposite sign conventions for flux; hence penalty
         # is added here instead of subtracted
         flux_without_penalty = f_pair.avg @ normal
-        flux = replace(
+        return replace(
             flux_without_penalty,
             energy=(
                 flux_without_penalty.energy
                 + tau * (state_plus.temperature - state_minus.temperature)))
-
-        return self._boundary_quantity(
-            discr, dd_bdry,
-            quantity=flux)
 
     def get_external_t(self, discr, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
@@ -507,7 +500,7 @@ def coupled_grad_t_operator(
         fluid_boundaries, wall_boundaries,
         fluid_state, wall_temperature, *,
         time=0.,
-        fluid_numerical_flux_func=gradient_flux_central,
+        fluid_numerical_flux_func=num_flux_central,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -572,9 +565,9 @@ def coupled_ns_heat_operator(
         fluid_boundaries, wall_boundaries,
         fluid_state, wall_temperature, *,
         time=0., wall_time_scale=1,
-        fluid_gradient_numerical_flux_func=gradient_flux_central,
-        inviscid_numerical_flux_func=inviscid_flux_rusanov,
-        viscous_numerical_flux_func=viscous_flux_central,
+        fluid_gradient_numerical_flux_func=num_flux_central,
+        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+        viscous_numerical_flux_func=viscous_facial_flux_central,
         use_av=False,
         av_kwargs=None,
         wall_penalty_amount=None,

@@ -29,9 +29,12 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pytest
-
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
+from meshmode.array_context import (  # noqa
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests
+)
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL
 
 from mirgecom.artificial_viscosity import (
@@ -41,8 +44,7 @@ from mirgecom.artificial_viscosity import (
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
     GasModel,
-    make_fluid_state,
-    project_fluid_state
+    make_fluid_state
 )
 from mirgecom.eos import IdealSingleGas
 
@@ -57,13 +59,27 @@ from pytools.obj_array import make_obj_array
 logger = logging.getLogger(__name__)
 
 
+# NOTE:  Testing of this av_laplacian_operator is currently
+# pretty limited.  This fact is somewhat indicative of the
+# limitations and shortcomings of this operator.  We intend
+# to soon replace our shock-handling approach with one that is
+# more robust in the presence of discontinuous coeffcients
+# and in which we understand the required boundary conditions.
+# Tracking the replacement endeavor:
+# https://github.com/illinois-ceesd/mirgecom/issues/684
+
 @pytest.mark.parametrize("dim",  [1, 2, 3])
 @pytest.mark.parametrize("order",  [1, 5])
 def test_tag_cells(ctx_factory, dim, order):
     """Test tag_cells.
 
-    Tests that the cells tagging properly tags cells
-    given prescribed solutions.
+    This test checks that tag_cells properly tags cells near
+    discontinuous or nearly-discontinuous features in 1d test solutions.
+    The following tests/functions are used:
+    - Discontinuity detection/Heaviside step discontinuity
+    - Detection smoothness/Element basis functions for each mode
+    - Detection thresholding/(p, p-1) polynomials greater/less/equal to s0
+    - Detection bounds checking for s_e = s_0 +/- delta
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -83,14 +99,13 @@ def test_tag_cells(ctx_factory, dim, order):
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = thaw(discr.nodes(), actx)
     nele = mesh.nelements
     zeros = 0.0*nodes[0]
 
-    # test jump discontinuity
+    # Test jump discontinuity
     soln = actx.np.where(nodes[0] > 0.0+zeros, 1.0+zeros, zeros)
     err = norm_indicator(1.0, discr, soln)
-
     assert err < tolerance,  "Jump discontinuity should trigger indicator (1.0)"
 
     # get meshmode polynomials
@@ -157,11 +172,13 @@ def test_tag_cells(ctx_factory, dim, order):
     err = norm_indicator(0.0, discr, soln, s0=s0+kappa-shift, kappa=kappa)
     assert err > tolerance,  "s_e>s_0-kappa should trigger indicator"
 
-    # lower bound
+    # upper bound
     err = norm_indicator(1.0, discr, soln, s0=s0-(kappa+shift), kappa=kappa)
-    assert err < tolerance,  "s_e>s_0+kappa should fully trigger indicator (1.0)"
+    # s_e>s_0+kappa should fully trigger indicator (1.0)
+    assert err < tolerance
     err = norm_indicator(1.0, discr, soln, s0=s0-(kappa-shift), kappa=kappa)
-    assert err > tolerance,  "s_e<s_0+kappa should not fully trigger indicator (1.0)"
+    # s_e<s_0+kappa should not fully trigger indicator (1.0)
+    assert err > tolerance
 
 
 @pytest.mark.parametrize("dim",  [1, 2, 3])
@@ -169,87 +186,74 @@ def test_tag_cells(ctx_factory, dim, order):
 def test_artificial_viscosity(ctx_factory, dim, order):
     """Test artificial_viscosity.
 
-    Tests the application on a few simple functions
-    to confirm artificial viscosity returns the analytical result.
+    Test AV operator for some test functions to verify artificial viscosity
+    returns the analytical result.
+    - 1d x^n (expected rhs = n*(n-1)*x^(n-2)
+    - x^2 + y^2 + z^2  (expected rhs = 2*dim)
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 10
-    tolerance = 1.e-8
+    tolerance = 1.e-6
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim, b=(1.0, )*dim, nelements_per_axis=(nel_1d, )*dim
+        a=(1.0, )*dim, b=(2.0, )*dim, nelements_per_axis=(nel_1d, )*dim
     )
 
     discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-    zeros = discr.zeros(actx)
+    nodes = thaw(discr.nodes(), actx)
 
     class TestBoundary:
-        def soln_gradient_flux(
-                self, disc, dd_bdry, fluid_state, gas_model, **kwargs):
-            fluid_state_int = project_fluid_state(disc, "vol", dd_bdry, fluid_state,
-                                                  gas_model)
-            cv_int = fluid_state_int.cv
+        def cv_gradient_flux(self, disc, dd_bdry, state_minus, gas_model, **kwargs):
+            cv_int = state_minus.cv
             from grudge.trace_pair import TracePair
             bnd_pair = TracePair(dd_bdry,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = thaw(actx, disc.normal(dd_bdry))
-            from mirgecom.flux import gradient_flux_central
-            flux_weak = gradient_flux_central(bnd_pair, normal=nhat)
-            return disc.project(dd_bdry, "all_faces", flux_weak)
+            nhat = thaw(disc.normal(dd_bdry), actx)
+            from mirgecom.flux import num_flux_central
+            from arraycontext import outer
+            # Do not project to "all_faces" as now we use built-in grad_cv_operator
+            return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
         def av_flux(self, disc, dd_bdry, diffusion, **kwargs):
-            nhat = thaw(actx, disc.normal(dd_bdry))
+            nhat = thaw(disc.normal(dd_bdry), actx)
             diffusion_minus = discr.project("vol", dd_bdry, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
             bnd_grad_pair = TracePair(dd_bdry, interior=diffusion_minus,
                                       exterior=diffusion_plus)
-            from mirgecom.flux import divergence_flux_central
-            flux_weak = divergence_flux_central(bnd_grad_pair, normal=nhat)
+            from mirgecom.flux import num_flux_central
+            flux_weak = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
             return disc.project(dd_bdry, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
-    # Uniform field return 0 rhs
-    soln = zeros + 1.0
-    cv = make_conserved(
-        dim,
-        mass=soln,
-        energy=soln,
-        momentum=make_obj_array([soln for _ in range(dim)]),
-        species_mass=make_obj_array([soln for _ in range(dim)])
-    )
-    gas_model = GasModel(eos=IdealSingleGas())
-    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-    boundary_kwargs = {"gas_model": gas_model}
-    rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                boundary_kwargs=boundary_kwargs,
-                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
-    err = discr.norm(rhs, np.inf)
-    assert err < tolerance
 
-    # Linear field return 0 rhs
-    soln = nodes[0]
-    cv = make_conserved(
-        dim,
-        mass=soln,
-        energy=soln,
-        momentum=make_obj_array([soln for _ in range(dim)]),
-        species_mass=make_obj_array([soln for _ in range(dim)])
-    )
-    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-    rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                boundary_kwargs=boundary_kwargs,
-                                fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
-    err = discr.norm(rhs, np.inf)
-    assert err < tolerance
+    # Up to quadratic 1d
+    for nsol in range(3):
+        soln = nodes[0]**nsol
+        exp_rhs_1d = nsol * (nsol-1) * nodes[0]**(nsol - 2)
+        print(f"{nsol=},{soln=},{exp_rhs_1d=}")
+        cv = make_conserved(
+            dim,
+            mass=soln,
+            energy=soln,
+            momentum=make_obj_array([soln for _ in range(dim)]),
+            species_mass=make_obj_array([soln for _ in range(dim)])
+        )
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
+        rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                    gas_model=gas_model,
+                                    fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
+        print(f"{rhs=}")
+        err = discr.norm(rhs-exp_rhs_1d, np.inf)
+        assert err < tolerance
 
-    # Quadratic field return constant 2
+    # Quadratic field return constant 2*dim
     soln = np.dot(nodes, nodes)
     cv = make_conserved(
         dim,
@@ -260,7 +264,210 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     )
     fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
-                                boundary_kwargs=boundary_kwargs,
+                                gas_model=gas_model,
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
     err = discr.norm(2.*dim-rhs, np.inf)
     assert err < tolerance
+
+
+@pytest.mark.parametrize("order",  [2, 3])
+@pytest.mark.parametrize("dim",  [1, 2])
+def test_trig(ctx_factory, dim, order):
+    """Test artificial_viscosity.
+
+    Test AV operator for some test functions to verify artificial viscosity
+    returns the analytical result.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec = EOCRecorder()
+    nel_1d_base = 4
+
+    for nfac in [1, 2, 4]:
+        nel_1d = nfac * nel_1d_base
+
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(0.0, )*dim, b=(1.0, )*dim, nelements_per_axis=(nel_1d, )*dim,
+            periodic=(True,)*dim
+        )
+
+        discr = EagerDGDiscretization(actx, mesh, order=order)
+        nodes = thaw(discr.nodes(), actx)
+
+        boundaries = {}
+
+        # u = sin(2 pi x)sin(2 pi y)sin(2 pi z)
+        # rhs  = -dim pi^2 u
+        soln = 1.0
+        exp_rhs = -dim * 4. * np.pi**2
+        for w in nodes:
+            soln = soln * actx.np.sin(w * 2 * np.pi)
+            exp_rhs = exp_rhs * actx.np.sin(w * 2 * np.pi)
+
+        gas_model = GasModel(eos=IdealSingleGas())
+        cv = make_conserved(
+            dim,
+            mass=soln,
+            energy=soln,
+            momentum=make_obj_array([soln for _ in range(dim)]),
+            species_mass=make_obj_array([soln for _ in range(dim)])
+        )
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
+        rhs = av_laplacian_operator(discr, boundaries=boundaries,
+                                    gas_model=gas_model,
+                                    fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
+
+        err_rhs = actx.to_numpy(discr.norm(rhs-exp_rhs, np.inf))
+        eoc_rec.add_data_point(1.0/nel_1d, err_rhs)
+
+    logger.info(
+        f"{dim=}, {order=}"
+        f"Errors:\n{eoc_rec}"
+    )
+    # For RHS-only checks we expect order - 1.
+    expected_order = order - 1
+    assert (
+        eoc_rec.order_estimate() >= expected_order - .5
+        or eoc_rec.max_error() < 1e-9
+    )
+
+
+# Box grid generator widget lifted from @majosm's diffusion tester
+def _get_box_mesh(dim, a, b, n):
+    dim_names = ["x", "y", "z"]
+    boundary_tag_to_face = {}
+    for i in range(dim):
+        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
+        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
+        boundary_tag_to_face=boundary_tag_to_face)
+
+
+class _VortexSoln:
+
+    def __init__(self, **kwargs):
+        self._dim = 2
+        from mirgecom.initializers import Vortex2D
+        origin = np.zeros(2)
+        velocity = origin + 1
+        self._initializer = Vortex2D(center=origin, velocity=velocity)
+
+    def dim(self):
+        return self._dim
+
+    def __call__(self, r, eos, **kwargs):
+        return self._initializer(x_vec=r, eos=eos)
+
+
+class _TestSoln:
+
+    def __init__(self, dim=2):
+        self._dim = dim
+        from mirgecom.initializers import Uniform
+        origin = np.zeros(self._dim)
+        velocity = origin + 1
+        self._initializer = Uniform(dim=self._dim, velocity=velocity)
+
+    def dim(self):
+        return self._dim
+
+    def __call__(self, r, eos, **kwargs):
+        return self._initializer(x_vec=r, eos=eos)
+
+
+# This test makes sure that the fluid boundaries work mechanically for AV,
+# and give an expected result when using the AV boundary interface.
+@pytest.mark.parametrize("prescribed_soln", [_TestSoln(dim=1),
+                                             _TestSoln(dim=2),
+                                             _TestSoln(dim=3)])
+@pytest.mark.parametrize("order", [2, 3])
+def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
+    """Check fluid boundary AV interface."""
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = prescribed_soln.dim()
+
+    kappa = 3.0
+    sigma = 5.0
+
+    from mirgecom.transport import SimpleTransport
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+                         transport=transport_model)
+
+    def _boundary_state_func(discr, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = discr.discr_from_dd(dd_bdry)
+        nodes = thaw(bnd_discr.nodes(), actx)
+        return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
+                                            **kwargs), gas_model)
+
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    from mirgecom.discretization import create_discretization_collection
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = thaw(discr.nodes(), actx)
+    cv = prescribed_soln(r=nodes, eos=gas_model.eos)
+    fluid_state = make_fluid_state(cv, gas_model)
+
+    boundary_nhat = thaw(discr.normal(BTAG_ALL), actx)
+
+    from mirgecom.boundary import (
+        PrescribedFluidBoundary,
+        AdiabaticNoslipMovingBoundary,
+        IsothermalNoSlipBoundary
+    )
+    prescribed_boundary = \
+        PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)
+    adiabatic_noslip = AdiabaticNoslipMovingBoundary()
+    isothermal_noslip = IsothermalNoSlipBoundary()
+
+    fluid_boundaries = {BTAG_ALL: prescribed_boundary}
+    from mirgecom.navierstokes import grad_cv_operator
+    fluid_grad_cv = \
+        grad_cv_operator(discr, gas_model, fluid_boundaries, fluid_state)
+
+    # Put in a testing field for AV - doesn't matter what - as long as it
+    # is spatially-dependent in all dimensions.
+    av_diffusion = 0. * fluid_grad_cv + np.dot(nodes, nodes)
+    av_diffusion_boundary = discr.project("vol", BTAG_ALL, av_diffusion)
+
+    # Prescribed boundaries are used for inflow/outflow-type boundaries
+    # where we expect to _preserve_ the soln gradient
+    from grudge.dof_desc import as_dofdesc
+    dd_bnd = as_dofdesc(BTAG_ALL)
+    all_faces_dd = dd_bnd.with_dtag("all_faces")
+    expected_av_flux_prescribed_boundary = av_diffusion_boundary@boundary_nhat
+    print(f"{expected_av_flux_prescribed_boundary=}")
+    exp_av_flux = discr.project(dd_bnd, all_faces_dd,
+                                expected_av_flux_prescribed_boundary)
+    print(f"{exp_av_flux=}")
+
+    prescribed_boundary_av_flux = \
+        prescribed_boundary.av_flux(discr, BTAG_ALL, av_diffusion)
+    print(f"{prescribed_boundary_av_flux=}")
+
+    bnd_flux_resid = (prescribed_boundary_av_flux - exp_av_flux)
+    print(f"{bnd_flux_resid=}")
+    assert bnd_flux_resid == 0
+
+    # Solid wall boundaries are expected to have 0 AV flux
+    wall_bnd_flux = \
+        adiabatic_noslip.av_flux(discr, BTAG_ALL, av_diffusion)
+    print(f"adiabatic_noslip: {wall_bnd_flux=}")
+    assert wall_bnd_flux == 0
+
+    wall_bnd_flux = \
+        isothermal_noslip.av_flux(discr, BTAG_ALL, av_diffusion)
+    print(f"isothermal_noslip: {wall_bnd_flux=}")
+    assert wall_bnd_flux == 0

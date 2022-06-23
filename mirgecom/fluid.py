@@ -42,12 +42,14 @@ from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
+    get_container_context_recursively
 )
 
 
 @with_container_arithmetic(bcast_obj_array=False,
                            bcast_container_types=(DOFArray, np.ndarray),
                            matmul=True,
+                           _cls_has_array_context_attr=True,
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
@@ -222,7 +224,6 @@ class ConservedVars:
     @property
     def array_context(self):
         """Return an array context for the :class:`ConservedVars` object."""
-        from arraycontext import get_container_context_recursively
         return get_container_context_recursively(self.mass)
 
     @property

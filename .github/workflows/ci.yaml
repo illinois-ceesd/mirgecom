@@ -82,7 +82,10 @@ jobs:
 
     examples:
         name: Examples
-        runs-on: ubuntu-latest
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
@@ -94,7 +97,9 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            conda install vtk  # needed for the accuracy comparison
             export XDG_CACHE_HOME=/tmp
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             cd examples && ./test_lazy_accuracy.sh
 
         - name: Run examples
@@ -102,6 +107,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             examples/run_examples.sh ./examples
 
     doc:
@@ -121,7 +127,7 @@ jobs:
 
             sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
-            conda install sphinx graphviz
+            conda install sphinx graphviz 'docutils>=0.16'
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"

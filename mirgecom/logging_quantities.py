@@ -51,6 +51,7 @@ from typing import Optional, Callable
 import numpy as np
 
 from grudge.dof_desc import DD_VOLUME_ALL
+import grudge.op as oper
 
 
 def initialize_logmgr(enable_logmgr: bool,
@@ -104,21 +105,21 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
         extract_vars_for_logging, units_for_logging, volume_dd=DD_VOLUME_ALL):
     """Add default discretization quantities to the logmgr."""
-    for op in ["min", "max", "L2_norm"]:
+    for reduction_op in ["min", "max", "L2_norm"]:
         for quantity in ["pressure", "temperature"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging,
-                volume_dd=volume_dd))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging, volume_dd=volume_dd))
 
         for quantity in ["mass", "energy"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging,
-                volume_dd=volume_dd))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging, volume_dd=volume_dd))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=d, volume_dd=volume_dd))
+                discr, "momentum", reduction_op, extract_vars_for_logging,
+                units_for_logging, axis=d, volume_dd=volume_dd))
 
 
 # {{{ Package versions
@@ -285,13 +286,13 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._discr_reduction = partial(self.discr.nodal_min, volume_dd)
+            self._discr_reduction = partial(oper.nodal_min, self.discr, volume_dd)
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(self.discr.nodal_max, volume_dd)
+            self._discr_reduction = partial(oper.nodal_max, self.discr, volume_dd)
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(self.discr.norm, p=2, dd=volume_dd)
+            self._discr_reduction = partial(oper.norm, self.discr, p=2, dd=volume_dd)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")

@@ -11,8 +11,9 @@ Solution Initializers
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
+.. autoclass:: ShearFlow
+.. autoclass:: PlanarDiscontinuity
 .. autoclass:: MulticomponentTrig
 
 State Initializers
@@ -22,7 +23,6 @@ State Initializers
 Initialization Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^
 .. autofunction:: make_pulse
-
 """
 
 __copyright__ = """
@@ -51,7 +51,7 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from mirgecom.eos import IdealSingleGas
 from numbers import Number
 from mirgecom.fluid import make_conserved
@@ -61,27 +61,26 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
                            density=None, velocity=None, mass_fractions=None):
     """Create a fluid state from a set of minimal input data."""
     if gas_model is None:
-        raise ValueError("Gas model is required to create a CV.")
+        raise ValueError("Gas model is required to create a FluidState.")
+
+    if (pressure is not None and temperature is not None and density is not None):
+        raise ValueError("State is overspecified, require only 2 of (pressure, "
+                         "temperature, density)")
+
+    if ((pressure is not None and (temperature is None or density is not None))
+          or (temperature is not None and (pressure is None or density is None))):
+        raise ValueError("State is underspecified, require 2 of (pressure, "
+                         "temperature, density)")
 
     if velocity is None:
         velocity = np.zeros(dim)
 
-    if pressure is not None and temperature is not None and density is not None:
-        raise ValueError("State is overspecified, require only 2 of (pressure, "
-                         "temperature, density)")
-
     if pressure is None:
-        if temperature is None or density is None:
-            raise ValueError("State is underspecified, require 2 of (pressure, "
-                             "temperature, density)")
         pressure = gas_model.eos.get_pressure(density, temperature, mass_fractions)
 
     if temperature is None:
-        if density is None:
-            raise ValueError("State is underspecified, require 2 of (pressure, "
-                             "temperature, density)")
-        temperature = gas_model.eos.get_temperature(
-            density, pressure, mass_fractions)
+        temperature = gas_model.eos.get_temperature(density, pressure,
+                                                    mass_fractions)
 
     if density is None:
         density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
@@ -89,9 +88,7 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
     internal_energy = gas_model.eos.get_internal_energy(
         temperature=temperature, mass=density, mass_fractions=mass_fractions)
 
-    species_mass = None
-    if mass_fractions is not None:
-        species_mass = density * mass_fractions
+    species_mass = None if mass_fractions is None else density * mass_fractions
 
     total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
     momentum = density*velocity
@@ -383,7 +380,7 @@ class DoubleMachReflection:
         At times $t > 0$, calls to this routine create an advanced solution
         under the assumption of constant normal shock speed *shock_speed*.
         The advanced solution *is not* the exact solution, but is appropriate
-        for use as an exact boundary solution on the top and upstream (left)
+        for use as a boundary solution on the top and upstream (left)
         side of the domain.
 
         Parameters
@@ -566,7 +563,7 @@ class Lump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -745,7 +742,7 @@ class MulticomponentLump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -1079,7 +1076,7 @@ class Uniform:
             Time at which RHS is desired (unused)
         """
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass
@@ -1424,3 +1421,102 @@ class PlanarPoiseuille:
         species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
         return make_conserved(2, mass=dmass, energy=denergy,
                               momentum=dmom, species_mass=species_mass)
+
+
+class ShearFlow:
+    r"""Shear flow exact Navier-Stokes solution from [Hesthaven_2008]_.
+
+    The shear flow solution is described in Section 7.5.3 of
+    [Hesthaven_2008]_. It is generalized to major-axis-aligned
+    3-dimensional cases here and defined as:
+
+    .. math::
+
+        \rho &= 1\\
+        v_\parallel &= r_{t}^2\\
+        \mathbf{v}_\bot &= 0\\
+        E &= \frac{2\mu{r_\parallel} + 10}{\gamma-1}
+        + \frac{r_{t}^4}{2}\\
+        \gamma &= \frac{3}{2}, \mu=0.01, \kappa=0
+
+    with fluid total energy $E$, viscosity $\mu$, and specific heat ratio
+    $\gamma$. The flow velocity is $\mathbf{v}$ with flow speed and direction
+    $v_\parallel$, and $r_\parallel$, respectively. The flow velocity in
+    all directions other than $r_\parallel$, is denoted as $\mathbf{v}_\bot$.
+    One major-axis-aligned flow-transverse direction, $r_t$ is set by the
+    user. This shear flow solution is an exact solution to the fully
+    compressible Navier-Stokes equations when neglecting thermal terms;
+    i.e., when thermal conductivity $\kappa=0$.  This solution requires a 2d
+    or 3d domain.
+    """
+
+    def __init__(self, dim=2, mu=.01, gamma=3./2., density=1.,
+                 flow_dir=0, trans_dir=1):
+        r"""Init the solution object.
+
+        Parameters
+        ----------
+        dim
+            Number of dimensions, 2 and 3 are valid
+        mu: float
+            Fluid viscosity
+        gamma: float
+            Ratio of specific heats for the fluid
+        density: float
+            Fluid mass density, $\rho$
+        flow_dir
+            Flow direction, $r_\parallel$, for the shear flow, 0=x, 1=y,
+            2=z. Defaults to x.
+        trans_dir
+            Transverse direction, $r_t$, for setting up the shear flow,
+            must be other than flow direction, $r_\parallel$, defaults to y.
+        """
+        if (flow_dir == trans_dir or trans_dir > (dim-1) or flow_dir > (dim-1)
+                or flow_dir < 0 or trans_dir < 0):
+            raise ValueError(f"Flow and transverse directions must be < {dim=}"
+                             f" and > 0.")
+
+        self._dim = dim
+        self._mu = mu
+        self._gamma = gamma
+        self._rho = density
+        self._flowdir = flow_dir
+        self._transdir = trans_dir
+
+    def __call__(self, x, **kwargs):
+        """Return shear flow solution at points *x*.
+
+        Parameters
+        ----------
+        x: numpy.ndarray
+            Point coordinates at which the shear flow solution is desired.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            A CV object with the shear flow solution
+        """
+        vel = 0.*x
+        flow_dir = self._flowdir
+        trans_dir = self._transdir
+
+        zeros = 0.*x[0]
+        ones = zeros + 1.
+
+        for idim in range(self._dim):
+            if idim == flow_dir:
+                vel[idim] = x[trans_dir]**2
+            else:
+                vel[idim] = 1.*zeros
+
+        density = self._rho * ones
+        mom = self._rho * vel
+
+        pressure = 2*self._mu*x[flow_dir] + 10
+
+        ie = pressure/(self._gamma - 1.)
+        ke = self._rho * (x[trans_dir]**4.)/2.
+        total_energy = ie + ke
+
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=total_energy)
