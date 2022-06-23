@@ -28,10 +28,10 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from grudge.eager import EagerDGDiscretization
+import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DTAG_BOUNDARY
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -111,7 +111,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
+    discr = create_discretization_collection(actx, local_mesh, order=order,
                     mpi_communicator=comm)
 
     if dim == 2:
@@ -178,7 +178,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
-    final_answer = actx.to_numpy(discr.norm(u, np.inf))
+    final_answer = actx.to_numpy(op.norm(discr, u, np.inf))
     resid = abs(final_answer - 0.00020620711665201585)
     if resid > 1e-15:
         raise ValueError(f"Run did not produce the expected result {resid=}")
