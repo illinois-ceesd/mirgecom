@@ -30,7 +30,8 @@ import pyopencl.tools as cl_tools
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 
 from logpyle import IntervalTimer, set_dt
@@ -169,19 +170,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
-    )
+    discr = create_discretization_collection(actx, local_mesh, order=order,
+                                             mpi_communicator=comm)
     nodes = thaw(discr.nodes(), actx)
     ones = discr.zeros(actx) + 1.0
 
@@ -328,8 +318,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             temperature_seed = restart_data["temperature_seed"]
         else:
             rst_cv = restart_data["cv"]
-            old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
-                                              mpi_communicator=comm)
+            old_discr = \
+                create_discretization_collection(actx, local_mesh, order=rst_order,
+                                                 mpi_communicator=comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))

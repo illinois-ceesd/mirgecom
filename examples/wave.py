@@ -30,9 +30,10 @@ import pyopencl.tools as cl_tools
 
 from pytools.obj_array import flat_obj_array
 
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
-from grudge.op import nodal_min
+import grudge.op as op
+
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
@@ -52,16 +53,16 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_device_memory_usage)
 
 
-def bump(actx, discr, t=0):
+def bump(actx, nodes, t=0):
     """Create a bump."""
-    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
+    dim = len(nodes)
+    source_center = np.array([0.2, 0.35, 0.1])[:dim]
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
-        for i in range(discr.dim)
+        for i in range(dim)
         ])
 
     return (
@@ -105,19 +106,20 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = thaw(discr.nodes(), actx)
 
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
-    dt = actx.to_numpy(current_cfl * nodal_min(discr, "vol",
-                                               nodal_dt))[()]
+    dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol",
+                                                  nodal_dt))[()]
 
     print("%d elements" % mesh.nelements)
 
-    fields = flat_obj_array(bump(actx, discr),
-                            [discr.zeros(actx) for i in range(discr.dim)])
+    fields = flat_obj_array(bump(actx, nodes),
+                            [discr.zeros(actx) for i in range(dim)])
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -156,7 +158,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, actx.to_numpy(discr.norm(fields[0], np.inf)))
+            print(istep, t, actx.to_numpy(op.norm(discr, fields[0], 2)))
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
