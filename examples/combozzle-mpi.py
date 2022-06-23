@@ -33,9 +33,11 @@ from functools import partial
 from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DISCR_TAG_QUAD
+from mirgecom.discretization import create_discretization_collection
+
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -632,10 +634,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if grid_only:
         return 0
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
-    from mirgecom.discretization import create_discretization_collection
-
-    discr = create_discretization_collection(actx, local_mesh, order, comm)
+    discr = create_discretization_collection(actx, local_mesh, order,
+                                             mpi_communicator=comm)
     nodes = thaw(discr.nodes(), actx)
     ones = discr.zeros(actx) + 1.0
 
@@ -880,8 +880,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             temperature_seed = restart_data["temperature_seed"]
         else:
             rst_cv = restart_data["cv"]
-            old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
-                                              mpi_communicator=comm)
+            old_discr = \
+                create_discretization_collection(actx, local_mesh, order=rst_order,
+                                                 mpi_communicator=comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
