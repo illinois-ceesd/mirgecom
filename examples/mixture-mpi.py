@@ -222,7 +222,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                             **kwargs), gas_model,
                                 temperature_seed=state_minus.temperature)
 
-    if True:
+    if False:
         my_boundary = AdiabaticSlipBoundary()
         boundaries = {BTAG_ALL: my_boundary}
     else:
