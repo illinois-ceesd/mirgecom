@@ -41,10 +41,9 @@ from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
-from grudge.eager import (
-    EagerDGDiscretization,
-    interior_trace_pair
-)
+import grudge.op as op
+from grudge.trace_pair import interior_trace_pair
+from mirgecom.discretization import create_discretization_collection
 from functools import partial
 
 logger = logging.getLogger(__name__)
@@ -127,7 +126,7 @@ def central_flux_interior(actx, discr, int_tpair):
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
     dd_all_faces = int_tpair.dd.with_dtag("all_faces")
-    return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
+    return op.project(discr, int_tpair.dd, dd_all_faces, flux_weak)
 
 
 def central_flux_boundary(actx, discr, soln_func, btag):
@@ -141,7 +140,7 @@ def central_flux_boundary(actx, discr, soln_func, btag):
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
     dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
-    return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
+    return op.project(discr, bnd_tpair.dd, dd_all_faces, flux_weak)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -184,7 +183,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        discr = create_discretization_collection(actx, mesh, order=order)
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume

@@ -33,6 +33,8 @@ import pyopencl.clmath
 import pytest
 from pytools.obj_array import make_obj_array
 
+import grudge.op as op
+
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
@@ -52,7 +54,7 @@ from mirgecom.initializers import (
     Vortex2D, Lump,
     MixtureInitializer
 )
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
@@ -89,7 +91,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
@@ -155,7 +157,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         print(f"prom_omega = {prom_omega}")
 
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         assert inf_norm((prom_c - can_c) / can_c) < 1e-14
         assert inf_norm((prom_t - can_t) / can_t) < 1e-14
@@ -197,7 +199,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     from meshmode.dof_array import thaw
     nodes = thaw(actx, discr.nodes())
 
@@ -259,7 +261,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"pyro_eos.e = {internal_energy}")
 
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         tol = 1e-14
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
@@ -299,7 +301,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     ones = discr.zeros(actx) + 1.0
 
     # Pyrometheus initialization
@@ -363,7 +365,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
         # Print
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
@@ -407,7 +409,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     from meshmode.dof_array import thaw
     nodes = thaw(actx, discr.nodes())
 
@@ -420,7 +422,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     cv = lump(nodes)
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     p = eos.pressure(cv)
     exp_p = 1.0
@@ -463,7 +465,7 @@ def test_idealsingle_vortex(ctx_factory):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     from meshmode.dof_array import thaw
     nodes = thaw(actx, discr.nodes())
     eos = IdealSingleGas()
@@ -472,7 +474,7 @@ def test_idealsingle_vortex(ctx_factory):
     cv = vortex(nodes)
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     gamma = eos.gamma()
     p = eos.pressure(cv)
