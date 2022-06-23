@@ -34,11 +34,10 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
 from grudge.dof_desc import as_dofdesc
-
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
@@ -79,7 +78,7 @@ def test_slipwall_identity(actx_factory, dim):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order)
     nodes = thaw(discr.nodes(), actx)
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
@@ -98,11 +97,11 @@ def test_slipwall_identity(actx_factory, dim):
             wall = AdiabaticSlipBoundary()
 
             uniform_state = initializer(nodes)
-            cv_minus = discr.project("vol", BTAG_ALL, uniform_state)
+            cv_minus = op.project(discr, "vol", BTAG_ALL, uniform_state)
             state_minus = make_fluid_state(cv=cv_minus, gas_model=gas_model)
 
             def bnd_norm(vec):
-                return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
+                return actx.to_numpy(op.norm(discr, vec, p=np.inf, dd=BTAG_ALL))
 
             state_plus = \
                 wall.adiabatic_slip_state(discr, btag=BTAG_ALL, gas_model=gas_model,
@@ -154,13 +153,13 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        discr = create_discretization_collection(actx, mesh, order=order)
         nodes = thaw(discr.nodes(), actx)
         nhat = thaw(discr.normal(BTAG_ALL), actx)
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
-            return actx.to_numpy(discr.norm(vec, p=np.inf, dd=BTAG_ALL))
+            return actx.to_numpy(op.norm(discr, vec, p=np.inf, dd=BTAG_ALL))
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
@@ -251,7 +250,7 @@ def test_noslip(actx_factory, dim, flux_func):
     b = 2.0
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     nodes = thaw(discr.nodes(), actx)
     nhat = thaw(discr.normal(BTAG_ALL), actx)
     print(f"{nhat=}")
@@ -263,11 +262,11 @@ def test_noslip(actx_factory, dim, flux_func):
         normal = thaw(discr.normal(int_tpair.dd), actx)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
-        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+        return op.project(discr, int_tpair.dd, "all_faces", flux_weak)
 
     # utility to compare stuff on the boundary only
     # from functools import partial
-    # bnd_norm = partial(discr.norm, p=np.inf, dd=BTAG_ALL)
+    # bnd_norm = partial(op.norm, discr, p=np.inf, dd=BTAG_ALL)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 
@@ -350,9 +349,9 @@ def test_noslip(actx_factory, dim, flux_func):
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
-            i_flux_int = discr.project(dd, dd_allfaces, bnd_flux)
+            i_flux_int = op.project(discr, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
-            i_flux_bc = discr.project(bc_dd, dd_allfaces, i_flux_bc)
+            i_flux_bc = op.project(discr, bc_dd, dd_allfaces, i_flux_bc)
 
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -364,10 +363,10 @@ def test_noslip(actx_factory, dim, flux_func):
             dd_vol = as_dofdesc("vol")
             dd_faces = as_dofdesc("all_faces")
             grad_cv_minus = \
-                discr.project("vol", BTAG_ALL,
+                op.project(discr, "vol", BTAG_ALL,
                               grad_operator(discr, dd_vol, dd_faces,
                                             uniform_state.cv, cv_flux_bnd))
-            grad_t_minus = discr.project("vol", BTAG_ALL,
+            grad_t_minus = op.project(discr, "vol", BTAG_ALL,
                                          grad_operator(discr, dd_vol, dd_faces,
                                                        temper, t_flux_bnd))
 
@@ -482,7 +481,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     b = 2.0
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     nodes = thaw(discr.nodes(), actx)
     boundary_discr = discr.discr_from_dd(BTAG_ALL)
     boundary_nodes = thaw(boundary_discr.nodes(), actx)
@@ -499,7 +498,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext),
                           normal)
-        return discr.project(int_tpair.dd, "all_faces", flux_weak)
+        return op.project(discr, int_tpair.dd, "all_faces", flux_weak)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
     # for velocities in each direction
@@ -560,8 +559,8 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
             bc_dd = as_dofdesc(BTAG_ALL)
-            i_flux_bc = discr.project(bc_dd, dd_allfaces, i_flux_bc)
-            i_flux_int = discr.project(dd, dd_allfaces, bnd_flux)
+            i_flux_bc = op.project(discr, bc_dd, dd_allfaces, i_flux_bc)
+            i_flux_int = op.project(discr, dd, dd_allfaces, bnd_flux)
 
             i_flux_bnd = i_flux_bc + i_flux_int
 
@@ -574,8 +573,8 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             dd_faces = as_dofdesc("all_faces")
             grad_cv = grad_operator(discr, dd_vol, dd_faces, cv, cv_flux_bnd)
             grad_t = grad_operator(discr, dd_vol, dd_faces, temper, t_flux_bnd)
-            grad_cv_minus = discr.project("vol", BTAG_ALL, grad_cv)
-            grad_t_minus = discr.project("vol", BTAG_ALL, grad_t)
+            grad_cv_minus = op.project(discr, "vol", BTAG_ALL, grad_cv)
+            grad_t_minus = op.project(discr, "vol", BTAG_ALL, grad_t)
 
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
