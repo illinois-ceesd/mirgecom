@@ -98,8 +98,8 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr_eager = EagerDGDiscretization(actx_eager, mesh, order=order)
-    discr_lazy = EagerDGDiscretization(actx_lazy, mesh, order=order)
+    discr_eager = create_discretization_collection(actx_eager, mesh, order=order)
+    discr_lazy = create_discretization_collection(actx_lazy, mesh, order=order)
 
     # Pyrometheus initialization
     mech_cti = get_mechanism_cti(mechname)
