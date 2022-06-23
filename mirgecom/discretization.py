@@ -45,9 +45,10 @@ def create_discretization_collection(actx, mesh, order, *, mpi_communicator=None
     """Create and return a grudge DG discretization object."""
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.eager import EagerDGDiscretization
-    from meshmode.discretization.poly_element import \
-        QuadratureSimplexGroupFactory, \
-        PolynomialRecursiveNodesGroupFactory
+    from meshmode.discretization.poly_element import (
+        QuadratureSimplexGroupFactory,
+        default_simplex_group_factory
+    )
 
     if quadrature_order < 0:
         quadrature_order = 2*order+1
@@ -55,8 +56,8 @@ def create_discretization_collection(actx, mesh, order, *, mpi_communicator=None
     discr = EagerDGDiscretization(
         actx, mesh,
         discr_tag_to_group_factory={
-            DISCR_TAG_BASE: PolynomialRecursiveNodesGroupFactory(order,
-                                                                 family="lgl"),
+            DISCR_TAG_BASE: default_simplex_group_factory(base_dim=mesh.dim,
+                                                          order=order),
             DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(quadrature_order),
         },
         mpi_communicator=mpi_communicator
