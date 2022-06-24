@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 def create_discretization_collection(actx, mesh, order, *, mpi_communicator=None,
                                      quadrature_order=-1):
     """Create and return a grudge DG discretization collection."""
-
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.discretization import DiscretizationCollection
     from meshmode.discretization.poly_element import (
