@@ -16,7 +16,7 @@ Here’s an example, to give you an impression:
    import numpy as np
    import pyopencl as cl
    from pytools.obj_array import flat_obj_array
-   from grudge.eager import EagerDGDiscretization
+   from grudge.discretization import DiscretizationCollection
    from grudge.shortcuts import make_visualizer
    from mirgecom.wave import wave_operator
    from mirgecom.integrators import rk4_step
@@ -36,7 +36,7 @@ Here’s an example, to give you an impression:
 
    print("%d elements" % mesh.nelements)
 
-   discr = EagerDGDiscretization(actx, mesh, order=order)
+   discr = DiscretizationCollection(actx, mesh, order=order)
    fields = flat_obj_array(
        [discr.zeros(actx)],
        [discr.zeros(actx) for i in range(discr.dim)]
@@ -54,7 +54,7 @@ Here’s an example, to give you an impression:
        fields = rk4_step(fields, t, dt, rhs)
        if istep % 10 == 0:
            print(istep, t, discr.norm(fields[0], np.inf))
-           vis.write_vtk_file("wave-eager-%04d.vtu" % istep,
+           vis.write_vtk_file("wave-%04d.vtu" % istep,
                    [("u", fields[0]), ("v", fields[1:]), ])
 
        t += dt

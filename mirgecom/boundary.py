@@ -87,7 +87,7 @@ class FluidBoundary(metaclass=ABCMeta):
 
         Parameters
         ----------
-        discr: :class:`~grudge.eager.EagerDGDiscretization`
+        discr: :class:`~grudge.discretization.DiscretizationCollection`
 
             A discretization collection encapsulating the DG elements
 
@@ -129,7 +129,7 @@ class FluidBoundary(metaclass=ABCMeta):
 
         Parameters
         ----------
-        discr: :class:`~grudge.eager.EagerDGDiscretization`
+        discr: :class:`~grudge.discretization.DiscretizationCollection`
 
             A discretization collection encapsulating the DG elements
 
@@ -179,7 +179,7 @@ class FluidBoundary(metaclass=ABCMeta):
 
         Parameters
         ----------
-        discr: :class:`~grudge.eager.EagerDGDiscretization`
+        discr: :class:`~grudge.discretization.DiscretizationCollection`
 
             A discretization collection encapsulating the DG elements
 
@@ -214,7 +214,7 @@ class FluidBoundary(metaclass=ABCMeta):
 
         Parameters
         ----------
-        discr: :class:`~grudge.eager.EagerDGDiscretization`
+        discr: :class:`~grudge.discretization.DiscretizationCollection`
 
             A discretization collection encapsulating the DG elements
 
@@ -482,7 +482,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
-        grad_av_minus = discr.project("vol", btag, diffusion)
+        grad_av_minus = op.project(discr, "vol", btag, diffusion)
         actx = grad_av_minus.mass[0].array_context
         nhat = thaw(discr.normal(btag), actx)
         grad_av_plus = self._bnd_grad_av_func(
@@ -542,7 +542,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         E_plus = E_minus
         """
         # Grab some boundary-relevant data
-        dim = discr.dim
+        dim = state_minus.dim
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
@@ -567,7 +567,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
         actx = grad_av_minus.mass[0].array_context
-        nhat = thaw(discr.norm(btag), actx)
+        nhat = thaw(discr.normal(btag), actx)
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
