@@ -235,7 +235,7 @@ def grad_operator(discr, boundaries, u, quadrature_tag=DISCR_TAG_BASE):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     boundaries:
         dictionary (or list of dictionaries) mapping boundary tags to
@@ -338,7 +338,7 @@ def diffusion_operator(discr, *args, return_grad_u=False, **kwargs):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     kappa: numbers.Number or meshmode.dof_array.DOFArray
         the conductivity value(s)
