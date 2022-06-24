@@ -338,20 +338,20 @@ def advance_state(rhs, timestepper, state, t_final,
         (current_step, current_t, current_state) = \
             _advance_state_leap(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
+                logmgr=logmgr, eos=eos, dim=dim,
             )
     else:
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep, logmgr=logmgr, eos=eos, dim=dim,
+                logmgr=logmgr, eos=eos, dim=dim,
             )
 
     return current_step, current_t, current_state
