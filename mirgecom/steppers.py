@@ -343,6 +343,15 @@ def advance_state(rhs, timestepper, state, t_final,
              "current and preferred usage.",
              DeprecationWarning, stacklevel=2)
 
+    if force_eval:
+        from warnings import warn
+        warn("Forced evaluation functionality of advance_state is deprecated; "
+             "setting force_eval=True will be disallowed starting Q4 2022, and "
+             "force_eval will be removed entirely in Q1 2023. If this behavior is "
+             "still desired, call force_evaluation via one of the callbacks "
+             "instead.",
+             DeprecationWarning, stacklevel=2)
+
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.

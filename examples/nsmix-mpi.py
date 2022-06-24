@@ -42,6 +42,7 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
+from mirgecom.utils import force_evaluation
 from mirgecom.navierstokes import ns_operator
 
 from mirgecom.io import make_init_message
@@ -82,7 +83,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None,
+         use_leap=False, use_profiling=False, lazy=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=True):
     """Drive example."""
@@ -120,7 +121,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_t = 0
     constant_cfl = True
     current_step = 0
-    timestepper = rk4_step
+    integrator = rk4_step
     debug = False
 
     # Some i/o frequencies
@@ -472,6 +473,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
+    def my_timestepper(state, t, dt, rhs):
+        if lazy:
+            state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+
     def my_post_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = get_fluid_state(cv, tseed)
@@ -498,12 +504,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_dt, current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_stepper_state = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
+        advance_state(rhs=my_rhs, timestepper=my_timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_state.cv,
                                             current_state.temperature]),
-                      t=current_t, t_final=t_final)
+                      t=current_t, t_final=t_final, force_eval=False)
 
     # Dump the final data
     if rank == 0:
@@ -566,7 +572,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent)
+         lazy=args.lazy, casename=casename, rst_filename=rst_filename,
+         actx_class=actx_class, log_dependent=log_dependent)
 
 # vim: foldmethod=marker

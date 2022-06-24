@@ -39,6 +39,7 @@ from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh
 )
+from mirgecom.utils import force_evaluation
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -107,9 +108,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # timestepping control
     if use_leap:
         from leap.rk import RK4MethodBuilder
-        timestepper = RK4MethodBuilder("state")
+        integrator = RK4MethodBuilder("state")
     else:
-        timestepper = rk4_step
+        integrator = rk4_step
     t_final = 1e-8
     current_cfl = 1.0
     current_dt = 1e-9
@@ -370,6 +371,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                               constant_cfl)
         return state, dt
 
+    def my_timestepper(state, t, dt, rhs):
+        if lazy:
+            state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+
     def my_post_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
@@ -394,12 +400,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, advanced_state = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
+        advance_state(rhs=my_rhs, timestepper=my_timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_state.cv,
                                             current_state.temperature]),
-                      t=current_t, t_final=t_final)
+                      t=current_t, t_final=t_final, force_eval=False)
 
     # Dump the final data
     if rank == 0:

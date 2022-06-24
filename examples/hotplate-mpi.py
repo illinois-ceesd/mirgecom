@@ -39,6 +39,7 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import get_sim_timestep
+from mirgecom.utils import force_evaluation
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -120,7 +121,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 force_device_scalars=True)
 
     # timestepping control
-    timestepper = rk4_step
+    integrator = rk4_step
     t_final = 2e-7
     current_cfl = .1
     current_dt = 1e-8
@@ -400,6 +401,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
+    def my_timestepper(state, t, dt, rhs):
+        if lazy:
+            state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -418,10 +424,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
+        advance_state(rhs=my_rhs, timestepper=my_timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state.cv, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final,
+                      force_eval=False)
     current_state = make_fluid_state(current_cv, gas_model)
 
     # Dump the final data

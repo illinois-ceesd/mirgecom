@@ -53,6 +53,7 @@ from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
+from mirgecom.utils import force_evaluation
 
 from logpyle import set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -156,7 +157,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Timestepping control
     current_step = 0
-    timestepper = rk4_step
+    integrator = rk4_step
     t_final = 1.0e-3
     current_cfl = 0.1
     current_dt = 1.0e-4
@@ -394,6 +395,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
+    def my_timestepper(state, t, dt, rhs):
+        if lazy:
+            state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -420,10 +426,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
+        advance_state(rhs=my_rhs, timestepper=my_timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state.cv, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final,
+                      force_eval=False)
 
     # Dump the final data
     if rank == 0:

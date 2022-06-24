@@ -36,10 +36,11 @@ import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
+from mirgecom.utils import force_evaluation
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
-from arraycontext import thaw, freeze
+from arraycontext import thaw
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -69,7 +70,7 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
+def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
 
@@ -77,7 +78,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         filename="wave.sqlite", mode="wu")
 
     if use_profiling:
-        if lazy_eval:
+        if lazy:
             raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -85,7 +86,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         queue = cl.CommandQueue(cl_ctx)
-        if lazy_eval:
+        if lazy:
             actx = PytatoPyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
         else:
@@ -149,7 +150,8 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if logmgr:
             logmgr.tick_before()
 
-        fields = thaw(freeze(fields, actx), actx)
+        if lazy:
+            fields = force_evaluation(actx, fields)
         fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
@@ -181,6 +183,6 @@ if __name__ == "__main__":
         help="enable lazy evaluation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile, use_logmgr=args.logging, lazy_eval=args.lazy)
+    main(use_profiling=args.profile, use_logmgr=args.logging, lazy=args.lazy)
 
 # vim: foldmethod=marker

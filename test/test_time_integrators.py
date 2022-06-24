@@ -128,7 +128,7 @@ if found:
             (step, t, state) = \
                 advance_state(rhs=rhs, timestepper=method, dt=dt,
                               state=state, t=t, t_final=t_final,
-                              component_id="y")
+                              component_id="y", force_eval=False)
 
             error = np.abs(state - exact_soln(t)) / exact_soln(t)
             integrator_eoc.add_data_point(dt, error)

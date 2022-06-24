@@ -172,8 +172,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ("u", u)
                         ], overwrite=True)
 
+        if lazy:
+            u = force_evaluation(actx, u)
         u = rk4_step(u, t, dt, compiled_rhs)
-        u = force_evaluation(actx, u)
 
         t += dt
         istep += 1

@@ -43,6 +43,7 @@ from mirgecom.simutil import (
     write_visfile,
     allsync
 )
+from mirgecom.utils import force_evaluation
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
@@ -121,9 +122,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Time stepper selection
     if use_leap:
         from leap.rk import RK4MethodBuilder
-        timestepper = RK4MethodBuilder("state")
+        integrator = RK4MethodBuilder("state")
     else:
-        timestepper = rk4_step
+        integrator = rk4_step
 
     # Time loop control parameters
     current_step = 0
@@ -533,6 +534,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
+    def my_timestepper(state, t, dt, rhs):
+        if lazy:
+            state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+
     def my_post_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = construct_fluid_state(cv, tseed)
@@ -564,11 +570,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_state = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
+        advance_state(rhs=my_rhs, timestepper=my_timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_cv, temperature_seed]),
-                      t=current_t, t_final=t_final)
+                      t=current_t, t_final=t_final, force_eval=False)
 
     # Dump the final data
     if rank == 0:

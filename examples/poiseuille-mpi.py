@@ -46,6 +46,7 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import get_sim_timestep
+from mirgecom.utils import force_evaluation
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -91,9 +92,9 @@ def _get_box_mesh(dim, a, b, n, t=None):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         use_overintegration=False, use_leap=False, use_profiling=False,
+         lazy=False, casename=None, rst_filename=None,
+         actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -122,7 +123,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     # timestepping control
-    timestepper = rk4_step
+    integrator = rk4_step
     t_final = 1e-7
     current_cfl = 0.05
     current_dt = 1e-10
@@ -411,6 +412,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
+    def my_timestepper(state, t, dt, rhs):
+        if lazy:
+            state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
@@ -430,10 +436,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
-        advance_state(rhs=my_rhs, timestepper=timestepper,
+        advance_state(rhs=my_rhs, timestepper=my_timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state.cv, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final,
+                      force_eval=False)
 
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
@@ -493,7 +500,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration,
+         use_overintegration=args.overintegration, lazy=args.lazy,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker
