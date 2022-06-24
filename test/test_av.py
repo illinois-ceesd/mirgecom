@@ -228,7 +228,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                       exterior=diffusion_plus)
             from mirgecom.flux import num_flux_central
             flux_weak = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-            return disc.project(btag, "all_faces", flux_weak)
+            return op.project(disc, btag, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
 
