@@ -6,6 +6,13 @@ import numpy as np
 
 def compare_files_vtu(first_file, second_file, file_type, tolerance=1e-12):
     import vtk
+    import os.path
+
+    # check for valid file path
+    if not os.path.exists(first_file):
+    	raise ValueError(f"Fidelity test failed: {first_file} not found")
+    if not os.path.exists(second_file):
+    	raise ValueError(f"Fidelity test failed: {second_file} not found")
 
     # read files:
     if file_type == "vtu":
