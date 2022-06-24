@@ -293,7 +293,7 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
 
         The discretization to use
 
@@ -345,7 +345,7 @@ def viscous_flux_on_element_boundary(
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
         A discretization collection encapsulating the DG elements
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
@@ -442,7 +442,7 @@ def get_viscous_timestep(discr, state):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
 
         the discretization to use
 
@@ -481,7 +481,7 @@ def get_viscous_cfl(discr, dt, state):
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
 
         the discretization to use
 
