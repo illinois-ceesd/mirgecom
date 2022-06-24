@@ -54,8 +54,8 @@ def create_discretization_collection(actx, mesh, order, *, mpi_communicator=None
     return DiscretizationCollection(
         actx, mesh,
         discr_tag_to_group_factory={
-            DISCR_TAG_BASE: PolynomialRecursiveNodesGroupFactory(base_dim=mesh.dim,
-                                                                 order=order),
+            DISCR_TAG_BASE: PolynomialRecursiveNodesGroupFactory(order=order,
+                                                                 family="lgl"),
             DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(quadrature_order),
         },
         mpi_communicator=mpi_communicator
