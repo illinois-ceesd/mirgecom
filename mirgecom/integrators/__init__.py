@@ -28,6 +28,8 @@ from .explicit_rk import rk4_step                          # noqa: F401
 from .lsrk import euler_step, lsrk54_step, lsrk144_step    # noqa: F401
 
 __doc__ = """
+.. autofunction:: with_array_context_pre_eval
+
 .. automodule:: mirgecom.integrators.explicit_rk
 .. automodule:: mirgecom.integrators.lsrk
 """
@@ -39,3 +41,12 @@ def lsrk4_step(state, t, dt, rhs):
     warn("Do not call lsrk4; it is now callled lsrk54_step. This function will "
          "disappear August 1, 2021", DeprecationWarning, stacklevel=2)
     return lsrk54_step(state, t, dt, rhs)
+
+
+def with_array_context_pre_eval(actx, integrator):
+    """Force a state pre-evaluation before calling the integrator."""
+    def integrator_with_pre_eval(state, t, dt, rhs):
+        from mirgecom.utils import force_evaluation
+        state = force_evaluation(actx, state)
+        return integrator(state, t, dt, rhs)
+    return integrator_with_pre_eval

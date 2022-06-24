@@ -35,8 +35,7 @@ import grudge.op as op
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
-from mirgecom.integrators import rk4_step
-from mirgecom.utils import force_evaluation
+from mirgecom.integrators import rk4_step, with_array_context_pre_eval
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
@@ -95,8 +94,13 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
 
     dim = 2
     nel_1d = 16
-    from meshmode.mesh.generation import generate_regular_rect_mesh
 
+    timestepper = with_array_context_pre_eval(actx, rk4_step)
+    t_final = 1
+    t = 0
+    istep = 0
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
     mesh = generate_regular_rect_mesh(
         a=(-0.5,)*dim,
         b=(0.5,)*dim,
@@ -143,16 +147,11 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
 
     compiled_rhs = actx.compile(rhs)
 
-    t = 0
-    t_final = 1
-    istep = 0
     while t < t_final:
         if logmgr:
             logmgr.tick_before()
 
-        if lazy:
-            fields = force_evaluation(actx, fields)
-        fields = rk4_step(fields, t, dt, compiled_rhs)
+        fields = timestepper(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
             if use_profiling:

@@ -42,13 +42,12 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
-from mirgecom.utils import force_evaluation
 from mirgecom.navierstokes import ns_operator
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
-from mirgecom.integrators import rk4_step
+from mirgecom.integrators import rk4_step, with_array_context_pre_eval
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
     AdiabaticSlipBoundary,
@@ -121,7 +120,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_t = 0
     constant_cfl = True
     current_step = 0
-    integrator = rk4_step
+    timestepper = with_array_context_pre_eval(actx, rk4_step)
     debug = False
 
     # Some i/o frequencies
@@ -473,11 +472,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
-    def my_timestepper(state, t, dt, rhs):
-        if lazy:
-            state = force_evaluation(actx, state)
-        return integrator(state, t, dt, rhs)
-
     def my_post_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = get_fluid_state(cv, tseed)
@@ -504,7 +498,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                   current_dt, current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_stepper_state = \
-        advance_state(rhs=my_rhs, timestepper=my_timestepper,
+        advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_state.cv,

@@ -32,8 +32,7 @@ import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DTAG_BOUNDARY
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.integrators import rk4_step
-from mirgecom.utils import force_evaluation
+from mirgecom.integrators import rk4_step, with_array_context_pre_eval
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -83,6 +82,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     dim = 2
     nel_1d = 16
 
+    timestepper = with_array_context_pre_eval(actx, rk4_step)
     t = 0
     t_final = 0.0002
     istep = 0
@@ -172,9 +172,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ("u", u)
                         ], overwrite=True)
 
-        if lazy:
-            u = force_evaluation(actx, u)
-        u = rk4_step(u, t, dt, compiled_rhs)
+        u = timestepper(u, t, dt, compiled_rhs)
 
         t += dt
         istep += 1
