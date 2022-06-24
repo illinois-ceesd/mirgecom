@@ -66,6 +66,7 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
+                                force_eval=True,
                                 logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
@@ -98,6 +99,9 @@ def _advance_state_stepper_func(rhs, timestepper,
         An optional user-defined function, with signature:
         ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
+    force_eval
+        An optional boolean indicating whether to force lazy evaluation between
+        timesteps.
 
     Returns
     -------
@@ -123,8 +127,10 @@ def _advance_state_stepper_func(rhs, timestepper,
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
+        if force_eval:
+            state = force_evaluation(actx, state)
+
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
-        state = force_evaluation(actx, state)
 
         t += dt
         istep += 1
@@ -146,6 +152,7 @@ def _advance_state_leap(rhs, timestepper, state,
                         t=0.0, istep=0,
                         pre_step_callback=None,
                         post_step_callback=None,
+                        force_eval=True,
                         logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
@@ -178,6 +185,9 @@ def _advance_state_leap(rhs, timestepper, state,
         An optional user-defined function, with signature:
         ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
+    force_eval
+        An optional boolean indicating whether to force lazy evaluation between
+        timesteps.
 
     Returns
     -------
@@ -204,11 +214,13 @@ def _advance_state_leap(rhs, timestepper, state,
                                           t=t, dt=dt)
             stepper_cls.dt = dt
 
+        if force_eval:
+            state = force_evaluation(actx, state)
+
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component
-                state = force_evaluation(actx, state)
 
                 t += dt
 
@@ -267,6 +279,7 @@ def advance_state(rhs, timestepper, state, t_final,
                   t=0.0, istep=0, dt=0,
                   pre_step_callback=None,
                   post_step_callback=None,
+                  force_eval=True,
                   logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
@@ -305,6 +318,9 @@ def advance_state(rhs, timestepper, state, t_final,
         An optional user-defined function, with signature:
         ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
+    force_eval
+        An optional boolean indicating whether to force lazy evaluation between
+        timesteps.
 
     Returns
     -------
@@ -341,6 +357,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
+                force_eval=force_eval,
                 component_id=component_id,
                 logmgr=logmgr, eos=eos, dim=dim,
             )
@@ -351,6 +368,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
+                force_eval=force_eval,
                 logmgr=logmgr, eos=eos, dim=dim,
             )
 
