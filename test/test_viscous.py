@@ -35,7 +35,7 @@ from pytools.obj_array import make_obj_array
 from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
 import grudge.op as op
-from grudge.eager import interior_trace_pair
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 
 from meshmode.array_context import (  # noqa
@@ -161,8 +161,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     initializer = PlanarPoiseuille(density=rho, mu=mu)
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                    int_tpair, boundaries):
-        return (compute_interior_flux(int_tpair)
+                    int_tpairs, boundaries):
+        return ((sum(compute_interior_flux(int_tpair) for int_tpair in int_tpairs))
                 + sum(compute_boundary_flux(btag) for btag in boundaries))
 
     from mirgecom.flux import num_flux_central
@@ -209,10 +209,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
         # form exact cv
         cv = initializer(x_vec=nodes, eos=eos)
-        cv_int_tpair = interior_trace_pair(discr, cv)
+        cv_int_tpairs = interior_trace_pairs(discr, cv)
         boundaries = [BTAG_ALL]
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
-                                  cv_int_tpair, boundaries)
+                                  cv_int_tpairs, boundaries)
         from mirgecom.operators import grad_operator
         from grudge.dof_desc import as_dofdesc
         dd_vol = as_dofdesc("vol")
