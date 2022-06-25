@@ -1,7 +1,7 @@
 """:mod:`mirgecom.fluid` provides common utilities for fluid simulation.
 
-State Vector Handling
-^^^^^^^^^^^^^^^^^^^^^
+Conserved Quantities Handling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: ConservedVars
 .. autofunction:: split_conserved
@@ -11,7 +11,6 @@ State Vector Handling
 Helper Functions
 ^^^^^^^^^^^^^^^^
 
-.. autofunction:: compute_wavespeed
 .. autofunction:: velocity_gradient
 .. autofunction:: species_mass_fraction_gradient
 """
@@ -45,12 +44,14 @@ from dataclasses import dataclass, fields
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
+    get_container_context_recursively
 )
 
 
 @with_container_arithmetic(bcast_obj_array=False,
                            bcast_container_types=(DOFArray, np.ndarray),
                            matmul=True,
+                           _cls_has_array_context_attr=True,
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
@@ -89,14 +90,14 @@ class ConservedVars:
 
     .. attribute:: momentum
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(ndim,)``
+        Object array (:class:`numpy.ndarray`) with shape ``(ndim,)``
         of :class:`~meshmode.dof_array.DOFArray` , or an object array with shape
         ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
         to the ndim equations of momentum conservation.
 
     .. attribute:: species_mass
 
-        Object array (:class:`~numpy.ndarray`) with shape ``(nspecies,)``
+        Object array (:class:`numpy.ndarray`) with shape ``(nspecies,)``
         of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
         ``(nspecies, ndim)`` respectively for scalar or vector quantities
         corresponding to the `nspecies` species mass conservation equations.
@@ -231,7 +232,7 @@ class ConservedVars:
     @property
     def array_context(self):
         """Return an array context for the :class:`ConservedVars` object."""
-        return self.mass.array_context
+        return get_container_context_recursively(self.mass)
 
     @property
     def dim(self):
@@ -242,6 +243,16 @@ class ConservedVars:
     def velocity(self):
         """Return the fluid velocity = momentum / mass."""
         return self.momentum / self.mass
+
+    @property
+    def speed(self):
+        """Return the fluid velocity = momentum / mass."""
+        return self.array_context.np.sqrt(np.dot(self.velocity, self.velocity))
+
+    @property
+    def nspecies(self):
+        """Return the number of mixture species."""
+        return len(self.species_mass)
 
     @property
     def species_mass_fractions(self):
@@ -351,7 +362,7 @@ def make_conserved(dim, mass=None, energy=None, momentum=None, species_mass=None
     )
 
 
-def velocity_gradient(discr, cv, grad_cv):
+def velocity_gradient(cv, grad_cv):
     r"""
     Compute the gradient of fluid velocity.
 
@@ -378,8 +389,6 @@ def velocity_gradient(discr, cv, grad_cv):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
     cv: ConservedVars
         the fluid conserved variables
     grad_cv: ConservedVars
@@ -398,7 +407,7 @@ def velocity_gradient(discr, cv, grad_cv):
     return (grad_cv.momentum - np.outer(cv.velocity, grad_cv.mass))/cv.mass
 
 
-def species_mass_fraction_gradient(discr, cv, grad_cv):
+def species_mass_fraction_gradient(cv, grad_cv):
     r"""
     Compute the gradient of species mass fractions.
 
@@ -413,8 +422,6 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
-        the discretization to use
     cv: ConservedVars
         the fluid conserved variables
     grad_cv: ConservedVars
@@ -426,21 +433,5 @@ def species_mass_fraction_gradient(discr, cv, grad_cv):
         object array of :class:`~meshmode.dof_array.DOFArray`
         representing $\partial_j{Y}_{\alpha}$.
     """
-    y = cv.species_mass / cv.mass
-    return (grad_cv.species_mass - np.outer(y, grad_cv.mass))/cv.mass
-
-
-def compute_wavespeed(eos, cv: ConservedVars):
-    r"""Return the wavespeed in the flow.
-
-    The wavespeed is calculated as:
-
-    .. math::
-
-        s_w = \|\mathbf{v}\| + c,
-
-    where $\mathbf{v}$ is the flow velocity and c is the speed of sound in the fluid.
-    """
-    actx = cv.array_context
-    v = cv.velocity
-    return actx.np.sqrt(np.dot(v, v)) + eos.sound_speed(cv)
+    return (grad_cv.species_mass
+            - np.outer(cv.species_mass_fractions, grad_cv.mass))/cv.mass

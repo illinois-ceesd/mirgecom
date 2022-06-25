@@ -28,17 +28,14 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
-
-from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
 from arraycontext import thaw, freeze
-
-from mirgecom.profiling import PyOpenCLProfilingArrayContext  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
+
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
@@ -52,16 +49,16 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_device_memory_usage)
 
 
-def bump(actx, discr, t=0):
+def bump(actx, nodes, t=0):
     """Create a bump."""
-    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
+    dim = len(nodes)
+    source_center = np.array([0.2, 0.35, 0.1])[:dim]
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
-        for i in range(discr.dim)
+        for i in range(dim)
         ])
 
     return (
@@ -72,8 +69,8 @@ def bump(actx, discr, t=0):
 
 
 @mpi_entry_point
-def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=None,
-         use_profiling=False, use_logmgr=False, actx_class=PyOpenCLArrayContext):
+def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+         restart_step=None, use_profiling=False, use_logmgr=False, lazy=False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -88,13 +85,16 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            logmgr=logmgr)
     else:
         queue = cl.CommandQueue(cl_ctx)
-        actx = actx_class(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    else:
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     if restart_step is None:
 
@@ -132,16 +132,17 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, local_mesh, order=order,
-                                  mpi_communicator=comm)
+    discr = create_discretization_collection(
+        actx, local_mesh, order=order, mpi_communicator=comm
+    )
+    nodes = thaw(discr.nodes(), actx)
 
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
-    dt = current_cfl * characteristic_lengthscales(actx, discr) / wave_speed
+    nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
 
-    from grudge.op import nodal_min
-    dt = nodal_min(discr, "vol", dt)
+    dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol", nodal_dt))[()]
 
     t_final = 1
 
@@ -150,8 +151,8 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         istep = 0
 
         fields = flat_obj_array(
-            bump(actx, discr),
-            [discr.zeros(actx) for i in range(discr.dim)]
+            bump(actx, nodes),
+            [discr.zeros(actx) for i in range(dim)]
             )
 
     else:
@@ -161,8 +162,9 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
         restart_fields = restart_data["fields"]
         old_order = restart_data["order"]
         if old_order != order:
-            old_discr = EagerDGDiscretization(actx, local_mesh, order=old_order,
-                                              mpi_communicator=comm)
+            old_discr = create_discretization_collection(
+                actx, local_mesh, order=old_order, mpi_communicator=comm
+            )
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
@@ -217,7 +219,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             )
 
         if istep % 10 == 0:
-            print(istep, t, discr.norm(fields[0]))
+            print(istep, t, actx.to_numpy(op.norm(discr, fields[0], 2)))
             vis.write_parallel_vtk_file(
                 comm,
                 "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
@@ -237,7 +239,7 @@ def main(snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl", restart_step=Non
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
-    final_soln = discr.norm(fields[0])
+    final_soln = actx.to_numpy(op.norm(discr, fields[0], 2))
     assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
 
@@ -252,10 +254,11 @@ if __name__ == "__main__":
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     args = parser.parse_args()
+    lazy = args.lazy
 
-    main(use_profiling=use_profiling, use_logmgr=use_logging,
-         actx_class=PytatoPyOpenCLArrayContext if args.lazy
-         else PyOpenCLArrayContext)
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
+    main(actx_class, use_profiling=use_profiling, use_logmgr=use_logging, lazy=lazy)
 
 # vim: foldmethod=marker

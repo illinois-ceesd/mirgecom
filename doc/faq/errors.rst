@@ -24,7 +24,7 @@ This can be caused by multiple issues:
 - The ``pocl`` package is not installed. You can install it with ``$ conda install pocl``.
   Consider installing ``pocl-cuda`` as well on Linux systems with Nvidia GPUs.
 - The OpenCL loader cannot find the system OpenCL drivers. You can add
-  support for the system CL platforms by installing the ``ocl-icd-system`` (on Linux) or ``khronos-opencl-icd-loader`` (on MacOS) package with ``conda``.
+  support for the system CL platforms by installing the ``ocl-icd-system`` (on Linux) or ``ocl_icd_wrapper_apple`` (on MacOS) package with ``conda``.
 - The loader is unable to load the platform for other reasons. You can further
   debug such an issue by running ``$ export OCL_ICD_DEBUG=7`` before starting
   mirgecom, which will give more output about what the loader is doing.
@@ -54,3 +54,17 @@ This can be caused by multiple issues:
   This error occurs because pyopencl was built by source with an incompatible
   gcc version. Load a newer gcc module (``$ ml load gcc/8.3.1`` should work),
   and recompile pyopencl.
+
+
+What does ``clEnqueueNDRangeKernel failed: OUT_OF_RESOURCES`` mean?
+-------------------------------------------------------------------
+
+This error message indicates that there is not enough memory available
+to run the simulation::
+
+     File "<generated code for 'invoke__pt_kernel_loopy_kernel'>", line 996, in invoke__pt_kernel_loopy_kernel
+     File "<generated code for 'invoke__pt_kernel_loopy_kernel'>", line 62, in _lpy_host__pt_kernel
+   pyopencl._cl.RuntimeError: clEnqueueNDRangeKernel failed: OUT_OF_RESOURCES
+
+
+Try running on more nodes and/or devices.

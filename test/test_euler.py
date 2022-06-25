@@ -38,28 +38,35 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import interior_trace_pair
-from grudge.symbolic.primitives import TracePair
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
 from mirgecom.boundary import (
-    PrescribedInviscidBoundary,
+    PrescribedFluidBoundary,
     DummyBoundary
 )
 from mirgecom.eos import IdealSingleGas
-from grudge.eager import EagerDGDiscretization
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
+import grudge.op as op
+from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
+
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
+from mirgecom.simutil import max_component_norm
 
 from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import (
     get_inviscid_timestep,
-    inviscid_flux
+    inviscid_facial_flux_rusanov,
+    inviscid_facial_flux_hll
 )
 
 from mirgecom.integrators import rk4_step
@@ -67,329 +74,19 @@ from mirgecom.integrators import rk4_step
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.parametrize("nspecies", [0, 1, 10])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux(actx_factory, nspecies, dim):
-    """Identity test - directly check inviscid flux routine
-    :func:`mirgecom.inviscid.inviscid_flux` against the exact expected result.
-    This test is designed to fail if the flux routine is broken.
-
-    The expected inviscid flux is:
-      F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI, rhoY V>
-    """
-    actx = actx_factory()
-
-    nel_1d = 16
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-
-    #    for dim in [1, 2, 3]:
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
-    order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    eos = IdealSingleGas()
-
-    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
-
-    def rand():
-        from meshmode.dof_array import DOFArray
-        return DOFArray(
-            actx,
-            tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))
-                  for grp in discr.discr_from_dd("vol").groups)
-        )
-
-    mass = rand()
-    energy = rand()
-    mom = make_obj_array([rand() for _ in range(dim)])
-
-    mass_fractions = make_obj_array([rand() for _ in range(nspecies)])
-    species_mass = mass * mass_fractions
-
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
-                        species_mass=species_mass)
-
-    # {{{ create the expected result
-
-    p = eos.pressure(cv)
-    escale = (energy + p) / mass
-
-    numeq = dim + 2 + nspecies
-
-    expected_flux = np.zeros((numeq, dim), dtype=object)
-    expected_flux[0] = mom
-    expected_flux[1] = mom * escale
-
-    for i in range(dim):
-        for j in range(dim):
-            expected_flux[2+i, j] = (mom[i] * mom[j] / mass + (p if i == j else 0))
-
-    for i in range(nspecies):
-        expected_flux[dim+2+i] = mom * mass_fractions[i]
-
-    expected_flux = make_conserved(dim, q=expected_flux)
-
-    # }}}
-
-    flux = inviscid_flux(discr, eos, cv)
-    flux_resid = flux - expected_flux
-
-    for i in range(numeq, dim):
-        for j in range(dim):
-            assert (la.norm(flux_resid[i, j].get())) == 0.0
-
-
-@pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux_components(actx_factory, dim):
-    """Test uniform pressure case.
-
-    Checks that the Euler-internal inviscid flux routine
-    :func:`mirgecom.inviscid.inviscid_flux` returns exactly the expected result
-    with a constant pressure and no flow.
-
-    Expected inviscid flux is:
-      F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI>
-
-    Checks that only diagonal terms of the momentum flux:
-      [ rho(V.x.V) + pI ] are non-zero and return the correctly calculated p.
-    """
-    actx = actx_factory()
-
-    eos = IdealSingleGas()
-
-    p0 = 1.0
-
-    nel_1d = 4
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
-    order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    eos = IdealSingleGas()
-
-    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
-    # === this next block tests 1,2,3 dimensions,
-    # with single and multiple nodes/states. The
-    # purpose of this block is to ensure that when
-    # all components of V = 0, the flux recovers
-    # the expected values (and p0 within tolerance)
-    # === with V = 0, fixed P = p0
-    tolerance = 1e-15
-    nodes = thaw(actx, discr.nodes())
-    mass = discr.zeros(actx) + np.dot(nodes, nodes) + 1.0
-    mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
-    p_exact = discr.zeros(actx) + p0
-    energy = p_exact / 0.4 + 0.5 * np.dot(mom, mom) / mass
-    cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
-    p = eos.pressure(cv)
-    flux = inviscid_flux(discr, eos, cv)
-    assert discr.norm(p - p_exact, np.inf) < tolerance
-    logger.info(f"{dim}d flux = {flux}")
-
-    # for velocity zero, these components should be == zero
-    assert discr.norm(flux.mass, 2) == 0.0
-    assert discr.norm(flux.energy, 2) == 0.0
-
-    # The momentum diagonal should be p
-    # Off-diagonal should be identically 0
-    assert discr.norm(flux.momentum - p0*np.identity(dim), np.inf) < tolerance
-
-
-@pytest.mark.parametrize(("dim", "livedim"), [
-    (1, 0),
-    (2, 0),
-    (2, 1),
-    (3, 0),
-    (3, 1),
-    (3, 2),
-    ])
-def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
-    r"""Constant pressure, V != 0:
-
-    Checks that the flux terms are returned in the proper order by running
-    only 1 non-zero velocity component at-a-time.
-    """
-    actx = actx_factory()
-
-    eos = IdealSingleGas()
-
-    p0 = 1.0
-
-    nel_1d = 4
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
-    order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
-
-    tolerance = 1e-15
-    for livedim in range(dim):
-        mass = discr.zeros(actx) + 1.0 + np.dot(nodes, nodes)
-        mom = make_obj_array([discr.zeros(actx) for _ in range(dim)])
-        mom[livedim] = mass
-        p_exact = discr.zeros(actx) + p0
-        energy = (
-            p_exact / (eos.gamma() - 1.0)
-            + 0.5 * np.dot(mom, mom) / mass
-        )
-        cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
-        p = eos.pressure(cv)
-        assert discr.norm(p - p_exact, np.inf) < tolerance
-        flux = inviscid_flux(discr, eos, cv)
-        logger.info(f"{dim}d flux = {flux}")
-        vel_exact = mom / mass
-
-        # first two components should be nonzero in livedim only
-        assert discr.norm(flux.mass - mom, np.inf) == 0
-        eflux_exact = (energy + p_exact)*vel_exact
-        assert discr.norm(flux.energy - eflux_exact, np.inf) == 0
-
-        logger.info("Testing momentum")
-        xpmomflux = mass*np.outer(vel_exact, vel_exact) + p_exact*np.identity(dim)
-        assert discr.norm(flux.momentum - xpmomflux, np.inf) < tolerance
-
-
-@pytest.mark.parametrize("nspecies", [0, 10])
-@pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-def test_facial_flux(actx_factory, nspecies, order, dim):
-    """Check the flux across element faces by prescribing states (q)
-    with known fluxes. Only uniform states are tested currently - ensuring
-    that the Lax-Friedrichs flux terms which are proportional to jumps in
-    state data vanish.
-
-    Since the returned fluxes use state data which has been interpolated
-    to-and-from the element faces, this test is grid-dependent.
-    """
-    actx = actx_factory()
-
-    tolerance = 1e-14
-    p0 = 1.0
-
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    from pytools.convergence import EOCRecorder
-
-    eoc_rec0 = EOCRecorder()
-    eoc_rec1 = EOCRecorder()
-    for nel_1d in [4, 8, 12]:
-
-        mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-        )
-
-        logger.info(f"Number of elements: {mesh.nelements}")
-
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        zeros = discr.zeros(actx)
-        ones = zeros + 1.0
-
-        mass_input = discr.zeros(actx) + 1.0
-        energy_input = discr.zeros(actx) + 2.5
-        mom_input = flat_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim)]
-        )
-        mass_frac_input = flat_obj_array(
-            [ones / ((i + 1) * 10) for i in range(nspecies)]
-        )
-        species_mass_input = mass_input * mass_frac_input
-
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            species_mass=species_mass_input)
-
-        from mirgecom.inviscid import inviscid_facial_flux
-
-        # Check the boundary facial fluxes as called on an interior boundary
-        interior_face_flux = inviscid_facial_flux(
-            discr, eos=IdealSingleGas(), cv_tpair=interior_trace_pair(discr, cv))
-
-        def inf_norm(data):
-            if len(data) > 0:
-                return discr.norm(data, np.inf, dd="all_faces")
-            else:
-                return 0.0
-
-        assert inf_norm(interior_face_flux.mass) < tolerance
-        assert inf_norm(interior_face_flux.energy) < tolerance
-        assert inf_norm(interior_face_flux.species_mass) < tolerance
-
-        # The expected pressure is 1.0 (by design). And the flux diagonal is
-        # [rhov_x*v_x + p] (etc) since we have zero velocities it's just p.
-        #
-        # The off-diagonals are zero. We get a {ndim}-vector for each
-        # dimension, the flux for the x-component of momentum (for example) is:
-        # f_momx = < 1.0, 0 , 0> , then we return f_momx .dot. normal, which
-        # can introduce negative values.
-        #
-        # (Explanation courtesy of Mike Campbell,
-        # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
-
-        nhat = thaw(actx, discr.normal("int_faces"))
-        mom_flux_exact = discr.project("int_faces", "all_faces", p0*nhat)
-        print(f"{mom_flux_exact=}")
-        print(f"{interior_face_flux.momentum=}")
-        momerr = inf_norm(interior_face_flux.momentum - mom_flux_exact)
-        assert momerr < tolerance
-        eoc_rec0.add_data_point(1.0 / nel_1d, momerr)
-
-        # Check the boundary facial fluxes as called on a domain boundary
-        dir_mass = discr.project("vol", BTAG_ALL, mass_input)
-        dir_e = discr.project("vol", BTAG_ALL, energy_input)
-        dir_mom = discr.project("vol", BTAG_ALL, mom_input)
-        dir_mf = discr.project("vol", BTAG_ALL, species_mass_input)
-
-        dir_bc = make_conserved(dim, mass=dir_mass, energy=dir_e,
-                                momentum=dir_mom, species_mass=dir_mf)
-        dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
-                                  momentum=dir_mom, species_mass=dir_mf)
-        boundary_flux = inviscid_facial_flux(
-            discr, eos=IdealSingleGas(),
-            cv_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc)
-        )
-
-        assert inf_norm(boundary_flux.mass) < tolerance
-        assert inf_norm(boundary_flux.energy) < tolerance
-        assert inf_norm(boundary_flux.species_mass) < tolerance
-
-        nhat = thaw(actx, discr.normal(BTAG_ALL))
-        mom_flux_exact = discr.project(BTAG_ALL, "all_faces", p0*nhat)
-        momerr = inf_norm(boundary_flux.momentum - mom_flux_exact)
-        assert momerr < tolerance
-
-        eoc_rec1.add_data_point(1.0 / nel_1d, momerr)
-
-    logger.info(
-        f"standalone Errors:\n{eoc_rec0}"
-        f"boundary Errors:\n{eoc_rec1}"
-    )
-    assert (
-        eoc_rec0.order_estimate() >= order - 0.5
-        or eoc_rec0.max_error() < 1e-9
-    )
-    assert (
-        eoc_rec1.order_estimate() >= order - 0.5
-        or eoc_rec1.max_error() < 1e-9
-    )
-
-
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_uniform_rhs(actx_factory, nspecies, dim, order):
-    """Tests the inviscid rhs using a trivial constant/uniform state which
-    should yield rhs = 0 to FP.  The test is performed for 1, 2, and 3 dimensions.
-    """
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
+                     numerical_flux_func):
+    """Test the inviscid rhs using a trivial constant/uniform state.
 
+    This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
+    and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
+    """
     actx = actx_factory()
 
     tolerance = 1e-9
@@ -408,7 +105,14 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
         zeros = discr.zeros(actx)
         ones = zeros + 1.0
 
@@ -428,6 +132,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv, gas_model)
 
         expected_rhs = make_conserved(
             dim, q=make_obj_array([discr.zeros(actx)
@@ -435,8 +141,12 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, time=0.0)
+        inviscid_rhs = \
+            euler_operator(discr, state=fluid_state, gas_model=gas_model,
+                           boundaries=boundaries, time=0.0,
+                           quadrature_tag=quadrature_tag,
+                           inviscid_numerical_flux_func=numerical_flux_func)
+
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -456,14 +166,17 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
-        for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
-        for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+        def inf_norm(x):
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
-        err_max = discr.norm(rho_resid, np.inf)
+        assert inf_norm(rho_resid) < tolerance
+        assert inf_norm(rhoe_resid) < tolerance
+        for i in range(dim):
+            assert inf_norm(mom_resid[i]) < tolerance
+        for i in range(nspecies):
+            assert inf_norm(rhoy_resid[i]) < tolerance
+
+        err_max = inf_norm(rho_resid)
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
@@ -473,10 +186,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(cv, gas_model)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(discr, eos=IdealSingleGas(),
-                                      boundaries=boundaries, cv=cv, time=0.0)
+        inviscid_rhs = euler_operator(
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -484,15 +200,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
 
-        assert discr.norm(rho_resid, np.inf) < tolerance
-        assert discr.norm(rhoe_resid, np.inf) < tolerance
+        assert inf_norm(rho_resid) < tolerance
+        assert inf_norm(rhoe_resid) < tolerance
 
         for i in range(dim):
-            assert discr.norm(mom_resid[i], np.inf) < tolerance
+            assert inf_norm(mom_resid[i]) < tolerance
         for i in range(nspecies):
-            assert discr.norm(rhoy_resid[i], np.inf) < tolerance
+            assert inf_norm(rhoy_resid[i]) < tolerance
 
-        err_max = discr.norm(rho_resid, np.inf)
+        err_max = inf_norm(rho_resid)
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -511,12 +227,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_vortex_rhs(actx_factory, order):
-    """Tests the inviscid rhs using the non-trivial 2D isentropic vortex
-    case configured to yield rhs = 0. Checks several different orders and
-    refinement levels to check error behavior.
-    """
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_func):
+    """Test the inviscid rhs using the non-trivial 2D isentropic vortex.
 
+    The case is configured to yield rhs = 0. Checks several different orders
+    and refinement levels to check error behavior.
+    """
     actx = actx_factory()
 
     dim = 2
@@ -536,21 +255,39 @@ def test_vortex_rhs(actx_factory, order):
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
+        nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
         vortex_soln = vortex(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(vortex_soln, gas_model)
+
+        def _vortex_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=vortex)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries,
-            cv=vortex_soln, time=0.0)
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag)
 
-        err_max = discr.norm(inviscid_rhs.join(), np.inf)
+        err_max = max_component_norm(discr, inviscid_rhs, np.inf)
+
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -566,10 +303,15 @@ def test_vortex_rhs(actx_factory, order):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_lump_rhs(actx_factory, dim, order):
-    """Tests the inviscid rhs using the non-trivial 1, 2, and 3D mass lump
-    case against the analytic expressions of the RHS. Checks several different
-    orders and refinement levels to check error behavior.
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+def test_lump_rhs(actx_factory, dim, order, use_overintegration,
+                  numerical_flux_func):
+    """Test the inviscid rhs using the non-trivial mass lump case.
+
+    The case is tested against the analytic expressions of the RHS.
+    Checks several different orders and refinement levels to check error behavior.
     """
     actx = actx_factory()
 
@@ -591,24 +333,43 @@ def test_lump_rhs(actx_factory, dim, order):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
+        nodes = thaw(discr.nodes(), actx)
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
         velocity = np.zeros(shape=(dim,))
         lump = Lump(dim=dim, center=center, velocity=velocity)
         lump_soln = lump(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(lump_soln, gas_model)
+
+        def _lump_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
+                                    gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_lump_boundary)
         }
+
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
-            time=0.0
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
-        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
+        err_max = max_component_norm(discr, inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -629,10 +390,15 @@ def test_lump_rhs(actx_factory, dim, order):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
-def test_multilump_rhs(actx_factory, dim, order, v0):
-    """Tests the inviscid rhs using the non-trivial 1, 2, and 3D mass lump case
-    against the analytic expressions of the RHS. Checks several different orders
-    and refinement levels to check error behavior.
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
+                       numerical_flux_func):
+    """Test the Euler rhs using the non-trivial 1, 2, and 3D mass lump case.
+
+    The case is tested against the analytic expressions of the RHS. Checks several
+    different orders and refinement levels to check error behavior.
     """
     actx = actx_factory()
     nspecies = 10
@@ -643,7 +409,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
     eoc_rec = EOCRecorder()
 
-    for nel_1d in [4, 8, 16]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import (
             generate_regular_rect_mesh,
         )
@@ -654,8 +420,15 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
+        nodes = thaw(discr.nodes(), actx)
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -670,19 +443,31 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
                                   spec_y0s=spec_y0s, spec_amplitudes=spec_amplitudes)
 
         lump_soln = lump(nodes)
+        gas_model = GasModel(eos=IdealSingleGas())
+        fluid_state = make_fluid_state(lump_soln, gas_model)
+
+        def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=lump)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
         }
 
         inviscid_rhs = euler_operator(
-            discr, eos=IdealSingleGas(), boundaries=boundaries, cv=lump_soln,
-            time=0.0
+            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
-        err_max = discr.norm((inviscid_rhs-expected_rhs).join(), np.inf)
+
+        err_max = actx.to_numpy(
+            op.norm(discr, (inviscid_rhs-expected_rhs), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -701,11 +486,8 @@ def test_multilump_rhs(actx_factory, dim, order, v0):
     )
 
 
+# Basic timestepping loop for the Euler operator
 def _euler_flow_stepper(actx, parameters):
-    """
-    Implements a generic time stepping loop for testing an inviscid flow
-    using a spectral filter.
-    """
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     mesh = parameters["mesh"]
@@ -721,6 +503,8 @@ def _euler_flow_stepper(actx, parameters):
     dt = parameters["dt"]
     constantcfl = parameters["constantcfl"]
     nstepstatus = parameters["nstatus"]
+    use_overintegration = parameters["use_overintegration"]
+    numerical_flux_func = parameters["numerical_flux_func"]
 
     if t_final <= t:
         return(0.0)
@@ -729,11 +513,21 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order,
+                                             quadrature_order=2*order+1)
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
+
+    nodes = thaw(discr.nodes(), actx)
 
     cv = initializer(nodes)
-    sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+    gas_model = GasModel(eos=eos)
+    fluid_state = make_fluid_state(cv, gas_model)
+
+    sdt = cfl * get_inviscid_timestep(discr, fluid_state)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -751,7 +545,7 @@ def _euler_flow_stepper(actx, parameters):
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)
         expected_result = initializer(nodes, t=t)
-        result_resid = (state - expected_result).join()
+        result_resid = state - expected_result
         maxerr = [np.max(np.abs(result_resid[i].get())) for i in range(dim + 2)]
         mindv = [np.min(dvfld.get()) for dvfld in dv]
         maxdv = [np.max(dvfld.get()) for dvfld in dv]
@@ -777,7 +571,11 @@ def _euler_flow_stepper(actx, parameters):
         return maxerr
 
     def rhs(t, q):
-        return euler_operator(discr, eos=eos, boundaries=boundaries, cv=q, time=t)
+        fluid_state = make_fluid_state(q, gas_model)
+        return euler_operator(discr, fluid_state, boundaries=boundaries,
+                              gas_model=gas_model, time=t,
+                              inviscid_numerical_flux_func=numerical_flux_func,
+                              quadrature_tag=quadrature_tag)
 
     filter_order = 8
     eta = .5
@@ -806,21 +604,20 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-        cv = make_conserved(
-            dim, q=filter_modally(discr, "vol", cutoff, frfunc, cv.join())
-        )
+        cv = filter_modally(discr, "vol", cutoff, frfunc, cv)
+        fluid_state = make_fluid_state(cv, gas_model)
 
         t += dt
         istep += 1
 
-        sdt = cfl * get_inviscid_timestep(discr, eos=eos, cv=cv)
+        sdt = cfl * get_inviscid_timestep(discr, fluid_state)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, time=t)
-        maxerr = discr.norm((cv - expected_result).join(), np.inf)
+        maxerr = max_component_norm(discr, cv-expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
@@ -830,13 +627,16 @@ def _euler_flow_stepper(actx, parameters):
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_isentropic_vortex(actx_factory, order):
-    """Advance the 2D isentropic vortex case in time with non-zero velocities
-    using an RK4 timestepping scheme. Check the advanced field values against
-    the exact/analytic expressions.
+@pytest.mark.parametrize("use_overintegration", [True, False])
+@pytest.mark.parametrize("numerical_flux_func",
+                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+def test_isentropic_vortex(actx_factory, order, use_overintegration,
+                           numerical_flux_func):
+    """Advance the 2D isentropic vortex case in time with non-zero velocities.
 
-    This tests all parts of the Euler module working together, with results
-    converging at the expected rates vs. the order.
+    This test uses an RK4 timestepping scheme, and checks the advanced field values
+    against the exact/analytic expressions. This tests all parts of the Euler module
+    working together, with results converging at the expected rates vs. the order.
     """
     actx = actx_factory()
 
@@ -864,16 +664,26 @@ def test_isentropic_vortex(actx_factory, order):
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
+
+        def _vortex_boundary(discr, btag, state_minus, gas_model, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = discr.discr_from_dd(btag)
+            nodes = thaw(bnd_discr.nodes(), actx)
+            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
+
         boundaries = {
-            BTAG_ALL: PrescribedInviscidBoundary(fluid_solution_func=initializer)
+            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
         }
+
         eos = IdealSingleGas()
         t = 0
         flowparams = {"dim": dim, "dt": dt, "order": order, "time": t,
                       "boundaries": boundaries, "initializer": initializer,
                       "eos": eos, "casename": casename, "mesh": mesh,
                       "tfinal": t_final, "exittol": exittol, "cfl": cfl,
-                      "constantcfl": False, "nstatus": 0}
+                      "constantcfl": False, "nstatus": 0,
+                      "use_overintegration": use_overintegration,
+                      "numerical_flux_func": numerical_flux_func}
         maxerr = _euler_flow_stepper(actx, flowparams)
         eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
 

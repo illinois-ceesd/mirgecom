@@ -2,6 +2,7 @@ islpy
 mpi4py
 numpy
 pytest
+pytest-cov
 pyvisfile
 pymetis
 importlib-resources

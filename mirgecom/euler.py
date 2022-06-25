@@ -53,25 +53,28 @@ THE SOFTWARE.
 """
 
 import numpy as np  # noqa
+
+from grudge.dof_desc import DOFDesc
+
+from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.inviscid import (
     inviscid_flux,
-    inviscid_facial_flux
+    inviscid_facial_flux_rusanov,
+    inviscid_flux_on_element_boundary
 )
-from grudge.eager import (
-    interior_trace_pair,
-    cross_rank_trace_pairs
-)
-from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
+
 from mirgecom.operators import div_operator
 
 
-def euler_operator(discr, eos, boundaries, cv, time=0.0):
+def euler_operator(discr, state, gas_model, boundaries, time=0.0,
+                   inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                   quadrature_tag=None, operator_states_quad=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
     -------
-    numpy.ndarray
+    :class:`~mirgecom.fluid.ConservedVars`
+
         The right-hand-side of the Euler flow equations:
 
         .. math::
@@ -81,47 +84,51 @@ def euler_operator(discr, eos, boundaries, cv, time=0.0):
 
     Parameters
     ----------
-    cv: :class:`mirgecom.fluid.ConservedVars`
-        Fluid conserved state object with the conserved variables.
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state, and dependent
+        quantities.
 
     boundaries
+
         Dictionary of boundary functions, one for each valid btag
 
     time
+
         Time
 
-    eos: mirgecom.eos.GasEOS
-        Implementing the pressure and temperature functions for
-        returning pressure and temperature as a function of the state q.
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
 
-    Returns
-    -------
-    numpy.ndarray
-        Agglomerated object array of DOF arrays representing the RHS of the Euler
-        flow equations.
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    quadrature_tag
+
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+        The default value is *None*.
     """
-    inviscid_flux_vol = inviscid_flux(discr, eos, cv)
-    inviscid_flux_bnd = (
-        inviscid_facial_flux(discr, eos=eos, cv_tpair=interior_trace_pair(discr, cv))
-        + sum(inviscid_facial_flux(
-            discr, eos=eos, cv_tpair=TracePair(
-                part_tpair.dd, interior=make_conserved(discr.dim, q=part_tpair.int),
-                exterior=make_conserved(discr.dim, q=part_tpair.ext)))
-              for part_tpair in cross_rank_trace_pairs(discr, cv.join()))
-        + sum(boundaries[btag].inviscid_boundary_flux(discr, btag=btag, cv=cv,
-                                                      eos=eos, time=time)
-              for btag in boundaries)
-    )
-    q = -div_operator(discr, inviscid_flux_vol.join(), inviscid_flux_bnd.join())
-    return make_conserved(discr.dim, q=q)
+    dd_quad_vol = DOFDesc("vol", quadrature_tag)
+    dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
 
+    if operator_states_quad is None:
+        operator_states_quad = make_operator_fluid_states(discr, state, gas_model,
+                                                          boundaries, quadrature_tag)
 
-def inviscid_operator(discr, eos, boundaries, q, t=0.0):
-    """Interface :function:`euler_operator` with backwards-compatible API."""
-    from warnings import warn
-    warn("Do not call inviscid_operator; it is now called euler_operator. This"
-         "function will disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return euler_operator(discr, eos, boundaries, make_conserved(discr.dim, q=q), t)
+    volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
+        operator_states_quad
+
+    # Compute volume contributions
+    inviscid_flux_vol = inviscid_flux(volume_state_quad)
+
+    # Compute interface contributions
+    inviscid_flux_bnd = inviscid_flux_on_element_boundary(
+        discr, gas_model, boundaries, interior_state_pairs_quad,
+        domain_boundary_states_quad, quadrature_tag=quadrature_tag,
+        numerical_flux_func=inviscid_numerical_flux_func, time=time)
+
+    return -div_operator(discr, dd_quad_vol, dd_quad_faces,
+                         inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless

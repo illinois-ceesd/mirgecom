@@ -90,6 +90,7 @@ intersphinx_mapping = {
     "https://pyrometheus.readthedocs.io/en/latest": None,
     "https://logpyle.readthedocs.io/en/latest/": None,
     "https://psutil.readthedocs.io/en/latest/": None,
+    "https://mpi4py.readthedocs.io/en/stable/": None,
     }
 
 autoclass_content = "class"

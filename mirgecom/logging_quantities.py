@@ -42,12 +42,15 @@ __doc__ = """
 from logpyle import (LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
+from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.discretization import Discretization
 import pyopencl as cl
 
 from typing import Optional, Callable
 import numpy as np
+
+import grudge.op as oper
 
 
 def initialize_logmgr(enable_logmgr: bool,
@@ -101,18 +104,21 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
       extract_vars_for_logging, units_for_logging):
     """Add default discretization quantities to the logmgr."""
-    for op in ["min", "max", "L2_norm"]:
+    for reduction_op in ["min", "max", "L2_norm"]:
         for quantity in ["pressure", "temperature"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging))
 
         for quantity in ["mass", "energy"]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                discr, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
+                discr, "momentum", reduction_op, extract_vars_for_logging,
+                units_for_logging,
                 axis=d))
 
 
@@ -256,13 +262,13 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._discr_reduction = partial(self.discr.nodal_min, "vol")
+            self._discr_reduction = partial(oper.nodal_min, self.discr, "vol")
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(self.discr.nodal_max, "vol")
+            self._discr_reduction = partial(oper.nodal_max, self.discr, "vol")
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(self.discr.norm, p=2)
+            self._discr_reduction = partial(oper.norm, self.discr, p=2)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
@@ -279,10 +285,12 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
+        actx = get_container_context_recursively(quantity)
+
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return self._discr_reduction(quantity)
+        return actx.to_numpy(self._discr_reduction(quantity))[()]
 
 # }}}
 

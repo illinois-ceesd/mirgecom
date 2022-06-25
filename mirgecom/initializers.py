@@ -5,12 +5,15 @@ Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
+.. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
 .. automethod: make_pulse
 .. autoclass:: MixtureInitializer
+.. autoclass:: PlanarPoiseuille
+.. autoclass:: ShearFlow
 """
 
 __copyright__ = """
@@ -39,7 +42,7 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
+from arraycontext import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
@@ -265,6 +268,123 @@ class SodShock1D:
                               momentum=mom)
 
 
+class DoubleMachReflection:
+    r"""Implement the double shock reflection problem.
+
+    The double shock reflection solution is crafted after [Woodward_1984]_
+    and is defined by:
+
+    .. math::
+
+        {\rho}(x < x_s(y,t)) &= \gamma \rho_j\\
+        {\rho}(x > x_s(y,t)) &= \gamma\\
+        {\rho}{V_x}(x < x_s(y,t)) &= u_p \cos(\pi/6)\\
+        {\rho}{V_x}(x > x_s(y,t)) &= 0\\
+        {\rho}{V_y}(x > x_s(y,t)) &= u_p \sin(\pi/6)\\
+        {\rho}{V_y}(x > x_s(y,t)) &= 0\\
+        {\rho}E(x < x_s(y,t)) &= (\gamma-1)p_j\\
+        {\rho}E(x > x_s(y,t)) &= (\gamma-1),
+
+    where the shock position is given,
+
+    .. math::
+
+        x_s = x_0 + y/\sqrt{3} + 2 u_s t/\sqrt{3}
+
+    and the normal shock jump relations are
+
+    .. math::
+
+        \rho_j &= \frac{(\gamma + 1) u_s^2}{(\gamma-1) u_s^2 + 2} \\
+        p_j &= \frac{2 \gamma u_s^2 - (\gamma - 1)}{\gamma+1} \\
+        u_p &= 2 \frac{u_s^2-1}{(\gamma+1) u_s}
+
+    The initial shock location is given by $x_0$ and $u_s$ is the shock speed.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, shock_location=1.0/6.0, shock_speed=4.0
+    ):
+        """Initialize double shock reflection parameters.
+
+        Parameters
+        ----------
+        shock_location: float
+           initial location of shock
+        shock_speed: float
+           shock speed, Mach number
+        """
+        self._shock_location = shock_location
+        self._shock_speed = shock_speed
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        r"""
+        Create double mach reflection solution at locations *x_vec*.
+
+        At times $t > 0$, calls to this routine create an advanced solution
+        under the assumption of constant normal shock speed *shock_speed*.
+        The advanced solution *is not* the exact solution, but is appropriate
+        for use as a boundary solution on the top and upstream (left)
+        side of the domain.
+
+        Parameters
+        ----------
+        time: float
+            Time at which to compute the solution
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
+        t = time
+        # Fail if numdim is other than 2
+        if(len(x_vec)) != 2:
+            raise ValueError("Case only defined for 2 dimensions")
+        if eos is None:
+            eos = IdealSingleGas()
+
+        gm1 = eos.gamma() - 1.0
+        gp1 = eos.gamma() + 1.0
+        gmn1 = 1.0 / gm1
+        x_rel = x_vec[0]
+        y_rel = x_vec[1]
+        actx = x_rel.array_context
+
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
+
+        rhol = eos.gamma() * rho_jump
+        rhor = eos.gamma()
+        ul = up * np.cos(np.pi/6.0)
+        ur = 0.0
+        vl = - up * np.sin(np.pi/6.0)
+        vr = 0.0
+        rhoel = gmn1 * p_jump
+        rhoer = gmn1 * 1.0
+
+        xinter = (self._shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*self._shock_speed*t/np.sqrt(3.0))
+        sigma = 0.05
+        xtanh = 1.0/sigma*(x_rel-xinter)
+        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
+                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
+        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
+        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
+
+        vel = make_obj_array([u, v])
+        mom = mass * vel
+        energy = rhoe + .5*mass*np.dot(vel, vel)
+
+        return make_conserved(dim=2, mass=mass, energy=energy, momentum=mom)
+
+
 class Lump:
     r"""Solution initializer for N-dimensional Gaussian lump of mass.
 
@@ -390,7 +510,7 @@ class Lump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -569,7 +689,7 @@ class MulticomponentLump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -758,7 +878,7 @@ class Uniform:
             Time at which RHS is desired (unused)
         """
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = thaw(discr.nodes(), actx)
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass
@@ -850,3 +970,222 @@ class MixtureInitializer:
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
+
+
+class PlanarPoiseuille:
+    r"""Initializer for the planar Poiseuille case.
+
+    The 2D planar Poiseuille case is defined as a viscous flow between two
+    stationary parallel sides with a uniform pressure drop prescribed
+    as *p_hi* at the inlet and *p_low* at the outlet. See the figure below:
+
+    .. figure:: ../figures/poiseuille.png
+        :scale: 50 %
+        :alt: Poiseuille domain illustration
+
+        Illustration of the Poiseuille case setup
+
+    The exact Poiseuille solution is defined by the following:
+    $$
+    P(x) &= P_{\text{hi}} + P'x\\
+    v_x &= \frac{-P'}{2\mu}y(h-y), v_y = 0\\
+    \rho &= \rho_0\\
+    \rho{E} &= \frac{P(x)}{(\gamma-1)} + \frac{\rho}{2}(\mathbf{v}\cdot\mathbf{v})
+    $$
+
+    Here, $P'$ is the constant slope of the linear pressure gradient from the inlet
+    to the outlet and is calculated as:
+    $$
+    P' = \frac{(P_{\text{low}}-P_{\text{hi}})}{\text{length}}
+    $$
+    $v_x$, and $v_y$ are respectively the x and y components of the velocity,
+    $\mathbf{v}$, and $\rho_0$ is the supplied constant density of the fluid.
+    """
+
+    def __init__(self, p_hi=100100., p_low=100000., mu=1.0, height=.02, length=.1,
+                 density=1.0):
+        """Initialize the Poiseuille solution initializer.
+
+        Parameters
+        ----------
+        p_hi: float
+            Pressure at the inlet (default=100100)
+        p_low: float
+            Pressure at the outlet (default=100000)
+        mu: float
+            Fluid viscosity, (default = 1.0)
+        height: float
+            Height of the domain, (default = .02)
+        length: float
+            Length of the domain, (default = .1)
+        density: float
+            Constant density of the fluid, (default=1.0)
+        """
+        self.length = length
+        self.height = height
+        self.dpdx = (p_low - p_hi)/length
+        self.rho = density
+        self.mu = mu
+        self.p_hi = p_hi
+
+    def __call__(self, x_vec, eos, cv=None, **kwargs):
+        r"""Create the Poiseuille solution.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Array of :class:`~meshmode.dof_array.DOFArray` representing the 2D
+            coordinates of the points at which the solution is desired
+        eos: :class:`~mirgecom.eos.GasEOS`
+            A gas equation of state
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Optional fluid state to supply fluid density and velocity if needed.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            The Poiseuille solution state
+        """
+        dim_mismatch = len(x_vec) != 2
+        if cv is not None:
+            dim_mismatch = dim_mismatch or cv.dim != 2
+        if dim_mismatch:
+            raise ValueError("PlanarPoiseuille initializer is 2D only.")
+
+        x = x_vec[0]
+        y = x_vec[1]
+        p_x = self.p_hi + self.dpdx*x
+
+        if cv is not None:
+            mass = cv.mass
+            velocity = cv.velocity
+        else:
+            mass = self.rho*x/x
+            u_x = -self.dpdx*y*(self.height - y)/(2*self.mu)
+            velocity = make_obj_array([u_x, 0*x])
+
+        ke = .5*np.dot(velocity, velocity)*mass
+        rho_e = p_x/(eos.gamma(cv)-1) + ke
+        return make_conserved(2, mass=mass, energy=rho_e,
+                              momentum=mass*velocity)
+
+    def exact_grad(self, x_vec, eos, cv_exact):
+        """Return the exact gradient of the Poiseuille state."""
+        y = x_vec[1]
+        x = x_vec[0]
+        # FIXME: Symbolic infrastructure could perhaps do this better
+        ones = x / x
+        mass = cv_exact.mass
+        velocity = cv_exact.velocity
+        dvxdy = -self.dpdx*(self.height-2*y)/(2*self.mu)
+        dvdy = make_obj_array([dvxdy, 0*x])
+        dedx = self.dpdx/(eos.gamma(cv_exact)-1)*ones
+        dedy = mass*np.dot(velocity, dvdy)
+        dmass = make_obj_array([0*x, 0*x])
+        denergy = make_obj_array([dedx, dedy])
+        dvx = make_obj_array([0*x, dvxdy])
+        dvy = make_obj_array([0*x, 0*x])
+        dv = np.stack((dvx, dvy))
+        dmom = mass*dv
+        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
+        return make_conserved(2, mass=dmass, energy=denergy,
+                              momentum=dmom, species_mass=species_mass)
+
+
+class ShearFlow:
+    r"""Shear flow exact Navier-Stokes solution from [Hesthaven_2008]_.
+
+    The shear flow solution is described in Section 7.5.3 of
+    [Hesthaven_2008]_. It is generalized to major-axis-aligned
+    3-dimensional cases here and defined as:
+
+    .. math::
+
+        \rho &= 1\\
+        v_\parallel &= r_{t}^2\\
+        \mathbf{v}_\bot &= 0\\
+        E &= \frac{2\mu{r_\parallel} + 10}{\gamma-1}
+        + \frac{r_{t}^4}{2}\\
+        \gamma &= \frac{3}{2}, \mu=0.01, \kappa=0
+
+    with fluid total energy $E$, viscosity $\mu$, and specific heat ratio
+    $\gamma$. The flow velocity is $\mathbf{v}$ with flow speed and direction
+    $v_\parallel$, and $r_\parallel$, respectively. The flow velocity in
+    all directions other than $r_\parallel$, is denoted as $\mathbf{v}_\bot$.
+    One major-axis-aligned flow-transverse direction, $r_t$ is set by the
+    user. This shear flow solution is an exact solution to the fully
+    compressible Navier-Stokes equations when neglecting thermal terms;
+    i.e., when thermal conductivity $\kappa=0$.  This solution requires a 2d
+    or 3d domain.
+    """
+
+    def __init__(self, dim=2, mu=.01, gamma=3./2., density=1.,
+                 flow_dir=0, trans_dir=1):
+        r"""Init the solution object.
+
+        Parameters
+        ----------
+        dim
+            Number of dimensions, 2 and 3 are valid
+        mu: float
+            Fluid viscosity
+        gamma: float
+            Ratio of specific heats for the fluid
+        density: float
+            Fluid mass density, $\rho$
+        flow_dir
+            Flow direction, $r_\parallel$, for the shear flow, 0=x, 1=y,
+            2=z. Defaults to x.
+        trans_dir
+            Transverse direction, $r_t$, for setting up the shear flow,
+            must be other than flow direction, $r_\parallel$, defaults to y.
+        """
+        if (flow_dir == trans_dir or trans_dir > (dim-1) or flow_dir > (dim-1)
+                or flow_dir < 0 or trans_dir < 0):
+            raise ValueError(f"Flow and transverse directions must be < {dim=}"
+                             f" and > 0.")
+
+        self._dim = dim
+        self._mu = mu
+        self._gamma = gamma
+        self._rho = density
+        self._flowdir = flow_dir
+        self._transdir = trans_dir
+
+    def __call__(self, x, **kwargs):
+        """Return shear flow solution at points *x*.
+
+        Parameters
+        ----------
+        x: numpy.ndarray
+            Point coordinates at which the shear flow solution is desired.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            A CV object with the shear flow solution
+        """
+        vel = 0.*x
+        flow_dir = self._flowdir
+        trans_dir = self._transdir
+
+        zeros = 0.*x[0]
+        ones = zeros + 1.
+
+        for idim in range(self._dim):
+            if idim == flow_dir:
+                vel[idim] = x[trans_dir]**2
+            else:
+                vel[idim] = 1.*zeros
+
+        density = self._rho * ones
+        mom = self._rho * vel
+
+        pressure = 2*self._mu*x[flow_dir] + 10
+
+        ie = pressure/(self._gamma - 1.)
+        ke = self._rho * (x[trans_dir]**4.)/2.
+        total_energy = ie + ke
+
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=total_energy)

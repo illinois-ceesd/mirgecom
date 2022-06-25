@@ -25,7 +25,7 @@ jobs:
             source myenv/bin/activate
             python -m pip install wheel
             python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
-            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py && echo "Flake8 found no errors."
+            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
     pylint:
         name: Pylint
@@ -44,8 +44,6 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            python -m pip install wheel
-            python -m pip install pylint pyyaml
             ./run-pylint.sh
 
     pydocstyle:
@@ -79,11 +77,15 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
+            python -m pip install pytest
+            python -m pytest --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples
-        runs-on: ubuntu-latest
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
@@ -95,7 +97,9 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            conda install vtk  # needed for the accuracy comparison
             export XDG_CACHE_HOME=/tmp
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             cd examples && ./test_lazy_accuracy.sh
 
         - name: Run examples
@@ -103,8 +107,9 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             examples/run_examples.sh ./examples
- 
+
     doc:
         name: Documentation
         runs-on: ubuntu-latest
@@ -122,7 +127,7 @@ jobs:
 
             sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
-            conda install sphinx graphviz
+            conda install sphinx graphviz 'docutils>=0.16'
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
@@ -154,7 +159,7 @@ jobs:
             cd mirgecom/examples
             python -m mpi4py ./pulse-mpi.py
 
-    y1: 
+    y1:
         name: Production testing
         runs-on: ${{ matrix.os }}
         strategy:
@@ -163,22 +168,24 @@ jobs:
 
         steps:
         - uses: actions/checkout@v2
+          with:
+            fetch-depth: '0'
         - name: Prepare production environment
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
+            MIRGEDIR=$(pwd)
+            cat .ci-support/production-testing-env.sh
+            . .ci-support/production-testing-env.sh
             cd ..
             git clone https://github.com/illinois-ceesd/emirge emirge.y1
             cd emirge.y1
-            . ../mirgecom/.ci-support/production-install.sh ../mirgecom/.ci-support/production-testing-env.sh
+            . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
+            source ${MIRGEDIR}/../config/activate_env.sh
+            . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
-            cd ..
-            source emirge.y1/config/activate_env.sh
-            . mirgecom/.ci-support/production-driver-install.sh mirgecom/.ci-support/production-testing-env.sh
-            for production_driver in $(ls | grep "production_driver_");
-            do
-               cd "$production_driver"/smoke_test
-               python -m mpi4py ./driver.py -i run_params.yaml
-               cd ../../
-            done
+            . .ci-support/production-testing-env.sh
+            source ../config/activate_env.sh
+            . .ci-support/production-drivers-install.sh .
+            . .ci-support/production-drivers-run.sh .
