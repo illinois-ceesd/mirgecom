@@ -6,13 +6,6 @@ import numpy as np
 
 def compare_files_vtu(first_file, second_file, file_type, tolerance=1e-12):
     import vtk
-    import os.path
-
-    # check for valid file path
-    if not os.path.exists(first_file):
-    	raise ValueError(f"Fidelity test failed: {first_file} not found")
-    if not os.path.exists(second_file):
-    	raise ValueError(f"Fidelity test failed: {second_file} not found")
 
     # read files:
     if file_type == "vtu":
@@ -333,6 +326,7 @@ def compare_files_hdf5(first_file, second_file, tolerance=1e-12):
 if __name__ == "__main__":
     import argparse
     import os
+    import os.path
 
     # read in file and comparison info from command line
     parser = argparse.ArgumentParser(
@@ -343,6 +337,12 @@ if __name__ == "__main__":
 
     first_file = args.files[0]
     second_file = args.files[1]
+
+    # check for valid file path
+    if not os.path.exists(first_file):
+        raise ValueError(f"Fidelity test failed: {first_file} not found")
+    if not os.path.exists(second_file):
+        raise ValueError(f"Fidelity test failed: {second_file} not found")
 
     file_split = os.path.splitext(first_file)[1]
     file_type = file_split[1:]  # remove dot
