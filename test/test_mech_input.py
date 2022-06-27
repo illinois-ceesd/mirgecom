@@ -23,9 +23,17 @@ THE SOFTWARE.
 """
 
 import logging
-from mirgecom.mechanisms import get_mechanism_cti
+from mirgecom.mechanisms import get_mechanism_input, get_mechanism_cti
 
 logger = logging.getLogger(__name__)
+
+
+def test_yaml_mechanism_input_reader():
+    """Quick test of CTI reader."""
+    test_input = get_mechanism_input("uiuc")
+    first_line = test_input.partition("\n")[0].strip()
+
+    assert first_line == "generator: cti2yaml"
 
 
 def test_cti_reader():

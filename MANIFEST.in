@@ -1,1 +1,2 @@
+include mirgecom/mechanisms/*.yaml
 include mirgecom/mechanisms/*.cti
