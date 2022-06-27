@@ -326,7 +326,6 @@ def compare_files_hdf5(first_file, second_file, tolerance=1e-12):
 if __name__ == "__main__":
     import argparse
     import os
-    import os.path
 
     # read in file and comparison info from command line
     parser = argparse.ArgumentParser(
