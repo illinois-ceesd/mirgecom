@@ -176,7 +176,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     if mpi_communicator is None:  # None is OK for serial writes!
         mpi_communicator = discr.mpi_communicator
         if mpi_communicator is not None:  # It's *not* OK to get comm from discr
-            from warning import warn
+            from warnings import warn
             warn("Using `write_visfile` in parallel without an MPI communicator is "
                  "deprecated and will stop working in Fall 2022. For parallel "
                  "writes, specify an MPI communicator with the `mpi_communicator` "
