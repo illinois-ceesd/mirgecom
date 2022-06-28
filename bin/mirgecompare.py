@@ -337,6 +337,12 @@ if __name__ == "__main__":
     first_file = args.files[0]
     second_file = args.files[1]
 
+    # check for valid file path
+    if not os.path.exists(first_file):
+        raise ValueError(f"Fidelity test failed: {first_file} not found")
+    if not os.path.exists(second_file):
+        raise ValueError(f"Fidelity test failed: {second_file} not found")
+
     file_split = os.path.splitext(first_file)[1]
     file_type = file_split[1:]  # remove dot
 
