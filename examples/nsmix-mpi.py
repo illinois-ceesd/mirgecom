@@ -47,7 +47,7 @@ from mirgecom.navierstokes import ns_operator
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
-from mirgecom.integrators import rk4_step, with_array_context_pre_eval
+from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
     AdiabaticSlipBoundary,
@@ -120,7 +120,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_t = 0
     constant_cfl = True
     current_step = 0
-    timestepper = with_array_context_pre_eval(actx, rk4_step)
+    timestepper = rk4_step
     debug = False
 
     # Some i/o frequencies
@@ -503,7 +503,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_state.cv,
                                             current_state.temperature]),
-                      t=current_t, t_final=t_final, force_eval=False)
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:

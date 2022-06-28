@@ -43,7 +43,7 @@ from mirgecom.artificial_viscosity import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step, with_array_context_pre_eval
+from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticNoslipMovingBoundary,
@@ -156,7 +156,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Timestepping control
     current_step = 0
-    timestepper = with_array_context_pre_eval(actx, rk4_step)
+    timestepper = rk4_step
     t_final = 1.0e-3
     current_cfl = 0.1
     current_dt = 1.0e-4
@@ -423,8 +423,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state.cv, t=current_t, t_final=t_final,
-                      force_eval=False)
+                      state=current_state.cv, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:

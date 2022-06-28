@@ -61,12 +61,26 @@ def _compile_rhs(actx, rhs):
     return get_rhs()
 
 
+def _strict_array_equal(actx, ary1, ary2):
+    """
+    Check if two arrays are equal.
+
+    If *ary1* and *ary2* are :mod:`pytato` arrays, additionally checks whether the
+    contained expressions are the same (not just whether they evaluate to the same
+    result).
+    """
+    if actx is None:
+        return np.array_equal(ary1, ary2)
+
+    return actx.to_numpy(actx.np.array_equal(ary1, ary2))[()]
+
+
 def _advance_state_stepper_func(rhs, timestepper,
                                 state, t_final, dt=0,
                                 t=0.0, istep=0,
                                 pre_step_callback=None,
                                 post_step_callback=None,
-                                force_eval=True,
+                                force_eval=None,
                                 logmgr=None, eos=None, dim=None):
     """Advance state from some time (t) to some time (t_final).
 
@@ -101,7 +115,8 @@ def _advance_state_stepper_func(rhs, timestepper,
         to be called after the timestepper is called for that particular step.
     force_eval
         An optional boolean indicating whether to force lazy evaluation between
-        timesteps.
+        timesteps. By default, attempts to deduce whether this is necessary based
+        on the behavior of the timestepper.
 
     Returns
     -------
@@ -127,10 +142,23 @@ def _advance_state_stepper_func(rhs, timestepper,
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if force_eval:
-            state = force_evaluation(actx, state)
-
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
+
+        if force_eval is None:
+            unevaluated_state = state
+            state = force_evaluation(actx, state)
+            if not _strict_array_equal(actx, state, unevaluated_state):
+                force_eval = True
+                from warnings import warn
+                warn(
+                    "Deduced force_eval=True for this timestepper. This can have a "
+                    "nontrivial performance impact. If you know that your "
+                    "timestepper does not require per-step forced evaluation, "
+                    "explicitly set force_eval=False.", stacklevel=2)
+            else:
+                force_eval = False
+        elif force_eval:
+            state = force_evaluation(actx, state)
 
         t += dt
         istep += 1
@@ -152,7 +180,7 @@ def _advance_state_leap(rhs, timestepper, state,
                         t=0.0, istep=0,
                         pre_step_callback=None,
                         post_step_callback=None,
-                        force_eval=True,
+                        force_eval=None,
                         logmgr=None, eos=None, dim=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
@@ -187,7 +215,8 @@ def _advance_state_leap(rhs, timestepper, state,
         to be called after the timestepper is called for that particular step.
     force_eval
         An optional boolean indicating whether to force lazy evaluation between
-        timesteps.
+        timesteps. By default, attempts to deduce whether this is necessary based
+        on the behavior of the timestepper.
 
     Returns
     -------
@@ -215,14 +244,29 @@ def _advance_state_leap(rhs, timestepper, state,
             stepper_cls.state = state
             stepper_cls.dt = dt
 
-        if force_eval:
-            state = force_evaluation(actx, state)
-            stepper_cls.state = state
-
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component
+
+                if force_eval is None:
+                    unevaluated_state = state
+                    state = force_evaluation(actx, state)
+                    stepper_cls.state = state
+                    if not _strict_array_equal(actx, state, unevaluated_state):
+                        force_eval = True
+                        from warnings import warn
+                        warn(
+                            "Deduced force_eval=True for this timestepper. This "
+                            "can have a nontrivial performance impact. If you know "
+                            "that your timestepper does not require per-step forced "
+                            "evaluation, explicitly set force_eval=False.",
+                            stacklevel=2)
+                    else:
+                        force_eval = False
+                elif force_eval:
+                    state = force_evaluation(actx, state)
+                    stepper_cls.state = state
 
                 t += dt
 
@@ -282,7 +326,7 @@ def advance_state(rhs, timestepper, state, t_final,
                   t=0.0, istep=0, dt=0,
                   pre_step_callback=None,
                   post_step_callback=None,
-                  force_eval=True,
+                  force_eval=None,
                   logmgr=None, eos=None, dim=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
@@ -323,7 +367,8 @@ def advance_state(rhs, timestepper, state, t_final,
         to be called after the timestepper is called for that particular step.
     force_eval
         An optional boolean indicating whether to force lazy evaluation between
-        timesteps.
+        timesteps. By default, attempts to deduce whether this is necessary based
+        on the behavior of the timestepper.
 
     Returns
     -------
@@ -346,15 +391,6 @@ def advance_state(rhs, timestepper, state, t_final,
              "current and preferred usage.",
              DeprecationWarning, stacklevel=2)
 
-    if force_eval:
-        from warnings import warn
-        warn("Forced evaluation functionality of advance_state is deprecated; "
-             "setting force_eval=True will be disallowed starting Q4 2022, and "
-             "force_eval will be removed entirely in Q1 2023. If this behavior is "
-             "still desired, call force_evaluation via one of the callbacks "
-             "instead.",
-             DeprecationWarning, stacklevel=2)
-
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
@@ -369,8 +405,8 @@ def advance_state(rhs, timestepper, state, t_final,
                 state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                force_eval=force_eval,
                 component_id=component_id,
+                force_eval=force_eval,
                 logmgr=logmgr, eos=eos, dim=dim,
             )
     else:

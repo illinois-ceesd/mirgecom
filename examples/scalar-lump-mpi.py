@@ -43,7 +43,7 @@ from mirgecom.simutil import (
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
-from mirgecom.integrators import rk4_step, with_array_context_pre_eval
+from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.initializers import MulticomponentLump
@@ -107,9 +107,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
     if use_leap:
         from leap.rk import RK4MethodBuilder
-        timestepper = with_array_context_pre_eval(actx, RK4MethodBuilder("state"))
+        timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = with_array_context_pre_eval(actx, rk4_step)
+        timestepper = rk4_step
     t_final = 0.005
     current_cfl = 1.0
     current_dt = .001
@@ -355,8 +355,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step, dt=current_dt,
                       post_step_callback=my_post_step,
-                      state=current_state.cv, t=current_t, t_final=t_final,
-                      force_eval=False)
+                      state=current_state.cv, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:

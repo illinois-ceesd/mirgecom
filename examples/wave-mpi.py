@@ -37,8 +37,9 @@ import grudge.op as op
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step, with_array_context_pre_eval
+from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
+from mirgecom.utils import force_evaluation
 
 import pyopencl.tools as cl_tools
 
@@ -144,7 +145,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
     dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol", nodal_dt))[()]
 
-    timestepper = with_array_context_pre_eval(actx, rk4_step)
+    timestepper = rk4_step
     t_final = 1
 
     if restart_step is None:
@@ -231,6 +232,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
             )
 
         fields = timestepper(fields, t, dt, compiled_rhs)
+        fields = force_evaluation(actx, fields)
 
         t += dt
         istep += 1

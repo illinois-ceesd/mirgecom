@@ -45,7 +45,7 @@ from mirgecom.simutil import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step, with_array_context_pre_eval
+from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
@@ -121,9 +121,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Time stepper selection
     if use_leap:
         from leap.rk import RK4MethodBuilder
-        timestepper = with_array_context_pre_eval(actx, RK4MethodBuilder("state"))
+        timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = with_array_context_pre_eval(actx, rk4_step)
+        timestepper = rk4_step
 
     # Time loop control parameters
     current_step = 0
@@ -568,7 +568,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_cv, temperature_seed]),
-                      t=current_t, t_final=t_final, force_eval=False)
+                      t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:

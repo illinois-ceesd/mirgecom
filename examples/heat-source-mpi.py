@@ -32,12 +32,13 @@ import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DTAG_BOUNDARY
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.integrators import rk4_step, with_array_context_pre_eval
+from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
+from mirgecom.utils import force_evaluation
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
@@ -82,7 +83,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     dim = 2
     nel_1d = 16
 
-    timestepper = with_array_context_pre_eval(actx, rk4_step)
+    timestepper = rk4_step
     t = 0
     t_final = 0.0002
     istep = 0
@@ -173,6 +174,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ], overwrite=True)
 
         u = timestepper(u, t, dt, compiled_rhs)
+        u = force_evaluation(actx, u)
 
         t += dt
         istep += 1
