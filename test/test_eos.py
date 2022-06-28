@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
                          [("uiuc", 1e-12),
-                          ("sanDiego", 1e-8)])
+                          ("sandiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus mechanisms.
@@ -173,7 +173,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
             assert inf_norm(prom_omega[i] - rate) < rate_tol
 
 
-@pytest.mark.parametrize("mechname", ["uiuc", "sanDiego"])
+@pytest.mark.parametrize("mechname", ["uiuc", "sandiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
@@ -272,7 +272,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
                          [("uiuc", 1e-12),
-                          ("sanDiego", 1e-8)])
+                          ("sandiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     """Test known pyrometheus reaction mechanisms.
