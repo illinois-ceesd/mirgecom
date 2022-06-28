@@ -168,7 +168,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         An MPI Communicator is required for parallel writes. If no
         mpi_communicator is provided, then the write is assumed to be serial.
         (deprecated behavior: pull an MPI communicator from the discretization
-         collection.  This will stop working in Fall 2022.)
+        collection.  This will stop working in Fall 2022.)
     """
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
