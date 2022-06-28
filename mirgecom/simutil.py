@@ -161,7 +161,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         The step number to use in the file names
     t: float
         The simulation time to write into the visualization files
-    overwrite: boolean
+    overwrite: bool
         Option whether to overwrite existing files (True) or fail if files
         exist (False=default).
     mpi_communicator:
