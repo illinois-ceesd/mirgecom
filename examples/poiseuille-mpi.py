@@ -91,9 +91,9 @@ def _get_box_mesh(dim, a, b, n, t=None):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False, use_leap=False, use_profiling=False,
-         lazy=False, casename=None, rst_filename=None,
-         actx_class=PyOpenCLArrayContext):
+         use_overintegration=False,
+         use_leap=False, use_profiling=False, casename=None,
+         rst_filename=None, actx_class=PyOpenCLArrayContext):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -493,7 +493,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration, lazy=args.lazy,
+         use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
 
 # vim: foldmethod=marker

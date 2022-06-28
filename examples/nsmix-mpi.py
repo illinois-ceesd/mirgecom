@@ -82,7 +82,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, lazy=False, casename=None,
+         use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=True):
     """Drive example."""
@@ -566,7 +566,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         lazy=args.lazy, casename=casename, rst_filename=rst_filename,
-         actx_class=actx_class, log_dependent=log_dependent)
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         log_dependent=log_dependent)
 
 # vim: foldmethod=marker

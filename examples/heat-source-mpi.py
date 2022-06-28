@@ -83,7 +83,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     dim = 2
     nel_1d = 16
 
-    timestepper = rk4_step
     t = 0
     t_final = 0.0002
     istep = 0
@@ -173,7 +172,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ("u", u)
                         ], overwrite=True)
 
-        u = timestepper(u, t, dt, compiled_rhs)
+        u = rk4_step(u, t, dt, compiled_rhs)
         u = force_evaluation(actx, u)
 
         t += dt

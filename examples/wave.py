@@ -95,13 +95,8 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
 
     dim = 2
     nel_1d = 16
-
-    timestepper = rk4_step
-    t_final = 1
-    t = 0
-    istep = 0
-
     from meshmode.mesh.generation import generate_regular_rect_mesh
+
     mesh = generate_regular_rect_mesh(
         a=(-0.5,)*dim,
         b=(0.5,)*dim,
@@ -148,11 +143,14 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
 
     compiled_rhs = actx.compile(rhs)
 
+    t = 0
+    t_final = 1
+    istep = 0
     while t < t_final:
         if logmgr:
             logmgr.tick_before()
 
-        fields = timestepper(fields, t, dt, compiled_rhs)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
         fields = force_evaluation(actx, fields)
 
         if istep % 10 == 0:

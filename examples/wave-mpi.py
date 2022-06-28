@@ -145,7 +145,6 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
     dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol", nodal_dt))[()]
 
-    timestepper = rk4_step
     t_final = 1
 
     if restart_step is None:
@@ -231,7 +230,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                 ], overwrite=True
             )
 
-        fields = timestepper(fields, t, dt, compiled_rhs)
+        fields = rk4_step(fields, t, dt, compiled_rhs)
         fields = force_evaluation(actx, fields)
 
         t += dt
