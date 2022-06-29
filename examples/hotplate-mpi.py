@@ -29,7 +29,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.shortcuts import make_visualizer

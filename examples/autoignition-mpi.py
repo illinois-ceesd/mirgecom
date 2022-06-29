@@ -51,7 +51,6 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,

@@ -30,7 +30,6 @@ import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 

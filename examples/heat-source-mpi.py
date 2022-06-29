@@ -122,7 +122,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     source_width = 0.2
 
-    from arraycontext import thaw
     nodes = actx.thaw(discr.nodes())
 
     boundaries = {

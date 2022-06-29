@@ -35,7 +35,6 @@ from meshmode.array_context import (
     PytatoPyOpenCLArrayContext
 )
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.shortcuts import make_visualizer
