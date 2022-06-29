@@ -135,7 +135,7 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
 
 def write_visfile(discr, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None,
-                  mpi_communicator=None):
+                  comm=None):
     """Write parallel VTK output for the fields specified in *io_fields*.
 
     This routine writes a parallel-compatible unstructured VTK visualization
@@ -173,9 +173,9 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    if mpi_communicator is None:  # None is OK for serial writes!
-        mpi_communicator = discr.mpi_communicator
-        if mpi_communicator is not None:  # It's *not* OK to get comm from discr
+    if comm is None:  # None is OK for serial writes!
+        comm = discr.mpi_communicator
+        if comm is not None:  # It's *not* OK to get comm from discr
             from warnings import warn
             warn("Using `write_visfile` in parallel without an MPI communicator is "
                  "deprecated and will stop working in Fall 2022. For parallel "
@@ -183,8 +183,8 @@ def write_visfile(discr, io_fields, visualizer, vizname,
                  "argument.")
     rank = 0
 
-    if mpi_communicator is not None:
-        rank = mpi_communicator.Get_rank()
+    if comm is not None:
+        rank = comm.Get_rank()
 
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
@@ -194,8 +194,8 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         if viz_dir and not os.path.exists(viz_dir):
             os.makedirs(viz_dir)
 
-    if mpi_communicator is not None:
-        mpi_communicator.barrier()
+    if comm is not None:
+        comm.barrier()
 
     if vis_timer:
         ctm = vis_timer.start_sub_timer()
@@ -204,7 +204,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
 
     with ctm:
         visualizer.write_parallel_vtk_file(
-            mpi_communicator, rank_fn, io_fields,
+            comm, rank_fn, io_fields,
             overwrite=overwrite,
             par_manifest_filename=make_par_fname(
                 basename=vizname, step=step, t=t
