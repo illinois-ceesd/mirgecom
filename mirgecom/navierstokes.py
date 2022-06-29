@@ -85,8 +85,6 @@ from mirgecom.operators import (
 )
 from mirgecom.gas_model import make_operator_fluid_states
 
-from arraycontext import thaw
-
 
 class _NSGradCVTag:
     pass
@@ -101,7 +99,7 @@ def _gradient_flux_interior(discr, numerical_flux_func, tpair):
     from arraycontext import outer
     actx = tpair.int.array_context
     dd = tpair.dd
-    normal = thaw(discr.normal(dd), actx)
+    normal = actx.thaw(discr.normal(dd))
     flux = outer(numerical_flux_func(tpair.int, tpair.ext), normal)
     return op.project(discr, dd, dd.with_dtag("all_faces"), flux)
 

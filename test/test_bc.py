@@ -29,7 +29,6 @@ import numpy.linalg as la  # noqa
 import logging
 import pytest
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
@@ -79,10 +78,10 @@ def test_slipwall_identity(actx_factory, dim):
 
     order = 3
     discr = create_discretization_collection(actx, mesh, order)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = thaw(discr.normal(BTAG_ALL), actx)
+    nhat = actx.thaw(discr.normal(BTAG_ALL))
     gas_model = GasModel(eos=eos)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -154,8 +153,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         )
 
         discr = create_discretization_collection(actx, mesh, order=order)
-        nodes = thaw(discr.nodes(), actx)
-        nhat = thaw(discr.normal(BTAG_ALL), actx)
+        nodes = actx.thaw(discr.nodes())
+        nhat = actx.thaw(discr.normal(BTAG_ALL))
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
@@ -194,7 +193,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                normal = thaw(discr.normal(BTAG_ALL), actx)
+                normal = actx.thaw(discr.normal(BTAG_ALL))
                 bnd_flux = flux_func(state_pair, gas_model, normal)
 
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
@@ -251,15 +250,15 @@ def test_noslip(actx_factory, dim, flux_func):
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
-    nhat = thaw(discr.normal(BTAG_ALL), actx)
+    nodes = actx.thaw(discr.nodes())
+    nhat = actx.thaw(discr.normal(BTAG_ALL))
     print(f"{nhat=}")
 
     from mirgecom.flux import num_flux_central
 
     def scalar_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = thaw(discr.normal(int_tpair.dd), actx)
+        normal = actx.thaw(discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         return op.project(discr, int_tpair.dd, "all_faces", flux_weak)
@@ -345,7 +344,7 @@ def test_noslip(actx_factory, dim, flux_func):
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
-            nhat = thaw(discr.normal(state_pair.dd), actx)
+            nhat = actx.thaw(discr.normal(state_pair.dd))
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
@@ -465,7 +464,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
@@ -482,19 +481,19 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
     boundary_discr = discr.discr_from_dd(BTAG_ALL)
-    boundary_nodes = thaw(boundary_discr.nodes(), actx)
+    boundary_nodes = actx.thaw(boundary_discr.nodes())
     expected_boundary_solution = prescribed_soln(r=boundary_nodes, eos=gas_model.eos)
 
-    nhat = thaw(discr.normal(BTAG_ALL), actx)
+    nhat = actx.thaw(discr.normal(BTAG_ALL))
     print(f"{nhat=}")
 
     from mirgecom.flux import num_flux_central
 
     def scalar_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = thaw(discr.normal(int_tpair.dd), actx)
+        normal = actx.thaw(discr.normal(int_tpair.dd))
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext),
                           normal)
@@ -554,7 +553,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             state_pairs = make_fluid_state_trace_pairs(cv_int_pairs, gas_model)
             state_pair = state_pairs[0]
 
-            nhat = thaw(discr.normal(state_pair.dd), actx)
+            nhat = actx.thaw(discr.normal(state_pair.dd))
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")

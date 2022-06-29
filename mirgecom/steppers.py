@@ -32,11 +32,7 @@ import numpy as np
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 from pytools import memoize_in
-from arraycontext import (
-    freeze,
-    thaw,
-    get_container_context_recursively
-)
+from arraycontext import get_container_context_recursively
 
 
 def _compile_timestepper(actx, timestepper, rhs):
@@ -67,7 +63,7 @@ def _compile_rhs(actx, rhs):
 def _force_evaluation(actx, state):
     if actx is None:
         return state
-    return thaw(freeze(state, actx), actx)
+    return actx.thaw(actx.freeze(state))
 
 
 def _advance_state_stepper_func(rhs, timestepper,

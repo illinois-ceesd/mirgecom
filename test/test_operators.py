@@ -34,7 +34,6 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
@@ -122,7 +121,7 @@ def _cv_test_func(dim):
 
 def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = thaw(discr.normal(int_tpair.dd), actx)
+    normal = actx.thaw(discr.normal(int_tpair.dd))
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
     dd_all_faces = int_tpair.dd.with_dtag("all_faces")
@@ -132,9 +131,9 @@ def central_flux_interior(actx, discr, int_tpair):
 def central_flux_boundary(actx, discr, soln_func, btag):
     """Compute a central flux for boundary faces."""
     boundary_discr = discr.discr_from_dd(btag)
-    bnd_nodes = thaw(boundary_discr.nodes(), actx)
+    bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = thaw(discr.normal(btag), actx)
+    bnd_nhat = actx.thaw(discr.normal(btag))
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
@@ -201,7 +200,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_func = partial(sym_eval, sym_test_func)
         grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         int_flux = partial(central_flux_interior, actx, discr)
         bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
 
@@ -209,10 +208,8 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         exact_grad = grad_test_func(nodes)
 
         from mirgecom.simutil import componentwise_norms
-        from arraycontext import flatten
 
-        err_scale = max(flatten(componentwise_norms(discr, exact_grad, np.inf),
-                                actx))
+        err_scale = max(actx.flatten(componentwise_norms(discr, exact_grad, np.inf)))
 
         if err_scale <= 1e-16:
             err_scale = 1
@@ -234,8 +231,9 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
 
         print(f"{test_grad=}")
         grad_err = \
-            max(flatten(componentwise_norms(discr, test_grad - exact_grad, np.inf),
-                        actx)) / err_scale
+            max(actx.flatten(
+                componentwise_norms(discr, test_grad - exact_grad, np.inf))
+                / err_scale)
 
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 
