@@ -32,6 +32,15 @@ In some cases, it can be helpful to install certain packages from source, for de
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
 `installation script <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__.
 
+How can I use system OpenCL implementations, such as Nvidia CL or Apple CL?
+---------------------------------------------------------------------------
+
+To use OpenCL drivers other than pocl, you can access the ones installed on the
+system by installing the following conda packages::
+
+   $ conda install ocl-icd-system            # Linux
+   $ conda install ocl_icd_wrapper_apple     # MacOS
+
 .. _Pyopencl source installation:
 
 How can I build pyopencl from source?
@@ -114,3 +123,10 @@ exact versions of the packages at a later time::
    To restore package versions in your entire environment, you should combine this with :ref:`record pip packages`::
 
       $ ./install.sh --conda-env=myenv.yml --pip-pkgs=myreq.txt
+
+.. warning::
+
+   The environment file can **not** be used to install conda packages on a different architecture or OS. For example,
+   an environment file created on MacOS won't be installable on Linux. The reasons are that conda package versions are
+   unique to each OS/architecture, and that different systems require different packages (for example, the `pocl-cuda`
+   package only exists on Linux, but not on MacOS).

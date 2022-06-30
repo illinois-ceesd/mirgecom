@@ -21,6 +21,11 @@ depend on each other as illustrated in this graph:
         loopy -> pyopencl;
 
         meshmode -> modepy;
+        meshmode -> arraycontext;
+
+        arraycontext -> pyopencl;
+        arraycontext -> loopy;
+        arraycontext -> pytato;
 
         loopy -> pymbolic;
 
@@ -47,6 +52,8 @@ What do these packages do?
      - 1/2/3D discontinuous Galerkin based on meshmode.
    * - :mod:`meshmode` (`GitHub <https://github.com/inducer/meshmode>`__)
      - (Unstructured, high-order) discontinuous piecewise polynomial discretizations.
+   * - :mod:`arraycontext` (`GitHub <https://github.com/inducer/arraycontext>`__)
+     - Creation of and operations on (lazy/GPU/...) arrays, array containers.
    * - :mod:`loopy` (`GitHub <https://github.com/inducer/loopy>`__)
      - A code generator for array-based code on CPUs and GPUs.
    * - :mod:`pyopencl` (`GitHub <https://github.com/inducer/pyopencl>`__)
@@ -66,4 +73,4 @@ What do these packages do?
 
 The source repository (and current branch) of most of these packages
 in use is determined by the file
-`requirements.txt in mirgecom <https://github.com/illinois-ceesd/mirgecom/blob/master/requirements.txt>`__.
+`requirements.txt in mirgecom <https://github.com/illinois-ceesd/mirgecom/blob/main/requirements.txt>`__.

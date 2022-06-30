@@ -1,6 +1,6 @@
 # mirgecom
 
-[![CI](https://github.com/illinois-ceesd/mirgecom/workflows/CI/badge.svg)](https://github.com/illinois-ceesd/mirgecom/actions?query=workflow%3ACI+branch%3Amaster)
+[![CI](https://github.com/illinois-ceesd/mirgecom/workflows/CI/badge.svg)](https://github.com/illinois-ceesd/mirgecom/actions?query=workflow%3ACI+branch%3Amain)
 [![Documentation Status](https://readthedocs.org/projects/mirgecom/badge/?version=latest)](https://mirgecom.readthedocs.io/en/latest/?badge=latest)
 
 mirgecom is a simulation library for the

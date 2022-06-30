@@ -1,7 +1,15 @@
 Gas Dynamics
 ============
 
-.. automodule:: mirgecom.euler
-.. automodule:: mirgecom.boundary
+.. automodule:: mirgecom.fluid
 .. automodule:: mirgecom.eos
+.. automodule:: mirgecom.transport
+.. automodule:: mirgecom.gas_model
 .. automodule:: mirgecom.initializers
+.. automodule:: mirgecom.euler
+.. automodule:: mirgecom.inviscid
+.. automodule:: mirgecom.viscous
+.. automodule:: mirgecom.navierstokes
+.. automodule:: mirgecom.boundary
+.. automodule:: mirgecom.flux
+.. automodule:: mirgecom.symbolic_fluid

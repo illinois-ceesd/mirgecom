@@ -1,0 +1,15 @@
+# Useful development packages.
+# Install them with 'pip install -r requirements_dev.txt'.
+
+memory-profiler
+jedi
+pudb
+pytest-pudb
+pyprof2calltree
+pyinstrument
+pylint
+pydocstyle
+pep8
+flake8-docstrings
+
+git+https://github.com/vmprof/vmprof-python.git

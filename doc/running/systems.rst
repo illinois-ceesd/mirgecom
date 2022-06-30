@@ -3,7 +3,7 @@ Running on specific systems
 
 This section discusses how to run mirgecom on various clusters.
 There are also several example run scripts in mirgecom's ``examples/``
-`folder <https://github.com/illinois-ceesd/mirgecom/tree/master/examples>`__.
+`folder <https://github.com/illinois-ceesd/mirgecom/tree/main/examples>`__.
 
 General
 -------
@@ -21,7 +21,7 @@ Quartz
 On the Quartz machine, running mirgecom should be straightforward.
 An example batch script for the slurm batch system is given below:
 
-.. literalinclude:: ../../examples/quartz.sbatch.sh
+.. literalinclude:: ../../examples/scripts/quartz.sbatch.sh
     :language: bash
 
 Run this with ``sbatch <script.sh>``.
@@ -40,7 +40,7 @@ taken to restrict each rank to a separate GPU to avoid competing for access to
 the GPU. The easiest way to do this is by specifying the ``-g 1`` argument to
 ``lrun``. An example batch script for the LSF batch system is given below:
 
-.. literalinclude:: ../../examples/lassen.bsub.sh
+.. literalinclude:: ../../examples/scripts/lassen.bsub.sh
     :language: bash
 
 

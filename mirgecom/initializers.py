@@ -5,15 +5,19 @@ Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
+.. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
+.. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. automethod: _make_pulse
-.. automethod: _make_uniform_flow
+.. automethod: make_pulse
+.. autoclass:: MixtureInitializer
+.. autoclass:: PlanarPoiseuille
+.. autoclass:: ShearFlow
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -37,83 +41,31 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
-from meshmode.dof_array import thaw
+from pytools.obj_array import make_obj_array
+from arraycontext import thaw
 from mirgecom.eos import IdealSingleGas
-from mirgecom.euler import split_conserved, join_conserved
+from mirgecom.fluid import make_conserved
 
 
-def _make_uniform_flow(x_vec, mass=1.0, energy=2.5, pressure=1.0,
-                       velocity=None, eos=IdealSingleGas()):
-    r"""Construct uniform, constant flow.
-
-    Construct a uniform, constant flow from mass, energy, pressure, and
-    an EOS object.
-
-    Parameters
-    ----------
-    x_vec: np.ndarray
-        Nodal positions
-    mass: float
-        Value to set $\rho$
-    energy: float
-        Optional value to set $\rho{E}$
-    pressure: float
-        Value to use for calculating $\rho{E}$
-    velocity: np.ndarray
-        Optional constant velocity to set $\rho\vec{V}$
-
-    Returns
-    -------
-    q: Object array of DOFArrays
-        Agglomerated object array with the uniform flow
-    """
-    dim = len(x_vec)
-    if velocity is None:
-        velocity = np.zeros(shape=(dim,))
-
-    _rho = mass
-    _p = pressure
-    _velocity = velocity
-    _gamma = eos.gamma()
-
-    mom0 = _velocity * _rho
-    e0 = _p / (_gamma - 1.0)
-    ke0 = _rho * 0.5 * np.dot(_velocity, _velocity)
-
-    x_rel = x_vec[0]
-    zeros = 0.0*x_rel
-    ones = zeros + 1.0
-
-    mass = zeros + _rho
-    mom = mom0 * ones
-    energy = e0 + ke0 + zeros
-
-    return join_conserved(dim=dim, mass=mass, energy=energy, momentum=mom)
-
-
-def _make_pulse(amp, r0, w, r):
+def make_pulse(amp, r0, w, r):
     r"""Create a Gaussian pulse.
 
     The Gaussian pulse is defined by:
 
     .. math::
 
-        G(\vec{r}) = a_0*\exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}}\\
+        G(\mathbf{r}) =
+        a_0*\exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
-    Where $\vec{r}$ is the position, and the parameters are
-    the pulse amplitude $a_0$, the pulse location $\vec{r_0}$, and the
-    RMS width of the pulse, $w$.
+    where $\mathbf{r}$ is the position, and the parameters are the pulse amplitude
+    $a_0$, the pulse location $\mathbf{r}_0$, and the rms width of the pulse, $w$.
 
     Parameters
     ----------
     amp: float
-        specifies the value of $\a_0$, the pulse amplitude
+        specifies the value of $a_0$, the pulse amplitude
     r0: float array
-        specifies the value of $\r_0$, the pulse location
+        specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
     r: Object array of DOFArrays
@@ -148,24 +100,23 @@ class Vortex2D:
 
     .. math::
 
-         u = u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
-         v = v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
-         \rho =
+         u &= u_0 - \beta\exp^{(1-r^2)}\frac{y - y_0}{2\pi}\\
+         v &= v_0 + \beta\exp^{(1-r^2)}\frac{x - x_0}{2\pi}\\
+         \rho &=
          ( 1 - (\frac{\gamma - 1}{16\gamma\pi^2})\beta^2
          \exp^{2(1-r^2)})^{\frac{1}{\gamma-1}}\\
-         p = \rho^{\gamma}
+         p &= \rho^{\gamma}
 
-    A call to this object after creation/init creates
-    the isentropic vortex solution at a given time (t)
-    relative to the configured origin (center) and
-    background flow velocity (velocity).
+    A call to this object after creation/init creates the isentropic
+    vortex solution at a given time (t) relative to the configured
+    origin (center) and background flow velocity (velocity).
 
     .. automethod:: __init__
     .. automethod:: __call__
     """
 
     def __init__(
-        self, beta=5, center=[0, 0], velocity=[0, 0],
+        self, *, beta=5, center=(0, 0), velocity=(0, 0),
     ):
         """Initialize vortex parameters.
 
@@ -182,19 +133,26 @@ class Vortex2D:
         self._center = np.array(center)
         self._velocity = np.array(velocity)
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, time=0, eos=None, **kwargs):
         """
         Create the isentropic vortex solution at time *t* at locations *x_vec*.
 
+        The solution at time *t* is created by advecting the vortex under the
+        assumption of user-supplied constant, uniform velocity
+        (``Vortex2D._velocity``).
+
         Parameters
         ----------
-        t: float
+        time: float
             Current time at which the solution is desired.
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: mirgecom.eos.IdealSingleGas
+            Equation of state class to supply method for gas *gamma*.
         """
+        t = time
+        if eos is None:
+            eos = IdealSingleGas()
         vortex_loc = self._center + t * self._velocity
 
         # coordinates relative to vortex center
@@ -206,13 +164,16 @@ class Vortex2D:
         expterm = self._beta * actx.np.exp(1 - r ** 2)
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
         v = self._velocity[1] + expterm * x_rel / (2 * np.pi)
+        velocity = make_obj_array([u, v])
         mass = (1 - (gamma - 1) / (16 * gamma * np.pi ** 2)
                 * expterm ** 2) ** (1 / (gamma - 1))
+        momentum = mass * velocity
         p = mass ** gamma
 
-        e = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
+        energy = p / (gamma - 1) + mass / 2 * (u ** 2 + v ** 2)
 
-        return flat_obj_array(mass, e, mass * u, mass * v)
+        return make_conserved(dim=2, mass=mass, energy=energy,
+                              momentum=momentum)
 
 
 class SodShock1D:
@@ -223,11 +184,11 @@ class SodShock1D:
 
     .. math::
 
-         {\rho}(x < x_0, 0) = \rho_l\\
-         {\rho}(x > x_0, 0) = \rho_r\\
-         {\rho}{V_x}(x, 0) = 0\\
-         {\rho}E(x < x_0, 0) = \frac{1}{\gamma - 1}\\
-         {\rho}E(x > x_0, 0) = \frac{.1}{\gamma - 1}
+         {\rho}(x < x_0, 0) &= \rho_l\\
+         {\rho}(x > x_0, 0) &= \rho_r\\
+         {\rho}{V_x}(x, 0) &= 0\\
+         {\rho}E(x < x_0, 0) &= \frac{1}{\gamma - 1}\\
+         {\rho}E(x > x_0, 0) &= \frac{.1}{\gamma - 1}
 
     A call to this object after creation/init creates Sod's shock solution at a
     given time (t) relative to the configured origin (center) and background
@@ -238,7 +199,8 @@ class SodShock1D:
     """
 
     def __init__(
-            self, dim=2, xdir=0, x0=0.5, rhol=1.0, rhor=0.125, pleft=1.0, pright=0.1,
+            self, *, dim=2, xdir=0, x0=0.5, rhol=1.0,
+            rhor=0.125, pleft=1.0, pright=0.1,
     ):
         """Initialize shock parameters.
 
@@ -267,19 +229,19 @@ class SodShock1D:
         if self._xdir >= self._dim:
             self._xdir = self._dim - 1
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, eos=None, **kwargs):
         """
         Create the 1D Sod's shock solution at locations *x_vec*.
 
         Parameters
         ----------
-        t: float
-            Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
+        if eos is None:
+            eos = IdealSingleGas()
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
         x_rel = x_vec[self._xdir]
@@ -292,7 +254,7 @@ class SodShock1D:
         x0 = zeros + self._x0
         energyl = zeros + gmn1 * self._energyl
         energyr = zeros + gmn1 * self._energyr
-        yesno = x_rel > x0
+        yesno = actx.np.greater(x_rel, x0)
         mass = actx.np.where(yesno, rhor, rhol)
         energy = actx.np.where(yesno, energyr, energyl)
         mom = make_obj_array(
@@ -302,7 +264,125 @@ class SodShock1D:
             ]
         )
 
-        return flat_obj_array(mass, energy, mom)
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
+
+
+class DoubleMachReflection:
+    r"""Implement the double shock reflection problem.
+
+    The double shock reflection solution is crafted after [Woodward_1984]_
+    and is defined by:
+
+    .. math::
+
+        {\rho}(x < x_s(y,t)) &= \gamma \rho_j\\
+        {\rho}(x > x_s(y,t)) &= \gamma\\
+        {\rho}{V_x}(x < x_s(y,t)) &= u_p \cos(\pi/6)\\
+        {\rho}{V_x}(x > x_s(y,t)) &= 0\\
+        {\rho}{V_y}(x > x_s(y,t)) &= u_p \sin(\pi/6)\\
+        {\rho}{V_y}(x > x_s(y,t)) &= 0\\
+        {\rho}E(x < x_s(y,t)) &= (\gamma-1)p_j\\
+        {\rho}E(x > x_s(y,t)) &= (\gamma-1),
+
+    where the shock position is given,
+
+    .. math::
+
+        x_s = x_0 + y/\sqrt{3} + 2 u_s t/\sqrt{3}
+
+    and the normal shock jump relations are
+
+    .. math::
+
+        \rho_j &= \frac{(\gamma + 1) u_s^2}{(\gamma-1) u_s^2 + 2} \\
+        p_j &= \frac{2 \gamma u_s^2 - (\gamma - 1)}{\gamma+1} \\
+        u_p &= 2 \frac{u_s^2-1}{(\gamma+1) u_s}
+
+    The initial shock location is given by $x_0$ and $u_s$ is the shock speed.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, shock_location=1.0/6.0, shock_speed=4.0
+    ):
+        """Initialize double shock reflection parameters.
+
+        Parameters
+        ----------
+        shock_location: float
+           initial location of shock
+        shock_speed: float
+           shock speed, Mach number
+        """
+        self._shock_location = shock_location
+        self._shock_speed = shock_speed
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        r"""
+        Create double mach reflection solution at locations *x_vec*.
+
+        At times $t > 0$, calls to this routine create an advanced solution
+        under the assumption of constant normal shock speed *shock_speed*.
+        The advanced solution *is not* the exact solution, but is appropriate
+        for use as a boundary solution on the top and upstream (left)
+        side of the domain.
+
+        Parameters
+        ----------
+        time: float
+            Time at which to compute the solution
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
+        t = time
+        # Fail if numdim is other than 2
+        if(len(x_vec)) != 2:
+            raise ValueError("Case only defined for 2 dimensions")
+        if eos is None:
+            eos = IdealSingleGas()
+
+        gm1 = eos.gamma() - 1.0
+        gp1 = eos.gamma() + 1.0
+        gmn1 = 1.0 / gm1
+        x_rel = x_vec[0]
+        y_rel = x_vec[1]
+        actx = x_rel.array_context
+
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
+
+        rhol = eos.gamma() * rho_jump
+        rhor = eos.gamma()
+        ul = up * np.cos(np.pi/6.0)
+        ur = 0.0
+        vl = - up * np.sin(np.pi/6.0)
+        vr = 0.0
+        rhoel = gmn1 * p_jump
+        rhoer = gmn1 * 1.0
+
+        xinter = (self._shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*self._shock_speed*t/np.sqrt(3.0))
+        sigma = 0.05
+        xtanh = 1.0/sigma*(x_rel-xinter)
+        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
+                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
+        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
+        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
+
+        vel = make_obj_array([u, v])
+        mom = mass * vel
+        energy = rhoe + .5*mass*np.dot(vel, vel)
+
+        return make_conserved(dim=2, mass=mass, energy=energy, momentum=mom)
 
 
 class Lump:
@@ -312,26 +392,19 @@ class Lump:
 
     .. math::
 
-         {\rho}(r) = {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
-         {\rho}\vec{V} = {\rho}(r)\vec{V_0}\\
-         {\rho}E = (\frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2
+         {\rho} &= {\rho}_{0} + {\rho}_{a}\exp^{(1-r^{2})}\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^2,
 
-    Where $V_0$ is the fixed velocity specified
-    by the user at init time, and $\gamma$ is taken
-    from the equation-of-state object (eos).
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init
+    time, and $\gamma$ is taken from the equation-of-state object (eos).
 
-    A call to this object after creation/init creates
-    the lump solution at a given time (t)
-    relative to the configured origin (center) and
+    A call to this object after creation/init creates the lump solution
+    at a given time (t) relative to the configured origin (center) and
     background flow velocity (velocity).
 
-    This object also functions as a boundary condition
-    by providing the "get_boundary_flux" method to
-    prescribe exact field values on the given boundary.
-
-    This object also supplies the exact expected RHS
-    terms from the analytic expression in the
-    "expected_rhs" method.
+    This object also supplies the exact expected RHS terms from the
+    analytic expression through :meth:`exact_rhs`.
 
     .. automethod:: __init__
     .. automethod:: __call__
@@ -339,14 +412,15 @@ class Lump:
     """
 
     def __init__(
-            self, numdim=1, rho0=1.0, rhoamp=1.0,
-            p0=1.0, center=[0], velocity=[0]
+            self, *, dim=1,
+            rho0=1.0, rhoamp=1.0, p0=1.0,
+            center=None, velocity=None,
     ):
         r"""Initialize Lump parameters.
 
         Parameters
         ----------
-        numdim: int
+        dim: int
             specify the number of dimensions for the lump
         rho0: float
             specifies the value of $\rho_0$
@@ -360,84 +434,83 @@ class Lump:
             fixed flow velocity used for exact solution at t != 0,
             shape ``(2,)``
         """
-        if len(center) == numdim:
-            self._center = center
-        elif len(center) > numdim:
-            numdim = len(center)
-            self._center = center
-        else:
-            self._center = np.zeros(shape=(numdim,))
+        if center is None:
+            center = np.zeros(shape=(dim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        dimmsg = f"is expected to be {dim}-dimensional"
+        if center.shape != (dim,):
+            raise ValueError(f"Lump center {dimmsg}.")
+        if velocity.shape != (dim,):
+            raise ValueError(f"Lump velocity {dimmsg}.")
 
-        if len(velocity) == numdim:
-            self._velocity = velocity
-        elif len(velocity) > numdim:
-            numdim = len(velocity)
-            self._velocity = velocity
-            new_center = np.zeros(shape=(numdim,))
-            for i in range(len(self._center)):
-                new_center[i] = self._center[i]
-            self._center = new_center
-        else:
-            self._velocity = np.zeros(shape=(numdim,))
-
-        assert len(self._velocity) == numdim
-        assert len(self._center) == numdim
-
+        self._dim = dim
+        self._velocity = velocity
+        self._center = center
         self._p0 = p0
         self._rho0 = rho0
         self._rhoamp = rhoamp
-        self._dim = numdim
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
         Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
-        Note that *t* is used to advect the mass lump under the assumption of
-        constant, and uniform velocity.
+        The solution at time *t* is created by advecting the mass lump under the
+        assumption of constant, uniform velocity (``Lump._velocity``).
 
         Parameters
         ----------
-        t: float
+        time: float
             Current time at which the solution is desired
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (if needed)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
+        t = time
+        if eos is None:
+            eos = IdealSingleGas()
+        if x_vec.shape != (self._dim,):
+            raise ValueError(f"Position vector has unexpected dimensionality,"
+                             f" expected {self._dim}.")
+
+        amplitude = self._rhoamp
         lump_loc = self._center + t * self._velocity
-        assert len(x_vec) == self._dim
+
         # coordinates relative to lump center
         rel_center = make_obj_array(
             [x_vec[i] - lump_loc[i] for i in range(self._dim)]
         )
         actx = x_vec[0].array_context
         r = actx.np.sqrt(np.dot(rel_center, rel_center))
+        expterm = amplitude * actx.np.exp(1 - r ** 2)
 
-        gamma = eos.gamma()
-        expterm = self._rhoamp * actx.np.exp(1 - r ** 2)
         mass = expterm + self._rho0
+        gamma = eos.gamma()
         mom = self._velocity * mass
         energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
 
-        return flat_obj_array(mass, energy, mom)
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom)
 
-    def exact_rhs(self, discr, q, t=0.0):
+    def exact_rhs(self, discr, cv, time=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
-        Note that this routine is only useful for testing under the condition of
-        uniform, and constant velocity field.
+        The RHS at time *t* is created by advecting the mass lump under the
+        assumption of constant, uniform velocity (``Lump._velocity``).
 
         Parameters
         ----------
         q
             State array which expects at least the canonical conserved quantities
             (mass, energy, momentum) for the fluid at each point.
-        t: float
+        time: float
             Time at which RHS is desired
         """
-        actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
+        t = time
+        actx = cv.array_context
+        nodes = thaw(discr.nodes(), actx)
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -459,7 +532,185 @@ class Lump:
         energyrhs = -v2 * rdotv * mass
         momrhs = v * (-2 * mass * rdotv)
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs)
+
+
+class MulticomponentLump:
+    r"""Solution initializer for multi-component N-dimensional Gaussian lump of mass.
+
+    The Gaussian lump is defined by:
+
+    .. math::
+
+         \rho &= 1.0\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
+         {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
+         + {a_\alpha}{e}^{({c_\alpha}-{r_\alpha})^2},
+
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
+    and $\gamma$ is taken from the equation-of-state object (eos).
+
+    The user-specified vector of initial values (${{Y}_\alpha}_0$)
+    for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
+    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
+    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
+
+    A call to this object after creation/init creates the lump solution at a given
+    time (*t*) relative to the configured origin (*center*) and background flow
+    velocity (*velocity*).
+
+    This object also supplies the exact expected RHS terms from the analytic
+    expression via :meth:`exact_rhs`.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: exact_rhs
+    """
+
+    def __init__(
+            self, *, dim=1, nspecies=0,
+            rho0=1.0, p0=1.0,
+            center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None,
+            spec_centers=None
+    ):
+        r"""Initialize MulticomponentLump parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specify the number of dimensions for the lump
+        rho0: float
+            specifies the value of $\rho_0$
+        p0: float
+            specifies the value of $p_0$
+        center: numpy.ndarray
+            center of lump, shape ``(dim,)``
+        velocity: numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(dim,)``
+        """
+        if center is None:
+            center = np.zeros(shape=(dim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        if center.shape != (dim,) or velocity.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional vector inputs.")
+
+        if spec_y0s is None:
+            spec_y0s = np.ones(shape=(nspecies,))
+        if spec_centers is None:
+            spec_centers = make_obj_array([np.zeros(shape=dim,)
+                                           for i in range(nspecies)])
+        if spec_amplitudes is None:
+            spec_amplitudes = np.ones(shape=(nspecies,))
+
+        if len(spec_y0s) != nspecies or\
+           len(spec_amplitudes) != nspecies or\
+               len(spec_centers) != nspecies:
+            raise ValueError(f"Expected nspecies={nspecies} inputs.")
+        for i in range(nspecies):
+            if len(spec_centers[i]) != dim:
+                raise ValueError(f"Expected {dim}-dimensional "
+                                 f"inputs for spec_centers.")
+
+        self._nspecies = nspecies
+        self._dim = dim
+        self._velocity = velocity
+        self._center = center
+        self._p0 = p0
+        self._rho0 = rho0
+        self._spec_y0s = spec_y0s
+        self._spec_centers = spec_centers
+        self._spec_amplitudes = spec_amplitudes
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        """
+        Create a multi-component lump solution at time *t* and locations *x_vec*.
+
+        The solution at time *t* is created by advecting the component mass lump
+        at the user-specified constant, uniform velocity
+        (``MulticomponentLump._velocity``).
+
+        Parameters
+        ----------
+        time: float
+            Current time at which the solution is desired
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        t = time
+        if eos is None:
+            eos = IdealSingleGas()
+        if x_vec.shape != (self._dim,):
+            print(f"len(x_vec) = {len(x_vec)}")
+            print(f"self._dim = {self._dim}")
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
+
+        actx = x_vec[0].array_context
+
+        loc_update = t * self._velocity
+
+        gamma = eos.gamma()
+        mass = 0 * x_vec[0] + self._rho0
+        mom = self._velocity * mass
+        energy = (self._p0 / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+
+        # process the species components independently
+        species_mass = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            lump_loc = self._spec_centers[i] + loc_update
+            rel_pos = x_vec - lump_loc
+            r2 = np.dot(rel_pos, rel_pos)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=species_mass)
+
+    def exact_rhs(self, discr, cv, time=0.0):
+        """
+        Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
+
+        The RHS at time *t* is created by advecting the species mass lump at the
+        user-specified constant, uniform velocity (``MulticomponentLump._velocity``).
+
+        Parameters
+        ----------
+        q
+            State array which expects at least the canonical conserved quantities
+            (mass, energy, momentum) for the fluid at each point.
+        time: float
+            Time at which RHS is desired
+        """
+        t = time
+        actx = cv.array_context
+        nodes = thaw(discr.nodes(), actx)
+        loc_update = t * self._velocity
+
+        mass = 0 * nodes[0] + self._rho0
+        mom = self._velocity * mass
+
+        v = mom / mass
+        massrhs = 0 * mass
+        energyrhs = 0 * mass
+        momrhs = 0 * mom
+
+        # process the species components independently
+        specrhs = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            lump_loc = self._spec_centers[i] + loc_update
+            rel_pos = nodes - lump_loc
+            r2 = np.dot(rel_pos, rel_pos)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
+
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=specrhs)
 
 
 class AcousticPulse:
@@ -469,10 +720,10 @@ class AcousticPulse:
 
     .. math::
 
-        {\rho}E(\vec{r}) = {\rho}E + a_0 * G(\vec{r})\\
-        G(\vec{r}) = \exp^{-(\frac{(\vec{r}-\vec{r_0})}{\sqrt{2}w})^{2}},
+        {\rho}E(\mathbf{r}) = {\rho}E + a_0 * G(\mathbf{r})\\
+        G(\mathbf{r}) = \exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
-    where $\vec{r}$ are the nodal coordinates, and $\vec{r_0}$,
+    where $\mathbf{r}$ are the nodal coordinates, and $\mathbf{r}_0$,
     $amplitude$, and $w$, are the the user-specified pulse location,
     amplitude, and width, respectively.
 
@@ -480,55 +731,56 @@ class AcousticPulse:
     .. automethod:: __call__
     """
 
-    def __init__(self, numdim=1, amplitude=1,
+    def __init__(self, *, dim=1, amplitude=1,
                  center=None, width=1):
         r"""
         Initialize acoustic pulse parameters.
 
         Parameters
         ----------
-        numdim: int
+        dim: int
             specify the number of dimensions for the pulse
         amplitude: float
             specifies the value of $amplitude$
         width: float
             specifies the rms width of the pulse
         center: numpy.ndarray
-            pulse location, shape ``(numdim,)``
+            pulse location, shape ``(dim,)``
         """
-        if len(center) == numdim:
+        if len(center) == dim:
             self._center = center
-        elif len(center) > numdim:
-            numdim = len(center)
+        elif len(center) > dim:
+            dim = len(center)
             self._center = center
         else:
-            self._center = np.zeros(shape=(numdim,))
-
-        assert len(self._center) == numdim
+            self._center = np.zeros(shape=(dim,))
+        if self._center.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._amp = amplitude
         self._width = width
-        self._dim = numdim
+        self._dim = dim
 
-    def __call__(self, x_vec, q, eos=IdealSingleGas()):
+    def __call__(self, x_vec, cv, eos=None, **kwargs):
         """
         Create the acoustic pulse at locations *x_vec*.
 
         Parameters
         ----------
-        t: float
-            Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
             Equation of state class to be used in construction of soln (unused)
         """
-        assert len(x_vec) == self._dim
-        cv = split_conserved(self._dim, q)
+        if eos is None:
+            eos = IdealSingleGas()
+        if x_vec.shape != (self._dim,):
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
+
         return cv.replace(
-            energy=cv.energy + _make_pulse(
+            energy=cv.energy + make_pulse(
                 amp=self._amp, w=self._width, r0=self._center, r=x_vec)
-            ).join()
+        )
 
 
 class Uniform:
@@ -543,14 +795,17 @@ class Uniform:
     """
 
     def __init__(
-            self, numdim=1, rho=1.0, p=1.0, e=2.5, velocity=np.zeros((1,)),
+            self, *, dim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
+            velocity=None, mass_fracs=None
     ):
         r"""Initialize uniform flow parameters.
 
         Parameters
         ----------
-        numdim: int
-            specify the number of dimensions for the lump
+        dim: int
+            specify the number of dimensions for the flow
+        nspecies: int
+            specify the number of species in the flow
         rho: float
             specifies the density
         p: float
@@ -560,56 +815,377 @@ class Uniform:
         velocity: numpy.ndarray
             specifies the flow velocity
         """
-        if len(velocity) == numdim:
-            self._velocity = velocity
-        elif len(velocity) > numdim:
-            numdim = len(velocity)
-            self._velocity = velocity
+        if velocity is not None:
+            numvel = len(velocity)
+            myvel = velocity
+            if numvel > dim:
+                dim = numvel
+            elif numvel < dim:
+                myvel = np.zeros(shape=(dim,))
+                for i in range(numvel):
+                    myvel[i] = velocity[i]
+            self._velocity = myvel
         else:
-            self._velocity = np.zeros(shape=(numdim,))
+            self._velocity = np.zeros(shape=(dim,))
 
-        assert len(self._velocity) == numdim
+        if mass_fracs is not None:
+            self._nspecies = len(mass_fracs)
+            self._mass_fracs = mass_fracs
+        else:
+            self._nspecies = nspecies
+            self._mass_fracs = np.zeros(shape=(nspecies,))
+
+        if self._velocity.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._p = p
         self._rho = rho
         self._e = e
-        self._dim = numdim
+        self._dim = dim
 
-    def __call__(self, t, x_vec, eos=IdealSingleGas()):
+    def __call__(self, x_vec, *, eos=None, **kwargs):
         """
         Create a uniform flow solution at locations *x_vec*.
 
         Parameters
         ----------
-        t: float
-            Current time at which the solution is desired (unused)
         x_vec: numpy.ndarray
             Nodal coordinates
-        eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (unused)
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
         """
-        return _make_uniform_flow(x_vec=x_vec, mass=self._rho,
-                                  pressure=self._p, energy=self._e,
-                                  velocity=self._velocity, eos=eos)
+        if eos is None:
+            eos = IdealSingleGas()
 
-    def exact_rhs(self, discr, q, t=0.0):
+        gamma = eos.gamma()
+        mass = 0.0 * x_vec[0] + self._rho
+        mom = self._velocity * mass
+        energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
+        species_mass = self._mass_fracs * mass
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=species_mass)
+
+    def exact_rhs(self, discr, cv, time=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
         Parameters
         ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point. (unused)
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
         t: float
             Time at which RHS is desired (unused)
         """
-        actx = q[0].array_context
-        nodes = thaw(actx, discr.nodes())
+        actx = cv.array_context
+        nodes = thaw(discr.nodes(), actx)
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass
         energyrhs = 0.0 * mass
-        momrhs = make_obj_array([0 * mass])
+        momrhs = make_obj_array([0 * mass for i in range(self._dim)])
+        yrhs = make_obj_array([0 * mass for i in range(self._nspecies)])
 
-        return flat_obj_array(massrhs, energyrhs, momrhs)
+        return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
+                              momentum=momrhs, species_mass=yrhs)
+
+
+class MixtureInitializer:
+    r"""Solution initializer for multi-species mixture.
+
+    This initializer creates a physics-consistent mixture solution
+    given an initial thermal state (pressure, temperature) and a
+    mixture-compatible EOS.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, *, dim=3, nspecies=0,
+            pressure=101500.0, temperature=300.0,
+            massfractions=None, velocity=None,
+    ):
+        r"""Initialize mixture parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specifies the number of dimensions for the solution
+        nspeces: int
+            specifies the number of mixture species
+        pressure: float
+            specifies the value of :math:`p_0`
+        temperature: float
+            specifies the  value of :math:`T_0`
+        massfractions: numpy.ndarray
+            specifies the mass fraction for each species
+        velocity: numpy.ndarray
+            fixed uniform flow velocity used for kinetic energy
+        """
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        if massfractions is None:
+            if nspecies > 0:
+                massfractions = np.zeros(shape=(nspecies,))
+        self._nspecies = nspecies
+        self._dim = dim
+        self._velocity = velocity
+        self._pressure = pressure
+        self._temperature = temperature
+        self._massfracs = massfractions
+
+    def __call__(self, x_vec, eos, **kwargs):
+        """
+        Create the mixture state at locations *x_vec* (t is ignored).
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Coordinates at which solution is desired
+        eos:
+            Mixture-compatible equation-of-state object must provide
+            these functions:
+            `eos.get_density`
+            `eos.get_internal_energy`
+        """
+        if x_vec.shape != (self._dim,):
+            raise ValueError(f"Position vector has unexpected dimensionality,"
+                             f" expected {self._dim}.")
+
+        ones = (1.0 + x_vec[0]) - x_vec[0]
+        pressure = self._pressure * ones
+        temperature = self._temperature * ones
+        velocity = make_obj_array([self._velocity[i] * ones
+                                   for i in range(self._dim)])
+        y = make_obj_array([self._massfracs[i] * ones
+                            for i in range(self._nspecies)])
+        mass = eos.get_density(pressure, temperature, y)
+        specmass = mass * y
+        mom = mass * velocity
+        internal_energy = eos.get_internal_energy(temperature=temperature,
+                                                  species_mass_fractions=y)
+        kinetic_energy = 0.5 * np.dot(velocity, velocity)
+        energy = mass * (internal_energy + kinetic_energy)
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=specmass)
+
+
+class PlanarPoiseuille:
+    r"""Initializer for the planar Poiseuille case.
+
+    The 2D planar Poiseuille case is defined as a viscous flow between two
+    stationary parallel sides with a uniform pressure drop prescribed
+    as *p_hi* at the inlet and *p_low* at the outlet. See the figure below:
+
+    .. figure:: ../figures/poiseuille.png
+        :scale: 50 %
+        :alt: Poiseuille domain illustration
+
+        Illustration of the Poiseuille case setup
+
+    The exact Poiseuille solution is defined by the following:
+    $$
+    P(x) &= P_{\text{hi}} + P'x\\
+    v_x &= \frac{-P'}{2\mu}y(h-y), v_y = 0\\
+    \rho &= \rho_0\\
+    \rho{E} &= \frac{P(x)}{(\gamma-1)} + \frac{\rho}{2}(\mathbf{v}\cdot\mathbf{v})
+    $$
+
+    Here, $P'$ is the constant slope of the linear pressure gradient from the inlet
+    to the outlet and is calculated as:
+    $$
+    P' = \frac{(P_{\text{low}}-P_{\text{hi}})}{\text{length}}
+    $$
+    $v_x$, and $v_y$ are respectively the x and y components of the velocity,
+    $\mathbf{v}$, and $\rho_0$ is the supplied constant density of the fluid.
+    """
+
+    def __init__(self, p_hi=100100., p_low=100000., mu=1.0, height=.02, length=.1,
+                 density=1.0):
+        """Initialize the Poiseuille solution initializer.
+
+        Parameters
+        ----------
+        p_hi: float
+            Pressure at the inlet (default=100100)
+        p_low: float
+            Pressure at the outlet (default=100000)
+        mu: float
+            Fluid viscosity, (default = 1.0)
+        height: float
+            Height of the domain, (default = .02)
+        length: float
+            Length of the domain, (default = .1)
+        density: float
+            Constant density of the fluid, (default=1.0)
+        """
+        self.length = length
+        self.height = height
+        self.dpdx = (p_low - p_hi)/length
+        self.rho = density
+        self.mu = mu
+        self.p_hi = p_hi
+
+    def __call__(self, x_vec, eos, cv=None, **kwargs):
+        r"""Create the Poiseuille solution.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Array of :class:`~meshmode.dof_array.DOFArray` representing the 2D
+            coordinates of the points at which the solution is desired
+        eos: :class:`~mirgecom.eos.GasEOS`
+            A gas equation of state
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Optional fluid state to supply fluid density and velocity if needed.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            The Poiseuille solution state
+        """
+        dim_mismatch = len(x_vec) != 2
+        if cv is not None:
+            dim_mismatch = dim_mismatch or cv.dim != 2
+        if dim_mismatch:
+            raise ValueError("PlanarPoiseuille initializer is 2D only.")
+
+        x = x_vec[0]
+        y = x_vec[1]
+        p_x = self.p_hi + self.dpdx*x
+
+        if cv is not None:
+            mass = cv.mass
+            velocity = cv.velocity
+        else:
+            mass = self.rho*x/x
+            u_x = -self.dpdx*y*(self.height - y)/(2*self.mu)
+            velocity = make_obj_array([u_x, 0*x])
+
+        ke = .5*np.dot(velocity, velocity)*mass
+        rho_e = p_x/(eos.gamma(cv)-1) + ke
+        return make_conserved(2, mass=mass, energy=rho_e,
+                              momentum=mass*velocity)
+
+    def exact_grad(self, x_vec, eos, cv_exact):
+        """Return the exact gradient of the Poiseuille state."""
+        y = x_vec[1]
+        x = x_vec[0]
+        # FIXME: Symbolic infrastructure could perhaps do this better
+        ones = x / x
+        mass = cv_exact.mass
+        velocity = cv_exact.velocity
+        dvxdy = -self.dpdx*(self.height-2*y)/(2*self.mu)
+        dvdy = make_obj_array([dvxdy, 0*x])
+        dedx = self.dpdx/(eos.gamma(cv_exact)-1)*ones
+        dedy = mass*np.dot(velocity, dvdy)
+        dmass = make_obj_array([0*x, 0*x])
+        denergy = make_obj_array([dedx, dedy])
+        dvx = make_obj_array([0*x, dvxdy])
+        dvy = make_obj_array([0*x, 0*x])
+        dv = np.stack((dvx, dvy))
+        dmom = mass*dv
+        species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
+        return make_conserved(2, mass=dmass, energy=denergy,
+                              momentum=dmom, species_mass=species_mass)
+
+
+class ShearFlow:
+    r"""Shear flow exact Navier-Stokes solution from [Hesthaven_2008]_.
+
+    The shear flow solution is described in Section 7.5.3 of
+    [Hesthaven_2008]_. It is generalized to major-axis-aligned
+    3-dimensional cases here and defined as:
+
+    .. math::
+
+        \rho &= 1\\
+        v_\parallel &= r_{t}^2\\
+        \mathbf{v}_\bot &= 0\\
+        E &= \frac{2\mu{r_\parallel} + 10}{\gamma-1}
+        + \frac{r_{t}^4}{2}\\
+        \gamma &= \frac{3}{2}, \mu=0.01, \kappa=0
+
+    with fluid total energy $E$, viscosity $\mu$, and specific heat ratio
+    $\gamma$. The flow velocity is $\mathbf{v}$ with flow speed and direction
+    $v_\parallel$, and $r_\parallel$, respectively. The flow velocity in
+    all directions other than $r_\parallel$, is denoted as $\mathbf{v}_\bot$.
+    One major-axis-aligned flow-transverse direction, $r_t$ is set by the
+    user. This shear flow solution is an exact solution to the fully
+    compressible Navier-Stokes equations when neglecting thermal terms;
+    i.e., when thermal conductivity $\kappa=0$.  This solution requires a 2d
+    or 3d domain.
+    """
+
+    def __init__(self, dim=2, mu=.01, gamma=3./2., density=1.,
+                 flow_dir=0, trans_dir=1):
+        r"""Init the solution object.
+
+        Parameters
+        ----------
+        dim
+            Number of dimensions, 2 and 3 are valid
+        mu: float
+            Fluid viscosity
+        gamma: float
+            Ratio of specific heats for the fluid
+        density: float
+            Fluid mass density, $\rho$
+        flow_dir
+            Flow direction, $r_\parallel$, for the shear flow, 0=x, 1=y,
+            2=z. Defaults to x.
+        trans_dir
+            Transverse direction, $r_t$, for setting up the shear flow,
+            must be other than flow direction, $r_\parallel$, defaults to y.
+        """
+        if (flow_dir == trans_dir or trans_dir > (dim-1) or flow_dir > (dim-1)
+                or flow_dir < 0 or trans_dir < 0):
+            raise ValueError(f"Flow and transverse directions must be < {dim=}"
+                             f" and > 0.")
+
+        self._dim = dim
+        self._mu = mu
+        self._gamma = gamma
+        self._rho = density
+        self._flowdir = flow_dir
+        self._transdir = trans_dir
+
+    def __call__(self, x, **kwargs):
+        """Return shear flow solution at points *x*.
+
+        Parameters
+        ----------
+        x: numpy.ndarray
+            Point coordinates at which the shear flow solution is desired.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            A CV object with the shear flow solution
+        """
+        vel = 0.*x
+        flow_dir = self._flowdir
+        trans_dir = self._transdir
+
+        zeros = 0.*x[0]
+        ones = zeros + 1.
+
+        for idim in range(self._dim):
+            if idim == flow_dir:
+                vel[idim] = x[trans_dir]**2
+            else:
+                vel[idim] = 1.*zeros
+
+        density = self._rho * ones
+        mom = self._rho * vel
+
+        pressure = 2*self._mu*x[flow_dir] + 10
+
+        ie = pressure/(self._gamma - 1.)
+        ke = self._rho * (x[trans_dir]**4.)/2.
+        total_energy = ie + ke
+
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=total_energy)

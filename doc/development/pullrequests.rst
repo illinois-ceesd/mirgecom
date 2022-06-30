@@ -3,7 +3,7 @@ Working with Pull Requests
 
 We are using GitHub's pull requests (PRs) feature to integrate changes into
 mirgecom and its supporting packages. Pull requests are based on git branches
-that are merged into another branch (usually the master branch). Note that
+that are merged into another branch (usually the ``main`` branch). Note that
 pull requests are a GitHub feature and live outside the main git
 functionality; the ``git`` program itself has no knowledge of them.
 
@@ -68,8 +68,8 @@ Creating a new pull request
 
    https://github.com/illinois-ceesd/mirgecom/pulls
 
-   The `base` branch should be the `master` branch of the repo you want to
-   merge into in most cases. The `compare` branch is the branch with your
+   The ``base`` branch should be the ``main`` branch of the repo you want to
+   merge into in most cases. The ``compare`` branch is the branch with your
    changes.
 
 6. After the pull request has been merged, please delete the branch
@@ -107,14 +107,14 @@ to express this dependency to make it easier to review and test both PRs jointly
 You can express this dependency by modifying the branch of a dependent package
 inside mirgecom's ``requirements.txt`` file in the main mirgecom folder. In
 the following example, assume that we want to create a feature in mirgecom
-that depends on the ``my_branch`` branch in meshmode::
+that depends on the ``featureX`` branch in meshmode::
 
    git+https://github.com/inducer/meshmode.git#egg=meshmode
    # change to:
    git+https://github.com/MYUSERNAME/meshmode.git@featureX#egg=meshmode
 
-With this change, new emirge installations and CI tests will automatically use
-the ``my_branch`` branch of meshmode.
+With this change, new emirge installations and continuous integration tests will
+automatically use the ``featureX`` branch of meshmode.
 
 .. important::
 
@@ -122,15 +122,47 @@ the ``my_branch`` branch of meshmode.
    example), then restore the original ``requirements.txt`` of mirgecom, and
    then merge the mirgecom PR.
 
-Reviewing/CI
-------------
+Reviewing & PRs
+---------------
 
-Each pull requests for mirgecom needs one manual approval by a reviewer and
+Each pull request for mirgecom needs one manual approval by a reviewer and
 needs to pass the Continuous Integration (CI) tests before merging. For the
 manual reviews, please select at least one reviewer (someone that has
 knowledge about the code you are modifying) in the "Reviewers" box at the top
 right of a PR. You can set the PR as a "draft" PR to indicate that it is still
 in progress and only a high-level review is requested.
+
+.. note::
+
+   Some thoughts and best practices regarding submitting your code for review can be found in this
+   article:
+
+   - `How to Make Your Code Reviewer Fall in Love with You <https://mtlynch.io/code-review-love/>`__
+
+   A similar (but mirrored) set of concerns applies from the other direction. You will definitely
+   want to read these articles when you start reviewing other folks' code, but it may be
+   helpful to read them even before then to gain a better understanding of the process:
+
+   - `How to Do Code Reviews Like a Human (Part One) <https://mtlynch.io/human-code-reviews-1/>`__
+   - `How to Do Code Reviews Like a Human (Part Two) <https://mtlynch.io/human-code-reviews-2/>`__
+
+Arguably one of the most important considerations for creating, maintaining and
+reviewing PRs is the *size of the PR*. In general, developers should strive to
+keep them small. Try to break large feature developments into smaller, more
+manageable pieces.  Small PRs are far easier to understand, review, and identify
+potential defects.  Your feature(s) will merge much faster and cleaner if the
+PRs are kept small.
+
+We often use inter-developer peer review for PRs. Flag your peers as reviewers
+for your work.  More eyes on our developments result in higher quality, more robust
+software. As a part of the development team, it is important for you to keep up with
+your PRs, and the PRs of your peers who have requested your attention.  The Github
+web interface can let you know when someone has requested your review.
+
+.. image:: ../figures/my_outstanding_reviews.png
+
+Continuous Integration Testing (CI)
+-----------------------------------
 
 We use GitHub actions as the CI provider to test each pull request. The CI
 tests are triggered automatically when a pull request is created or updated.
@@ -142,7 +174,7 @@ PRs and full PRs will undergo CI tests.
 
 To check the code automatically on your local machine before creating the git
 commit, you can use a git hook such as the following one (save this script as
-``.git/pre-commit`` in the mirgecom/ folder and make it executable):
+``.git/hooks/pre-commit`` in the mirgecom/ folder and make it executable):
 
 .. code-block:: bash
 
@@ -172,6 +204,94 @@ commit, you can use a git hook such as the following one (save this script as
    fi
 
 
+While highly recommended, hooks can sometimes be annoying. After setting up your hooks, you can use ``git --no-verify`` or equivalently ``git -n`` to run ``git`` commands without triggering the hooks.
+
+Production Testing in CI
+------------------------
+
+The CI testing in mirgecom includes a set of "production" tests which help
+detect when a proposed change in a PR breaks the CEESD prediction capability
+toolchain.  Most developments and PRs do not require special considerations
+for the production tests, but any production test failures will require
+a bit of care to resolve.
+
+When PRs run afoul of the CI production tests, it indicates that if the PR
+change set merges to main, then the "production" capability of mirgecom will
+not function until the production capability and the change set are brought
+into accordance.
+
+To resolve CI production test failures for a development in PR, it is often useful
+to run the production tests manually. The production tests may be prepared and
+executed from anywhere by hand-executing the production test scripts found in
+``.ci-support/``. The following is an example workflow adjacent to what CI itself
+does for executing the production tests.
+
+1. Check out the PR development (and optionally make a production branch)
+
+   The PR development is assumed to be in a mirgecom branch called ``branch-name``
+   and possibly in a fork called ``fork-name``.
+
+   .. code:: bash
+
+      $ # For ceesd-local branches:
+      $ git clone -b branch-name git@github.com:/illinois-ceesd/mirgecom
+      $ # Or for developer fork:
+      $ git clone -b branch-name git@github.com:/fork-name/mirgecom
+      $ cd mirgecom           # or loopy, meshmode, ...
+      $ git switch -c branch-name-production  # Optional production branch
+
+2. Set up the production environment and capability
+   
+   .. code:: bash
+
+      $ # Load the customizable production environment
+      $ . .ci-support/production-testing-env.sh
+      $ # Merge the production branch
+      $ . .ci-support/merge-install-production-branch.sh .
+
+   If Step 2 fails, i.e. if there are merge conflicts, then those must
+   be resolved. Push the merged result to CEESD or a fork, and indicate
+   that version in the PRODUCTION_FORK, and PRODUCTION_BRANCH env vars in
+   ``.ci-support/production-testing-env.sh``.
+
+3. Grab and run the production tests
+
+   .. code:: bash
+
+      $ # Load env if needed
+      $ . .ci-support/production-testing-env.sh
+      $ # Get the production tests
+      $ . .ci-support/production-drivers-install.sh .
+      $ # Run the production tests
+      $ . .ci-support/production-drivers-run.sh .
+
+   Step 3 will clone the production driver repos to the current directory,
+   with each driver in its own directory. If any of the drivers fail to
+   work with the current development, then they may be modified into working
+   condition and then pushed to a repo/branch. Indicate the location of the working
+   drivers in the PRODUCTION_DRIVERS env var customization in
+   ``.ci-support/production-testing-env.sh``.
+
+4. Update the PR to reflect the change in production environment (if any)
+
+   Push the customized production ``.ci-support/production-testing-env.sh``
+   settings to the PR development branch. Upon push, mirgecom CI will
+   try the production tests again, now with the customized environment.
+
+
+If the PR development requires production environment customization in order to
+pass production tests, then care and coordination will be required to get these
+changes merged into the main mirgecom development.  PR reviewers will help
+with this process.  If the PR is accepted for merging to main, then mirgecom
+developers will update the production capabilities to be compatible with
+the changes before merging.
+
+ .. important::
+
+    Any production environment customizations must be backed out before
+    merging the PR development to main. Never merge a PR development with
+    production environment customizations in-place.
+
 Merging a pull request
 ----------------------
 
@@ -181,7 +301,7 @@ and merge**, **rebase and merge**, and **create a merge commit**.
 Squash and merge
 ^^^^^^^^^^^^^^^^
 
-Squash all commits into one commit and merge it to the main branch. This is
+Squash all commits into one commit and merge it to the ``main`` branch. This is
 the preferred option, especially for small changes, as it keeps the history
 shorter and cleaner, makes git bisection easier, and makes it easier to revert
 a pull request.
@@ -189,20 +309,20 @@ a pull request.
 Rebase and merge
 ^^^^^^^^^^^^^^^^
 
-Rebase all commits to top of the main branch and merge all commits. This
+Rebase all commits to top of the ``main`` branch and merge all commits. This
 is the preferred option for larger changes, for example, by having
 separate commits for the implementation of a feature and its
 documentation
 
 Other possibilities (such as squashing only some commits and then
-merging multiple commits into ``master``) are not directly supported by
+merging multiple commits into ``main``) are not directly supported by
 GitHub’s Web UI, but can be done manually on the command line (these
 might need to be force pushed to a branch).
 
 Create a merge commit
 ^^^^^^^^^^^^^^^^^^^^^
 
-This options just merges all commits into the master branch. This is the simplest
+This options just merges all commits into the ``main`` branch. This is the simplest
 way to merge a pull request, but can lead to issues with bisection and reverting PRs
 later.
 

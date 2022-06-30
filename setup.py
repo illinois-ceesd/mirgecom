@@ -27,10 +27,7 @@ def main():
               "License :: OSI Approved :: MIT License",
               "Natural Language :: English",
               "Programming Language :: Python",
-              "Programming Language :: Python :: 3.6",
-              "Programming Language :: Python :: 3.7",
-              "Programming Language :: Python :: 3.8",
-              "Programming Language :: Python :: 3.9",
+              "Programming Language :: Python :: 3",
               "Topic :: Scientific/Engineering",
               "Topic :: Scientific/Engineering :: Information Analysis",
               "Topic :: Scientific/Engineering :: Mathematics",
@@ -41,7 +38,7 @@ def main():
 
           packages=find_packages(),
 
-          python_requires="~=3.6",
+          python_requires="~=3.8",
 
           install_requires=[
               "mpi4py>=3",
@@ -49,6 +46,7 @@ def main():
               "pytest>=2.3",
               "pytools>=2018.5.2",
               "modepy>=2013.3",
+              "arraycontext>=2021.1",
               "meshmode>=2013.3",
               "pyopencl>=2013.1",
               "pymbolic>=2013.2",
@@ -58,7 +56,11 @@ def main():
               "dagrt>=2019.1",
               "grudge>=2015.1",
               "six>=1.8",
-              ])
+              "logpyle",
+              "importlib-resources>=1.1.0; python_version < '3.9'",
+          ],
+
+          include_package_data=True,)
 
 
 if __name__ == "__main__":
