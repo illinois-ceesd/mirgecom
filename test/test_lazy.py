@@ -79,13 +79,14 @@ def op_test_data(ctx_factory):
 def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
     from mirgecom.simutil import componentwise_norms
+    from arraycontext import flatten
     actx = x.array_context
-    lhs = actx.to_numpy(actx.flatten(componentwise_norms(discr, x - y, np.inf)))
+    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, np.inf), actx))
 
     rhs = np.maximum(
         rel_tol * np.maximum(
-            actx.to_numpy(actx.flatten(componentwise_norms(discr, x, np.inf))),
-            actx.to_numpy(actx.flatten(componentwise_norms(discr, y, np.inf)))),
+            actx.to_numpy(flatten(componentwise_norms(discr, x, np.inf), actx)),
+            actx.to_numpy(flatten(componentwise_norms(discr, y, np.inf), actx))),
         abs_tol)
 
     is_close = np.all(lhs <= rhs)
@@ -136,7 +137,9 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_flux(u_tpair):
         dd = u_tpair.dd
         dd_allfaces = dd.with_dtag("all_faces")
-        normal = u_tpair.int.array_context.thaw(discr.normal(dd))
+        normal = discr.normal(dd)
+        actx = u_tpair.int[0].array_context
+        normal = actx.thaw(normal)
         flux = u_tpair.avg @ normal
         return op.project(discr, dd, dd_allfaces, flux)
 
