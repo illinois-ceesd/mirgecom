@@ -37,8 +37,10 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 
-from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 

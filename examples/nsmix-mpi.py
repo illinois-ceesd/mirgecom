@@ -30,13 +30,9 @@ import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.transport import SimpleTransport
@@ -82,9 +78,12 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
-         log_dependent=True):
+         rst_filename=None, actx_class=None, lazy=False,
+         log_dependent=True, use_overintegration=False):
     """Drive example."""
+    if actx_class is None:
+        raise RuntimeError("Array context class missing.")
+
     cl_ctx = ctx_factory()
 
     if casename is None:
@@ -107,9 +106,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000)
+    else:
+        actx = actx_class(comm, queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                force_device_scalars=True)
 
     # Timestepping control
     # This example runs only 3 steps by default (to keep CI ~short)
@@ -159,6 +161,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         actx, local_mesh, order=order, mpi_communicator=comm
     )
     nodes = actx.thaw(discr.nodes())
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
+
     ones = discr.zeros(actx) + 1.0
 
     if logmgr:
@@ -244,11 +252,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyrometheus_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism,
-                             temperature_guess=init_temperature)
-    gas_model = GasModel(eos=eos, transport=transport_model)
+    from mirgecom.thermochemistry import get_thermochemistry_class_by_mechanism_name
+    pyrometheus_mechanism = \
+        get_thermochemistry_class_by_mechanism_name("uiuc")(actx.np)
+
+    pyro_eos = PyrometheusMixture(pyrometheus_mechanism,
+                                  temperature_guess=init_temperature)
+    gas_model = GasModel(eos=pyro_eos, transport=transport_model)
 
     # }}}
 
@@ -362,9 +372,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(status_msg)
 
-    def my_write_viz(step, t, state, dv):
-        viz_fields = [("cv", state),
+    def my_write_viz(step, t, cv, dv, ns_rhs=None, chem_rhs=None,
+                     grad_cv=None, grad_t=None, grad_v=None):
+        viz_fields = [("cv", cv),
                       ("dv", dv)]
+        if ns_rhs is not None:
+            viz_ext = [("nsrhs", ns_rhs),
+                       ("chemrhs", chem_rhs),
+                       ("grad_rho", grad_cv.mass),
+                       ("grad_e", grad_cv.energy),
+                       ("grad_mom_x", grad_cv.momentum[0]),
+                       ("grad_mom_y", grad_cv.momentum[1]),
+                       ("grad_y_1", grad_cv.species_mass[0]),
+                       ("grad_v_x", grad_v[0]),
+                       ("grad_v_y", grad_v[1]),
+                       ("grad_temperature", grad_t)]
+            viz_fields.extend(viz_ext)
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, comm=comm)
@@ -455,7 +478,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=cv, tseed=tseed)
 
             if do_viz:
-                my_write_viz(step=step, t=t, state=cv, dv=dv)
+                from mirgecom.fluid import velocity_gradient
+                ns_rhs, grad_cv, grad_t = \
+                    ns_operator(discr, state=fluid_state, time=t,
+                                boundaries=visc_bnds, gas_model=gas_model,
+                                return_gradients=True, quadrature_tag=quadrature_tag)
+                grad_v = velocity_gradient(cv, grad_cv)
+                chem_rhs = \
+                    pyro_eos.get_species_source_terms(cv,
+                                                      fluid_state.temperature)
+                my_write_viz(step=step, t=t, cv=cv, dv=dv, ns_rhs=ns_rhs,
+                             chem_rhs=chem_rhs, grad_cv=grad_cv, grad_t=grad_t,
+                             grad_v=grad_v)
 
             dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
@@ -465,7 +499,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=cv, dv=dv)
+            my_write_viz(step=step, t=t, cv=cv, dv=dv)
             my_write_restart(step=step, t=t, state=cv, tseed=tseed)
             raise
 
@@ -484,13 +518,41 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return make_obj_array([cv, fluid_state.temperature]), dt
 
+    flux_beta = .25
+
+    from mirgecom.viscous import viscous_flux
+    from mirgecom.flux import num_flux_central
+
+    def _num_flux_dissipative(u_minus, u_plus, beta):
+        return num_flux_central(u_minus, u_plus) + beta*(u_plus - u_minus)/2
+
+    def _viscous_facial_flux_dissipative(discr, state_pair, grad_cv_pair,
+                                         grad_t_pair, beta=0., gas_model=None):
+        actx = state_pair.int.array_context
+        normal = actx.thaw(discr.normal(state_pair.dd))
+
+        f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
+                             grad_t_pair.int)
+        f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
+                             grad_t_pair.ext)
+
+        return _num_flux_dissipative(f_int, f_ext, beta=beta)@normal
+
+    grad_num_flux_func = partial(_num_flux_dissipative, beta=flux_beta)
+    viscous_num_flux_func = partial(_viscous_facial_flux_dissipative,
+                                    beta=-flux_beta)
+
     def my_rhs(t, state):
         cv, tseed = state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
         ns_rhs = ns_operator(discr, state=fluid_state, time=t,
-                             boundaries=visc_bnds, gas_model=gas_model)
-        cv_rhs = ns_rhs + eos.get_species_source_terms(cv, fluid_state.temperature)
+                             boundaries=visc_bnds, gas_model=gas_model,
+                             gradient_numerical_flux_func=grad_num_flux_func,
+                             viscous_numerical_flux_func=viscous_num_flux_func,
+                             quadrature_tag=quadrature_tag)
+        cv_rhs = ns_rhs + pyro_eos.get_species_source_terms(cv,
+                                                            fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
 
     current_dt = get_sim_timestep(discr, current_state, current_t,
@@ -513,7 +575,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_dv = current_state.dv
     final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
-    my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
+    from mirgecom.fluid import velocity_gradient
+    ns_rhs, grad_cv, grad_t = \
+        ns_operator(discr, state=current_state, time=current_t,
+                    boundaries=visc_bnds, gas_model=gas_model,
+                    return_gradients=True)
+    grad_v = velocity_gradient(current_state.cv, grad_cv)
+    chem_rhs = \
+        pyro_eos.get_species_source_terms(current_state.cv,
+                                          current_state.temperature)
+    my_write_viz(step=current_step, t=current_t, cv=current_state.cv, dv=final_dv,
+                             chem_rhs=chem_rhs, grad_cv=grad_cv, grad_t=grad_t,
+                             grad_v=grad_v)
     my_write_restart(step=current_step, t=current_t, state=current_state.cv,
                      tseed=tseed)
     my_write_status(current_step, current_t, final_dt, state=current_state,
@@ -532,6 +605,8 @@ if __name__ == "__main__":
     import argparse
     casename = "nsmix"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -543,19 +618,18 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    log_dependent = not args.lazy
+    lazy = args.lazy
 
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
-            else PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -566,6 +640,7 @@ if __name__ == "__main__":
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent)
+         log_dependent=log_dependent, lazy=lazy,
+         use_overintegration=args.overintegration)
 
 # vim: foldmethod=marker
