@@ -102,8 +102,8 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
     discr_lazy = create_discretization_collection(actx_lazy, mesh, order=order)
 
     # Pyrometheus initialization
-    mech_cti = get_mechanism_cti(mechname)
-    sol = cantera.Solution(phase_id="gas", source=mech_cti)
+    mech_input = get_mechanism_input(mechname)
+    sol = cantera.Solution(name="gas", yaml=mech_input)
 
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyro_eager = make_pyrometheus_mechanism_class(sol)(actx_eager.np)
@@ -131,7 +131,7 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+        cantera_soln = cantera.Solution(phase_id="gas", source=mech_input)
         cantera_soln.TPY = tempin, pressin, y0s
         cantera_soln.equilibrate("UV")
         can_t, can_rho, can_y = cantera_soln.TDY
