@@ -176,7 +176,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     overwrite: bool
         Option whether to overwrite existing files (True) or fail if files
         exist (False=default).
-    mpi_communicator:
+    comm:
         An MPI Communicator is required for parallel writes. If no
         mpi_communicator is provided, then the write is assumed to be serial.
         (deprecated behavior: pull an MPI communicator from the discretization
