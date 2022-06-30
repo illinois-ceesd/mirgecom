@@ -532,5 +532,4 @@ def species_fraction_anomaly_relaxation(cv, alpha=1.):
 
 def force_evaluation(actx, expn):
     """Wrap freeze/thaw forcing evaluation of expressions."""
-    from arraycontext import thaw, freeze
-    return thaw(freeze(expn, actx), actx)
+    return actx.thaw(actx.freeze(expn))
