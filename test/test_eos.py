@@ -157,24 +157,23 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         pyro_rho_eager = pyro_eager.get_density(pin_eager, tin_eager, yin_eager)
         pyro_rho_lazy = pyro_lazy.get_density(pin_lazy, tin_lazy, yin_lazy)
 
-        from arraycontext import thaw, freeze, to_numpy
+        from arraycontext import to_numpy
         rho_lazy = to_numpy(
-            thaw(freeze(pyro_rho_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_rho_lazy))
         )
 
         pyro_e_eager = pyro_eager.get_mixture_internal_energy_mass(tin_eager,
                                                                    yin_eager)
         pyro_e_lazy = pyro_lazy.get_mixture_internal_energy_mass(tin_lazy, yin_lazy)
         e_lazy = to_numpy(
-            thaw(freeze(pyro_e_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_e_lazy))
         )
 
         # These both take 5 Newton iterations
         pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager)
         pyro_t_lazy = temp_lazy(pyro_e_lazy, tin_lazy, yin_lazy)
 
-        t_lazy = to_numpy(thaw(freeze(pyro_t_lazy, actx_lazy), actx_eager),
-                          actx_eager)
+        t_lazy = to_numpy(actx_eager.thaw(actx_lazy.freeze(pyro_t_lazy)))
 
         pyro_p_eager = pyro_eager.get_pressure(pyro_rho_eager, tin_eager, yin_eager)
         pyro_c_eager = pyro_eager.get_concentrations(pyro_rho_eager, yin_eager)
@@ -186,13 +185,13 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
         pyro_k_lazy = pyro_lazy.get_fwd_rate_coefficients(pyro_t_lazy, pyro_c_lazy)
 
         c_lazy = to_numpy(
-            thaw(freeze(pyro_c_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_c_lazy))
         )
         p_lazy = to_numpy(
-            thaw(freeze(pyro_p_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_p_lazy))
         )
         k_lazy = to_numpy(
-            thaw(freeze(pyro_k_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_k_lazy))
         )
 
         # Pyro chemistry functions
@@ -208,10 +207,10 @@ def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
                                                              pyro_t_lazy,
                                                              yin_lazy)
         r_lazy = to_numpy(
-            thaw(freeze(pyro_r_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_r_lazy))
         )
         omega_lazy = to_numpy(
-            thaw(freeze(pyro_omega_lazy, actx_lazy), actx_eager), actx_eager
+            actx_eager.thaw(actx_lazy.freeze(pyro_omega_lazy))
         )
 
         print(f"can(rho, y, p, t, e, k) = ({can_rho}, {can_y}, "
