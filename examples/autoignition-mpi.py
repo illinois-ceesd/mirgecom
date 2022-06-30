@@ -40,8 +40,7 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile,
-    allsync
+    write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -379,14 +378,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MIN)
-            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MAX)
-            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MIN)
-            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MAX)
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                                 op="min")
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                                 op="max")
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                                 op="min")
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                                 op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
@@ -487,14 +486,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if constant_cfl:
             ts_field = current_cfl * compute_dt(state)
             from grudge.op import nodal_min_loc
-            dt = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
-                         comm=comm, op=MPI.MIN)
+            dt = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
+                               op="min")
             cfl = current_cfl
         else:
             ts_field = compute_cfl(state, current_dt)
             from grudge.op import nodal_max_loc
-            cfl = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
-                          comm=comm, op=MPI.MAX)
+            cfl = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
+                                op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
