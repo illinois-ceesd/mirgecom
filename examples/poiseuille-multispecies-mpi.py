@@ -30,7 +30,6 @@ import pyopencl.tools as cl_tools
 from pytools.obj_array import make_obj_array
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.eager import EagerDGDiscretization
@@ -189,7 +188,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         },
         mpi_communicator=comm
     )
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -273,7 +272,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _exact_boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             cv=state_minus.cv, **kwargs), gas_model)
 

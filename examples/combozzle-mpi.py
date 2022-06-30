@@ -67,7 +67,6 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
@@ -636,7 +635,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     discr = create_discretization_collection(actx, local_mesh, order,
                                              mpi_communicator=comm)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
     ones = discr.zeros(actx) + 1.0
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
