@@ -385,7 +385,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("production_rates", production_rates),
                       ("dt" if constant_cfl else "cfl", ts_field)]
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
 
     def my_write_restart(step, t, state, temperature_seed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
