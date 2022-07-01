@@ -61,18 +61,23 @@ def _compile_rhs(actx, rhs):
     return get_rhs()
 
 
-def _strict_array_equal(actx, ary1, ary2):
+def _is_unevaluated(actx, ary):
     """
-    Check if two arrays are equal.
-
-    If *ary1* and *ary2* are :mod:`pytato` arrays, additionally checks whether the
-    contained expressions are the same (not just whether they evaluate to the same
-    result).
+    Check if an array/container contains an unevaluated :module:`pytato` expression.
     """
-    if actx is None:
-        return np.array_equal(ary1, ary2)
+    def is_non_data_pytato_array(x):
+        import pytato as pt
+        return isinstance(x, pt.Array) and not isinstance(x, pt.DataWrapper)
 
-    return actx.to_numpy(actx.np.array_equal(ary1, ary2))[()]
+    from arraycontext import serialize_container, NotAnArrayContainerError
+    try:
+        iterable = serialize_container(ary)
+        for _, subary in iterable:
+            if is_non_data_pytato_array(subary):
+                return True
+        return False
+    except NotAnArrayContainerError:
+        return is_non_data_pytato_array(ary)
 
 
 def _advance_state_stepper_func(rhs, timestepper,
@@ -145,9 +150,7 @@ def _advance_state_stepper_func(rhs, timestepper,
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
 
         if force_eval is None:
-            unevaluated_state = state
-            state = force_evaluation(actx, state)
-            if not _strict_array_equal(actx, state, unevaluated_state):
+            if _is_unevaluated(actx, state):
                 force_eval = True
                 from warnings import warn
                 warn(
@@ -157,7 +160,8 @@ def _advance_state_stepper_func(rhs, timestepper,
                     "explicitly set force_eval=False.", stacklevel=2)
             else:
                 force_eval = False
-        elif force_eval:
+
+        if force_eval:
             state = force_evaluation(actx, state)
 
         t += dt
@@ -250,10 +254,7 @@ def _advance_state_leap(rhs, timestepper, state,
                 state = event.state_component
 
                 if force_eval is None:
-                    unevaluated_state = state
-                    state = force_evaluation(actx, state)
-                    stepper_cls.state = state
-                    if not _strict_array_equal(actx, state, unevaluated_state):
+                    if _is_unevaluated(actx, state):
                         force_eval = True
                         from warnings import warn
                         warn(
@@ -264,7 +265,8 @@ def _advance_state_leap(rhs, timestepper, state,
                             stacklevel=2)
                     else:
                         force_eval = False
-                elif force_eval:
+
+                if force_eval:
                     state = force_evaluation(actx, state)
                     stepper_cls.state = state
 
