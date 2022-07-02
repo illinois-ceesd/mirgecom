@@ -189,13 +189,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    # -- Pick up a CTI for the thermochemistry config
-    # --- Note: Users may add their own CTI file by dropping it into
-    # ---       mirgecom/mechanisms alongside the other CTI files.
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
+    # -- Pick up the input data for the thermochemistry mechanism
+    # --- Note: Users may add their own mechanism input file by dropping it into
+    # ---       mirgecom/mechanisms alongside the other mech input files.
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input = get_mechanism_input("uiuc")
 
-    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     nspecies = cantera_soln.n_species
 
     # Initial temperature, pressure, and mixture mole fractions are needed to
@@ -368,7 +368,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True)
+                      step=step, t=t, overwrite=True, comm=comm)
 
     def my_write_restart(step, t, state, tseed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)

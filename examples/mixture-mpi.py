@@ -180,9 +180,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 ("max_temperature",    "{value:7g})\n")])
 
     # Pyrometheus initialization
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
-    sol = cantera.Solution(phase_id="gas", source=mech_cti)
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input = get_mechanism_input("uiuc")
+    sol = cantera.Solution(name="gas", yaml=mech_input)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
@@ -277,7 +277,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields = [("cv", state), ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
 
     def my_write_restart(step, t, state, tseed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
