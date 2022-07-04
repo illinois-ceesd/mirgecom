@@ -796,7 +796,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
         [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
         """
         actx = state_minus.array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
         # boundary-normal velocity
         boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
         boundary_speed = actx.np.sqrt(np.dot(boundary_vel, boundary_vel))
@@ -855,7 +855,7 @@ class InflowBoundary(PrescribedFluidBoundary):
         [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
         """
         actx = state_minus.array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
 
         v_plus = np.dot(self._free_stream_state.velocity, nhat)
         rho_plus = self._free_stream_state.mass_density
@@ -987,7 +987,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                                       temperature_seed=state_minus.temperature)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        normal = thaw(discr.normal(btag), state_minus.array_context)
+        normal = state_minus.array_context.thaw(discr.normal(btag))
         return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
@@ -1023,7 +1023,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
-        normal = thaw(discr.normal(btag), actx)
+        normal = actx.thaw(discr.normal(btag))
 
         state_plus = self.isothermal_wall_state(discr=discr, btag=btag,
                                                 gas_model=gas_model,
@@ -1092,7 +1092,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
             discr, btag, gas_model, state_minus)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        normal = thaw(discr.normal(btag), state_minus.array_context)
+        normal = state_minus.array_context.thaw(discr.normal(btag))
         return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
@@ -1131,7 +1131,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
-        normal = thaw(discr.normal(btag), actx)
+        normal = actx.thaw(discr.normal(btag))
 
         state_plus = self.adiabatic_wall_state_for_diffusion(
             discr=discr, btag=btag, gas_model=gas_model, state_minus=state_minus)
@@ -1183,7 +1183,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                                            state_minus, **kwargs):
         """Return state with opposite normal momentum."""
         actx = state_minus.array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
 
         mom_plus = \
             (state_minus.momentum_density
@@ -1201,7 +1201,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                                            state_minus, **kwargs):
         """Return state with 0 velocities and energy(Twall)."""
         actx = state_minus.array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
 
         mom_plus = \
             (state_minus.momentum_density
@@ -1222,7 +1222,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             discr, btag, gas_model, state_minus)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        normal = thaw(discr.normal(btag), state_minus.array_context)
+        normal = state_minus.array_context.thaw(discr.normal(btag))
         return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
@@ -1261,7 +1261,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
-        normal = thaw(discr.normal(btag), actx)
+        normal = actx.thaw(discr.normal(btag))
 
         state_plus = self.adiabatic_wall_state_for_diffusion(
             discr=discr, btag=btag, gas_model=gas_model, state_minus=state_minus)
@@ -1283,7 +1283,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
         actx = grad_av_minus.mass[0].array_context
-        nhat = thaw(discr.norm(btag), actx)
+        nhat = actx.thaw(discr.norm(btag))
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
