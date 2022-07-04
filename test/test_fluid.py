@@ -33,7 +33,6 @@ import pytest
 
 from pytools.obj_array import make_obj_array
 
-from meshmode.dof_array import thaw
 from mirgecom.fluid import make_conserved
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
@@ -64,7 +63,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
     order = 3
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -113,7 +112,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
         )
 
         discr = create_discretization_collection(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
         zeros = discr.zeros(actx)
 
         mass = nodes[dim-1]*nodes[dim-1]
@@ -161,7 +160,7 @@ def test_velocity_gradient_structure(actx_factory):
     order = 1
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -210,7 +209,7 @@ def test_species_mass_gradient(actx_factory, dim):
     order = 1
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1
 

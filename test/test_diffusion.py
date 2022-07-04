@@ -26,7 +26,6 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-from arraycontext import thaw
 import grudge.op as op
 from mirgecom.symbolic import (
     diff as sym_diff,
@@ -169,7 +168,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         return self._kappa
 
     def get_boundaries(self, discr, actx, t):
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         sym_exact_u = self.get_solution(
             pmbl.make_sym_vector("x", self.dim), pmbl.var("t"))
@@ -183,7 +182,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
             upper_grad_u = op.project(discr, "vol", upper_btag, exact_grad_u)
-            normal = thaw(discr.normal(upper_btag), actx)
+            normal = actx.thaw(discr.normal(upper_btag))
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
@@ -329,7 +328,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         discr = create_discretization_collection(actx, mesh, order)
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         def get_rhs(t, u):
             kappa = p.get_kappa(nodes, t, u)
@@ -391,7 +390,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     discr = create_discretization_collection(actx, mesh, order)
 
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -512,7 +511,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             discr_mirgecom = create_discretization_collection(actx, mesh,
                                                               order=order)
-            nodes_mirgecom = thaw(discr_mirgecom.nodes(), actx)
+            nodes_mirgecom = actx.thaw(discr_mirgecom.nodes())
 
             u_mirgecom = p.get_solution(nodes_mirgecom, t)
 
@@ -522,7 +521,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
                 u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
-            nodes_ndg = thaw(discr_ndg.nodes(), actx)
+            nodes_ndg = actx.thaw(discr_ndg.nodes())
 
             u_ndg = p.get_solution(nodes_ndg, t)
 
@@ -584,7 +583,7 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     discr = create_discretization_collection(actx, mesh, order=4)
 
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     t = 1.23456789
 

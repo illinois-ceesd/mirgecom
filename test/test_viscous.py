@@ -32,7 +32,6 @@ import logging
 import pytest  # noqa
 
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
@@ -71,7 +70,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     order = 1
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -168,7 +167,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     from mirgecom.flux import num_flux_central
 
     def cv_flux_interior(int_tpair):
-        normal = thaw(actx, discr.normal(int_tpair.dd))
+        normal = actx.thaw(discr.normal(int_tpair.dd))
         from arraycontext import outer
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         dd_all_faces = int_tpair.dd.with_dtag("all_faces")
@@ -176,9 +175,9 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     def cv_flux_boundary(btag):
         boundary_discr = discr.discr_from_dd(btag)
-        bnd_nodes = thaw(actx, boundary_discr.nodes())
+        bnd_nodes = actx.thaw(boundary_discr.nodes())
         cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
-        bnd_nhat = thaw(actx, discr.normal(btag))
+        bnd_nhat = actx.thaw(discr.normal(btag))
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(btag, interior=cv_bnd, exterior=cv_bnd)
         from arraycontext import outer
@@ -198,7 +197,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         )
 
         discr = create_discretization_collection(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
 
         def inf_norm(x):
             return actx.to_numpy(op.norm(discr, x, np.inf))
@@ -300,7 +299,7 @@ def test_species_diffusive_flux(actx_factory):
     order = 1
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -376,7 +375,7 @@ def test_diffusive_heat_flux(actx_factory):
     order = 1
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -452,7 +451,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     order = 1
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
     vel = .32
