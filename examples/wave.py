@@ -39,7 +39,6 @@ from mirgecom.integrators import rk4_step
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
-from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -104,7 +103,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
     order = 3
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
@@ -149,7 +148,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if logmgr:
             logmgr.tick_before()
 
-        fields = thaw(freeze(fields, actx), actx)
+        fields = actx.thaw(actx.freeze(fields))
         fields = rk4_step(fields, t, dt, compiled_rhs)
 
         if istep % 10 == 0:
