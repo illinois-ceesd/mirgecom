@@ -129,7 +129,7 @@ import numpy as np
 
 from pytools import memoize_in, keyed_memoize_in
 from functools import partial
-from meshmode.dof_array import thaw, DOFArray
+from meshmode.dof_array import DOFArray
 
 from mirgecom.flux import num_flux_central
 from mirgecom.operators import div_operator
@@ -254,7 +254,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
 
     def central_flux_div(utpair):
         dd = utpair.dd
-        normal = thaw(actx, discr.normal(dd))
+        normal = actx.thaw(discr.normal(dd))
         return op.project(discr, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat

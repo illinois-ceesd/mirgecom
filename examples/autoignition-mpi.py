@@ -51,7 +51,6 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -171,7 +170,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     discr = create_discretization_collection(actx, local_mesh, order=order,
                                              mpi_communicator=comm)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
     ones = discr.zeros(actx) + 1.0
 
     if use_overintegration:
