@@ -63,19 +63,16 @@ def _compile_rhs(actx, rhs):
 
 def _is_unevaluated(actx, ary):
     """Check if an array contains an unevaluated :module:`pytato` expression."""
-    def is_non_data_pytato_array(x):
-        import pytato as pt
-        return isinstance(x, pt.Array) and not isinstance(x, pt.DataWrapper)
-
     from arraycontext import serialize_container, NotAnArrayContainerError
     try:
         iterable = serialize_container(ary)
         for _, subary in iterable:
-            if is_non_data_pytato_array(subary):
+            if _is_unevaluated(actx, subary):
                 return True
         return False
     except NotAnArrayContainerError:
-        return is_non_data_pytato_array(ary)
+        import pytato as pt
+        return isinstance(ary, pt.Array) and not isinstance(ary, pt.DataWrapper)
 
 
 def _advance_state_stepper_func(rhs, timestepper,
