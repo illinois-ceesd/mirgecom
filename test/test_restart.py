@@ -50,8 +50,7 @@ def test_restart_cv(actx_factory, nspecies):
     )
     order = 3
     discr = create_discretization_collection(actx, mesh, order=order)
-    from meshmode.dof_array import thaw
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     mass = nodes[0]
     energy = nodes[1]

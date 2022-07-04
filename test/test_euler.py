@@ -38,7 +38,6 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
@@ -263,7 +262,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         else:
             quadrature_tag = None
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -274,7 +273,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         def _vortex_boundary(discr, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
@@ -341,7 +340,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         else:
             quadrature_tag = None
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
@@ -354,7 +353,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         def _lump_boundary(discr, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
                                     gas_model)
 
@@ -428,7 +427,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         else:
             quadrature_tag = None
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -449,7 +448,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
@@ -521,7 +520,7 @@ def _euler_flow_stepper(actx, parameters):
     else:
         quadrature_tag = None
 
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     cv = initializer(nodes)
     gas_model = GasModel(eos=eos)
@@ -668,7 +667,7 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
         def _vortex_boundary(discr, btag, state_minus, gas_model, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
