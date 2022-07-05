@@ -126,12 +126,13 @@ def _advance_state_stepper_func(rhs, timestepper,
         the current time
     state: numpy.ndarray
     """
+    actx = get_container_context_recursively(state)
+
     t = np.float64(t)
+    state = force_evaluation(actx, state)
 
     if t_final <= t:
         return istep, t, state
-
-    actx = get_container_context_recursively(state)
 
     compiled_rhs = _compile_rhs(actx, rhs)
 
@@ -225,12 +226,13 @@ def _advance_state_leap(rhs, timestepper, state,
         the current time
     state: numpy.ndarray
     """
+    actx = get_container_context_recursively(state)
+
     t = np.float64(t)
+    state = force_evaluation(actx, state)
 
     if t_final <= t:
         return istep, t, state
-
-    actx = get_container_context_recursively(state)
 
     compiled_rhs = _compile_rhs(actx, rhs)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
