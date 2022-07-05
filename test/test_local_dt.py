@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
                           (rk4_step, 4)])
 def test_integration_order(integrator, method_order):
     """Test that time integrators have correct order using local time stepping.
-    
+
     Run for dt as an array (and not as a float) but the order check is done
     one dt at a time.
     """
