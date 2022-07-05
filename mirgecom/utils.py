@@ -116,5 +116,4 @@ def force_evaluation(actx, x):
     """Force evaluation of a (possibly lazy) array."""
     if actx is None:
         return x
-    from arraycontext import freeze, thaw
-    return thaw(freeze(x, actx), actx)
+    return actx.thaw(actx.freeze(x))

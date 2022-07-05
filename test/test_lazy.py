@@ -29,7 +29,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
-from arraycontext import freeze, thaw
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
@@ -138,7 +137,9 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_flux(u_tpair):
         dd = u_tpair.dd
         dd_allfaces = dd.with_dtag("all_faces")
-        normal = thaw(discr.normal(dd), u_tpair.int[0].array_context)
+        normal = discr.normal(dd)
+        actx = u_tpair.int[0].array_context
+        normal = actx.thaw(normal)
         flux = u_tpair.avg @ normal
         return op.project(discr, dd, dd_allfaces, flux)
 
@@ -149,7 +150,7 @@ def test_lazy_op_divergence(op_test_data, order):
     lazy_op = lazy_actx.compile(div_op)
 
     def get_inputs(actx):
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
         return u,
 
@@ -158,7 +159,7 @@ def test_lazy_op_divergence(op_test_data, order):
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
-        return thaw(freeze(u, lazy_actx), eager_actx)
+        return eager_actx.thaw(lazy_actx.freeze(u))
 
     eager_result = div_op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
@@ -189,7 +190,7 @@ def test_lazy_op_diffusion(op_test_data, order):
     lazy_op = lazy_actx.compile(diffusion_op)
 
     def get_inputs(actx):
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         kappa = discr.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
         return kappa, u
@@ -199,7 +200,7 @@ def test_lazy_op_diffusion(op_test_data, order):
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
-        return thaw(freeze(u, lazy_actx), eager_actx)
+        return eager_actx.thaw(lazy_actx.freeze(u))
 
     eager_result = diffusion_op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
@@ -241,7 +242,7 @@ def _get_scalar_lump():
     def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(init(x_vec=nodes, eos=gas_model.eos,
                                      **kwargs), gas_model)
 
@@ -277,7 +278,7 @@ def test_lazy_op_euler(op_test_data, problem, order):
     lazy_op = lazy_actx.compile(euler_op)
 
     def get_inputs(actx):
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         state = init(nodes)
         return state,
 
@@ -285,7 +286,7 @@ def test_lazy_op_euler(op_test_data, problem, order):
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
-        return thaw(freeze(u, lazy_actx), eager_actx)
+        return eager_actx.thaw(lazy_actx.freeze(u))
 
     eager_result = euler_op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))

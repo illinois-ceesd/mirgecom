@@ -30,7 +30,6 @@ import pytest
 import numpy as np
 from functools import partial
 
-from meshmode.dof_array import thaw
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
 from meshmode.array_context import (  # noqa
@@ -39,7 +38,6 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import (
     make_obj_array
 )
-from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import make_spectral_filter
 
 
@@ -169,7 +167,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     )
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1

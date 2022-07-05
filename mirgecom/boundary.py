@@ -44,7 +44,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
@@ -364,7 +363,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                             exterior=boundary_state.cv)
 
         actx = state_minus.array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
         from arraycontext import outer
         return outer(self._grad_num_flux_func(cv_pair.int, cv_pair.ext), nhat)
 
@@ -374,7 +373,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                   state_minus, **kwargs):
         # Feed a boundary temperature to numerical flux for grad op
         actx = state_minus.array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
         bnd_tpair = TracePair(btag,
                               interior=state_minus.temperature,
                               exterior=self._bnd_temperature_func(
@@ -394,7 +393,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                         gas_model=gas_model,
                                                         state_minus=state_minus,
                                                         **kwargs)
-        normal = thaw(discr.normal(btag), state_minus.array_context)
+        normal = state_minus.array_context.thaw(discr.normal(btag))
         return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
     # Returns the flux to be used by the divergence operator when computing the
@@ -470,7 +469,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         """Get the diffusive fluxes for the AV operator API."""
         grad_av_minus = op.project(discr, "vol", btag, diffusion)
         actx = grad_av_minus.mass[0].array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
         grad_av_plus = self._bnd_grad_av_func(
             discr=discr, btag=btag, grad_av_minus=grad_av_minus, **kwargs)
         bnd_grad_pair = TracePair(btag, interior=grad_av_minus,
@@ -531,7 +530,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
 
         # Subtract out the 2*wall-normal component
         # of velocity from the velocity at the wall to
@@ -553,7 +552,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
         actx = grad_av_minus.mass[0].array_context
-        nhat = thaw(discr.normal(btag), actx)
+        nhat = actx.thaw(discr.normal(btag))
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall

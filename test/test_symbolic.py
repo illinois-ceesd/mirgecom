@@ -25,7 +25,6 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-from meshmode.dof_array import thaw
 from meshmode.mesh.generation import generate_regular_rect_mesh
 import mirgecom.symbolic as sym
 from mirgecom.discretization import create_discretization_collection
@@ -301,7 +300,7 @@ def test_symbolic_evaluation(actx_factory):
 
     discr = create_discretization_collection(actx, mesh, order=2)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     sym_coords = pmbl.make_sym_vector("x", 2)
 

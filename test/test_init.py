@@ -32,7 +32,6 @@ from pytools.obj_array import make_obj_array
 import pytest
 
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
@@ -75,7 +74,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
@@ -130,7 +129,7 @@ def test_lump_init(ctx_factory):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -171,7 +170,7 @@ def test_vortex_init(ctx_factory):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -209,7 +208,7 @@ def test_shock_init(ctx_factory):
     print(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     initr = SodShock1D()
     initsoln = initr(time=0.0, x_vec=nodes)
@@ -248,7 +247,7 @@ def test_uniform(ctx_factory, dim):
     print(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -293,7 +292,7 @@ def test_pulse(ctx_factory, dim):
     print(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -356,7 +355,7 @@ def test_multilump(ctx_factory, dim):
     logger.info(f"Number of elements: {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     rho0 = 1.5
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])

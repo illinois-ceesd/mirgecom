@@ -40,7 +40,6 @@ from mirgecom.utils import force_evaluation
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
-from arraycontext import thaw
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -105,7 +104,7 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
     order = 3
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
