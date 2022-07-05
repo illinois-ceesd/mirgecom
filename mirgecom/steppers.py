@@ -143,6 +143,9 @@ def _advance_locally_state_stepper_func(rhs, timestepper, state, t, dt, nsteps,
                                 post_step_callback=None, force_eval=True):
     """Advance state for specific number of iterations using local time stepping.
 
+       Not to be used in time accurate simulations, only for convergence towards
+       steady state regime.
+
     Parameters
     ----------
     rhs

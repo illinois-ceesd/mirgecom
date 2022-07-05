@@ -96,7 +96,7 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t=0.0, dt=None, cfl=None, t_final=0.0,
+def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
                             constant_cfl=False, local_dt=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
@@ -142,11 +142,15 @@ def get_sim_timestep(discr, state, t=0.0, dt=None, cfl=None, t_final=0.0,
         The maximum stable DT based on a viscous fluid.
     """
     from mirgecom.viscous import get_viscous_timestep
+    from grudge.op import nodal_min, elementwise_min
     if local_dt:
-        my_local_dt = cfl * get_viscous_timestep(discr=discr, state=state)
+        actx = (state.cv.mass).array_context
+        data_shape = (state.cv.mass[0]).shape
+        my_local_dt = cfl * actx.np.broadcast_to(
+            elementwise_min(discr, get_viscous_timestep(discr=discr, state=state)),
+            data_shape)
         return my_local_dt
     else:
-        from grudge.op import nodal_min
         mydt = dt
         t_remaining = max(0, t_final - t)
         if constant_cfl:
