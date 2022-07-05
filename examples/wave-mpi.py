@@ -28,7 +28,6 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 
 from pytools.obj_array import flat_obj_array
-from arraycontext import thaw, freeze
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
@@ -135,7 +134,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     discr = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
@@ -229,7 +228,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                 ], overwrite=True
             )
 
-        fields = thaw(freeze(fields, actx), actx)
+        fields = actx.thaw(actx.freeze(fields))
         fields = rk4_step(fields, t, dt, compiled_rhs)
 
         t += dt

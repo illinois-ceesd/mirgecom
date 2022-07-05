@@ -28,7 +28,6 @@ import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
-from meshmode.dof_array import thaw
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
 
@@ -167,7 +166,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
         discr = create_discretization_collection(actx, mesh, order=order)
 
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
@@ -230,7 +229,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     discr = create_discretization_collection(actx, mesh, order=order)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)

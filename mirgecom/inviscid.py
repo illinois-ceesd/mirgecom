@@ -40,7 +40,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from arraycontext import thaw
 import grudge.op as op
 from mirgecom.fluid import make_conserved
 
@@ -270,7 +269,7 @@ def inviscid_flux_on_element_boundary(
             state_pair.dd, state_pair.dd.with_dtag("all_faces"),
             numerical_flux_func(
                 state_pair, gas_model,
-                thaw(discr.normal(state_pair.dd), state_pair.int.array_context)))
+                state_pair.int.array_context.thaw(discr.normal(state_pair.dd))))
 
     def _boundary_flux(dd_bdry, boundary, state_minus):
         return op.project(discr,
