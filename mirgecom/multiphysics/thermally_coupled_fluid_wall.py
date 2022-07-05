@@ -40,8 +40,6 @@ THE SOFTWARE.
 from dataclasses import replace
 import numpy as np
 
-from arraycontext import thaw
-
 from grudge.trace_pair import (
     TracePair,
     inter_volume_trace_pairs
@@ -50,6 +48,7 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
     as_dofdesc,
 )
+import grudge.op as op
 
 from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.fluid import make_conserved
@@ -115,14 +114,11 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         """Get the exterior solution on the boundary."""
         if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
             dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            ext_t = discr.project(dd_bdry_base, dd_bdry, self.ext_t)
-            ext_kappa = discr.project(dd_bdry_base, dd_bdry, self.ext_kappa)
+            ext_t = op.project(discr, dd_bdry_base, dd_bdry, self.ext_t)
+            ext_kappa = op.project(discr, dd_bdry_base, dd_bdry, self.ext_kappa)
         else:
             ext_t = self.ext_t
             ext_kappa = self.ext_kappa
-
-        # Grab some boundary-relevant data
-        dim = discr.dim
 
         # Cancel out the momentum
         cv_minus = state_minus.cv
@@ -139,8 +135,8 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
         # Form the external boundary solution with the new momentum and energy.
         ext_cv = make_conserved(
-            dim=dim, mass=cv_minus.mass, energy=ext_energy, momentum=ext_mom,
-            species_mass=cv_minus.species_mass)
+            dim=state_minus.dim, mass=cv_minus.mass, energy=ext_energy,
+            momentum=ext_mom, species_mass=cv_minus.species_mass)
 
         def replace_thermal_conductivity(state, kappa):
             new_tv = replace(state.tv, thermal_conductivity=kappa)
@@ -168,7 +164,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
 
         # Grab a unit normal to the boundary
-        nhat = thaw(discr.normal(dd_bdry), state_minus.array_context)
+        nhat = state_minus.array_context.thaw(discr.normal(dd_bdry))
 
         return numerical_flux_func(state_pair, gas_model, nhat)
 
@@ -178,7 +174,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         actx = grad_av_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = thaw(discr.normal(dd_bdry), actx)
+        nhat = actx.thaw(discr.normal(dd_bdry))
 
         # Apply a Neumann condition on the energy gradient
         # Should probably compute external energy gradient using external temperature
@@ -201,7 +197,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             - np.outer(grad_av_minus.species_mass @ nhat, nhat))
 
         return make_conserved(
-            discr.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
+            grad_av_minus.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
             momentum=grad_av_minus.momentum, species_mass=ext_grad_species_mass)
 
     def get_external_grad_cv(self, state_minus, grad_cv_minus, normal, **kwargs):
@@ -234,7 +230,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
-        normal = thaw(discr.normal(dd_bdry), actx)
+        normal = actx.thaw(discr.normal(dd_bdry))
 
         # FIXME: Need to examine [Mengaldo_2014]_ - specifically momentum terms
         state_plus = self.get_external_state(
@@ -273,7 +269,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             state_pair_with_harmonic_mean_coefs.ext, grad_cv_bc, grad_t_plus)
         f_pair = TracePair(dd_bdry, interior=f_int, exterior=f_ext)
 
-        lengthscales = discr.project(dd_bdry_base, dd_bdry, self.lengthscales)
+        lengthscales = op.project(discr, dd_bdry_base, dd_bdry, self.lengthscales)
 
         tau = (
             self.heat_flux_penalty_amount * kappa_harmonic_mean / lengthscales)
@@ -291,7 +287,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         """Get the exterior T on the boundary."""
         if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
             dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return discr.project(dd_bdry_base, dd_bdry, self.ext_t)
+            return op.project(discr, dd_bdry_base, dd_bdry, self.ext_t)
         else:
             return self.ext_t
 
@@ -304,7 +300,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
                 "Boundary does not have external temperature gradient data.")
         if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
             dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return discr.project(dd_bdry_base, dd_bdry, self.ext_grad_t)
+            return op.project(discr, dd_bdry_base, dd_bdry, self.ext_grad_t)
         else:
             return self.ext_grad_t
 
@@ -324,7 +320,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
             self, discr, dd_vol, dd_bdry, u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         """Get the numerical flux for grad(u) on the boundary."""
-        int_u = discr.project(dd_vol, dd_bdry, u)
+        int_u = op.project(discr, dd_vol, dd_bdry, u)
         u_tpair = TracePair(dd_bdry, interior=int_u, exterior=self.ext_u)
         from mirgecom.diffusion import grad_flux
         return grad_flux(discr, u_tpair, quadrature_tag=quadrature_tag)
@@ -338,11 +334,11 @@ class InterfaceWallBoundary(DiffusionBoundary):
                 "Boundary does not have external temperature gradient data.")
         if self.lengthscales is None:
             raise ValueError("Boundary does not have length scales data.")
-        int_u = discr.project(dd_vol, dd_bdry, u)
+        int_u = op.project(discr, dd_vol, dd_bdry, u)
         u_tpair = TracePair(dd_bdry, interior=int_u, exterior=self.ext_u)
-        int_kappa = discr.project(dd_vol, dd_bdry, kappa)
+        int_kappa = op.project(discr, dd_vol, dd_bdry, kappa)
         kappa_tpair = TracePair(dd_bdry, interior=int_kappa, exterior=self.ext_kappa)
-        int_grad_u = discr.project(dd_vol, dd_bdry, grad_u)
+        int_grad_u = op.project(discr, dd_vol, dd_bdry, grad_u)
         grad_u_tpair = TracePair(
             dd_bdry, interior=int_grad_u, exterior=self.ext_grad_u)
         lengthscales_tpair = TracePair(
@@ -455,7 +451,7 @@ def get_interface_boundaries(
                 kappa_tpair.ext,
                 grad_temperature_tpair.ext,
                 wall_penalty_amount,
-                lengthscales=discr.project(
+                lengthscales=op.project(discr,
                     fluid_volume_dd, temperature_tpair.dd, fluid_lengthscales))
             for temperature_tpair, kappa_tpair, grad_temperature_tpair in zip(
                 temperature_inter_vol_tpairs[wall_volume_dd, fluid_volume_dd],
@@ -467,7 +463,7 @@ def get_interface_boundaries(
                 temperature_tpair.ext,
                 kappa_tpair.ext,
                 grad_temperature_tpair.ext,
-                discr.project(
+                op.project(discr,
                     wall_volume_dd, temperature_tpair.dd, wall_lengthscales))
             for temperature_tpair, kappa_tpair, grad_temperature_tpair in zip(
                 temperature_inter_vol_tpairs[fluid_volume_dd, wall_volume_dd],

@@ -34,7 +34,6 @@ from meshmode.array_context import (  # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL
 from grudge.dof_desc import as_dofdesc
 from mirgecom.flux import num_flux_central
@@ -42,10 +41,9 @@ from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
-from grudge.eager import (
-    EagerDGDiscretization,
-    interior_trace_pair
-)
+import grudge.op as op
+from grudge.trace_pair import interior_trace_pair
+from mirgecom.discretization import create_discretization_collection
 from functools import partial
 
 logger = logging.getLogger(__name__)
@@ -125,25 +123,25 @@ def _cv_test_func(dim):
 
 def central_flux_interior(actx, discr, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = thaw(discr.normal(int_tpair.dd), actx)
+    normal = actx.thaw(discr.normal(int_tpair.dd))
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
     dd_all_faces = int_tpair.dd.with_dtag("all_faces")
-    return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
+    return op.project(discr, int_tpair.dd, dd_all_faces, flux_weak)
 
 
 def central_flux_boundary(actx, discr, soln_func, dd_bdry):
     """Compute a central flux for boundary faces."""
     boundary_discr = discr.discr_from_dd(dd_bdry)
-    bnd_nodes = thaw(boundary_discr.nodes(), actx)
+    bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = thaw(discr.normal(dd_bdry), actx)
+    bnd_nhat = actx.thaw(discr.normal(dd_bdry))
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
     dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
-    return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
+    return op.project(discr, bnd_tpair.dd, dd_all_faces, flux_weak)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -186,7 +184,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        discr = create_discretization_collection(actx, mesh, order=order)
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
@@ -204,7 +202,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_func = partial(sym_eval, sym_test_func)
         grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         int_flux = partial(central_flux_interior, actx, discr)
         bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
 
@@ -212,8 +210,8 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         exact_grad = grad_test_func(nodes)
 
         from mirgecom.simutil import componentwise_norms
-        from arraycontext import flatten
 
+        from arraycontext import flatten
         err_scale = max(flatten(componentwise_norms(discr, exact_grad, np.inf),
                                 actx))
 
@@ -236,8 +234,9 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
 
         print(f"{test_grad=}")
         grad_err = \
-            max(flatten(componentwise_norms(discr, test_grad - exact_grad, np.inf),
-                        actx)) / err_scale
+            max(flatten(
+                componentwise_norms(discr, test_grad - exact_grad, np.inf),
+                actx) / err_scale)
 
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 

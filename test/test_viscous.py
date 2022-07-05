@@ -33,15 +33,13 @@ import pytest  # noqa
 from dataclasses import replace
 
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
 from grudge.dof_desc import as_dofdesc
 import grudge.op as op
-from grudge.eager import (
-    EagerDGDiscretization,
-    interior_trace_pair
-)
+from grudge.trace_pair import interior_trace_pairs
+from mirgecom.discretization import create_discretization_collection
+
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -74,8 +72,8 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -115,7 +113,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     tau = viscous_stress_tensor(fluid_state, grad_cv)
 
     # The errors come from grad_v
-    assert actx.to_numpy(discr.norm(tau - exp_tau, np.inf)) < 1e-12
+    assert actx.to_numpy(op.norm(discr, tau - exp_tau, np.inf)) < 1e-12
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
@@ -165,32 +163,32 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     initializer = PlanarPoiseuille(density=rho, mu=mu)
 
     def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
-                    int_tpair, boundaries):
+                    int_tpairs, boundaries):
         return (
-            compute_interior_flux(int_tpair)
+            sum(compute_interior_flux(int_tpair) for int_tpair in int_tpairs)
             + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
 
     from mirgecom.flux import num_flux_central
 
     def cv_flux_interior(int_tpair):
-        normal = thaw(actx, discr.normal(int_tpair.dd))
+        normal = actx.thaw(discr.normal(int_tpair.dd))
         from arraycontext import outer
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         dd_all_faces = int_tpair.dd.with_dtag("all_faces")
-        return discr.project(int_tpair.dd, dd_all_faces, flux_weak)
+        return op.project(discr, int_tpair.dd, dd_all_faces, flux_weak)
 
     def cv_flux_boundary(dd_bdry):
         boundary_discr = discr.discr_from_dd(dd_bdry)
-        bnd_nodes = thaw(actx, boundary_discr.nodes())
+        bnd_nodes = actx.thaw(boundary_discr.nodes())
         cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
-        bnd_nhat = thaw(actx, discr.normal(dd_bdry))
+        bnd_nhat = actx.thaw(discr.normal(dd_bdry))
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
         from arraycontext import outer
         flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
         dd_all_faces = dd_bdry.with_domain_tag(
             replace(dd_bdry.domain_tag, tag=FACE_RESTR_ALL))
-        return discr.project(bnd_tpair.dd, dd_all_faces, flux_weak)
+        return op.project(discr, dd_bdry, dd_all_faces, flux_weak)
 
     for nfac in [1, 2, 4]:
 
@@ -203,11 +201,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        discr = create_discretization_collection(actx, mesh, order=order)
+        nodes = actx.thaw(discr.nodes())
 
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
@@ -215,10 +213,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
         # form exact cv
         cv = initializer(x_vec=nodes, eos=eos)
-        cv_int_tpair = interior_trace_pair(discr, cv)
+        cv_int_tpairs = interior_trace_pairs(discr, cv)
         boundaries = [BTAG_ALL]
         cv_flux_bnd = _elbnd_flux(discr, cv_flux_interior, cv_flux_boundary,
-                                  cv_int_tpair, boundaries)
+                                  cv_int_tpairs, boundaries)
         from mirgecom.operators import grad_operator
         dd_vol = as_dofdesc("vol")
         dd_faces = as_dofdesc("all_faces")
@@ -304,8 +302,8 @@ def test_species_diffusive_flux(actx_factory):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -353,7 +351,7 @@ def test_species_diffusive_flux(actx_factory):
     j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     tol = 1e-10
     for idim in range(dim):
@@ -380,8 +378,8 @@ def test_diffusive_heat_flux(actx_factory):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -428,7 +426,7 @@ def test_diffusive_heat_flux(actx_factory):
     j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     tol = 1e-10
     for idim in range(dim):
@@ -456,8 +454,8 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
     vel = .32
@@ -492,7 +490,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
         expected *= f
     calculated = get_local_max_species_diffusivity(actx, d_alpha)
 
-    assert actx.to_numpy(discr.norm(calculated-expected, np.inf)) == 0
+    assert actx.to_numpy(op.norm(discr, calculated-expected, np.inf)) == 0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -511,7 +509,7 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -551,4 +549,4 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
     dt_expected = chlen / (speed_total + (mu / chlen))
 
     error = (dt_expected - dt_field) / dt_expected
-    assert actx.to_numpy(discr.norm(error, np.inf)) == 0
+    assert actx.to_numpy(op.norm(discr, error, np.inf)) == 0

@@ -28,7 +28,8 @@ import pymbolic as pmbl
 import pymbolic.primitives as prim
 import mirgecom.symbolic as sym
 from mirgecom.wave import wave_operator
-from meshmode.dof_array import thaw
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -163,10 +164,9 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     for n in [8, 10, 12] if p.dim == 3 else [8, 12, 16]:
         mesh = p.mesh_factory(n)
 
-        from grudge.eager import EagerDGDiscretization
-        discr = EagerDGDiscretization(actx, mesh, order=order)
+        discr = create_discretization_collection(actx, mesh, order=order)
 
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
@@ -184,13 +184,13 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
         expected_rhs = sym_eval(sym_rhs, t_check)
 
         rel_linf_err = actx.to_numpy(
-            discr.norm(rhs - expected_rhs, np.inf)
-            / discr.norm(expected_rhs, np.inf))
+            op.norm(discr, rhs - expected_rhs, np.inf)
+            / op.norm(discr, expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, discr.order)
+            vis = make_visualizer(discr, order)
             vis.write_vtk_file("wave_accuracy_{order}_{n}.vtu".format(order=order,
                         n=n), [
                             ("u", fields[0]),
@@ -227,10 +227,9 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     mesh = p.mesh_factory(8)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
@@ -259,7 +258,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order)
+        vis = make_visualizer(discr, order)
         vis.write_vtk_file("wave_stability.vtu",
                 [
                     ("u", fields[0]),
@@ -269,7 +268,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
                     ])
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     err = inf_norm(fields-expected_fields)
     max_err = inf_norm(expected_fields)

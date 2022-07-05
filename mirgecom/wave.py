@@ -31,9 +31,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import thaw
-from grudge.trace_pair import TracePair
-from grudge.eager import interior_trace_pair, cross_rank_trace_pairs
+from grudge.trace_pair import TracePair, interior_trace_pairs
 import grudge.op as op
 
 
@@ -42,8 +40,7 @@ def _flux(discr, c, w_tpair):
     v = w_tpair[1:]
 
     actx = w_tpair.int[0].array_context
-
-    normal = thaw(actx, discr.normal(w_tpair.dd))
+    normal = actx.thaw(discr.normal(w_tpair.dd))
 
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),
@@ -68,7 +65,7 @@ def wave_operator(discr, c, w):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     c: float
         the (constant) wave speed
@@ -96,12 +93,12 @@ def wave_operator(discr, c, w):
                 )
             +  # noqa: W504
             op.face_mass(discr,
-                _flux(discr, c=c, w_tpair=interior_trace_pair(discr, w))
-                + _flux(discr, c=c,
-                    w_tpair=TracePair(BTAG_ALL, interior=dir_bval, exterior=dir_bc))
+                _flux(discr, c=c,
+                      w_tpair=TracePair(BTAG_ALL, interior=dir_bval,
+                                        exterior=dir_bc))
                 + sum(
                     _flux(discr, c=c, w_tpair=tpair)
-                    for tpair in cross_rank_trace_pairs(discr, w, _WaveTag))
+                    for tpair in interior_trace_pairs(discr, w, comm_tag=_WaveTag))
                 )
             )
         )

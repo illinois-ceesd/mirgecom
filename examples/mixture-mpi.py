@@ -29,12 +29,11 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DISCR_TAG_QUAD
 
-
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -152,21 +151,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-    order = 1
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
+    order = 3
+    discr = create_discretization_collection(
+        actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     use_overintegration = False
     if use_overintegration:
@@ -201,9 +190,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 ("max_temperature",    "{value:7g})\n")])
 
     # Pyrometheus initialization
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
-    sol = cantera.Solution(phase_id="gas", source=mech_cti)
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input = get_mechanism_input("uiuc")
+    sol = cantera.Solution(name="gas", yaml=mech_input)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
     pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
@@ -227,12 +216,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def boundary_solution(discr, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(dd_bdry)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model,
                                 temperature_seed=state_minus.temperature)
 
-    if True:
+    if False:
         my_boundary = AdiabaticSlipBoundary()
         boundaries = {BTAG_ALL: my_boundary}
     else:
@@ -274,7 +263,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info(init_message)
 
     def my_write_status(component_errors, dv=None):
-        from mirgecom.simutil import allsync
         status_msg = (
             "------- errors="
             + ", ".join("%.3g" % en for en in component_errors))
@@ -283,14 +271,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MIN)
-            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MAX)
-            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MIN)
-            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MAX)
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                                 op="min")
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                                 op="max")
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                                 op="min")
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                                 op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
@@ -307,7 +295,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields = [("cv", state), ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
 
     def my_write_restart(step, t, state, tseed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)

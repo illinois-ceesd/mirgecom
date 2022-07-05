@@ -31,11 +31,11 @@ from functools import partial
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DISCR_TAG_QUAD
 
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -152,21 +152,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
     order = 1
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
+    discr = create_discretization_collection(
+        actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -237,7 +227,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)

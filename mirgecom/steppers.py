@@ -30,11 +30,7 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools import memoize_in
-from arraycontext import (
-    freeze,
-    thaw,
-    get_container_context_recursively
-)
+from arraycontext import get_container_context_recursively
 
 
 def _compile_timestepper(actx, timestepper, rhs):
@@ -65,7 +61,7 @@ def _compile_rhs(actx, rhs):
 def _force_evaluation(actx, state):
     if actx is None:
         return state
-    return thaw(freeze(state, actx), actx)
+    return actx.thaw(actx.freeze(state))
 
 
 def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,

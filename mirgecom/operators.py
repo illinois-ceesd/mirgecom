@@ -38,7 +38,7 @@ def grad_operator(discr, dd_vol, dd_faces, u, flux):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     dd_vol: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the volume discretization.
@@ -70,7 +70,7 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     dd_vol: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the volume discretization.

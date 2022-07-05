@@ -33,9 +33,9 @@ import pytest
 
 from pytools.obj_array import make_obj_array
 
-from meshmode.dof_array import thaw
 from mirgecom.fluid import make_conserved
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -62,8 +62,8 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -83,7 +83,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     tol = 1e-11
     exp_result = vel_fac * np.eye(dim) * ones
-    grad_v_err = [actx.to_numpy(discr.norm(grad_v[i] - exp_result[i], np.inf))
+    grad_v_err = [actx.to_numpy(op.norm(discr, grad_v[i] - exp_result[i], np.inf))
                   for i in range(dim)]
 
     assert max(grad_v_err) < tol
@@ -111,8 +111,8 @@ def test_velocity_gradient_eoc(actx_factory, dim):
             a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
-        discr = EagerDGDiscretization(actx, mesh, order=order)
-        nodes = thaw(actx, discr.nodes())
+        discr = create_discretization_collection(actx, mesh, order=order)
+        nodes = actx.thaw(discr.nodes())
         zeros = discr.zeros(actx)
 
         mass = nodes[dim-1]*nodes[dim-1]
@@ -132,7 +132,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
 
         comp_err = make_obj_array([
             actx.to_numpy(
-                discr.norm(grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf))
+                op.norm(discr, grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf))
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
@@ -159,8 +159,8 @@ def test_velocity_gradient_structure(actx_factory):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -188,7 +188,7 @@ def test_velocity_gradient_structure(actx_factory):
     assert type(grad_v[0, 0]) == DOFArray
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     assert inf_norm(grad_v - exp_result) < tol
     assert inf_norm(grad_v.T - exp_trans) < tol
@@ -208,8 +208,8 @@ def test_species_mass_gradient(actx_factory, dim):
 
     order = 1
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1
 
@@ -240,7 +240,7 @@ def test_species_mass_gradient(actx_factory, dim):
     assert type(grad_y[0, 0]) == DOFArray
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     tol = 1e-11
     for idim in range(dim):

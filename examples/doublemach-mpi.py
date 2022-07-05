@@ -30,7 +30,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
@@ -193,8 +192,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    discr = create_discretization_collection(actx, local_mesh, order, comm)
-    nodes = thaw(discr.nodes(), actx)
+    discr = create_discretization_collection(actx, local_mesh, order=order,
+                                             mpi_communicator=comm)
+    nodes = actx.thaw(discr.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -240,7 +240,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _boundary_state(discr, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(dd_bdry)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
@@ -295,7 +295,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("tagged_cells", tagged_cells)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True)
+                      step=step, t=t, overwrite=True,
+                      comm=comm)
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)

@@ -130,7 +130,7 @@ from dataclasses import replace
 
 from pytools import memoize_in, keyed_memoize_in
 from functools import partial
-from meshmode.dof_array import thaw, DOFArray
+from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
 from mirgecom.flux import num_flux_central
@@ -267,7 +267,7 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
         dd_trace = utpair.dd
         dd_allfaces = dd_trace.with_domain_tag(
             replace(dd_trace.domain_tag, tag=FACE_RESTR_ALL))
-        normal = thaw(actx, discr.normal(dd_trace))
+        normal = actx.thaw(discr.normal(dd_trace))
         return op.project(discr, dd_trace, dd_allfaces,
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat

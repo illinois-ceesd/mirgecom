@@ -149,8 +149,16 @@ def get_sim_timestep(
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
-                  step=0, t=0, overwrite=False, vis_timer=None):
-    """Write VTK output for the fields specified in *io_fields*.
+                  step=0, t=0, overwrite=False, vis_timer=None,
+                  comm=None):
+    """Write parallel VTK output for the fields specified in *io_fields*.
+
+    This routine writes a parallel-compatible unstructured VTK visualization
+    file set in (vtu/pvtu) format. One file per MPI rank is written with the
+    following naming convention: *vizname*_*step*_<mpi-rank>.vtu, and a single
+    file manifest with naming convention: *vizname*_*step*.pvtu.  Users are
+    advised to visualize the data using _Paraview_, _VisIt_, or other
+    VTU-compatible visualization software by opening the PVTU files.
 
     .. note::
         This is a collective routine and must be called by all MPI ranks.
@@ -162,14 +170,35 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         VTK output object.
     io_fields:
         List of tuples indicating the (name, data) for each field to write.
+    vizname: str
+        Root part of the visualization file name to write
+    step: int
+        The step number to use in the file names
+    t: float
+        The simulation time to write into the visualization files
+    overwrite: bool
+        Option whether to overwrite existing files (True) or fail if files
+        exist (False=default).
+    comm:
+        An MPI Communicator is required for parallel writes. If no
+        mpi_communicator is provided, then the write is assumed to be serial.
+        (deprecated behavior: pull an MPI communicator from the discretization
+        collection.  This will stop working in Fall 2022.)
     """
     from contextlib import nullcontext
     from mirgecom.io import make_rank_fname, make_par_fname
 
-    comm = discr.mpi_communicator
+    if comm is None:  # None is OK for serial writes!
+        comm = discr.mpi_communicator
+        if comm is not None:  # It's *not* OK to get comm from discr
+            from warnings import warn
+            warn("Using `write_visfile` in parallel without an MPI communicator is "
+                 "deprecated and will stop working in Fall 2022. For parallel "
+                 "writes, specify an MPI communicator with the `mpi_communicator` "
+                 "argument.")
     rank = 0
 
-    if comm:
+    if comm is not None:
         rank = comm.Get_rank()
 
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
@@ -180,7 +209,7 @@ def write_visfile(discr, io_fields, visualizer, vizname,
         if viz_dir and not os.path.exists(viz_dir):
             os.makedirs(viz_dir)
 
-    if comm:
+    if comm is not None:
         comm.barrier()
 
     if vis_timer:
@@ -293,8 +322,8 @@ def check_range_local(discr: DiscretizationCollection, dd: str, field: DOFArray,
                       min_value: float, max_value: float) -> List[float]:
     """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    local_min = np.asscalar(actx.to_numpy(op.nodal_min_loc(discr, dd, field)))
-    local_max = np.asscalar(actx.to_numpy(op.nodal_max_loc(discr, dd, field)))
+    local_min = actx.to_numpy(op.nodal_min_loc(discr, dd, field)).item()
+    local_max = actx.to_numpy(op.nodal_max_loc(discr, dd, field)).item()
 
     failing_values = []
 
@@ -612,5 +641,4 @@ def species_fraction_anomaly_relaxation(cv, alpha=1.):
 
 def force_evaluation(actx, expn):
     """Wrap freeze/thaw forcing evaluation of expressions."""
-    from arraycontext import thaw, freeze
-    return thaw(freeze(expn, actx), actx)
+    return actx.thaw(actx.freeze(expn))

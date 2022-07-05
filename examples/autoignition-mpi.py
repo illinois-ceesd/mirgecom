@@ -30,7 +30,8 @@ import pyopencl.tools as cl_tools
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 
 from logpyle import IntervalTimer, set_dt
@@ -39,8 +40,7 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile,
-    allsync
+    write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -50,7 +50,6 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
-from arraycontext import thaw
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -169,20 +168,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
-    )
-    nodes = thaw(discr.nodes(), actx)
+    discr = create_discretization_collection(actx, local_mesh, order=order,
+                                             mpi_communicator=comm)
+    nodes = actx.thaw(discr.nodes())
     ones = discr.zeros(actx) + 1.0
 
     if use_overintegration:
@@ -221,13 +209,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    # -- Pick up a CTI for the thermochemistry config
-    # --- Note: Users may add their own CTI file by dropping it into
-    # ---       mirgecom/mechanisms alongside the other CTI files.
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
+    # -- Pick up the input data for the thermochemistry mechanism
+    # --- Note: Users may add their own mechanism input file by dropping it into
+    # ---       mirgecom/mechanisms alongside the other mech input files.
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input = get_mechanism_input("uiuc")
 
-    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     nspecies = cantera_soln.n_species
 
     # Initial temperature, pressure, and mixutre mole fractions are needed to
@@ -328,8 +316,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             temperature_seed = restart_data["temperature_seed"]
         else:
             rst_cv = restart_data["cv"]
-            old_discr = EagerDGDiscretization(actx, local_mesh, order=rst_order,
-                                              mpi_communicator=comm)
+            old_discr = \
+                create_discretization_collection(actx, local_mesh, order=rst_order,
+                                                 mpi_communicator=comm)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
                                                    old_discr.discr_from_dd("vol"))
@@ -388,14 +377,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MIN)
-            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MAX)
-            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MIN)
-            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MAX)
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                                 op="min")
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                                 op="max")
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                                 op="min")
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                                 op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
@@ -407,7 +396,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("production_rates", production_rates),
                       ("dt" if constant_cfl else "cfl", ts_field)]
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
 
     def my_write_restart(step, t, state, temperature_seed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
@@ -496,14 +486,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if constant_cfl:
             ts_field = current_cfl * compute_dt(state)
             from grudge.op import nodal_min_loc
-            dt = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
-                         comm=comm, op=MPI.MIN)
+            dt = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
+                               op="min")
             cfl = current_cfl
         else:
             ts_field = compute_cfl(state, current_dt)
             from grudge.op import nodal_max_loc
-            cfl = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
-                          comm=comm, op=MPI.MAX)
+            cfl = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
+                                op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):

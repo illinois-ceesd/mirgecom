@@ -38,7 +38,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 from dataclasses import replace
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
 from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE, as_dofdesc
@@ -55,7 +54,7 @@ def grad_flux(discr, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
     dd_allfaces_quad = dd_trace_quad.with_domain_tag(
         replace(dd_trace_quad.domain_tag, tag=FACE_RESTR_ALL))
 
-    normal_quad = thaw(discr.normal(dd_trace_quad), actx)
+    normal_quad = actx.thaw(discr.normal(dd_trace_quad))
 
     def to_quad(a):
         return op.project(discr, dd_trace, dd_trace_quad, a)
@@ -82,7 +81,7 @@ def diffusion_flux(
     dd_allfaces_quad = dd_trace_quad.with_domain_tag(
         replace(dd_trace_quad.domain_tag, tag=FACE_RESTR_ALL))
 
-    normal_quad = thaw(discr.normal(dd_trace_quad), actx)
+    normal_quad = actx.thaw(discr.normal(dd_trace_quad))
 
     def to_quad(a):
         return op.project(discr, dd_trace, dd_trace_quad, a)
@@ -291,7 +290,7 @@ def grad_operator(
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     boundaries:
         dictionary (or list of dictionaries) mapping boundary tags to
@@ -424,7 +423,7 @@ def diffusion_operator(
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
         the discretization to use
     kappa: numbers.Number or meshmode.dof_array.DOFArray
         the conductivity value(s)

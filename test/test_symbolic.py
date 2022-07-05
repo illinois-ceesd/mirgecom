@@ -25,10 +25,10 @@ import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-from meshmode.dof_array import thaw
 from meshmode.mesh.generation import generate_regular_rect_mesh
 import mirgecom.symbolic as sym
-
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -298,10 +298,9 @@ def test_symbolic_evaluation(actx_factory):
         b=(np.pi/2,)*2,
         nelements_per_axis=(4,)*2)
 
-    from grudge.eager import EagerDGDiscretization
-    discr = EagerDGDiscretization(actx, mesh, order=2)
+    discr = create_discretization_collection(actx, mesh, order=2)
 
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     sym_coords = pmbl.make_sym_vector("x", 2)
 
@@ -313,7 +312,9 @@ def test_symbolic_evaluation(actx_factory):
     f = sym.evaluate(sym_f, t=0.5, x=nodes)
 
     expected_f = np.exp(-0.5) * actx.np.cos(nodes[0]) * actx.np.sin(nodes[1])
-    assert actx.to_numpy(discr.norm(f - expected_f)/discr.norm(expected_f)) < 1e-12
+    assert actx.to_numpy(
+        op.norm(discr, f - expected_f, np.inf)
+        / op.norm(discr, expected_f, np.inf)) < 1e-12
 
     # Vector
     sym_f = make_obj_array([
@@ -326,7 +327,9 @@ def test_symbolic_evaluation(actx_factory):
         np.exp(-0.5) * (0*nodes[0] + 1),
         actx.np.cos(nodes[0]),
         actx.np.sin(nodes[1])])
-    assert actx.to_numpy(discr.norm(f - expected_f)/discr.norm(expected_f)) < 1e-12
+    assert actx.to_numpy(
+        op.norm(discr, f - expected_f, np.inf)
+        / op.norm(discr, expected_f, np.inf)) < 1e-12
 
     # Array container
     from mirgecom.fluid import make_conserved
@@ -346,7 +349,11 @@ def test_symbolic_evaluation(actx_factory):
             actx.np.cos(nodes[0]),
             actx.np.cos(nodes[1])]),
         energy=actx.np.sin(nodes[0]))
-    assert actx.to_numpy(discr.norm(f - expected_f)/discr.norm(expected_f)) < 1e-12
+
+    # This awkward construction works around an issue with empty
+    # arrays inside the CV: (https://github.com/inducer/grudge/issues/266)
+    from mirgecom.simutil import compare_fluid_solutions
+    assert max(compare_fluid_solutions(discr, f, expected_f)) < 1e-12
 
 
 if __name__ == "__main__":

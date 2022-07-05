@@ -38,7 +38,6 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
@@ -52,7 +51,10 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from grudge.eager import EagerDGDiscretization
+import grudge.op as op
+from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
+
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -102,18 +104,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -174,7 +166,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         )
 
         def inf_norm(x):
-            return actx.to_numpy(discr.norm(x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, np.inf))
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -262,25 +254,15 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
             quadrature_tag = None
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -291,7 +273,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         def _vortex_boundary(discr, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(dd_bdry)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
@@ -350,25 +332,15 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
             quadrature_tag = None
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
@@ -381,7 +353,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         def _lump_boundary(discr, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(dd_bdry)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
                                     gas_model)
 
@@ -447,25 +419,15 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-        from meshmode.discretization.poly_element import \
-            default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-        discr = EagerDGDiscretization(
-            actx, mesh,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: default_simplex_group_factory(
-                    base_dim=dim, order=order),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-            }
-        )
+        discr = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
             quadrature_tag = None
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -486,7 +448,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         def _my_boundary(discr, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(dd_bdry)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
@@ -504,7 +466,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         print(f"expected_rhs = {expected_rhs}")
 
         err_max = actx.to_numpy(
-            discr.norm((inviscid_rhs-expected_rhs), np.inf))
+            op.norm(discr, (inviscid_rhs-expected_rhs), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -550,25 +512,15 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
-    discr = EagerDGDiscretization(
-        actx, mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        }
-    )
+    discr = create_discretization_collection(actx, mesh, order,
+                                             quadrature_order=2*order+1)
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
         quadrature_tag = None
 
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     cv = initializer(nodes)
     gas_model = GasModel(eos=eos)
@@ -715,7 +667,7 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
         def _vortex_boundary(discr, dd_bdry, state_minus, gas_model, **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(dd_bdry)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {

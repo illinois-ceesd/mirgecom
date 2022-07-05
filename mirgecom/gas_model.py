@@ -289,7 +289,7 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
 
@@ -402,7 +402,7 @@ def make_operator_fluid_states(
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
 

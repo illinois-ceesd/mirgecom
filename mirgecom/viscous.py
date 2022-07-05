@@ -48,7 +48,6 @@ from grudge.trace_pair import TracePair
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
-from arraycontext import thaw
 
 import grudge.op as op
 
@@ -296,7 +295,7 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
 
         The discretization to use
 
@@ -326,7 +325,7 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
     """
     from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
-    normal = thaw(discr.normal(state_pair.dd), actx)
+    normal = actx.thaw(discr.normal(state_pair.dd))
 
     def harmonic_mean(x, y):
         x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
@@ -368,7 +367,7 @@ def viscous_flux_on_element_boundary(
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
         A discretization collection encapsulating the DG elements
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
@@ -468,7 +467,7 @@ def get_viscous_timestep(discr, state, *, volume_dd=DD_VOLUME_ALL):
 
     Parameters
     ----------
-    discr: grudge.eager.EagerDGDiscretization
+    discr: grudge.discretization.DiscretizationCollection
 
         the discretization to use
 
@@ -508,7 +507,7 @@ def get_viscous_cfl(discr, dt, state, *, volume_dd=DD_VOLUME_ALL):
 
     Parameters
     ----------
-    discr: :class:`~grudge.eager.EagerDGDiscretization`
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
 
         the discretization to use
 

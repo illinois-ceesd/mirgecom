@@ -29,7 +29,7 @@ import numpy.random
 import logging
 import pytest
 from pytools.obj_array import make_obj_array
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -49,9 +49,8 @@ def test_restart_cv(actx_factory, nspecies):
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    from meshmode.dof_array import thaw
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     mass = nodes[0]
     energy = nodes[1]

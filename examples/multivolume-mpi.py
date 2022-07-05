@@ -32,7 +32,6 @@ from pytools.obj_array import make_obj_array
 import pyopencl as cl
 import pyopencl.tools as cl_tools
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
 from grudge.eager import EagerDGDiscretization
@@ -209,8 +208,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
 
-    fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
-    wall_nodes = thaw(discr.nodes(dd_vol_wall), actx)
+    fluid_nodes = actx.thaw(discr.nodes(dd_vol_fluid))
+    wall_nodes = actx.thaw(discr.nodes(dd_vol_wall))
 
     fluid_ones = 0*fluid_nodes[0] + 1
     wall_ones = 0*wall_nodes[0] + 1
@@ -309,7 +308,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
 #         pressure = 4935.22/x_scale
 #         mass = pressure/isothermal_wall_temp/r
-#         fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
+#         fluid_nodes = actx.thaw(discr.nodes(dd_vol_fluid))
 #         vel = np.zeros(shape=(dim,))
 #         orig = np.array([0., 0.01*x_scale])
 #         from mirgecom.initializers import Lump, AcousticPulse
@@ -529,7 +528,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
-    fluid_nodes = thaw(discr.nodes(dd_vol_fluid), actx)
+    fluid_nodes = actx.thaw(discr.nodes(dd_vol_fluid))
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)

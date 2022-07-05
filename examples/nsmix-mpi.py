@@ -30,11 +30,11 @@ import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DISCR_TAG_QUAD
 
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
@@ -156,21 +156,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
     order = 1
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
+    discr = create_discretization_collection(
+        actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -206,13 +196,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    # -- Pick up a CTI for the thermochemistry config
-    # --- Note: Users may add their own CTI file by dropping it into
-    # ---       mirgecom/mechanisms alongside the other CTI files.
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_cti = get_mechanism_cti("uiuc")
+    # -- Pick up the input data for the thermochemistry mechanism
+    # --- Note: Users may add their own mechanism input file by dropping it into
+    # ---       mirgecom/mechanisms alongside the other mech input files.
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input = get_mechanism_input("uiuc")
 
-    cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     nspecies = cantera_soln.n_species
 
     # Initial temperature, pressure, and mixture mole fractions are needed to
@@ -329,8 +319,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-    visualizer = make_visualizer(discr, order + 3
-                                 if discr.dim == 2 else order)
+    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -401,7 +390,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             viz_fields.extend(viz_ext)
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True)
+                      step=step, t=t, overwrite=True, comm=comm)
 
     def my_write_restart(step, t, state, tseed):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
@@ -540,7 +529,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _viscous_facial_flux_dissipative(discr, state_pair, grad_cv_pair,
                                          grad_t_pair, beta=0., gas_model=None):
         actx = state_pair.int.array_context
-        normal = thaw(discr.normal(state_pair.dd), actx)
+        normal = actx.thaw(discr.normal(state_pair.dd))
 
         f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                              grad_t_pair.int)

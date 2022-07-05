@@ -51,7 +51,6 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools.obj_array import make_obj_array
-from arraycontext import thaw
 from mirgecom.eos import IdealSingleGas
 from numbers import Number
 from mirgecom.fluid import make_conserved
@@ -563,7 +562,7 @@ class Lump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -742,7 +741,7 @@ class MulticomponentLump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -1076,7 +1075,7 @@ class Uniform:
             Time at which RHS is desired (unused)
         """
         actx = cv.array_context
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass
