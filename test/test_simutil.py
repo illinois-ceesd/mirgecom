@@ -28,6 +28,7 @@ import numpy as np
 import pytest  # noqa
 
 from arraycontext import (  # noqa
+    flatten,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
@@ -133,7 +134,6 @@ def test_analytic_comparison(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     resid = vortex_soln - cv
 
-    from arraycontext import flatten
     expected_errors = actx.to_numpy(
         flatten(componentwise_norms(discr, resid, order=np.inf), actx)).tolist()
 
