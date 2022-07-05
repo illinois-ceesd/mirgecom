@@ -96,20 +96,26 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
+def get_sim_timestep(discr, state, t=0.0, dt=None, cfl=None, t_final=0.0,
+                            constant_cfl=False, local_dt=False):
     """Return the maximum stable timestep for a typical fluid simulation.
 
-    This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
-    maximum domain-wide stability-limited timestep for a fluid simulation.
+    If local_dt == False, this routine returns *dt*, the users defined constant
+    timestep, or *max_dt*, the maximum domain-wide stability-limited timestep
+    for a fluid simulation.
+    If local_dt == True, this routine returns *dt* as a DOFArray, and time is
+    advanced locally such that the cells are not at the same time instant. This is
+    useful for steady state convergence.
 
     .. important::
         This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
         which makes it domain-wide regardless of parallel domain decomposition. Thus
         this routine must be called *collectively* (i.e. by all ranks).
 
-    Two modes are supported:
+    Three modes are supported:
         - Constant DT mode: returns the minimum of (t_final-t, dt)
         - Constant CFL mode: returns (cfl * max_dt)
+        - Local DT mode: returns local dt
 
     Parameters
     ----------
@@ -127,22 +133,28 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final, constant_cfl=False):
         The current CFL number
     constant_cfl: bool
         True if running constant CFL mode
+    local_dt: bool
+        True if running local DT mode. False by default.
 
     Returns
     -------
     float
         The maximum stable DT based on a viscous fluid.
     """
-    t_remaining = max(0, t_final - t)
-    mydt = dt
-    if constant_cfl:
-        from mirgecom.viscous import get_viscous_timestep
+    from mirgecom.viscous import get_viscous_timestep
+    if local_dt:
+        my_local_dt = cfl * get_viscous_timestep(discr=discr, state=state)
+        return my_local_dt
+    else:
         from grudge.op import nodal_min
-        mydt = state.array_context.to_numpy(
-            cfl * nodal_min(
-                discr, "vol",
-                get_viscous_timestep(discr=discr, state=state)))[()]
-    return min(t_remaining, mydt)
+        mydt = dt
+        t_remaining = max(0, t_final - t)
+        if constant_cfl:
+            mydt = state.array_context.to_numpy(
+                cfl * nodal_min(
+                    discr, "vol",
+                    get_viscous_timestep(discr=discr, state=state)))[()]
+        return min(t_remaining, mydt)
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
