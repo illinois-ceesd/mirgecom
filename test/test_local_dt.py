@@ -27,7 +27,6 @@ THE SOFTWARE.
 import numpy as np
 import logging
 import pytest
-import importlib
 
 from mirgecom.integrators import (euler_step,
                                   lsrk54_step,
