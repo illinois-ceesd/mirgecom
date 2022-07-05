@@ -225,6 +225,8 @@ def _advance_state_leap(rhs, timestepper, state,
         the current time
     state: numpy.ndarray
     """
+    t = np.float64(t)
+
     if t_final <= t:
         return istep, t, state
 
