@@ -68,11 +68,11 @@ def test_integration_order(integrator, method_order):
 
             while istep < 5:
                 state = integrator(state, t, dt, rhs)
-                t = t + dt       
+                t = t + dt
                 istep += 1
 
             error = np.abs(state[i] - exact_soln(t)[i]) / exact_soln(t)[i]
             integrator_eoc.add_data_point(dt[i], error)
 
         logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
-        assert integrator_eoc.order_estimate() >= method_order - .01  
+        assert integrator_eoc.order_estimate() >= method_order - .01
