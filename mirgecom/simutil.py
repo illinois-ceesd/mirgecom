@@ -69,7 +69,7 @@ from functools import partial
 from meshmode.dof_array import DOFArray
 
 from typing import List
-from grudge.discretization import DiscretizationCollection
+from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 
 
@@ -467,7 +467,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                 raise ValueError("Missing volume specification for some elements.")
 
             part_id_to_elements = {
-                (rank, volumes[vol_idx]):
+                PartID(volumes[vol_idx], rank):
                     np.where(
                         (volume_index_per_element == vol_idx)
                         & (rank_per_element == rank))[0]
@@ -477,9 +477,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             # FIXME: Find a better way to do this
             part_id_to_part_index = {
                 part_id: part_index
-                for part_id, part_index in zip(
-                    part_id_to_elements.keys(),
-                    range(len(part_id_to_elements)))}
+                for part_index, part_id in enumerate(part_id_to_elements.keys())}
             from meshmode.mesh.processing import _compute_global_elem_to_part_elem
             global_elem_to_part_elem = _compute_global_elem_to_part_elem(
                 mesh.nelements, part_id_to_elements, part_id_to_part_index,
@@ -503,8 +501,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             rank_to_mesh_data = {
                 rank: {
                     vol: (
-                        part_id_to_mesh[rank, vol],
-                        part_id_to_tag_to_elements[rank, vol])
+                        part_id_to_mesh[PartID(vol, rank)],
+                        part_id_to_tag_to_elements[PartID(vol, rank)])
                     for vol in volumes}
                 for rank in range(num_ranks)}
 
