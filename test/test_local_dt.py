@@ -58,7 +58,7 @@ def test_integration_order(integrator, method_order):
     integrator_eoc = EOCRecorder()
 
     local_dt = np.asarray([0.5, 1.0, 1.5, 2.0])
-    for i in range(0,local_dt.shape[0]):
+    for i in range(0, local_dt.shape[0]):
         for refine in [1, 2, 4, 8]:
             dt = local_dt / refine
             t = 0*dt
@@ -75,6 +75,4 @@ def test_integration_order(integrator, method_order):
             integrator_eoc.add_data_point(dt[i], error)
 
         logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
-        assert integrator_eoc.order_estimate() >= method_order - .01
-
-   
+        assert integrator_eoc.order_estimate() >= method_order - .01  
