@@ -33,7 +33,7 @@ from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
 from mirgecom.utils import force_evaluation
 from pytools import memoize_in
-from arraycontext import get_container_context_recursively
+from arraycontext import get_container_context_recursively_opt
 
 
 def _compile_timestepper(actx, timestepper, rhs):
@@ -126,7 +126,7 @@ def _advance_state_stepper_func(rhs, timestepper,
         the current time
     state: numpy.ndarray
     """
-    actx = get_container_context_recursively(state)
+    actx = get_container_context_recursively_opt(state)
 
     t = np.float64(t)
     state = force_evaluation(actx, state)
@@ -226,7 +226,7 @@ def _advance_state_leap(rhs, timestepper, state,
         the current time
     state: numpy.ndarray
     """
-    actx = get_container_context_recursively(state)
+    actx = get_container_context_recursively_opt(state)
 
     t = np.float64(t)
     state = force_evaluation(actx, state)
