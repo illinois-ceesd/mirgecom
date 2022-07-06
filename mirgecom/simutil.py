@@ -116,13 +116,16 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     - "Constant DT" mode (default): $\delta{t} = \mathbf{\text{min}}
       \left(\textit{dt},~\Delta{t}_r\right)$
     - "Constant CFL" mode (constant_cfl=True): $\delta{t} =
-      \mathbf{\text{global_min}}\left(\delta{t}_l,~\Delta{t}_r\right)$
-    - "Local DT" mode (local_dt=True): $\delta{t} = \delta{t}_l$
+      \mathbf{\text{min}}\left(\mathbf{\text{global_min}}\left(\delta{t}_l\right)
+      ,~\Delta{t}_r\right)$
+    - "Local DT" mode (local_dt=True): $\delta{t} = \mathbf{\text{cell_local_min}}
+      \left(\delta{t}_l\right)$
 
-    For "Local DT" mode, *t_final* is ignored, and a
-    :class:`~meshmode.dof_array.DOFArray` containing the cell-local *cfl*-limited
-    timestep, $\mathbf{\text{cell_local_min}\left(\delta{t}_l\right)$ is returned.
-    This mode is useful for stepping to convergence of steady-state solutions.
+    Note that for "Local DT" mode, *t_final* is ignored, and a
+    :class:`~meshmode.dof_array.DOFArray` containing the local *cfl*-limited
+    timestep, where $\mathbf{\text{cell_local_min}}\left(\delta{t}_l\right)$ is
+    defined as the minimum over the cell collocation points. This mode is useful for
+    stepping to convergence of steady-state solutions.
 
     .. important::
         This routine calls the collective :func:`~grudge.op.nodal_min` on the inside
