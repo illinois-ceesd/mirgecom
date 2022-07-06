@@ -126,10 +126,11 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
       \left(\delta{t}_l,~\Delta{t}_r\right)$
     - "Local DT" mode (local_dt=True): $\delta{t} = \delta{t}_l$
 
-    For "Local DT" mode, *t_final* is ignored, and a
-    :class:`~meshmode.dof_array.DOFArray` containing the point-local *cfl*-limited
-    timestep, $\delta{t}_l$ is returned. This mode is useful for stepping to
-    convergence of steady-state solutions.
+    For "Local DT" mode, *t_final* is ignored, and returns a
+    :class:`~meshmode.dof_array.DOFArray` containing the grid-local *cfl*-limited
+    timestep, $\delta{t}_l$, based on the minimum value for all
+    collocation points inside a grid cell.
+    This mode is useful for stepping to convergence of steady-state solutions.
 
     .. important::
         This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
