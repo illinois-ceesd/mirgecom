@@ -442,8 +442,6 @@ def compare_files_vtu(
         ):
     """Compare files of vtu type.
 
-    .. note::
-
     Parameters
     ----------
     first_file:
@@ -516,7 +514,7 @@ def compare_files_vtu(
     print("VTU Fidelity test completed successfully with tolerance", tolerance)
 
 
-class Hdf5Reader:
+class _Hdf5Reader:
     def __init__(self, filename):
         import h5py
 
@@ -526,7 +524,7 @@ class Hdf5Reader:
         return self.file_obj[datapath]
 
 
-class XdmfReader:
+class _XdmfReader:
     # CURRENTLY DOES NOT SUPPORT MULTIPLE Grids
 
     def __init__(self, filename):
@@ -581,14 +579,12 @@ class XdmfReader:
         h5_datapath = split_source_info[2]
 
         # read data from corresponding hdf5 file
-        h5_reader = Hdf5Reader(h5_filename)
+        h5_reader = _Hdf5Reader(h5_filename)
         return h5_reader.read_specific_data(h5_datapath)
 
 
 def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-12):
     """Compare files of xdmf type.
-
-    .. note::
 
     Parameters
     ----------
@@ -609,8 +605,8 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
         If it fails the file type test or contains different data.
     """
     # read files
-    file_reader1 = XdmfReader(first_file)
-    file_reader2 = XdmfReader(second_file)
+    file_reader1 = _XdmfReader(first_file)
+    file_reader2 = _XdmfReader(second_file)
 
     # check same number of grids
     if len(file_reader1.grids) != len(file_reader2.grids):
@@ -721,7 +717,6 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
 def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-12):
     """Compare files of hdf5 type.
 
-
     Parameters
     ----------
     first_file:
@@ -740,8 +735,8 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
     False:
         If it fails the file type test or contains different data.
     """
-    file_reader1 = Hdf5Reader(first_file)
-    file_reader2 = Hdf5Reader(second_file)
+    file_reader1 = _Hdf5Reader(first_file)
+    file_reader2 = _Hdf5Reader(second_file)
     f1 = file_reader1.file_obj
     f2 = file_reader2.file_obj
 
