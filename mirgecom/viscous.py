@@ -45,7 +45,6 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
-from arraycontext import thaw
 
 import grudge.op as op
 
@@ -323,7 +322,7 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
     """
     from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
-    normal = thaw(discr.normal(state_pair.dd), actx)
+    normal = actx.thaw(discr.normal(state_pair.dd))
 
     f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                          grad_t_pair.int)

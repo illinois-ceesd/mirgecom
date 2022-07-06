@@ -200,8 +200,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    from meshmode.dof_array import thaw
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
@@ -410,8 +409,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    from meshmode.dof_array import thaw
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -466,8 +464,7 @@ def test_idealsingle_vortex(ctx_factory):
     logger.info(f"Number of elements {mesh.nelements}")
 
     discr = create_discretization_collection(actx, mesh, order=order)
-    from meshmode.dof_array import thaw
-    nodes = thaw(actx, discr.nodes())
+    nodes = actx.thaw(discr.nodes())
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()

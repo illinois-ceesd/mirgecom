@@ -31,7 +31,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import thaw
 from grudge.trace_pair import TracePair, interior_trace_pairs
 import grudge.op as op
 
@@ -41,8 +40,7 @@ def _flux(discr, c, w_tpair):
     v = w_tpair[1:]
 
     actx = w_tpair.int[0].array_context
-
-    normal = thaw(actx, discr.normal(w_tpair.dd))
+    normal = actx.thaw(discr.normal(w_tpair.dd))
 
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),

@@ -30,7 +30,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.shortcuts import make_visualizer
@@ -195,7 +194,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
     discr = create_discretization_collection(actx, local_mesh, order=order,
                                              mpi_communicator=comm)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -241,7 +240,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 

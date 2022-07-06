@@ -36,7 +36,6 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 from mirgecom.fluid import make_conserved
@@ -299,7 +298,7 @@ class FluidManufacturedSolution(FluidCase):
                                  **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(self.get_solution(x=nodes, t=time), gas_model)
 
         return {BTAG_ALL:
@@ -629,7 +628,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     from mirgecom.discretization import create_discretization_collection
     discr = create_discretization_collection(actx, mesh, order)
 
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     source_eval = evaluate(sym_source, t=0, x=nodes)
 
@@ -681,7 +680,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
                              **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         boundary_cv = exact_soln(x=nodes)
         return make_fluid_state(boundary_cv, gas_model)
 
@@ -708,7 +707,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         from grudge.dt_utils import h_max_from_volume
         h_max = actx.to_numpy(h_max_from_volume(discr))
 
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         print(f"{nodes=}")
 
         cv_exact = exact_soln(x=nodes)
@@ -898,7 +897,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         mesh = man_soln.get_mesh(n)
 
         discr = create_discretization_collection(actx, mesh, order)
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
 
         from grudge.dt_utils import characteristic_lengthscales
         char_len = actx.to_numpy(
@@ -937,7 +936,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
                                  **kwargs):
             actx = state_minus.array_context
             bnd_discr = discr.discr_from_dd(btag)
-            nodes = thaw(bnd_discr.nodes(), actx)
+            nodes = actx.thaw(bnd_discr.nodes())
             boundary_cv = evaluate(sym_cv, x=nodes, t=time)
             return make_fluid_state(boundary_cv, gas_model)
 
