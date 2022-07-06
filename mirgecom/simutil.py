@@ -453,7 +453,7 @@ def compare_files_vtu(
     file_type:
         Vtu files
     tolerance:
-        Max acceptable value
+        Max acceptable absolute difference
 
     Returns
     -------
@@ -599,7 +599,7 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
     file_type:
         Xdmf files
     tolerance:
-        Max acceptable value
+        Max acceptable absolute difference
 
     Returns
     -------
@@ -721,7 +721,6 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
 def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-12):
     """Compare files of hdf5 type.
 
-    .. note::
 
     Parameters
     ----------
@@ -732,7 +731,7 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
     file_type:
         Hdf5 files
     tolerance:
-        Max acceptable value
+        Max acceptable absolute difference
 
     Returns
     -------
