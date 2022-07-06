@@ -75,17 +75,6 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-## Box grid generator widget lifted from @majosm and slightly bent
-#def _get_box_mesh(dim, a, b, n, t=None):
-#    dim_names = ["x", "y", "z"]
-#    bttf = {}
-#    for i in range(dim):
-#        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-#        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-#    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-#    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
-
-
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_overintegration=False, lazy=False,
@@ -131,7 +120,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_dt = 1e-10
     current_t = 0
     constant_cfl = True
-    local_dt = True # declaration necessary for local time stepping.
+    local_dt = True  # XXX declaration necessary for local time stepping.
     current_step = 0
 
     # some i/o frequencies
@@ -169,7 +158,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # create a stretched grid to force different grid cell size
         xx = np.linspace(left_boundary_location, right_boundary_location, npts_x + 1)
         yy = np.sqrt(np.linspace(0.0, 1.0, npts_y + 1))*(ytop - ybottom)
-        coords = tuple((xx,yy))
+        coords = tuple((xx, yy))
 
         from meshmode.mesh.generation import generate_box_mesh
         generate_mesh = partial(generate_box_mesh,
