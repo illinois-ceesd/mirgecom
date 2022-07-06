@@ -61,8 +61,7 @@ from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_device_name,
-    logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_device_memory_usage
 )
 
 
@@ -173,7 +172,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh, global_nelements = (
             generate_and_distribute_mesh(comm, generate_mesh))
         local_nelements = local_mesh.nelements
-
 
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from meshmode.discretization.poly_element import \
@@ -301,13 +299,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
         t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
         t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
-        if constant_cfl:
-            cfl = current_cfl
-        else:
-            from mirgecom.viscous import get_viscous_cfl
-            cfl = actx.to_numpy(nodal_max(discr, "vol",
-                                          get_viscous_cfl(discr, dt, state)))
-        if rank == 0:    
+        if rank == 0:
             logger.info(f"----- Pressure({p_min}, {p_max})\n"
                         f"----- Temperature({t_min}, {t_max})\n"
                         "----- errors="
@@ -377,15 +369,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_pre_step(step, t, dt, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
         dv = fluid_state.dv
-            
+
         if constant_cfl:
             dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
-                                           t_final, constant_cfl, local_dt)     
+                                           t_final, constant_cfl, local_dt)
         if local_dt:
             t = force_evaluation(actx, t)
             dt = force_evaluation(actx, get_sim_timestep(discr, fluid_state, t, dt,
                  current_cfl, constant_cfl=constant_cfl, local_dt=local_dt))
-        
+
         try:
             component_errors = None
 
@@ -432,10 +424,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_post_step(step, t, dt, state):
         if logmgr:
-            if local_dt:    
+            if local_dt:
                 set_dt(logmgr, 1.0)
             else:
-                set_dt(logmgr, dt)            
+                set_dt(logmgr, dt)
             logmgr.tick_after()
         return state, dt
 
@@ -447,7 +439,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                  current_cfl, constant_cfl=constant_cfl, local_dt=local_dt)
-    if local_dt == True:
+    if local_dt:
         current_dt = force_evaluation(actx, current_dt)
 
         current_t = current_t + current_dt*0.0
@@ -483,6 +475,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         print(actx.tabulate_profiling_data())
 
     exit()
+
 
 if __name__ == "__main__":
     import argparse
