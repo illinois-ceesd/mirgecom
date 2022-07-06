@@ -105,16 +105,9 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     Courant-Friedrichs-Lewy number, *cfl*, and the simulation max simulated time
     limit, *t_final*, and subject to the user's optional settings.
 
-    The point-local inviscid fluid timestep, $\delta{t}_l$, is computed as:
-
-    .. math::
-        \delta{t}_l = \frac{\Delta{x}}{\left(|\mathbf{v}_f| + c\right)},
-
-    where $\Delta{x}$ is the point-local mesh spacing, $\mathbf{v}_f$ is the
-    fluid velocity and $c$ is the local speed-of-sound.  For viscous fluids,
-    $\delta{t}_l$ is calculated by :func:`~mirgecom.viscous.get_viscous_timestep`.
-    Users are referred to :func:`~mirgecom.viscous.get_viscous_timestep` for more
-    details on the calculation of $\delta{t}_l$ for viscous fluids.
+    The local fluid timestep, $\delta{t}_l$, is computed by
+    :func:`~mirgecom.viscous.get_viscous_timestep`.  Users are referred to that
+    routine for the details of the local timestep.
 
     With the remaining simulation time $\Delta{t}_r =
     \left(\mathit{t\_final}-\mathit{t}\right)$, three modes are supported
@@ -127,19 +120,20 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     - "Local DT" mode (local_dt=True): $\delta{t} = \delta{t}_l$
 
     For "Local DT" mode, *t_final* is ignored, and a
-    :class:`~meshmode.dof_array.DOFArray` containing the point-local *cfl*-limited
+    :class:`~meshmode.dof_array.DOFArray` containing the local *cfl*-limited
     timestep, $\delta{t}_l$ is returned. This mode is useful for stepping to
     convergence of steady-state solutions.
 
     .. important::
-        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
-        which makes it domain-wide regardless of parallel domain decomposition. Thus
-        this routine must be called *collectively* (i.e. by all MPI ranks).
+        This routine calls the collective :func:`~grudge.op.nodal_min` on the inside
+        which involves MPI collective functions.  Thus all MPI ranks on the
+        :class:`~grudge.discretization.DiscretizationCollection` must call this
+        routine collectively.
 
     Parameters
     ----------
-    discr
-        Grudge discretization or discretization collection?
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
+        The grudge DG discretization to use
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
     t: float
