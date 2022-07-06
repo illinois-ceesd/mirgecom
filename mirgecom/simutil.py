@@ -464,11 +464,11 @@ def compare_files_vtu(
 
     # read files:
     if file_type == "vtu":
-        reader1 = vtk.vtkXMLUnstructuredGridReader()
-        reader2 = vtk.vtkXMLUnstructuredGridReader()
+        reader1 = vtk.vtkXMLUnstructuredGridReader()  # pylint: disable=no-member
+        reader2 = vtk.vtkXMLUnstructuredGridReader()  # pylint: disable=no-member
     else:
-        reader1 = vtk.vtkXMLPUnstructuredGridReader()
-        reader2 = vtk.vtkXMLPUnstructuredGridReader()
+        reader1 = vtk.vtkXMLPUnstructuredGridReader()  # pylint: disable=no-member
+        reader2 = vtk.vtkXMLPUnstructuredGridReader()  # pylint: disable=no-member
 
     reader1.SetFileName(first_file)
     reader1.Update()
