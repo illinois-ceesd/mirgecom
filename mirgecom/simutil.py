@@ -128,10 +128,11 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     stepping to convergence of steady-state solutions.
 
     .. important::
-        This routine calls the collective :func:`~grudge.op.nodal_min` on the inside
-        which involves MPI collective functions.  Thus all MPI ranks on the
+        For "Constant CFL" mode, this routine calls the collective
+        :func:`~grudge.op.nodal_min` on the inside which involves MPI collective
+        functions.  Thus all MPI ranks on the
         :class:`~grudge.discretization.DiscretizationCollection` must call this
-        routine collectively.
+        routine collectively when using "Constant CFL" mode.
 
     Parameters
     ----------
