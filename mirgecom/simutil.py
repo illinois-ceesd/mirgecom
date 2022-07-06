@@ -60,13 +60,13 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import grudge.op as op
-
-from arraycontext import map_array_container, flatten
-
 from functools import partial
 
+import grudge.op as op
+# from grudge.op import nodal_min, elementwise_min
+from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
+from mirgecom.viscous import get_viscous_timestep
 
 from typing import List
 from grudge.discretization import DiscretizationCollection
@@ -98,24 +98,43 @@ def check_step(step, interval):
 
 def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
                             constant_cfl=False, local_dt=False):
-    """Return the maximum stable timestep for a typical fluid simulation.
+    r"""Return the maximum stable timestep for a typical fluid simulation.
 
-    If local_dt == False, this routine returns *dt*, the users defined constant
-    timestep, or *max_dt*, the maximum domain-wide stability-limited timestep
-    for a fluid simulation.
-    If local_dt == True, this routine returns *dt* as a DOFArray, and time is
-    advanced locally such that the cells are not at the same time instant. This is
-    useful for steady state convergence.
+    This routine returns a constraint-limited timestep size for a fluid
+    simulation.  The returned timestep will be constrained by the specified
+    Courant-Friedrichs-Lewy number, *cfl*, and the simulation max simulated time
+    limit, *t_final*, and subject to the user's optional settings.
+
+    The point-local inviscid fluid timestep, $\delta{t}_l$, is computed as:
+
+    .. math::
+        \delta{t}_l = \frac{\Delta{x}}{\left(|\mathbf{v}_f| + c\right)},
+
+    where $\Delta{x}$ is the point-local mesh spacing, $\mathbf{v}_f$ is the
+    fluid velocity and $c$ is the local speed-of-sound.  For viscous fluids,
+    $\delta{t}_l$ is calculated by :func:`~mirgecom.viscous.get_viscous_timestep`.
+    Users are referred to :func:`~mirgecom.viscous.get_viscous_timestep` for more
+    details on the calculation of $\delta{t}_l$ for viscous fluids.
+
+    With the remaining simulation time $\Delta{t}_r =
+    \left(\mathit{t\_final}-\mathit{t}\right)$, three modes are supported
+    for the returned timestep, $\delta{t}$:
+
+    - "Constant DT" mode (default): $\delta{t} = \mathbf{\text{min}}
+      \left(\textit{dt},~\Delta{t}_r\right)$
+    - "Constant CFL" mode (constant_cfl=True): $\delta{t} = \mathbf{\text{min}}
+      \left(\delta{t}_l,~\Delta{t}_r\right)$
+    - "Local DT" mode (local_dt=True): $\delta{t} = \delta{t}_l$
+
+    For "Local DT" mode, *t_final* is ignored, and a
+    :class:`~meshmode.dof_array.DOFArray` containing the point-local *cfl*-limited
+    timestep, $\delta{t}_l$ is returned. This mode is useful for stepping to
+    convergence of steady-state solutions.
 
     .. important::
         This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
         which makes it domain-wide regardless of parallel domain decomposition. Thus
-        this routine must be called *collectively* (i.e. by all ranks).
-
-    Three modes are supported:
-        - Constant DT mode: returns the minimum of (t_final-t, dt)
-        - Constant CFL mode: returns (cfl * max_dt)
-        - Local DT mode: returns local dt
+        this routine must be called *collectively* (i.e. by all MPI ranks).
 
     Parameters
     ----------
@@ -138,27 +157,26 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
 
     Returns
     -------
-    float
-        The maximum stable DT based on a viscous fluid.
+    float or :class:`~meshmode.dof_array.DOFArray`
+        The global maximum stable DT based on a viscous fluid.
     """
-    from mirgecom.viscous import get_viscous_timestep
-    from grudge.op import nodal_min, elementwise_min
     if local_dt:
-        actx = (state.cv.mass).array_context
+        actx = state.array_context
         data_shape = (state.cv.mass[0]).shape
-        my_local_dt = cfl * actx.np.broadcast_to(
-            elementwise_min(discr, get_viscous_timestep(discr=discr, state=state)),
+        return cfl * actx.np.broadcast_to(
+            op.elementwise_min(discr, get_viscous_timestep(discr=discr,
+                                                           state=state)),
             data_shape)
-        return my_local_dt
-    else:
-        mydt = dt
-        t_remaining = max(0, t_final - t)
-        if constant_cfl:
-            mydt = state.array_context.to_numpy(
-                cfl * nodal_min(
-                    discr, "vol",
-                    get_viscous_timestep(discr=discr, state=state)))[()]
-        return min(t_remaining, mydt)
+
+    my_dt = dt
+    t_remaining = max(0, t_final - t)
+    if constant_cfl:
+        my_dt = state.array_context.to_numpy(
+            cfl * op.nodal_min(
+                discr, "vol",
+                get_viscous_timestep(discr=discr, state=state)))[()]
+
+    return min(t_remaining, my_dt)
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
