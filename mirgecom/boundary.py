@@ -760,26 +760,41 @@ class OutflowBoundary(PrescribedFluidBoundary):
 
     Total energy for the flow is computed as follows:
 
-
-    When the flow is super-sonic, i.e. when:
+    - For an ideal gas at super-sonic flow conditions, i.e. when:
 
     .. math:
 
        \rho\mathbf{V} \cdot \hat\mathbf{n} \ge c,
 
-    then the internal solution is used outright:
+    then the pressure is extrapolated from interior points:
 
     .. math:
 
-        \rho{E}^+ &= \rho{E}^-
+        P^+ &= P^-
 
-    otherwise the flow is sub-sonic, and the prescribed boundary pressure,
-    $P^+$, is used to compute the energy:
+    Otherwise, if the flow is sub-sonic, then the prescribed boundary pressure,
+    $P^+$, is used. In both cases, the energy is computed as:
 
     .. math:
 
         \rho{E}^+ &= \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
         + \frac{1}{2\rho^+}\left(\rho\mathbf{V}^+\cdot\rho\mathbf{V}^+\right).
+
+    - For mixtures, the pressure is evaluated similarly to the ideal gas case.
+    However, the total energy depends on the temperature to account for the
+    species enthalpy and variable specific heat at constant volume. For super-sonic
+    flows, it is extrapolated from interior points:
+
+    .. math:
+
+       T^+ &= T^-
+
+    while for sub-sonic flows, it is evaluated using ideal gas law
+
+    .. math:
+
+        T^+ &= \frac{P^+}{R_{mix} \rho^+}
+
     """
 
     def __init__(self, boundary_pressure=101325):
@@ -794,6 +809,14 @@ class OutflowBoundary(PrescribedFluidBoundary):
 
         This is the partially non-reflective boundary state described by
         [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
+
+        For super-sonic outflow, the interior flow properties (minus) are
+        extrapolated to the exterior point (plus).
+        For sub-sonic outflow, the pressure is imposed on the external point.
+
+        For mixtures, the internal energy is obtained via temperature, which comes
+        from ideal gas law with the mixture-weighted gas constant.
+        For ideal gas, the internal energy is obtained directly from pressure.
         """
         actx = state_minus.array_context
         nhat = actx.thaw(discr.normal(btag))
@@ -803,11 +826,24 @@ class OutflowBoundary(PrescribedFluidBoundary):
         speed_of_sound = state_minus.speed_of_sound
         kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
         gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
-        external_pressure = 2*self._pressure - state_minus.pressure
-        boundary_pressure = actx.np.where(actx.np.greater(boundary_speed,
-                                                          speed_of_sound),
-                                          state_minus.pressure, external_pressure)
-        internal_energy = boundary_pressure / (gamma - 1)
+
+        pressure_plus = 2.0*self._pressure - state_minus.pressure
+        if state_minus.is_mixture:
+            R_gas = gas_model.eos.gas_const(state_minus.cv)
+            temp_plus = (
+                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                state_minus.temperature, pressure_plus/(state_minus.cv.mass*R_gas))
+            )
+
+            internal_energy = state_minus.cv.mass*(
+                gas_model.eos.get_internal_energy(temp_plus,
+                                            state_minus.species_mass_fractions))
+        else:
+            boundary_pressure = actx.np.where(actx.np.greater(boundary_speed,
+                                                              speed_of_sound),
+                                              state_minus.pressure, pressure_plus)
+            internal_energy = (boundary_pressure / (gamma - 1.0))
+
         total_energy = internal_energy + kinetic_energy
         cv_outflow = make_conserved(dim=state_minus.dim, mass=state_minus.cv.mass,
                                     momentum=state_minus.cv.momentum,
@@ -1185,9 +1221,13 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
         nhat = actx.thaw(discr.normal(btag))
 
+        # flip the normal component of the velocity
         mom_plus = \
             (state_minus.momentum_density
              - 2*(np.dot(state_minus.momentum_density, nhat)*nhat))
+
+        # no changes are necessary to the energy equation because the velocity
+        # magnitude is the same, only the (normal) direction changes.
 
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density,
@@ -1199,17 +1239,25 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def adiabatic_wall_state_for_diffusion(self, discr, btag, gas_model,
                                            state_minus, **kwargs):
-        """Return state with 0 velocities and energy(Twall)."""
+        """Return state with zero normal-velocity and energy(Twall)."""
         actx = state_minus.array_context
         nhat = actx.thaw(discr.normal(btag))
 
-        mom_plus = \
-            (state_minus.momentum_density
-             - 2*(np.dot(state_minus.momentum_density, nhat)*nhat))
+        # remove normal component from velocity/momentum
+        mom_plus = (state_minus.momentum_density
+                      - 1*(np.dot(state_minus.momentum_density, nhat)*nhat))
+
+        # modify energy accordingly
+        kinetic_energy_plus = 0.5*np.dot(mom_plus, mom_plus)/state_minus.mass_density
+        internal_energy_plus = (
+            state_minus.mass_density * gas_model.eos.get_internal_energy(
+                temperature=state_minus.temperature,
+                species_mass_fractions=state_minus.species_mass_fractions))
 
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density,
-            energy=state_minus.energy_density, momentum=mom_plus,
+            energy=kinetic_energy_plus + internal_energy_plus,
+            momentum=mom_plus,
             species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
@@ -1222,7 +1270,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             discr, btag, gas_model, state_minus)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
-        normal = state_minus.array_context.thaw(discr.normal(btag))
+        actx = state_minus.array_context
+        normal = actx.thaw(discr.normal(btag))
         return numerical_flux_func(state_pair, gas_model, normal)
 
     def temperature_bc(self, state_minus, **kwargs):
@@ -1244,10 +1293,38 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                     (state_minus.mass_density*grad_y_plus[i]
                      + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
 
+        mass_plus = state_minus.mass_density
+        grad_mass_plus = grad_cv_minus.mass
+
+        from mirgecom.fluid import velocity_gradient
+        v_minus = state_minus.velocity
+        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
+
+        # modify velocity gradient at the boundary:
+        # remove normal component of velocity
+        v_plus = state_minus.velocity \
+                      - 1*np.dot(state_minus.velocity, normal)*normal
+        # eliminate anti-diagonal terms in 2D to force tau_xy = 0
+        grad_v_plus = grad_v_minus*np.eye(2)  # FIXME how to do this in 3D?
+        # product rule for momentum
+        grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
+
+        # the energy has to be modified accordingly:
+        # first, get gradient of internal energy, i.e., no kinetic energy
+        grad_int_energy_minus = grad_cv_minus.energy \
+            - 0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
+                + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus))
+        grad_int_energy_plus = grad_int_energy_minus
+        # then modify gradient of kinetic energy to match the changes in velocity
+        grad_kin_energy_plus = \
+            0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
+                + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
+        grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
+
         return make_conserved(grad_cv_minus.dim,
-                              mass=grad_cv_minus.mass,
-                              energy=grad_cv_minus.energy,
-                              momentum=grad_cv_minus.momentum,
+                              mass=grad_mass_plus,
+                              energy=grad_energy_plus,
+                              momentum=grad_momentum_density_plus,
                               species_mass=grad_species_mass_plus)
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
@@ -1283,7 +1360,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
         actx = grad_av_minus.mass[0].array_context
-        nhat = actx.thaw(discr.norm(btag))
+        nhat = actx.thaw(discr.normal(btag))
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
