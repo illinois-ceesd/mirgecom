@@ -23,7 +23,7 @@ Mesh utilities
 .. autofunction:: generate_and_distribute_mesh
 
 File comparison utilities
---------------
+-------------------------
 
 .. autofunction:: compare_files_vtu
 .. autofunction:: compare_files_xdmf
