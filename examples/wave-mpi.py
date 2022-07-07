@@ -38,6 +38,7 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
+from mirgecom.utils import force_evaluation
 
 import pyopencl.tools as cl_tools
 
@@ -228,8 +229,8 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
                 ], overwrite=True
             )
 
-        fields = actx.thaw(actx.freeze(fields))
         fields = rk4_step(fields, t, dt, compiled_rhs)
+        fields = force_evaluation(actx, fields)
 
         t += dt
         istep += 1
