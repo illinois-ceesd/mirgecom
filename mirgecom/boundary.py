@@ -496,9 +496,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
 
 class DummyBoundary(PrescribedFluidBoundary):
-    """Boundary type that assigns boundary-adjacent quantities as the
-    boundary solution.
-    """
+    """Boundary type that assigns boundary-adjacent solution to the boundary."""
 
     def __init__(self):
         """Initialize the DummyBoundary boundary type."""
@@ -508,7 +506,7 @@ class DummyBoundary(PrescribedFluidBoundary):
 class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
-    This function is deprecated and should be replaced by 
+    This function is deprecated and should be replaced by
     :class:`~mirgecom.boundary.SymmetryBoundary`
     """
 
@@ -579,7 +577,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing a no-slip moving boundary.
 
-    This function is deprecated and should be replaced by 
+    This function is deprecated and should be replaced by
     :class:`~mirgecom.boundary.AdiabaticNoslipWallBoundary`
     """
 
@@ -627,7 +625,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     r"""Isothermal no-slip viscous wall boundary.
 
-    This function is deprecated and should be replaced by 
+    This function is deprecated and should be replaced by
     :class:`~mirgecom.boundary.IsothermalWallBoundary`
     """
 
@@ -860,7 +858,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
         \rho{E}^+ = \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
         + \frac{1}{2}\rho^+\left(\mathbf{V}^+\cdot\mathbf{V}^+\right).
 
-    For mixtures, the pressure is imposed or extrapolated in a similar fashion 
+    For mixtures, the pressure is imposed or extrapolated in a similar fashion
     to the ideal gas case.
     However, the total energy depends on the temperature to account for the
     species enthalpy and variable specific heat at constant volume. For super-sonic
@@ -1083,9 +1081,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         )
 
     def isothermal_wall_state(self, discr, btag, gas_model, state_minus, **kwargs):
-        """Return state with zero-velocity and the respective internal energy
-        based on the wall temperature.
-        """
+        """Return state with zero-velocity and the respective internal energy."""
         temperature_wall = self._wall_temp + 0*state_minus.mass_density
         mom_plus = state_minus.mass_density*0.*state_minus.velocity
         mass_frac_plus = state_minus.species_mass_fractions
@@ -1211,9 +1207,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def adiabatic_wall_state_for_diffusion(self, discr, btag, gas_model,
                                            state_minus, **kwargs):
-        """Return state with zero-velocity and extrapolate the internal energy due
-        to the adiabatic wall condition.
-        """
+        """Return state with zero-velocity."""
         mom_plus = 0*state_minus.momentum_density
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density,
@@ -1306,7 +1300,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     and that temperature gradients are null due to the adiabatic condition.
 
     .. math::
-    
+
         \nabla u ^+ = \nabla{u}^- \circ I
 
         \nabla T \cdot n = 0
