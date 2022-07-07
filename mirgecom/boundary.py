@@ -508,6 +508,9 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     This function is deprecated and should be replaced by
     :class:`~mirgecom.boundary.SymmetryBoundary`
+
+    .. automethod:: adiabatic_slip_state
+    .. automethod:: adiabatic_slip_grad_av
     """
 
     def __init__(self):
@@ -579,6 +582,9 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 
     This function is deprecated and should be replaced by
     :class:`~mirgecom.boundary.AdiabaticNoslipWallBoundary`
+
+    .. automethod:: adiabatic_noslip_state
+    .. automethod:: adiabatic_noslip_grad_av
     """
 
     def __init__(self, wall_velocity=None, dim=2):
@@ -627,6 +633,9 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
 
     This function is deprecated and should be replaced by
     :class:`~mirgecom.boundary.IsothermalWallBoundary`
+
+    .. automethod:: isothermal_noslip_state
+    .. automethod:: temperature_bc
     """
 
     def __init__(self, wall_temperature=300):
