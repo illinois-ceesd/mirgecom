@@ -297,9 +297,18 @@ def inviscid_flux_on_element_boundary(
 
 
 def get_inviscid_timestep(discr, state):
-    """Return node-local stable timestep estimate for an inviscid fluid.
+    r"""Return node-local stable timestep estimate for an inviscid fluid.
 
-    The maximum stable timestep is computed from the acoustic wavespeed.
+    The locally required timestep is computed from the acoustic wavespeed:
+
+
+    .. math::
+        \delta{t}_l = \frac{\Delta{x}_l}{\left(|\mathbf{v}_f| + c\right)},
+
+    where $\Delta{x}_l$ is the local mesh spacing (given by
+    :func:`~grudge.dt_utils.characteristic_lengthscales`), and fluid velocity
+    $\mathbf{v}_f$, and fluid speed-of-sound $c$, are defined by local state
+    data.
 
     Parameters
     ----------

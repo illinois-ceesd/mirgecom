@@ -105,16 +105,9 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     Courant-Friedrichs-Lewy number, *cfl*, and the simulation max simulated time
     limit, *t_final*, and subject to the user's optional settings.
 
-    The point-local inviscid fluid timestep, $\delta{t}_l$, is computed as:
-
-    .. math::
-        \delta{t}_l = \frac{\Delta{x}}{\left(|\mathbf{v}_f| + c\right)},
-
-    where $\Delta{x}$ is the point-local mesh spacing, $\mathbf{v}_f$ is the
-    fluid velocity and $c$ is the local speed-of-sound.  For viscous fluids,
-    $\delta{t}_l$ is calculated by :func:`~mirgecom.viscous.get_viscous_timestep`.
-    Users are referred to :func:`~mirgecom.viscous.get_viscous_timestep` for more
-    details on the calculation of $\delta{t}_l$ for viscous fluids.
+    The local fluid timestep, $\delta{t}_l$, is computed by
+    :func:`~mirgecom.viscous.get_viscous_timestep`.  Users are referred to that
+    routine for the details of the local timestep.
 
     With the remaining simulation time $\Delta{t}_r =
     \left(\mathit{t\_final}-\mathit{t}\right)$, three modes are supported
@@ -122,25 +115,29 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
 
     - "Constant DT" mode (default): $\delta{t} = \mathbf{\text{min}}
       \left(\textit{dt},~\Delta{t}_r\right)$
-    - "Constant CFL" mode (constant_cfl=True): $\delta{t} = \mathbf{\text{min}}
-      \left(\delta{t}_l,~\Delta{t}_r\right)$
-    - "Local DT" mode (local_dt=True): $\delta{t} = \delta{t}_l$
+    - "Constant CFL" mode (constant_cfl=True): $\delta{t} =
+      \mathbf{\text{min}}\left(\mathbf{\text{global_min}}\left(\delta{t}_l\right)
+      ,~\Delta{t}_r\right)$
+    - "Local DT" mode (local_dt=True): $\delta{t} = \mathbf{\text{cell_local_min}}
+      \left(\delta{t}_l\right)$
 
-    For "Local DT" mode, *t_final* is ignored, and returns a
-    :class:`~meshmode.dof_array.DOFArray` containing the grid-local *cfl*-limited
-    timestep, $\delta{t}_l$, based on the minimum value for all
-    collocation points inside a grid cell.
-    This mode is useful for stepping to convergence of steady-state solutions.
+    Note that for "Local DT" mode, *t_final* is ignored, and a
+    :class:`~meshmode.dof_array.DOFArray` containing the local *cfl*-limited
+    timestep, where $\mathbf{\text{cell_local_min}}\left(\delta{t}_l\right)$ is
+    defined as the minimum over the cell collocation points. This mode is useful for
+    stepping to convergence of steady-state solutions.
 
     .. important::
-        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
-        which makes it domain-wide regardless of parallel domain decomposition. Thus
-        this routine must be called *collectively* (i.e. by all MPI ranks).
+        For "Constant CFL" mode, this routine calls the collective
+        :func:`~grudge.op.nodal_min` on the inside which involves MPI collective
+        functions.  Thus all MPI ranks on the
+        :class:`~grudge.discretization.DiscretizationCollection` must call this
+        routine collectively when using "Constant CFL" mode.
 
     Parameters
     ----------
-    discr
-        Grudge discretization or discretization collection?
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
+        The grudge DG discretization to use
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
     t: float
