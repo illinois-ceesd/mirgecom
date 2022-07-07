@@ -1293,6 +1293,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                     (state_minus.mass_density*grad_y_plus[i]
                      + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
 
+        # extrapolate density and its gradient
         mass_plus = state_minus.mass_density
         grad_mass_plus = grad_cv_minus.mass
 
@@ -1305,7 +1306,9 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         v_plus = state_minus.velocity \
                       - 1*np.dot(state_minus.velocity, normal)*normal
         # eliminate anti-diagonal terms in 2D to force tau_xy = 0
-        grad_v_plus = grad_v_minus*np.eye(2)  # FIXME how to do this in 3D?
+        #grad_v_plus = grad_v_minus*np.eye(2)  # FIXME how to do this in 3D?
+        grad_v_plus: du_t/dn = 0.0
+ 
         # product rule for momentum
         grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
 
