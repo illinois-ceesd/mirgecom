@@ -116,14 +116,14 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     - "Constant DT" mode (default): $\delta{t} = \mathbf{\text{min}}
       \left(\textit{dt},~\Delta{t}_r\right)$
     - "Constant CFL" mode (constant_cfl=True): $\delta{t} =
-      \mathbf{\text{min}}\left(\mathbf{\text{global_min}}\left(\delta{t}_l\right)
+      \mathbf{\text{min}}\left(\mathbf{\text{global\_min}}\left(\delta{t}\_l\right)
       ,~\Delta{t}_r\right)$
-    - "Local DT" mode (local_dt=True): $\delta{t} = \mathbf{\text{cell_local_min}}
+    - "Local DT" mode (local_dt=True): $\delta{t} = \mathbf{\text{cell\_local\_min}}
       \left(\delta{t}_l\right)$
 
     Note that for "Local DT" mode, *t_final* is ignored, and a
     :class:`~meshmode.dof_array.DOFArray` containing the local *cfl*-limited
-    timestep, where $\mathbf{\text{cell_local_min}}\left(\delta{t}_l\right)$ is
+    timestep, where $\mathbf{\text{cell\_local\_min}}\left(\delta{t}\_l\right)$ is
     defined as the minimum over the cell collocation points. This mode is useful for
     stepping to convergence of steady-state solutions.
 
