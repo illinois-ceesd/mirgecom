@@ -301,7 +301,6 @@ def get_inviscid_timestep(discr, state):
 
     The locally required timestep is computed from the acoustic wavespeed:
 
-
     .. math::
         \delta{t}_l = \frac{\Delta{x}_l}{\left(|\mathbf{v}_f| + c\right)},
 
