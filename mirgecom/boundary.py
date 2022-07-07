@@ -22,6 +22,7 @@ Boundary Conditions
 .. autoclass:: OutflowBoundary
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
+.. autoclass:: SymmetryBoundary
 
 Auxilliary Utilities
 ^^^^^^^^^^^^^^^^^^^^
@@ -529,6 +530,10 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
 
+    from warnings import warn
+    warn("AdiabaticSlipBoundary is deprecated. Use SymmetryBoundary instead.",
+        PendingDeprecationWarning)
+
     def adiabatic_slip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
@@ -602,6 +607,11 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
             raise ValueError(f"Specified wall velocity must be {dim}-vector.")
         self._wall_velocity = wall_velocity
 
+    from warnings import warn
+    warn("AdiabaticNoslipMovingBoundary is deprecated."
+         " Use AdiabaticNoslipWallBoundary instead.",
+        PendingDeprecationWarning)
+
     def adiabatic_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
@@ -638,6 +648,11 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
             self, boundary_state_func=self.isothermal_noslip_state,
             boundary_temperature_func=self.temperature_bc
         )
+
+    from warnings import warn
+    warn("IsothermalWallBoundary is deprecated."
+         " Use IsothermalWallBoundary instead.",
+        PendingDeprecationWarning)
 
     def isothermal_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         r"""Get the interior and exterior solution (*state_minus*) on the boundary.
@@ -684,15 +699,23 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         q_bc = q_\infty
     """
 
-    def __init__(self, numdim, numspecies, free_stream_temperature=300,
-                 free_stream_pressure=101325, free_stream_velocity=None,
+    def __init__(self, numdim, numspecies,
+                 free_stream_pressure=None,
+                 free_stream_velocity=None,
+                 free_stream_density=None,
+                 free_stream_temperature=None,
                  free_stream_mass_fractions=None):
         """Initialize the boundary condition object."""
         if free_stream_velocity is None:
-            free_stream_velocity = np.zeros(numdim)
+            raise ValueError("Free-stream velocity must be specified")
         if len(free_stream_velocity) != numdim:
             raise ValueError("Free-stream velocity must be of ambient dimension.")
+
         if numspecies > 0:
+            if free_stream_pressure is None:
+                raise ValueError("Free-stream pressure must be given.")
+            if free_stream_temperature is None:
+                raise ValueError("Free-stream temperature must be given.")
             if free_stream_mass_fractions is None:
                 raise ValueError("Free-stream species mixture fractions must be"
                                  " given.")
@@ -704,25 +727,54 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         self._pressure = free_stream_pressure
         self._species_mass_fractions = free_stream_mass_fractions
         self._velocity = free_stream_velocity
+        self._density = free_stream_density
+
+        underspecified = 3
+        overspecified = 3
+        if self._temperature is None:
+            underspecified -= 1; overspecified -= 1
+        if self._pressure is None:
+            underspecified -= 1; overspecified -= 1
+        if self._density is None:
+            underspecified -= 1; overspecified -= 1
+        if underspecified < 2:
+           raise ValueError("Please, specify at least 2 variables for EOS.")
+        if overspecified == 3:
+           raise ValueError("Please, specify only 2 variables for EOS.")
 
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.farfield_state,
-            boundary_temperature_func=self.temperature_bc
+            viscous_flux_func=self.viscous_flux_farfield
         )
 
     def farfield_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary."""
-        free_stream_mass_fractions = (0*state_minus.species_mass_fractions
+        free_stream_mass_fractions = (0.*state_minus.species_mass_fractions
                                       + self._species_mass_fractions)
-        free_stream_temperature = 0*state_minus.temperature + self._temperature
-        free_stream_pressure = 0*state_minus.pressure + self._pressure
-        free_stream_density = gas_model.eos.get_density(
-            pressure=free_stream_pressure, temperature=free_stream_temperature,
-            mass_fractions=free_stream_mass_fractions)
-        free_stream_velocity = 0*state_minus.velocity + self._velocity
+
+        if self._temperature is not None:
+            free_stream_temperature = 0.*state_minus.temperature + self._temperature
+        if self._pressure is not None:
+            free_stream_pressure = 0.*state_minus.pressure + self._pressure
+        if self._density is not None:
+            free_stream_density = 0.*state_minus.cv.mass + self._density
+
+        if self._temperature is None:
+            self._temperature = \
+                self._pressure/(gas_model.eos.gas_const()*self._density)
+            free_stream_temperature = 0.*state_minus.temperature + self._temperature
+        if self._pressure is None:        
+            free_stream_pressure = \
+                gas_model.eos.gas_const()*self._density*self._temperature
+        if self._density is None:
+            free_stream_density = gas_model.eos.get_density(
+                pressure=free_stream_pressure, temperature=free_stream_temperature,
+                species_mass_fractions=free_stream_mass_fractions)
+
+        free_stream_velocity = 0.*state_minus.velocity + self._velocity
         free_stream_internal_energy = gas_model.eos.get_internal_energy(
             temperature=free_stream_temperature,
-            mass_fractions=free_stream_mass_fractions)
+            species_mass_fractions=free_stream_mass_fractions)
 
         free_stream_total_energy = \
             free_stream_density*(free_stream_internal_energy
@@ -744,6 +796,32 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         """Get temperature value to weakly prescribe flow temperature at boundary."""
         return 0*state_minus.temperature + self._temperature
 
+    def viscous_flux_farfield(self, discr, btag, gas_model, state_minus,
+                              grad_cv_minus, grad_t_minus,
+                              numerical_flux_func=viscous_facial_flux_central,
+                                           **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux.
+
+           Since the far-field condition assumes uniform flow, all the gradients
+           are zero."""
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(discr.normal(btag))
+
+        state_plus = self.farfield_state(discr, btag, gas_model, state_minus)
+#        state_plus = self.farfield_state_for_diffusion(
+#            discr=discr, btag=btag, gas_model=gas_model, state_minus=state_minus)
+
+        grad_cv_plus = 0.0*grad_cv_minus
+        grad_t_plus = 0.0*grad_t_minus
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
+                             grad_t=grad_t_plus)
+
+        return f_ext@normal
+
 
 class OutflowBoundary(PrescribedFluidBoundary):
     r"""Outflow boundary treatment.
@@ -760,7 +838,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
 
     Total energy for the flow is computed as follows:
 
-    - For an ideal gas at super-sonic flow conditions, i.e. when:
+    For an ideal gas at super-sonic flow conditions, i.e. when:
 
     .. math:
 
@@ -780,7 +858,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
         \rho{E}^+ &= \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
         + \frac{1}{2\rho^+}\left(\rho\mathbf{V}^+\cdot\rho\mathbf{V}^+\right).
 
-    - For mixtures, the pressure is evaluated similarly to the ideal gas case.
+    For mixtures, the pressure is evaluated similarly to the ideal gas case.
     However, the total energy depends on the temperature to account for the
     species enthalpy and variable specific heat at constant volume. For super-sonic
     flows, it is extrapolated from interior points:
@@ -1222,8 +1300,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         nhat = actx.thaw(discr.normal(btag))
 
         # flip the normal component of the velocity
-        mom_plus = \
-            (state_minus.momentum_density
+        mom_plus = (state_minus.momentum_density
              - 2*(np.dot(state_minus.momentum_density, nhat)*nhat))
 
         # no changes are necessary to the energy equation because the velocity
@@ -1306,9 +1383,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         v_plus = state_minus.velocity \
                       - 1*np.dot(state_minus.velocity, normal)*normal
         # eliminate anti-diagonal terms in 2D to force tau_xy = 0
-        #grad_v_plus = grad_v_minus*np.eye(2)  # FIXME how to do this in 3D?
-        grad_v_plus: du_t/dn = 0.0
- 
+        grad_v_plus = grad_v_minus*np.eye(2)  # FIXME how to do this in 3D?
+
         # product rule for momentum
         grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
 
@@ -1365,8 +1441,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         actx = grad_av_minus.mass[0].array_context
         nhat = actx.thaw(discr.normal(btag))
 
-        # Subtract 2*wall-normal component of q
-        # to enforce q=0 on the wall
+        # Subtract 2*wall-normal component of q to enforce q=0 on the wall
         s_mom_normcomp = np.outer(nhat,
                                   np.dot(grad_av_minus.momentum, nhat))
         s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
@@ -1376,3 +1451,76 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                               energy=-grad_av_minus.energy,
                               momentum=-s_mom_flux,
                               species_mass=-grad_av_minus.species_mass)
+
+
+#class FarfieldBoundary(PrescribedFluidBoundary):
+#    r"""Farfield boundary treatment.
+
+#    This class implements a farfield boundary as described by
+#    [Mengaldo_2014]_.  The boundary condition is implemented
+#    as:
+
+#    .. math::
+#        q_bc = q_\infty
+#    """
+
+#    def __init__(self, numdim, numspecies, free_stream_temperature=300,
+#                 free_stream_pressure=101325, free_stream_velocity=None,
+#                 free_stream_mass_fractions=None):
+#        """Initialize the boundary condition object."""
+#        if free_stream_velocity is None:
+#            free_stream_velocity = np.zeros(numdim)
+#        if len(free_stream_velocity) != numdim:
+#            raise ValueError("Free-stream velocity must be of ambient dimension.")
+#        if numspecies > 0:
+#            if free_stream_mass_fractions is None:
+#                raise ValueError("Free-stream species mixture fractions must be"
+#                                 " given.")
+#            if len(free_stream_mass_fractions) != numspecies:
+#                raise ValueError("Free-stream species mixture fractions of improper"
+#                                 " size.")
+
+#        self._temperature = free_stream_temperature
+#        self._pressure = free_stream_pressure
+#        self._species_mass_fractions = free_stream_mass_fractions
+#        self._velocity = free_stream_velocity
+
+#        PrescribedFluidBoundary.__init__(
+#            self, boundary_state_func=self.farfield_state,
+#            boundary_temperature_func=self.temperature_bc
+#        )
+
+#    def farfield_state(self, discr, btag, gas_model, state_minus, **kwargs):
+#        """Get the exterior solution on the boundary."""
+#        free_stream_mass_fractions = (0*state_minus.species_mass_fractions
+#                                      + self._species_mass_fractions)
+#        free_stream_temperature = 0*state_minus.temperature + self._temperature
+#        free_stream_pressure = 0*state_minus.pressure + self._pressure
+#        free_stream_density = gas_model.eos.get_density(
+#            pressure=free_stream_pressure, temperature=free_stream_temperature,
+#            mass_fractions=free_stream_mass_fractions)
+#        free_stream_velocity = 0*state_minus.velocity + self._velocity
+#        free_stream_internal_energy = gas_model.eos.get_internal_energy(
+#            temperature=free_stream_temperature,
+#            mass_fractions=free_stream_mass_fractions)
+
+#        free_stream_total_energy = \
+#            free_stream_density*(free_stream_internal_energy
+#                                 + .5*np.dot(free_stream_velocity,
+#                                             free_stream_velocity))
+#        free_stream_spec_mass = free_stream_density * free_stream_mass_fractions
+
+#        cv_infinity = make_conserved(
+#            state_minus.dim, mass=free_stream_density,
+#            energy=free_stream_total_energy,
+#            momentum=free_stream_density*free_stream_velocity,
+#            species_mass=free_stream_spec_mass
+#        )
+
+#        return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
+#                                temperature_seed=free_stream_temperature)
+
+#    def temperature_bc(self, state_minus, **kwargs):
+#        """Get temperature value to weakly prescribe flow temperature at boundary."""
+#        return 0*state_minus.temperature + self._temperature
+
