@@ -119,7 +119,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_dt = 1e-10
     current_t = 0
     constant_cfl = True
-    local_dt = True  # XXX declaration necessary for local time stepping.
+    local_dt = False  # XXX declaration necessary for local time stepping.
     current_step = 0
 
     # some i/o frequencies
