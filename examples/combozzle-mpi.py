@@ -1,4 +1,4 @@
-"""Predictionf-adjacent performance tester."""
+"""Prediction-adjacent performance tester."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
