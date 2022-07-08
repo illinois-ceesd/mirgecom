@@ -50,6 +50,7 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
+from mirgecom.utils import force_evaluation
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -328,6 +329,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # Set the current state from time 0
         current_cv = initializer(eos=gas_model.eos, x_vec=nodes)
         temperature_seed = temperature_seed * ones
+
+    current_cv = force_evaluation(actx, current_cv)
 
     # The temperature_seed going into this function is:
     # - At time 0: the initial temperature input data (maybe from Cantera)
