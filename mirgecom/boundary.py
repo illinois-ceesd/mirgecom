@@ -558,7 +558,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
     def adiabatic_slip_grad_av(self, discr, btag, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
+        """Get the exterior grad(Q) on the boundary for artificial viscosity."""
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
         actx = grad_av_minus.mass[0].array_context
@@ -624,7 +624,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
     def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
+        """Get the exterior solution on the boundary for artificial viscosity."""
         return(-grad_av_minus)
 
 
@@ -689,7 +689,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     r"""Farfield boundary treatment.
 
     This class implements a farfield boundary as described by
-    [Mengaldo_2014]_.  The boundary condition is implemented
+    [Mengaldo_2014]_ eqn. 30 and eqn. 42.  The boundary condition is implemented
     as:
 
     .. math::
@@ -698,12 +698,11 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     and the gradients
 
     .. math::
-        \nabla q_{bc} = 0
+        \nabla q_{bc} = \nabla q^{-}
 
     .. automethod:: __init__
     .. automethod:: farfield_state
     .. automethod:: temperature_bc
-    .. automethod:: viscous_flux_farfield
     """
 
     def __init__(self, numdim, numspecies,
@@ -736,25 +735,15 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         self._velocity = free_stream_velocity
         self._density = free_stream_density
 
-        underspecified = 3
-        overspecified = 3
-        if self._temperature is None:
-            underspecified -= 1
-            overspecified -= 1
-        if self._pressure is None:
-            underspecified -= 1
-            overspecified -= 1
-        if self._density is None:
-            underspecified -= 1
-            overspecified -= 1
-        if underspecified < 2:
-            raise ValueError("Please, specify at least 2 variables for EOS.")
-        if overspecified == 3:
-            raise ValueError("Please, specify only 2 variables for EOS.")
+        num_specified = sum(x is not None for x in [free_stream_temperature,
+                                                    free_stream_pressure,
+                                                    free_stream_density])
+        if num_specified != 2:
+            raise ValueError("Two of [free_stream_pressure, free_stream_temperature,"
+                             " free_stream_density], must be provided.")
 
         PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.farfield_state,
-            viscous_flux_func=self.viscous_flux_farfield
+            self, boundary_state_func=self.farfield_state
         )
 
     def farfield_state(self, discr, btag, gas_model, state_minus, **kwargs):
@@ -805,31 +794,6 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value to weakly prescribe flow temperature at boundary."""
         return 0*state_minus.temperature + self._temperature
-
-    def viscous_flux_farfield(self, discr, btag, gas_model, state_minus,
-                              grad_cv_minus, grad_t_minus,
-                              numerical_flux_func=viscous_facial_flux_central,
-                                           **kwargs):
-        """Return the boundary flux for the divergence of the viscous flux.
-
-        Since the far-field condition assumes uniform flow, all the gradients
-        are zero.
-        """
-        from mirgecom.viscous import viscous_flux
-        actx = state_minus.array_context
-        normal = actx.thaw(discr.normal(btag))
-
-        state_plus = self.farfield_state(discr, btag, gas_model, state_minus)
-
-        grad_cv_plus = 0.0*grad_cv_minus
-        grad_t_plus = 0.0*grad_t_minus
-
-        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
-        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
-        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
-                             grad_t=grad_t_plus)
-
-        return f_ext@normal
 
 
 class OutflowBoundary(PrescribedFluidBoundary):
@@ -1190,6 +1154,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     .. automethod:: adiabatic_wall_state_for_advection
     .. automethod:: adiabatic_wall_state_for_diffusion
     .. automethod:: grad_temperature_bc
+    .. automethod:: adiabatic_noslip_grad_av
     """
 
     def __init__(self):
@@ -1289,6 +1254,10 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
         return f_ext@normal
 
+    def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
+        """Get the exterior solution on the boundary for artificial viscosity."""
+        return(-grad_av_minus)
+
 
 class SymmetryBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing symmetry/slip wall boundary.
@@ -1321,6 +1290,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     .. automethod:: adiabatic_wall_state_for_advection
     .. automethod:: adiabatic_wall_state_for_diffusion
     .. automethod:: grad_temperature_bc
+    .. automethod:: adiabatic_slip_grad_av
     """
 
     def __init__(self, dim=2):
@@ -1475,3 +1445,22 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                              grad_t=grad_t_plus)
 
         return f_ext@normal
+
+    def adiabatic_slip_grad_av(self, discr, btag, grad_av_minus, **kwargs):
+        """Get the exterior grad(Q) on the boundary for artificial viscosity."""
+        # Grab some boundary-relevant data
+        dim, = grad_av_minus.mass.shape
+        actx = grad_av_minus.mass[0].array_context
+        nhat = actx.thaw(discr.normal(btag))
+
+        # Subtract 2*wall-normal component of q
+        # to enforce q=0 on the wall
+        s_mom_normcomp = np.outer(nhat,
+                                  np.dot(grad_av_minus.momentum, nhat))
+        s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
+
+        # flip components to set a neumann condition
+        return make_conserved(dim, mass=-grad_av_minus.mass,
+                              energy=-grad_av_minus.energy,
+                              momentum=-s_mom_flux,
+                              species_mass=-grad_av_minus.species_mass)
