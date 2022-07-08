@@ -33,8 +33,8 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
-from arraycontext.container.traversal import freeze, thaw
-
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -70,8 +70,7 @@ def op_test_data(ctx_factory):
                 "y": ["-y", "+y"]
             })
 
-        from grudge.eager import EagerDGDiscretization
-        return EagerDGDiscretization(eager_actx, mesh, order=order)
+        return create_discretization_collection(eager_actx, mesh, order=order)
 
     return eager_actx, lazy_actx, get_discr
 
@@ -103,7 +102,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #     cl_ctx = ctx_factory()
 #     actx, discr = _op_test_fixture(cl_ctx)
 #
-#     from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+#     from grudge.dof_desc import DTAG_BOUNDARY
 #     from mirgecom.diffusion import (
 #         _gradient_operator,
 #         DirichletDiffusionBoundary,
@@ -114,14 +113,12 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
 #     }
 #
-#     def op(alpha, u):
-#         return _gradient_operator(
-#             discr, DISCR_TAG_BASE, alpha, boundaries, u)
+#     def op(u):
+#         return _gradient_operator(discr, boundaries, u)
 
 #     compiled_op = actx.compile(op)
-#     alpha = discr.zeros(actx) + 1
 #     u = discr.zeros(actx)
-#     compiled_op(alpha, u)
+#     compiled_op(u)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -140,18 +137,20 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_flux(u_tpair):
         dd = u_tpair.dd
         dd_allfaces = dd.with_dtag("all_faces")
-        normal = thaw(discr.normal(dd), u_tpair.int[0].array_context)
+        normal = discr.normal(dd)
+        actx = u_tpair.int[0].array_context
+        normal = actx.thaw(normal)
         flux = u_tpair.avg @ normal
-        return discr.project(dd, dd_allfaces, flux)
+        return op.project(discr, dd, dd_allfaces, flux)
 
-    def op(u):
+    def div_op(u):
         return div_operator(discr, dd_vol, dd_faces,
                             u, get_flux(interior_trace_pair(discr, u)))
 
-    lazy_op = lazy_actx.compile(op)
+    lazy_op = lazy_actx.compile(div_op)
 
     def get_inputs(actx):
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
         return u,
 
@@ -160,9 +159,9 @@ def test_lazy_op_divergence(op_test_data, order):
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
-        return thaw(freeze(u, lazy_actx), eager_actx)
+        return eager_actx.thaw(lazy_actx.freeze(u))
 
-    eager_result = op(*get_inputs(eager_actx))
+    eager_result = div_op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
     is_close, lhs, rhs = isclose(lazy_result, eager_result)
     assert is_close, f"{lhs} not <= {rhs}"
@@ -174,7 +173,7 @@ def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_discr = op_test_data
     discr = get_discr(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY, DISCR_TAG_BASE
+    from grudge.dof_desc import DTAG_BOUNDARY
     from mirgecom.diffusion import (
         diffusion_operator,
         DirichletDiffusionBoundary,
@@ -185,26 +184,25 @@ def test_lazy_op_diffusion(op_test_data, order):
         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
     }
 
-    def op(alpha, u):
-        return diffusion_operator(
-            discr, DISCR_TAG_BASE, alpha, boundaries, u)
+    def diffusion_op(kappa, u):
+        return diffusion_operator(discr, kappa, boundaries, u)
 
-    lazy_op = lazy_actx.compile(op)
+    lazy_op = lazy_actx.compile(diffusion_op)
 
     def get_inputs(actx):
-        nodes = thaw(discr.nodes(), actx)
-        alpha = discr.zeros(actx) + 1
+        nodes = actx.thaw(discr.nodes())
+        kappa = discr.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
-        return alpha, u
+        return kappa, u
 
     tol = 1e-11
     isclose = partial(
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
-        return thaw(freeze(u, lazy_actx), eager_actx)
+        return eager_actx.thaw(lazy_actx.freeze(u))
 
-    eager_result = op(*get_inputs(eager_actx))
+    eager_result = diffusion_op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
     is_close, lhs, rhs = isclose(lazy_result, eager_result)
     assert is_close, f"{lhs} not <= {rhs}"
@@ -244,7 +242,7 @@ def _get_scalar_lump():
     def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(init(x_vec=nodes, eos=gas_model.eos,
                                      **kwargs), gas_model)
 
@@ -254,7 +252,7 @@ def _get_scalar_lump():
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
     }
 
-    return gas_model, init, boundaries, 5e-12
+    return gas_model, init, boundaries, 1e-11
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -272,15 +270,15 @@ def test_lazy_op_euler(op_test_data, problem, order):
     from mirgecom.euler import euler_operator
     from mirgecom.gas_model import make_fluid_state
 
-    def op(state):
+    def euler_op(state):
         fluid_state = make_fluid_state(state, gas_model)
         return euler_operator(discr, gas_model=gas_model,
                               boundaries=boundaries, state=fluid_state)
 
-    lazy_op = lazy_actx.compile(op)
+    lazy_op = lazy_actx.compile(euler_op)
 
     def get_inputs(actx):
-        nodes = thaw(discr.nodes(), actx)
+        nodes = actx.thaw(discr.nodes())
         state = init(nodes)
         return state,
 
@@ -288,9 +286,9 @@ def test_lazy_op_euler(op_test_data, problem, order):
         _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
-        return thaw(freeze(u, lazy_actx), eager_actx)
+        return eager_actx.thaw(lazy_actx.freeze(u))
 
-    eager_result = op(*get_inputs(eager_actx))
+    eager_result = euler_op(*get_inputs(eager_actx))
     lazy_result = lazy_to_eager(lazy_op(*get_inputs(lazy_actx)))
     is_close, lhs, rhs = isclose(lazy_result, eager_result)
     assert is_close, f"{lhs} not <= {rhs}"

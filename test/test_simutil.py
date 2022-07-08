@@ -28,7 +28,6 @@ import numpy as np
 import pytest  # noqa
 
 from arraycontext import (  # noqa
-    thaw,
     flatten,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
@@ -36,8 +35,7 @@ from arraycontext import (  # noqa
 
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
-
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
 
 
 def test_basic_cfd_healthcheck(actx_factory):
@@ -53,8 +51,8 @@ def test_basic_cfd_healthcheck(actx_factory):
     )
 
     order = 3
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
 
@@ -122,8 +120,8 @@ def test_analytic_comparison(actx_factory):
     )
 
     order = 2
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(discr.nodes(), actx)
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     zeros = discr.zeros(actx)
     ones = zeros + 1.0
     mass = ones

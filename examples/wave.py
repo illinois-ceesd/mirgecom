@@ -30,15 +30,16 @@ import pyopencl.tools as cl_tools
 
 from pytools.obj_array import flat_obj_array
 
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
+import grudge.op as op
 
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
+from mirgecom.utils import force_evaluation
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
-from arraycontext import thaw, freeze
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
@@ -49,16 +50,16 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_device_memory_usage)
 
 
-def bump(actx, discr, t=0):
+def bump(actx, nodes, t=0):
     """Create a bump."""
-    source_center = np.array([0.2, 0.35, 0.1])[:discr.dim]
+    dim = len(nodes)
+    source_center = np.array([0.2, 0.35, 0.1])[:dim]
     source_width = 0.05
     source_omega = 3
 
-    nodes = thaw(discr.nodes(), actx)
     center_dist = flat_obj_array([
         nodes[i] - source_center[i]
-        for i in range(discr.dim)
+        for i in range(dim)
         ])
 
     return (
@@ -68,7 +69,7 @@ def bump(actx, discr, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
+def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
 
@@ -76,7 +77,7 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         filename="wave.sqlite", mode="wu")
 
     if use_profiling:
-        if lazy_eval:
+        if lazy:
             raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -84,8 +85,9 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
             allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         queue = cl.CommandQueue(cl_ctx)
-        if lazy_eval:
-            actx = PytatoPyOpenCLArrayContext(queue)
+        if lazy:
+            actx = PytatoPyOpenCLArrayContext(queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
         else:
             actx = PyOpenCLArrayContext(queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
@@ -101,19 +103,20 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
 
     order = 3
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
-    from grudge.op import nodal_min
-    dt = actx.to_numpy(current_cfl * nodal_min(discr, "vol", nodal_dt))[()]
+    dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol",
+                                                  nodal_dt))[()]
 
     print("%d elements" % mesh.nelements)
 
-    fields = flat_obj_array(bump(actx, discr),
-                            [discr.zeros(actx) for i in range(discr.dim)])
+    fields = flat_obj_array(bump(actx, nodes),
+                            [discr.zeros(actx) for i in range(dim)])
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -146,13 +149,13 @@ def main(use_profiling=False, use_logmgr=False, lazy_eval: bool = False):
         if logmgr:
             logmgr.tick_before()
 
-        fields = thaw(freeze(fields, actx), actx)
         fields = rk4_step(fields, t, dt, compiled_rhs)
+        fields = force_evaluation(actx, fields)
 
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, actx.to_numpy(discr.norm(fields[0], np.inf)))
+            print(istep, t, actx.to_numpy(op.norm(discr, fields[0], 2)))
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
@@ -178,6 +181,6 @@ if __name__ == "__main__":
         help="enable lazy evaluation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile, use_logmgr=args.logging, lazy_eval=args.lazy)
+    main(use_profiling=args.profile, use_logmgr=args.logging, lazy=args.lazy)
 
 # vim: foldmethod=marker

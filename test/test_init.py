@@ -32,7 +32,6 @@ from pytools.obj_array import make_obj_array
 import pytest
 
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.dof_array import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
@@ -42,7 +41,9 @@ from mirgecom.initializers import MulticomponentLump
 from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
 
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
+
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
@@ -72,8 +73,8 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
@@ -84,7 +85,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     def inf_norm(data):
         if len(data) > 0:
-            return actx.to_numpy(discr.norm(data, np.inf))
+            return actx.to_numpy(op.norm(discr, data, np.inf))
         else:
             return 0.0
 
@@ -127,8 +128,8 @@ def test_lump_init(ctx_factory):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -140,7 +141,7 @@ def test_lump_init(ctx_factory):
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = actx.to_numpy(discr.norm(p - exp_p, np.inf))
+    errmax = actx.to_numpy(op.norm(discr, p - exp_p, np.inf))
 
     logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
@@ -168,8 +169,8 @@ def test_vortex_init(ctx_factory):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     # Init soln with Vortex
     vortex = Vortex2D()
@@ -177,7 +178,7 @@ def test_vortex_init(ctx_factory):
     gamma = 1.4
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
-    errmax = actx.to_numpy(discr.norm(p - exp_p, np.inf))
+    errmax = actx.to_numpy(op.norm(discr, p - exp_p, np.inf))
 
     logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
@@ -206,8 +207,8 @@ def test_shock_init(ctx_factory):
     order = 3
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     initr = SodShock1D()
     initsoln = initr(time=0.0, x_vec=nodes)
@@ -221,7 +222,7 @@ def test_shock_init(ctx_factory):
     p = eos.pressure(initsoln)
 
     assert actx.to_numpy(
-        discr.norm(actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf)) < tol
+        op.norm(discr, actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf)) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -245,8 +246,8 @@ def test_uniform(ctx_factory, dim):
     order = 1
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -256,7 +257,7 @@ def test_uniform(ctx_factory, dim):
     tol = 1e-15
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     assert inf_norm(initsoln.mass - 1.0) < tol
     assert inf_norm(initsoln.energy - 2.5) < tol
@@ -290,8 +291,8 @@ def test_pulse(ctx_factory, dim):
     order = 1
     print(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
@@ -306,7 +307,7 @@ def test_pulse(ctx_factory, dim):
     print(f"Pulse = {pulse}")
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     # does it return the expected exponential?
     pulse_check = actx.np.exp(-.5 * r2)
@@ -353,8 +354,8 @@ def test_multilump(ctx_factory, dim):
     order = 3
     logger.info(f"Number of elements: {mesh.nelements}")
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     rho0 = 1.5
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
@@ -378,7 +379,7 @@ def test_multilump(ctx_factory, dim):
     print(f"get_num_species = {numcvspec}")
 
     def inf_norm(x):
-        return actx.to_numpy(discr.norm(x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, np.inf))
 
     assert numcvspec == nspecies
     assert inf_norm(cv.mass - rho0) == 0.0

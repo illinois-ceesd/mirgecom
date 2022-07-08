@@ -30,15 +30,14 @@ import pytest
 import numpy as np
 from functools import partial
 
-from meshmode.dof_array import thaw
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
+import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from pytools.obj_array import (
     make_obj_array
 )
-from meshmode.dof_array import thaw  # noqa
 from mirgecom.filter import make_spectral_filter
 
 
@@ -65,7 +64,7 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
+    discr = create_discretization_collection(actx, mesh, order=order)
     vol_discr = discr.discr_from_dd("vol")
 
     eta = .5  # just filter half the modes
@@ -167,8 +166,8 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         a=(0.0,) * dim, b=(1.0,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    discr = EagerDGDiscretization(actx, mesh, order=order)
-    nodes = thaw(actx, discr.nodes())
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
 
     # number of modes see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
@@ -198,7 +197,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     tol = 1e-14
 
     logger.info(f"Max Errors (uniform field) = {max_errors}")
-    assert(np.max(max_errors) < tol)
+    assert actx.np.less(np.max(max_errors), tol)
 
     # construct polynomial field:
     # a0 + a1*x + a2*x*x + ....
@@ -218,7 +217,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     filtered_field = filter_modally(discr, "vol", cutoff,
                                     frfunc, field)
     soln_resid = field - filtered_field
-    max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in soln_resid]
+    max_errors = [actx.to_numpy(op.norm(discr, v, np.inf)) for v in soln_resid]
     logger.info(f"Field = {field}")
     logger.info(f"Filtered = {filtered_field}")
     logger.info(f"Max Errors (poly) = {max_errors}")
@@ -229,7 +228,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     tol = 1e-1
     if do_viz is True:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, discr.order)
+        vis = make_visualizer(discr, order)
 
     from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
 
@@ -254,6 +253,6 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
             ]
             vis.write_vtk_file(f"filter_test_{field_order}.vtu", io_fields)
         field_resid = unfiltered_spectrum - filtered_spectrum
-        max_errors = [actx.to_numpy(discr.norm(v, np.inf)) for v in field_resid]
+        max_errors = [actx.to_numpy(op.norm(discr, v, np.inf)) for v in field_resid]
         # fields should be different, but not too different
         assert(tol > np.max(max_errors) > threshold)

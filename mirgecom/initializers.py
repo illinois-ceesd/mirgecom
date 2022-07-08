@@ -5,6 +5,7 @@ Solution Initializers
 ^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: Vortex2D
 .. autoclass:: SodShock1D
+.. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
@@ -12,6 +13,7 @@ Solution Initializers
 .. automethod: make_pulse
 .. autoclass:: MixtureInitializer
 .. autoclass:: PlanarPoiseuille
+.. autoclass:: ShearFlow
 """
 
 __copyright__ = """
@@ -40,7 +42,6 @@ THE SOFTWARE.
 
 import numpy as np
 from pytools.obj_array import make_obj_array
-from meshmode.dof_array import thaw
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
@@ -266,6 +267,123 @@ class SodShock1D:
                               momentum=mom)
 
 
+class DoubleMachReflection:
+    r"""Implement the double shock reflection problem.
+
+    The double shock reflection solution is crafted after [Woodward_1984]_
+    and is defined by:
+
+    .. math::
+
+        {\rho}(x < x_s(y,t)) &= \gamma \rho_j\\
+        {\rho}(x > x_s(y,t)) &= \gamma\\
+        {\rho}{V_x}(x < x_s(y,t)) &= u_p \cos(\pi/6)\\
+        {\rho}{V_x}(x > x_s(y,t)) &= 0\\
+        {\rho}{V_y}(x > x_s(y,t)) &= u_p \sin(\pi/6)\\
+        {\rho}{V_y}(x > x_s(y,t)) &= 0\\
+        {\rho}E(x < x_s(y,t)) &= (\gamma-1)p_j\\
+        {\rho}E(x > x_s(y,t)) &= (\gamma-1),
+
+    where the shock position is given,
+
+    .. math::
+
+        x_s = x_0 + y/\sqrt{3} + 2 u_s t/\sqrt{3}
+
+    and the normal shock jump relations are
+
+    .. math::
+
+        \rho_j &= \frac{(\gamma + 1) u_s^2}{(\gamma-1) u_s^2 + 2} \\
+        p_j &= \frac{2 \gamma u_s^2 - (\gamma - 1)}{\gamma+1} \\
+        u_p &= 2 \frac{u_s^2-1}{(\gamma+1) u_s}
+
+    The initial shock location is given by $x_0$ and $u_s$ is the shock speed.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, shock_location=1.0/6.0, shock_speed=4.0
+    ):
+        """Initialize double shock reflection parameters.
+
+        Parameters
+        ----------
+        shock_location: float
+           initial location of shock
+        shock_speed: float
+           shock speed, Mach number
+        """
+        self._shock_location = shock_location
+        self._shock_speed = shock_speed
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        r"""
+        Create double mach reflection solution at locations *x_vec*.
+
+        At times $t > 0$, calls to this routine create an advanced solution
+        under the assumption of constant normal shock speed *shock_speed*.
+        The advanced solution *is not* the exact solution, but is appropriate
+        for use as a boundary solution on the top and upstream (left)
+        side of the domain.
+
+        Parameters
+        ----------
+        time: float
+            Time at which to compute the solution
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.GasEOS`
+            Equation of state class to be used in construction of soln (if needed)
+        """
+        t = time
+        # Fail if numdim is other than 2
+        if(len(x_vec)) != 2:
+            raise ValueError("Case only defined for 2 dimensions")
+        if eos is None:
+            eos = IdealSingleGas()
+
+        gm1 = eos.gamma() - 1.0
+        gp1 = eos.gamma() + 1.0
+        gmn1 = 1.0 / gm1
+        x_rel = x_vec[0]
+        y_rel = x_vec[1]
+        actx = x_rel.array_context
+
+        # Normal Shock Relations
+        shock_speed_2 = self._shock_speed * self._shock_speed
+        rho_jump = gp1 * shock_speed_2 / (gm1 * shock_speed_2 + 2.)
+        p_jump = (2. * eos.gamma() * shock_speed_2 - gm1) / gp1
+        up = 2. * (shock_speed_2 - 1.) / (gp1 * self._shock_speed)
+
+        rhol = eos.gamma() * rho_jump
+        rhor = eos.gamma()
+        ul = up * np.cos(np.pi/6.0)
+        ur = 0.0
+        vl = - up * np.sin(np.pi/6.0)
+        vr = 0.0
+        rhoel = gmn1 * p_jump
+        rhoer = gmn1 * 1.0
+
+        xinter = (self._shock_location + y_rel/np.sqrt(3.0)
+                  + 2.0*self._shock_speed*t/np.sqrt(3.0))
+        sigma = 0.05
+        xtanh = 1.0/sigma*(x_rel-xinter)
+        mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
+        rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
+                + rhoer/2.0*(actx.np.tanh(xtanh)+1.0))
+        u = ul/2.0*(actx.np.tanh(-xtanh)+1.0)+ur/2.0*(actx.np.tanh(xtanh)+1.0)
+        v = vl/2.0*(actx.np.tanh(-xtanh)+1.0)+vr/2.0*(actx.np.tanh(xtanh)+1.0)
+
+        vel = make_obj_array([u, v])
+        mom = mass * vel
+        energy = rhoe + .5*mass*np.dot(vel, vel)
+
+        return make_conserved(dim=2, mass=mass, energy=energy, momentum=mom)
+
+
 class Lump:
     r"""Solution initializer for N-dimensional Gaussian lump of mass.
 
@@ -391,7 +509,7 @@ class Lump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -570,7 +688,7 @@ class MulticomponentLump:
         """
         t = time
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -759,7 +877,7 @@ class Uniform:
             Time at which RHS is desired (unused)
         """
         actx = cv.array_context
-        nodes = thaw(actx, discr.nodes())
+        nodes = actx.thaw(discr.nodes())
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass
@@ -971,3 +1089,102 @@ class PlanarPoiseuille:
         species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
         return make_conserved(2, mass=dmass, energy=denergy,
                               momentum=dmom, species_mass=species_mass)
+
+
+class ShearFlow:
+    r"""Shear flow exact Navier-Stokes solution from [Hesthaven_2008]_.
+
+    The shear flow solution is described in Section 7.5.3 of
+    [Hesthaven_2008]_. It is generalized to major-axis-aligned
+    3-dimensional cases here and defined as:
+
+    .. math::
+
+        \rho &= 1\\
+        v_\parallel &= r_{t}^2\\
+        \mathbf{v}_\bot &= 0\\
+        E &= \frac{2\mu{r_\parallel} + 10}{\gamma-1}
+        + \frac{r_{t}^4}{2}\\
+        \gamma &= \frac{3}{2}, \mu=0.01, \kappa=0
+
+    with fluid total energy $E$, viscosity $\mu$, and specific heat ratio
+    $\gamma$. The flow velocity is $\mathbf{v}$ with flow speed and direction
+    $v_\parallel$, and $r_\parallel$, respectively. The flow velocity in
+    all directions other than $r_\parallel$, is denoted as $\mathbf{v}_\bot$.
+    One major-axis-aligned flow-transverse direction, $r_t$ is set by the
+    user. This shear flow solution is an exact solution to the fully
+    compressible Navier-Stokes equations when neglecting thermal terms;
+    i.e., when thermal conductivity $\kappa=0$.  This solution requires a 2d
+    or 3d domain.
+    """
+
+    def __init__(self, dim=2, mu=.01, gamma=3./2., density=1.,
+                 flow_dir=0, trans_dir=1):
+        r"""Init the solution object.
+
+        Parameters
+        ----------
+        dim
+            Number of dimensions, 2 and 3 are valid
+        mu: float
+            Fluid viscosity
+        gamma: float
+            Ratio of specific heats for the fluid
+        density: float
+            Fluid mass density, $\rho$
+        flow_dir
+            Flow direction, $r_\parallel$, for the shear flow, 0=x, 1=y,
+            2=z. Defaults to x.
+        trans_dir
+            Transverse direction, $r_t$, for setting up the shear flow,
+            must be other than flow direction, $r_\parallel$, defaults to y.
+        """
+        if (flow_dir == trans_dir or trans_dir > (dim-1) or flow_dir > (dim-1)
+                or flow_dir < 0 or trans_dir < 0):
+            raise ValueError(f"Flow and transverse directions must be < {dim=}"
+                             f" and > 0.")
+
+        self._dim = dim
+        self._mu = mu
+        self._gamma = gamma
+        self._rho = density
+        self._flowdir = flow_dir
+        self._transdir = trans_dir
+
+    def __call__(self, x, **kwargs):
+        """Return shear flow solution at points *x*.
+
+        Parameters
+        ----------
+        x: numpy.ndarray
+            Point coordinates at which the shear flow solution is desired.
+
+        Returns
+        -------
+        :class:`~mirgecom.fluid.ConservedVars`
+            A CV object with the shear flow solution
+        """
+        vel = 0.*x
+        flow_dir = self._flowdir
+        trans_dir = self._transdir
+
+        zeros = 0.*x[0]
+        ones = zeros + 1.
+
+        for idim in range(self._dim):
+            if idim == flow_dir:
+                vel[idim] = x[trans_dir]**2
+            else:
+                vel[idim] = 1.*zeros
+
+        density = self._rho * ones
+        mom = self._rho * vel
+
+        pressure = 2*self._mu*x[flow_dir] + 10
+
+        ie = pressure/(self._gamma - 1.)
+        ke = self._rho * (x[trans_dir]**4.)/2.
+        total_energy = ie + ke
+
+        return make_conserved(dim=self._dim, mass=density, momentum=mom,
+                              energy=total_energy)

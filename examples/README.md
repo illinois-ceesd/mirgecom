@@ -6,7 +6,7 @@ are able to run on mulitple GPUs or CPUs in a suitable MPI environemnt. All of
 the example exercise some unique feature of *MIRGE-Com*.  The examples and the
 unique features they exercise are as follows:
 
-- `autoignition-mpi.py`: Chemistry with Pyrometheus
+- `autoignition-mpi.py`: Chemistry verification case with Pyrometheus
 - `heat-source-mpi.py`: Diffusion operator
 - `lump-mpi.py`: Lump advection, advection verification case
 - `mixture-mpi.py`: Mixture EOS with Pyrometheus
@@ -14,3 +14,7 @@ unique features they exercise are as follows:
 - `pulse-mpi.py`: Acoustic pulse in a box, wall boundary test case
 - `sod-mpi.py`: Sod's shock case: Fluid test case with strong shock
 - `vortex-mpi.py`: Isentropic vortex advection: outflow boundaries, verification
+- `hotplate-mpi.py`: Isothermal BC verification (prescribed exact soln)
+- `doublemach-mpi.py`: AV test case
+- `nsmix-mpi.py`: Viscous mixture w/Pyrometheus-based EOS
+- `poiseuille-mpi.py`: Poiseuille flow verification case
