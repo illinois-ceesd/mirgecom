@@ -1,6 +1,8 @@
 """Useful bits and bobs.
 
+.. autoclass:: StatisticsAccumulator
 .. autofunction:: asdict_shallow
+.. autofunction:: force_evaluation
 """
 
 __copyright__ = """
@@ -25,11 +27,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-"""
-
-__doc__ = """
-.. autoclass:: StatisticsAccumulator
-.. autofunction:: asdict_shallow
 """
 
 from typing import Optional
@@ -113,3 +110,10 @@ class StatisticsAccumulator:
             return None
 
         return self._min * self.scale_factor
+
+
+def force_evaluation(actx, x):
+    """Force evaluation of a (possibly lazy) array."""
+    if actx is None:
+        return x
+    return actx.thaw(actx.freeze(x))

@@ -29,8 +29,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from mirgecom.utils import force_evaluation
 from pytools import memoize_in
-from arraycontext import get_container_context_recursively
+from arraycontext import get_container_context_recursively_opt
 
 
 def _compile_timestepper(actx, timestepper, rhs):
@@ -58,15 +59,23 @@ def _compile_rhs(actx, rhs):
     return get_rhs()
 
 
-def _force_evaluation(actx, state):
-    if actx is None:
-        return state
-    return actx.thaw(actx.freeze(state))
+def _is_unevaluated(actx, ary):
+    """Check if an array contains an unevaluated :module:`pytato` expression."""
+    from arraycontext import serialize_container, NotAnArrayContainerError
+    try:
+        iterable = serialize_container(ary)
+        for _, subary in iterable:
+            if _is_unevaluated(actx, subary):
+                return True
+        return False
+    except NotAnArrayContainerError:
+        import pytato as pt
+        return isinstance(ary, pt.Array) and not isinstance(ary, pt.DataWrapper)
 
 
 def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
                                 t=0.0, istep=0, pre_step_callback=None,
-                                post_step_callback=None, force_eval=True):
+                                post_step_callback=None, force_eval=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -100,7 +109,8 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         to be called after the timestepper is called for that particular step.
     force_eval
         An optional boolean indicating whether to force lazy evaluation between
-        timesteps.  Defaults to True.
+        timesteps. By default, attempts to deduce whether this is necessary based
+        on the behavior of the timestepper.
 
     Returns
     -------
@@ -110,25 +120,36 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         the current time
     state: numpy.ndarray
     """
+    actx = get_container_context_recursively_opt(state)
+
     t = np.float64(t)
+    state = force_evaluation(actx, state)
 
     if t_final <= t:
         return istep, t, state
 
-    actx = get_container_context_recursively(state)
-
     compiled_rhs = _compile_rhs(actx, rhs)
 
     while t < t_final:
-
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if force_eval:
-            state = _force_evaluation(actx, state)
-
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
-        state = _force_evaluation(actx, state)
+
+        if force_eval is None:
+            if _is_unevaluated(actx, state):
+                force_eval = True
+                from warnings import warn
+                warn(
+                    "Deduced force_eval=True for this timestepper. This can have a "
+                    "nontrivial performance impact. If you know that your "
+                    "timestepper does not require per-step forced evaluation, "
+                    "explicitly set force_eval=False.", stacklevel=2)
+            else:
+                force_eval = False
+
+        if force_eval:
+            state = force_evaluation(actx, state)
 
         t += dt
         istep += 1
@@ -142,7 +163,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
 def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
                         component_id="state", t=0.0, istep=0,
                         pre_step_callback=None, post_step_callback=None,
-                        force_eval=True):
+                        force_eval=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -174,6 +195,10 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
         An optional user-defined function, with signature:
         ``state, dt = post_step_callback(step, t, dt, state)``,
         to be called after the timestepper is called for that particular step.
+    force_eval
+        An optional boolean indicating whether to force lazy evaluation between
+        timesteps. By default, attempts to deduce whether this is necessary based
+        on the behavior of the timestepper.
 
     Returns
     -------
@@ -183,10 +208,13 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
         the current time
     state: numpy.ndarray
     """
+    actx = get_container_context_recursively_opt(state)
+
+    t = np.float64(t)
+    state = force_evaluation(actx, state)
+
     if t_final <= t:
         return istep, t, state
-
-    actx = get_container_context_recursively(state)
 
     compiled_rhs = _compile_rhs(actx, rhs)
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
@@ -198,16 +226,30 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
             state, dt = pre_step_callback(state=state,
                                           step=istep,
                                           t=t, dt=dt)
+            stepper_cls.state = state
             stepper_cls.dt = dt
-
-        if force_eval:
-            state = _force_evaluation(actx, state)
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
             if isinstance(event, stepper_cls.StateComputed):
                 state = event.state_component
-                state = _force_evaluation(actx, state)
+
+                if force_eval is None:
+                    if _is_unevaluated(actx, state):
+                        force_eval = True
+                        from warnings import warn
+                        warn(
+                            "Deduced force_eval=True for this timestepper. This "
+                            "can have a nontrivial performance impact. If you know "
+                            "that your timestepper does not require per-step forced "
+                            "evaluation, explicitly set force_eval=False.",
+                            stacklevel=2)
+                    else:
+                        force_eval = False
+
+                if force_eval:
+                    state = force_evaluation(actx, state)
+                    stepper_cls.state = state
 
                 t += dt
 
@@ -215,6 +257,7 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
                     state, dt = post_step_callback(state=state,
                                                    step=istep,
                                                    t=t, dt=dt)
+                    stepper_cls.state = state
                     stepper_cls.dt = dt
 
                 istep += 1
@@ -263,7 +306,7 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 
 def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
                   component_id="state", pre_step_callback=None,
-                  post_step_callback=None, force_eval=True):
+                  post_step_callback=None, force_eval=None):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -303,7 +346,8 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
         to be called after the timestepper is called for that particular step.
     force_eval
         An optional boolean indicating whether to force lazy evaluation between
-        timesteps.  Defaults to True.
+        timesteps. By default, attempts to deduce whether this is necessary based
+        on the behavior of the timestepper.
 
     Returns
     -------
@@ -330,20 +374,20 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
         (current_step, current_t, current_state) = \
             _advance_state_leap(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                component_id=component_id, istep=istep,
-                force_eval=force_eval
+                component_id=component_id,
+                force_eval=force_eval,
             )
     else:
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                istep=istep, force_eval=force_eval
+                force_eval=force_eval,
             )
 
     return current_step, current_t, current_state
