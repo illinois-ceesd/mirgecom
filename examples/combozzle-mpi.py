@@ -33,7 +33,7 @@ from functools import partial
 from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_QUAD
 from mirgecom.discretization import create_discretization_collection
@@ -859,8 +859,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if not periodic:
         if multiple_boundaries:
             for idir in range(dim):
-                boundaries[DTAG_BOUNDARY(f"+{idir}")] = wall
-                boundaries[DTAG_BOUNDARY(f"-{idir}")] = wall
+                boundaries[BoundaryDomainTag(f"+{idir}")] = wall
+                boundaries[BoundaryDomainTag(f"-{idir}")] = wall
         else:
             boundaries = {BTAG_ALL: wall}
 
