@@ -28,6 +28,7 @@ import numpy as np
 import pytest  # noqa
 
 from arraycontext import (  # noqa
+    flatten,
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
