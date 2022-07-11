@@ -23,7 +23,7 @@ Mesh utilities
 .. autofunction:: generate_and_distribute_mesh
 
 File comparison utilities
---------------
+-------------------------
 
 .. autofunction:: compare_files_vtu
 .. autofunction:: compare_files_xdmf
@@ -464,11 +464,11 @@ def compare_files_vtu(
 
     # read files:
     if file_type == "vtu":
-        reader1 = vtk.vtkXMLUnstructuredGridReader()
-        reader2 = vtk.vtkXMLUnstructuredGridReader()
+        reader1 = vtk.vtkXMLUnstructuredGridReader()  # pylint: disable=no-member
+        reader2 = vtk.vtkXMLUnstructuredGridReader()  # pylint: disable=no-member
     else:
-        reader1 = vtk.vtkXMLPUnstructuredGridReader()
-        reader2 = vtk.vtkXMLPUnstructuredGridReader()
+        reader1 = vtk.vtkXMLPUnstructuredGridReader()  # pylint: disable=no-member
+        reader2 = vtk.vtkXMLPUnstructuredGridReader()  # pylint: disable=no-member
 
     reader1.SetFileName(first_file)
     reader1.Update()
@@ -487,6 +487,7 @@ def compare_files_vtu(
         print("File 1:", point_data1.GetNumberOfArrays(), "\n",
               "File 2:", point_data2.GetNumberOfArrays())
         raise ValueError("Fidelity test failed: Mismatched data array count")
+
 
     maxerrorvalue = 0
     for i in range(point_data1.GetNumberOfArrays()):
