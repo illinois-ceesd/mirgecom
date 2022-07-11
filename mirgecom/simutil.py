@@ -488,6 +488,7 @@ def compare_files_vtu(
               "File 2:", point_data2.GetNumberOfArrays())
         raise ValueError("Fidelity test failed: Mismatched data array count")
 
+    maxerrorvalue = 0
     for i in range(point_data1.GetNumberOfArrays()):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
@@ -507,9 +508,14 @@ def compare_files_vtu(
         # verify individual values w/in given tolerance
         for j in range(arr1.GetSize()):
             if abs(arr1.GetValue(j) - arr2.GetValue(j)) > tolerance:
+                if maxerrorvalue < abs(arr1.GetValue(j) - arr2.GetValue(j)):
+                    maxerrorvalue = abs(arr1.GetValue(j) - arr2.GetValue(j))
                 print("Tolerance:", tolerance)
-                raise ValueError("Fidelity test failed: Mismatched data array "
-                                 "values with given tolerance")
+
+    if not maxerrorvalue == 0:
+        raise ValueError("Fidelity test failed: Mismatched data array "
+                                 "values with given tolerance. "
+                                 "Max Error Value:", maxerrorvalue)
 
     print("VTU Fidelity test completed successfully with tolerance", tolerance)
 
@@ -675,6 +681,7 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
                          "given tolerance")
 
     # compare other Attributes:
+    maxerrorvalue = 0
     for i in range(len(file_reader1.uniform_grid)):
         curr_cell1 = file_reader1.uniform_grid[i]
         curr_cell2 = file_reader2.uniform_grid[i]
@@ -708,8 +715,13 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
         for i in range(len(values1)):
             if abs(values1[i] - values2[i]) > tolerance:
                 print("Tolerance:", tolerance, "\n", "Cell:", curr_cell1.get("Name"))
-                raise ValueError("Fidelity test failed: Mismatched data values "
-                                 "with given tolerance")
+                if maxerrorvalue < abs(values1[i] - values2[i]):
+                    maxerrorvalue = abs(values1[i] - values2[i])
+
+    if not maxerrorvalue == 0:
+        raise ValueError("Fidelity test failed: Mismatched data array "
+                                 "values with given tolerance. "
+                                 "Max Error Value:", maxerrorvalue)
 
     print("XDMF Fidelity test completed successfully with tolerance", tolerance)
 
@@ -749,6 +761,7 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
         raise ValueError("Fidelity test failed: Mismatched grid count")
 
     # loop through Grids
+    maxvalueerror = 0
     for i in range(len(objects1)):
         obj_name1 = objects1[i]
         obj_name2 = objects2[i]
@@ -810,7 +823,12 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
                 if not np.allclose(curr_datalist1, curr_datalist2, atol=tolerance):
                     print("Tolerance:", tolerance, "\n",
                           "Data List:", curr_listname1)
-                    raise ValueError("Fidelity test failed: Mismatched data "
-                                     "values with given tolerance")
+                    if maxvalueerror < abs(curr_datalist1 - curr_datalist2):
+                        maxvalueerror = abs(curr_datalist1 - curr_datalist2)
+
+    if not maxvalueerror == 0:
+        raise ValueError("Fidelity test failed: Mismatched data "
+                             "values with given tolerance. "
+                             "Max Value Error: ", maxvalueerror)
 
     print("HDF5 Fidelity test completed successfully with tolerance", tolerance)
