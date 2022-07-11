@@ -488,7 +488,6 @@ def compare_files_vtu(
               "File 2:", point_data2.GetNumberOfArrays())
         raise ValueError("Fidelity test failed: Mismatched data array count")
 
-
     maxerrorvalue = 0
     for i in range(point_data1.GetNumberOfArrays()):
         arr1 = point_data1.GetArray(i)
