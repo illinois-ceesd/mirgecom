@@ -2,6 +2,7 @@ r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyromethe
 
 .. autofunction:: get_pyrometheus_wrapper_class
 .. autofunction:: get_pyrometheus_wrapper_class_from_cantera
+.. autofunction:: get_thermochemistry_class_by_mechanism_name
 """
 
 __copyright__ = """
@@ -126,6 +127,17 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
     pyro_class = pyro.get_thermochem_class(cantera_soln)
     return get_pyrometheus_wrapper_class(pyro_class,
                                          temperature_niter=temperature_niter)
+
+
+def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
+                                                temperature_niter=5):
+    """Grab a pyrometheus mechanism class from the mech name."""
+    from mirgecom.mechanisms import get_mechanism_cti
+    mech_input_source = get_mechanism_cti(mechanism_name)
+    from cantera import Solution
+    cantera_soln = Solution(phase_id="gas", source=mech_input_source)
+    return \
+        get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter)
 
 
 # backwards compat

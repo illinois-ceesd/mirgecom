@@ -16,11 +16,23 @@ Diagnostic utilities
 .. autofunction:: max_component_norm
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
+.. autofunction:: boundary_report
 
 Mesh utilities
 --------------
 
 .. autofunction:: generate_and_distribute_mesh
+
+Simulation support utilities
+----------------------------
+
+.. autofunction:: limit_species_mass_fractions
+.. autofunction:: species_fraction_anomaly_relaxation
+
+Lazy eval utilities
+-------------------
+
+.. autofunction:: force_evaluation
 
 File comparison utilities
 -------------------------
@@ -422,7 +434,51 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     else:
         local_mesh = mesh_dist.receive_mesh_part()
 
+    global_nelements = comm.bcast(global_nelements)
     return local_mesh, global_nelements
+
+
+def boundary_report(discr, boundaries, outfile_name):
+    """Generate a report of the grid boundaries."""
+    comm = discr.mpi_communicator
+    nproc = 1
+    rank = 0
+    if comm is not None:
+        nproc = comm.Get_size()
+        rank = comm.Get_rank()
+
+    local_header = f"nproc: {nproc}\nrank: {rank}\n"
+    from io import StringIO
+    local_report = StringIO(local_header)
+    local_report.seek(0, 2)
+
+    for btag in boundaries:
+        boundary_discr = discr.discr_from_dd(btag)
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        local_report.write(f"{btag}: {nnodes}\n")
+
+    if nproc > 1:
+        from meshmode.mesh import BTAG_PARTITION
+        from grudge.trace_pair import connected_ranks
+        remote_ranks = connected_ranks(discr)
+        local_report.write(f"remote_ranks: {remote_ranks}\n")
+        rank_nodes = []
+        for remote_rank in remote_ranks:
+            boundary_discr = discr.discr_from_dd(BTAG_PARTITION(remote_rank))
+            nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+            rank_nodes.append(nnodes)
+        local_report.write(f"nnodes_pb: {rank_nodes}\n")
+
+    local_report.write("-----\n")
+    local_report.seek(0)
+
+    for irank in range(nproc):
+        if irank == rank:
+            f = open(outfile_name, "a+")
+            f.write(local_report.read())
+            f.close()
+        if comm is not None:
+            comm.barrier()
 
 
 def create_parallel_grid(comm, generate_grid):
@@ -432,6 +488,58 @@ def create_parallel_grid(comm, generate_grid):
          "instead. This function will disappear August 1, 2021",
          DeprecationWarning, stacklevel=2)
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
+
+
+def limit_species_mass_fractions(cv):
+    """Keep the species mass fractions from going negative."""
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
+        actx = cv.array_context
+        new_y = 1.*y
+        zero = 0 * y[0]
+        one = zero + 1.
+
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 1e-14),
+                                     zero, new_y[i])
+            new_y[i] = actx.np.where(actx.np.greater(new_y[i], 1.),
+                                     one, new_y[i])
+        new_rho_y = cv.mass*new_y
+
+        for i in range(cv.nspecies):
+            new_rho_y[i] = actx.np.where(actx.np.less(new_rho_y[i], 1e-16),
+                                         zero, new_rho_y[i])
+            new_rho_y[i] = actx.np.where(actx.np.greater(new_rho_y[i], 1.),
+                                         one, new_rho_y[i])
+
+        return make_conserved(dim=cv.dim, mass=cv.mass,
+                              momentum=cv.momentum, energy=cv.energy,
+                              species_mass=new_rho_y)
+    return cv
+
+
+def species_fraction_anomaly_relaxation(cv, alpha=1.):
+    """Pull negative species fractions back towards 0 with a RHS contribution."""
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
+        actx = cv.array_context
+        new_y = 1.*y
+        zero = 0. * y[0]
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 0.),
+                                     -new_y[i], zero)
+            # y_spec = actx.np.where(y_spec > 1., y_spec-1., zero)
+        return make_conserved(dim=cv.dim, mass=0.*cv.mass,
+                              momentum=0.*cv.momentum, energy=0.*cv.energy,
+                              species_mass=alpha*cv.mass*new_y)
+    return 0.*cv
+
+
+def force_evaluation(actx, expn):
+    """Wrap freeze/thaw forcing evaluation of expressions."""
+    return actx.thaw(actx.freeze(expn))
 
 
 def compare_files_vtu(

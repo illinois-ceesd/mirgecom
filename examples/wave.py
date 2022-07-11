@@ -38,8 +38,10 @@ from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 from mirgecom.utils import force_evaluation
 
-from meshmode.array_context import (PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext)
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext
+)
 
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 

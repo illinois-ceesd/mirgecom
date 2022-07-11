@@ -52,7 +52,6 @@ def lsrk_step(coefs, state, t, dt, rhs):
     for i in range(len(coefs.A)):
         k = coefs.A[i]*k + dt*rhs(t + coefs.C[i]*dt, state)
         state = state + coefs.B[i]*k
-
     return state
 
 
