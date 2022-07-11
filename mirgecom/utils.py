@@ -2,7 +2,6 @@
 
 .. autoclass:: StatisticsAccumulator
 .. autofunction:: asdict_shallow
-.. autofunction:: force_evaluation
 """
 
 __copyright__ = """
@@ -114,6 +113,11 @@ class StatisticsAccumulator:
 
 def force_evaluation(actx, x):
     """Force evaluation of a (possibly lazy) array."""
+    from warnings import warn
+    warn(
+        "force_evaluation is deprecated and will disappear in Q4 2022. "
+        "Use the array container's freeze_thaw method instead.",
+        DeprecationWarning, stacklevel=2)
     if actx is None:
         return x
-    return actx.thaw(actx.freeze(x))
+    return actx.freeze_thaw(x)

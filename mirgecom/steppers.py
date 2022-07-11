@@ -31,7 +31,6 @@ THE SOFTWARE.
 import numpy as np
 from logpyle import set_dt
 from mirgecom.logging_quantities import set_sim_state
-from mirgecom.utils import force_evaluation
 from pytools import memoize_in
 from arraycontext import get_container_context_recursively_opt
 
@@ -129,7 +128,9 @@ def _advance_state_stepper_func(rhs, timestepper,
     actx = get_container_context_recursively_opt(state)
 
     t = np.float64(t)
-    state = force_evaluation(actx, state)
+
+    if actx is not None:
+        state = actx.freeze_thaw(state)
 
     if t_final <= t:
         return istep, t, state
@@ -157,8 +158,8 @@ def _advance_state_stepper_func(rhs, timestepper,
             else:
                 force_eval = False
 
-        if force_eval:
-            state = force_evaluation(actx, state)
+        if force_eval and actx is not None:
+            state = actx.freeze_thaw(state)
 
         t += dt
         istep += 1
@@ -229,7 +230,9 @@ def _advance_state_leap(rhs, timestepper, state,
     actx = get_container_context_recursively_opt(state)
 
     t = np.float64(t)
-    state = force_evaluation(actx, state)
+
+    if actx is not None:
+        state = actx.freeze_thaw(state)
 
     if t_final <= t:
         return istep, t, state
@@ -265,8 +268,8 @@ def _advance_state_leap(rhs, timestepper, state,
                     else:
                         force_eval = False
 
-                if force_eval:
-                    state = force_evaluation(actx, state)
+                if force_eval and actx is not None:
+                    state = actx.freeze_thaw(state)
                     stepper_cls.state = state
 
                 t += dt

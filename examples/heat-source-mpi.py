@@ -38,7 +38,6 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.utils import force_evaluation
 import pyopencl.tools as cl_tools
 
 from mirgecom.logging_quantities import (initialize_logmgr,
@@ -172,7 +171,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         ], overwrite=True)
 
         u = rk4_step(u, t, dt, compiled_rhs)
-        u = force_evaluation(actx, u)
+        u = actx.freeze_thaw(u)
 
         t += dt
         istep += 1

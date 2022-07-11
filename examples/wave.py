@@ -36,7 +36,6 @@ import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
-from mirgecom.utils import force_evaluation
 
 from meshmode.array_context import (PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext)
@@ -150,7 +149,7 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
             logmgr.tick_before()
 
         fields = rk4_step(fields, t, dt, compiled_rhs)
-        fields = force_evaluation(actx, fields)
+        fields = actx.freeze_thaw(fields)
 
         if istep % 10 == 0:
             if use_profiling:
