@@ -81,16 +81,28 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
             raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = \
+            PyOpenCLProfilingArrayContext(
+                queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+            )
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy:
-            actx = PytatoPyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+            actx = \
+                PytatoPyOpenCLArrayContext(
+                    queue,
+                    allocator=cl_tools.MemoryPool(
+                        cl_tools.ImmediateAllocator(queue)),
+                )
         else:
-            actx = PyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+            actx = \
+                PyOpenCLArrayContext(
+                    queue,
+                    allocator=cl_tools.MemoryPool(
+                        cl_tools.ImmediateAllocator(queue)),
+                    force_device_scalars=True
+                )
 
     dim = 2
     nel_1d = 16
@@ -141,6 +153,7 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         return wave_operator(discr, c=wave_speed, w=w)
 
     compiled_rhs = actx.compile(rhs)
+    fields = force_evaluation(actx, fields)
 
     t = 0
     t_final = 1
