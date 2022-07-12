@@ -147,7 +147,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue = cl.CommandQueue(cl_ctx)
 
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000)
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                          allocator=cl_tools.MemoryPool(
+                              cl_tools.ImmediateAllocator(queue)))
     else:
         actx = actx_class(comm, queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
@@ -267,7 +269,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
-    visualizer = make_visualizer(discr, order)
+    visualizer = make_visualizer(discr)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
