@@ -54,7 +54,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -155,7 +155,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -182,8 +182,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.mechanisms import get_mechanism_input
     mech_input = get_mechanism_input("uiuc")
     sol = cantera.Solution(name="gas", yaml=mech_input)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+    pyrometheus_mechanism = \
+        get_pyrometheus_wrapper_class_from_cantera(sol)(actx.np)
 
     nspecies = pyrometheus_mechanism.num_species
     eos = PyrometheusMixture(pyrometheus_mechanism)
@@ -243,7 +244,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info(init_message)
 
     def my_write_status(component_errors, dv=None):
-        from mirgecom.simutil import allsync
         status_msg = (
             "------- errors="
             + ", ".join("%.3g" % en for en in component_errors))
@@ -252,14 +252,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MIN)
-            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MAX)
-            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MIN)
-            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MAX)
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                                 op="min")
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                                 op="max")
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                                 op="min")
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                                 op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
