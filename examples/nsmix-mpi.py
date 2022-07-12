@@ -107,7 +107,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue = cl.CommandQueue(cl_ctx)
 
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000)
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         actx = actx_class(comm, queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
@@ -624,6 +625,7 @@ if __name__ == "__main__":
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
+    lazy = args.lazy
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")

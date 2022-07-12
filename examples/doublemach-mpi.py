@@ -269,7 +269,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
-    visualizer = make_visualizer(discr, order)
+    visualizer = make_visualizer(discr)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
