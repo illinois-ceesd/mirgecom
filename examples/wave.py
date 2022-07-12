@@ -85,7 +85,6 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
             PyOpenCLProfilingArrayContext(
                 queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-                force_device_scalars=True
             )
     else:
         queue = cl.CommandQueue(cl_ctx)
