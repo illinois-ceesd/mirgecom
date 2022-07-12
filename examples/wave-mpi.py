@@ -193,7 +193,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
     def rhs(t, w):
         return wave_operator(discr, c=wave_speed, w=w)
-
+    fields = force_evaluation(actx, fields)
     compiled_rhs = actx.compile(rhs)
 
     while t < t_final:

@@ -40,8 +40,7 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile,
-    allsync
+    write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -51,6 +50,7 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
+from mirgecom.utils import force_evaluation
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -74,7 +74,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_overintegration=False, use_profiling=False,
-         casename=None, lazy=False, rst_filename=None, log_dependent=True):
+         casename=None, lazy=False, rst_filename=None, log_dependent=True,
+         viscous_terms_on=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -257,11 +258,24 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+    pyro_mechanism = \
+        get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
-    gas_model = GasModel(eos=eos)
+    # {{{ Initialize simple transport model
+    from mirgecom.transport import SimpleTransport
+    transport_model = None
+    if viscous_terms_on:
+        kappa = 1e-5
+        spec_diffusivity = 1e-5 * np.ones(nspecies)
+        sigma = 1e-5
+        transport_model = SimpleTransport(viscosity=sigma,
+                                          thermal_conductivity=kappa,
+                                          species_diffusivity=spec_diffusivity)
+    # }}}
+
+    gas_model = GasModel(eos=eos, transport=transport_model)
     from pytools.obj_array import make_obj_array
 
     def get_temperature_update(cv, temperature):
@@ -317,6 +331,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(eos=gas_model.eos, x_vec=nodes)
         temperature_seed = temperature_seed * ones
 
+    current_cv = force_evaluation(actx, current_cv)
+
     # The temperature_seed going into this function is:
     # - At time 0: the initial temperature input data (maybe from Cantera)
     # - On restart: the restarted temperature seed from restart file (saving
@@ -365,14 +381,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MIN)
-            tmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
-                           comm=comm, op=MPI.MAX)
-            pmin = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MIN)
-            pmax = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
-                           comm=comm, op=MPI.MAX)
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+                                 op="min")
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+                                 op="max")
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+                                 op="min")
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+                                 op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
@@ -448,17 +464,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-    from mirgecom.inviscid import get_inviscid_timestep
+    from mirgecom.viscous import get_viscous_timestep
 
     def get_dt(state):
-        return get_inviscid_timestep(discr, state=state)
+        return get_viscous_timestep(discr, state=state)
 
     compute_dt = actx.compile(get_dt)
 
-    from mirgecom.inviscid import get_inviscid_cfl
+    from mirgecom.viscous import get_viscous_cfl
 
     def get_cfl(state, dt):
-        return get_inviscid_cfl(discr, dt=dt, state=state)
+        return get_viscous_cfl(discr, dt=dt, state=state)
 
     compute_cfl = actx.compile(get_cfl)
 
@@ -474,14 +490,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if constant_cfl:
             ts_field = current_cfl * compute_dt(state)
             from grudge.op import nodal_min_loc
-            dt = allsync(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
-                         comm=comm, op=MPI.MIN)
+            dt = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", ts_field)),
+                               op="min")
             cfl = current_cfl
         else:
             ts_field = compute_cfl(state, current_dt)
             from grudge.op import nodal_max_loc
-            cfl = allsync(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
-                          comm=comm, op=MPI.MAX)
+            cfl = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", ts_field)),
+                                op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
     def my_pre_step(step, t, dt, state):
@@ -542,22 +558,34 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, cv, gas_model.eos)
             logmgr.tick_after()
+
         return make_obj_array([cv, fluid_state.temperature]), dt
 
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov as inv_num_flux_func
+    from mirgecom.gas_model import make_operator_fluid_states
+    from mirgecom.navierstokes import ns_operator
+
+    fluid_operator = euler_operator
+    if viscous_terms_on:
+        fluid_operator = ns_operator
 
     def my_rhs(t, state):
         cv, tseed = state
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        return make_obj_array([
-            euler_operator(discr, state=fluid_state, time=t, boundaries=boundaries,
-                           gas_model=gas_model,
-                           inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                           quadrature_tag=quadrature_tag)
-            + eos.get_species_source_terms(cv, fluid_state.temperature),
-            0*tseed])
+        fluid_operator_states = make_operator_fluid_states(
+            discr, fluid_state, gas_model, boundaries=boundaries,
+            quadrature_tag=quadrature_tag)
+        fluid_rhs = fluid_operator(
+            discr, state=fluid_state, gas_model=gas_model, time=t,
+            boundaries=boundaries, operator_states_quad=fluid_operator_states,
+            quadrature_tag=quadrature_tag,
+            inviscid_numerical_flux_func=inv_num_flux_func)
+        chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
+        tseed_rhs = fluid_state.temperature - tseed
+        cv_rhs = fluid_rhs + chem_rhs
+        return make_obj_array([cv_rhs, tseed_rhs])
 
     current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -602,6 +630,8 @@ if __name__ == "__main__":
         help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
+    parser.add_argument("--navierstokes", action="store_true",
+                        help="turns on compressible Navier-Stokes RHS")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
@@ -615,6 +645,7 @@ if __name__ == "__main__":
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
     lazy = args.lazy
+    viscous_terms_on = args.navierstokes
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -632,6 +663,6 @@ if __name__ == "__main__":
     main(actx_class, use_logmgr=args.log, use_leap=args.leap,
          use_overintegration=args.overintegration, use_profiling=args.profiling,
          lazy=lazy, casename=casename, rst_filename=rst_filename,
-         log_dependent=log_dependent)
+         log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
 
 # vim: foldmethod=marker
