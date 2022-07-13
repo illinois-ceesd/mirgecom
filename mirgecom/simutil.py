@@ -168,10 +168,13 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
     if local_dt:
         actx = state.array_context
         data_shape = (state.cv.mass[0]).shape
-        return cfl * actx.np.broadcast_to(
-            op.elementwise_min(discr, get_viscous_timestep(discr=discr,
-                                                           state=state)),
-            data_shape)
+        if actx.supports_nonscalar_broadcasting:
+            return cfl * actx.np.broadcast_to(
+                op.elementwise_min(discr, get_viscous_timestep(discr, state)),
+                data_shape)
+        else:
+            return cfl * op.elementwise_min(discr,
+                                            get_viscous_timestep(discr, state))
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
