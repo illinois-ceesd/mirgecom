@@ -45,7 +45,8 @@ logger = logging.getLogger(__name__)
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
                           (rk4_step, 4)])
-def test_integration_order(integrator, method_order):
+@pytest.mark.parametrize("local_dt", [True, False])
+def test_integration_order(integrator, method_order, local_dt):
     """Test that time integrators have correct order."""
 
     def exact_soln(t):
@@ -57,18 +58,28 @@ def test_integration_order(integrator, method_order):
     from pytools.convergence import EOCRecorder
     integrator_eoc = EOCRecorder()
 
-    dt = 1.0
+    dt = (np.asarray([0.5, 1.0, 1.5, 2.0]) if local_dt else 1.0)
+    loop_limit = 5 if local_dt else 4
+    istep = 0
+
     for refine in [1, 2, 4, 8]:
         dt = dt / refine
-        t = 0
+        t = 0*dt
+        loop_counter = istep if local_dt else t
         state = exact_soln(t)
 
-        while t < 4:
+        while loop_counter < loop_limit:
             state = integrator(state, t, dt, rhs)
             t = t + dt
+            istep = istep + 1
+            loop_counter = istep if local_dt else t
 
-        error = np.abs(state - exact_soln(t)) / exact_soln(t)
-        integrator_eoc.add_data_point(dt, error)
+        if local_dt:
+            error = np.abs(state[i] - exact_soln(t)[i]) / exact_soln(t)[i]
+            integrator_eoc.add_data_point(dt[i], error)
+        else:
+            error = np.abs(state - exact_soln(t)) / exact_soln(t)
+            integrator_eoc.add_data_point(dt, error)
 
     logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
     assert integrator_eoc.order_estimate() >= method_order - .01
