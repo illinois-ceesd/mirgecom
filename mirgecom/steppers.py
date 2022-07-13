@@ -176,10 +176,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         istep = istep + 1
         t = t + dt
 
-        if local_dt:
-            marching_loc = istep
-        else:
-            marching_loc = t
+        marching_loc = istep if local_dt else t
 
         if post_step_callback is not None:
             state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
