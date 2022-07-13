@@ -117,13 +117,7 @@ def test_state_advancer(integrator, method_order, local_dt):
                           max_steps=max_steps, local_dt=local_dt,
                           istep=0)
 
-        if local_dt:
-            advanced_t = t + max_steps*dt
-
         expected_soln = exact_soln(advanced_t)
-        print(f"{advanced_step=},{advanced_t=}")
-        print(f"{advanced_state=}")
-        print(f",{expected_soln=}")
 
         if local_dt:
             # Use the max error among multi-"cells" for local_dt
