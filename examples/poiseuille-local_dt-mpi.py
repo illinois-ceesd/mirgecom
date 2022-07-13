@@ -450,7 +450,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=current_state.cv, t=current_t, t_final=t_final,
-                      nsteps=100, local_dt=local_dt,
+                      max_steps=20, local_dt=local_dt,
                       istep=current_step)
 
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
