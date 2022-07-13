@@ -153,6 +153,9 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
 
+        if force_eval:
+            state = force_evaluation(actx, state)
+
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
 
         if force_eval is None:
@@ -249,6 +252,9 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
                                           t=t, dt=dt)
             stepper_cls.state = state
             stepper_cls.dt = dt
+
+        if force_eval:
+            state = force_evaluation(actx, state)
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):

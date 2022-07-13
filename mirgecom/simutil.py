@@ -77,6 +77,7 @@ from mirgecom.viscous import get_viscous_timestep
 
 from typing import List
 from grudge.discretization import DiscretizationCollection
+from mirgecom.viscous import get_viscous_timestep
 
 
 logger = logging.getLogger(__name__)
