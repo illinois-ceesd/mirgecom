@@ -54,6 +54,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from warnings import warn
 import numpy as np
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
@@ -515,15 +516,13 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
+        warn("AdiabaticSlipBoundary is deprecated. Use SymmetryBoundary instead.",
+             DeprecationWarning, stacklevel=2)
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_slip_state,
             boundary_temperature_func=self._temperature_for_interior_state,
             boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
-
-    from warnings import warn
-    warn("AdiabaticSlipBoundary is deprecated. Use SymmetryBoundary instead.",
-        PendingDeprecationWarning)
 
     def adiabatic_slip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
@@ -589,22 +588,22 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
+        warn("AdiabaticNoslipMovingBoundary is deprecated. Use "
+             "AdiabaticNoSlipWallBoundary instead.", DeprecationWarning,
+             stacklevel=2)
+
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_noslip_state,
             boundary_temperature_func=self._temperature_for_interior_state,
             boundary_grad_av_func=self.adiabatic_noslip_grad_av,
         )
+
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
             wall_velocity = np.zeros(shape=(dim,))
         if len(wall_velocity) != dim:
             raise ValueError(f"Specified wall velocity must be {dim}-vector.")
         self._wall_velocity = wall_velocity
-
-    from warnings import warn
-    warn("AdiabaticNoslipMovingBoundary is deprecated."
-         " Use AdiabaticNoslipWallBoundary instead.",
-        PendingDeprecationWarning)
 
     def adiabatic_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
@@ -640,16 +639,14 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
+        warn("IsothermalNoSlipBoundary is deprecated. Use IsothermalWallBoundary "
+             "instead.", DeprecationWarning, stacklevel=2)
+
         self._wall_temp = wall_temperature
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.isothermal_noslip_state,
             boundary_temperature_func=self.temperature_bc
         )
-
-    from warnings import warn
-    warn("IsothermalWallBoundary is deprecated."
-         " Use IsothermalWallBoundary instead.",
-        PendingDeprecationWarning)
 
     def isothermal_noslip_state(self, discr, btag, gas_model, state_minus, **kwargs):
         r"""Get the interior and exterior solution (*state_minus*) on the boundary.
