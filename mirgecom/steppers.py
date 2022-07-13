@@ -29,8 +29,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from logpyle import set_dt
-from mirgecom.logging_quantities import set_sim_state
 from mirgecom.utils import force_evaluation
 from pytools import memoize_in
 from arraycontext import get_container_context_recursively_opt
@@ -75,13 +73,10 @@ def _is_unevaluated(actx, ary):
         return isinstance(ary, pt.Array) and not isinstance(ary, pt.DataWrapper)
 
 
-def _advance_state_stepper_func(rhs, timestepper,
-                                state, t_final, dt=0,
-                                t=0.0, istep=0,
-                                pre_step_callback=None,
-                                post_step_callback=None,
-                                force_eval=None,
-                                logmgr=None, eos=None, dim=None):
+def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
+                                t=0.0, istep=0, pre_step_callback=None,
+                                post_step_callback=None, force_eval=None,
+                                local_dt=False, max_steps=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -105,6 +100,8 @@ def _advance_state_stepper_func(rhs, timestepper,
         Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
+    max_steps: int
+        Optional parameter indicating maximum number of steps to take
     pre_step_callback
         An optional user-defined function, with signature:
         ``state, dt = pre_step_callback(step, t, dt, state)``,
@@ -117,6 +114,9 @@ def _advance_state_stepper_func(rhs, timestepper,
         An optional boolean indicating whether to force lazy evaluation between
         timesteps. By default, attempts to deduce whether this is necessary based
         on the behavior of the timestepper.
+    local_dt
+        An optional boolean indicating whether *dt* is uniform or cell-local in
+        the domain.
 
     Returns
     -------
@@ -128,20 +128,33 @@ def _advance_state_stepper_func(rhs, timestepper,
     """
     actx = get_container_context_recursively_opt(state)
 
-    t = np.float64(t)
-    state = force_evaluation(actx, state)
+    if local_dt:
+        if max_steps is None:
+            raise ValueError("max_steps must be given for local_dt mode.")
+        marching_loc = istep
+        marching_limit = max_steps
+    else:
+        t = np.float64(t)
+        marching_loc = t
+        marching_limit = t_final
 
-    if t_final <= t:
+    if marching_loc >= marching_limit:
         return istep, t, state
+
+    state = force_evaluation(actx, state)
 
     compiled_rhs = _compile_rhs(actx, rhs)
 
-    while t < t_final:
-        if logmgr:
-            logmgr.tick_before()
+    while marching_loc < marching_limit:
+        if max_steps is not None:
+            if max_steps <= istep:
+                return istep, t, state
 
         if pre_step_callback is not None:
             state, dt = pre_step_callback(state=state, step=istep, t=t, dt=dt)
+
+        if force_eval:
+            state = force_evaluation(actx, state)
 
         state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
 
@@ -160,28 +173,21 @@ def _advance_state_stepper_func(rhs, timestepper,
         if force_eval:
             state = force_evaluation(actx, state)
 
-        t += dt
-        istep += 1
+        istep = istep + 1
+        t = t + dt
+
+        marching_loc = istep if local_dt else t
 
         if post_step_callback is not None:
             state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
 
-        if logmgr:
-            set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
-            logmgr.tick_after()
-
     return istep, t, state
 
 
-def _advance_state_leap(rhs, timestepper, state,
-                        t_final, dt=0,
-                        component_id="state",
-                        t=0.0, istep=0,
-                        pre_step_callback=None,
-                        post_step_callback=None,
-                        force_eval=None,
-                        logmgr=None, eos=None, dim=None):
+def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
+                        component_id="state", t=0.0, istep=0,
+                        pre_step_callback=None, post_step_callback=None,
+                        force_eval=None):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -246,6 +252,9 @@ def _advance_state_leap(rhs, timestepper, state,
                                           t=t, dt=dt)
             stepper_cls.state = state
             stepper_cls.dt = dt
+
+        if force_eval:
+            state = force_evaluation(actx, state)
 
         # Leap interface here is *a bit* different.
         for event in stepper_cls.run(t_end=t+dt):
@@ -322,13 +331,9 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     return stepper_cls
 
 
-def advance_state(rhs, timestepper, state, t_final,
-                  component_id="state",
-                  t=0.0, istep=0, dt=0,
-                  pre_step_callback=None,
-                  post_step_callback=None,
-                  force_eval=None,
-                  logmgr=None, eos=None, dim=None):
+def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
+                  max_steps=None, component_id="state", pre_step_callback=None,
+                  post_step_callback=None, force_eval=None, local_dt=False):
     """Determine what stepper we're using and advance the state from (t) to (t_final).
 
     Parameters
@@ -358,6 +363,8 @@ def advance_state(rhs, timestepper, state, t_final,
         Initial timestep size to use, optional if dt is adaptive
     istep: int
         Step number from which to start
+    max_steps: int
+        Optional parameter indicating maximum number of steps to take
     pre_step_callback
         An optional user-defined function, with signature:
         ``state, dt = pre_step_callback(step, t, dt, state)``,
@@ -370,6 +377,9 @@ def advance_state(rhs, timestepper, state, t_final,
         An optional boolean indicating whether to force lazy evaluation between
         timesteps. By default, attempts to deduce whether this is necessary based
         on the behavior of the timestepper.
+    local_dt
+        An optional boolean indicating whether *dt* is uniform or cell-local in
+        the domain.
 
     Returns
     -------
@@ -385,20 +395,15 @@ def advance_state(rhs, timestepper, state, t_final,
     import sys
     leap_timestepper = False
 
-    if ((logmgr is not None) or (dim is not None) or (eos is not None)):
-        from warnings import warn
-        warn("Passing logmgr, dim, or eos into the stepper is a deprecated stepper "
-             "signature that will disappear in Q3 2022. See the examples for the "
-             "current and preferred usage.",
-             DeprecationWarning, stacklevel=2)
-
     if "leap" in sys.modules:
         # The timestepper can still either be a leap method generator
         # or a user-passed function.
         from leap import MethodBuilder
         if isinstance(timestepper, MethodBuilder):
             leap_timestepper = True
-
+            if local_dt:
+                raise ValueError("Local timestepping is not supported for Leap-based"
+                                 " integrators.")
     if leap_timestepper:
         (current_step, current_t, current_state) = \
             _advance_state_leap(
@@ -408,17 +413,16 @@ def advance_state(rhs, timestepper, state, t_final,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
                 force_eval=force_eval,
-                logmgr=logmgr, eos=eos, dim=dim,
             )
     else:
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt, istep=istep,
+                state=state, t=t, t_final=t_final, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
-                force_eval=force_eval,
-                logmgr=logmgr, eos=eos, dim=dim,
+                istep=istep, force_eval=force_eval,
+                max_steps=max_steps, local_dt=local_dt
             )
 
     return current_step, current_t, current_state
