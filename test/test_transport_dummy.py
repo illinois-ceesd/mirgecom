@@ -95,15 +95,11 @@ def test_pyrometheus_transport(ctx_factory, mechname):
     zeros = discr.zeros(actx)
 
     # Pyrometheus initialization
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
     mech_input = get_mechanism_input(mechname)
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    # pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
-#    pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
-
-    from mirgecom.thermochemistry import get_thermochemistry_class_by_mechanism_name
-    pyro_obj = get_thermochemistry_class_by_mechanism_name("uiuc",
-                                                        temperature_niter=3)(actx.np)
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+                   cantera_soln, temperature_niter=3)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
@@ -152,7 +148,7 @@ def test_pyrometheus_transport(ctx_factory, mechname):
 
         tin = can_t * ones
         rhoin = can_rho * ones
-        yin = can_y * ones
+        yin = can_rho * can_y * ones
 
         # Cantera transport
         mu_ct = cantera_soln.viscosity
@@ -161,8 +157,8 @@ def test_pyrometheus_transport(ctx_factory, mechname):
 
         cv = make_conserved(dim=2, mass=can_rho * ones,
                             momentum=make_obj_array([zeros,zeros]),
-                            energy=gas_model.eos.get_internal_energy(tin,can_rho*yin),
-                            species_mass=can_rho*yin) #XXX this is strange.. Doesnt it need the mass?
+                            energy=gas_model.eos.get_internal_energy(tin,yin),
+                            species_mass=yin)
 
         fluid_state = make_fluid_state(cv, gas_model, tin)
 
