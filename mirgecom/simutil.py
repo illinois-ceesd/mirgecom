@@ -488,8 +488,9 @@ def compare_files_vtu(
               "File 2:", point_data2.GetNumberOfArrays())
         raise ValueError("Fidelity test failed: Mismatched data array count")
 
-    maxerrorvalue = 0
-    for i in range(point_data1.GetNumberOfArrays()):
+    nfields = point_data1.GetNumberOfArrays()
+    max_field_errors = [0 for _ in range(nfields)]
+    for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
 
@@ -506,16 +507,17 @@ def compare_files_vtu(
             raise ValueError("Fidelity test failed: Mismatched data array sizes")
 
         # verify individual values w/in given tolerance
+        print(f"Field: {point_data2.GetArrayName(i)}", end=" ")
         for j in range(arr1.GetSize()):
-            if abs(arr1.GetValue(j) - arr2.GetValue(j)) > tolerance:
-                if maxerrorvalue < abs(arr1.GetValue(j) - arr2.GetValue(j)):
-                    maxerrorvalue = abs(arr1.GetValue(j) - arr2.GetValue(j))
-                print("Tolerance:", tolerance)
+            test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
+            if test_err > max_field_errors[i]:
+                max_field_errors[i] = test_err
+        print(f"Max Error: {max_field_errors[i]}")
 
-    if not maxerrorvalue == 0:
+    violation = any([max_field_errors[i] > tolerance for i in range(nfields)])
+    if violation:
         raise ValueError("Fidelity test failed: Mismatched data array "
-                                 "values with given tolerance. "
-                                 "Max Error Value:", maxerrorvalue)
+                                 "values with given tolerance. ")
 
     print("VTU Fidelity test completed successfully with tolerance", tolerance)
 
