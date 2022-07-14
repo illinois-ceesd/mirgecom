@@ -13,6 +13,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
+.. autoclass:: MixtureAveragedTransport
 
 Exceptions
 ^^^^^^^^^^
@@ -255,3 +256,76 @@ class PowerLawTransport(TransportModel):
                             eos: GasEOS) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._d_alpha*(0*cv.mass + 1.)
+
+
+class MixtureAveragedTransport(TransportModel):
+    r"""Transport model with mixture averaged transport properties.
+
+    Inherits from (and implements) :class:`TransportModel` based on a
+    temperature-dependent fit from Pyrometheus/Cantera weighted by the mixture
+    composition.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
+    """
+
+    def __init__(self, pyrometheus_mech, factor=1.0, alpha=0.6):
+        """Initialize power law coefficients and parameters.
+
+        Parameters
+        ----------
+        pyrometheus_mech:
+
+        factor: Scaling factor to artifically increase or decrease the
+        transport coefficients. The default is to keep the physical value, i.e., 1.0.
+
+        alpha: The bulk viscosity. The default value is "air". Ideally, it should be
+        a function of temperature and species.
+        """
+
+        self._pyro_mech = pyrometheus_mech
+        self._alpha = alpha
+        self._factor = factor
+
+    def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$. """
+        return (
+            self._factor*self._pyro_mech.get_mixture_viscosity_mixavg(
+                dv.temperature, cv.species_mass_fractions)
+        )
+
+    def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$.
+
+        $\mu_{B} = \alpha\mu$
+        """
+        return self._alpha*self.viscosity(cv, dv)
+
+    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\alpha - \frac{2}{3}\right)\mu$
+        """
+        return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
+
+    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
+                             eos: GasEOS) -> DOFArray:
+        r"""Get the gas thermal_conductivity, $\kappa$."""
+        return (
+            self._factor*self._pyro_mech.get_mixture_thermal_conductivity_mixavg(
+                dv.temperature, cv.species_mass_fractions)
+        )
+
+    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
+                            eos: GasEOS) -> DOFArray:
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        return (
+            self._factor*self._pyro_mech.get_species_mass_diffusivities_mixavg(
+                dv.temperature, dv.pressure, cv.species_mass_fractions)
+        )
