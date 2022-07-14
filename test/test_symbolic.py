@@ -313,8 +313,8 @@ def test_symbolic_evaluation(actx_factory):
 
     expected_f = np.exp(-0.5) * actx.np.cos(nodes[0]) * actx.np.sin(nodes[1])
     assert actx.to_numpy(
-        op.norm(discr, f - expected_f, np.inf)
-        / op.norm(discr, expected_f, np.inf)) < 1e-12
+        op.norm(discr, f - expected_f, 2)
+        / op.norm(discr, expected_f, 2)) < 1e-12
 
     # Vector
     sym_f = make_obj_array([
@@ -328,8 +328,8 @@ def test_symbolic_evaluation(actx_factory):
         actx.np.cos(nodes[0]),
         actx.np.sin(nodes[1])])
     assert actx.to_numpy(
-        op.norm(discr, f - expected_f, np.inf)
-        / op.norm(discr, expected_f, np.inf)) < 1e-12
+        op.norm(discr, f - expected_f, 2)
+        / op.norm(discr, expected_f, 2)) < 1e-12
 
     # Array container
     from mirgecom.fluid import make_conserved

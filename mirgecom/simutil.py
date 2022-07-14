@@ -344,12 +344,12 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     actx = red_state.array_context
     resid = red_state - blue_state
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(discr, resid, order=np.inf), actx))
+        flatten(componentwise_norms(discr, resid, order=2), actx))
 
     return resid_errs.tolist()
 
 
-def componentwise_norms(discr, fields, order=np.inf):
+def componentwise_norms(discr, fields, order=2):
     """Return the *order*-norm for each component of *fields*.
 
     .. note::
@@ -365,7 +365,7 @@ def componentwise_norms(discr, fields, order=np.inf):
         return 0
 
 
-def max_component_norm(discr, fields, order=np.inf):
+def max_component_norm(discr, fields, order=2):
     """Return the max *order*-norm over the components of *fields*.
 
     .. note::

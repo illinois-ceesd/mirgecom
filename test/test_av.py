@@ -88,7 +88,7 @@ def test_tag_cells(ctx_factory, dim, order):
 
     def norm_indicator(expected, discr, soln, **kwargs):
         return(op.norm(discr, expected-smoothness_indicator(discr, soln, **kwargs),
-                          np.inf))
+                          2))
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -249,7 +249,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                     gas_model=gas_model,
                                     fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
         print(f"{rhs=}")
-        err = op.norm(discr, rhs-exp_rhs_1d, np.inf)
+        err = op.norm(discr, rhs-exp_rhs_1d, 2)
         assert err < tolerance
 
     # Quadratic field return constant 2*dim
@@ -265,7 +265,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     rhs = av_laplacian_operator(discr, boundaries=boundaries,
                                 gas_model=gas_model,
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
-    err = op.norm(discr, 2.*dim-rhs, np.inf)
+    err = op.norm(discr, 2.*dim-rhs, 2)
     assert err < tolerance
 
 
@@ -320,7 +320,7 @@ def test_trig(ctx_factory, dim, order):
                                     gas_model=gas_model,
                                     fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
 
-        err_rhs = actx.to_numpy(op.norm(discr, rhs-exp_rhs, np.inf))
+        err_rhs = actx.to_numpy(op.norm(discr, rhs-exp_rhs, 2))
         eoc_rec.add_data_point(1.0/nel_1d, err_rhs)
 
     logger.info(

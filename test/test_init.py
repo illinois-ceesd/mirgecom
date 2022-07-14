@@ -85,7 +85,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     def inf_norm(data):
         if len(data) > 0:
-            return actx.to_numpy(op.norm(discr, data, np.inf))
+            return actx.to_numpy(op.norm(discr, data, 2))
         else:
             return 0.0
 
@@ -141,7 +141,7 @@ def test_lump_init(ctx_factory):
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = actx.to_numpy(op.norm(discr, p - exp_p, np.inf))
+    errmax = actx.to_numpy(op.norm(discr, p - exp_p, 2))
 
     logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
@@ -178,7 +178,7 @@ def test_vortex_init(ctx_factory):
     gamma = 1.4
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
-    errmax = actx.to_numpy(op.norm(discr, p - exp_p, np.inf))
+    errmax = actx.to_numpy(op.norm(discr, p - exp_p, 2))
 
     logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
@@ -222,7 +222,7 @@ def test_shock_init(ctx_factory):
     p = eos.pressure(initsoln)
 
     assert actx.to_numpy(
-        op.norm(discr, actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), np.inf)) < tol
+        op.norm(discr, actx.np.where(nodes_x < 0.5, p-xpl, p-xpr), 2)) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -257,7 +257,7 @@ def test_uniform(ctx_factory, dim):
     tol = 1e-15
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     assert inf_norm(initsoln.mass - 1.0) < tol
     assert inf_norm(initsoln.energy - 2.5) < tol
@@ -307,7 +307,7 @@ def test_pulse(ctx_factory, dim):
     print(f"Pulse = {pulse}")
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     # does it return the expected exponential?
     pulse_check = actx.np.exp(-.5 * r2)
@@ -379,7 +379,7 @@ def test_multilump(ctx_factory, dim):
     print(f"get_num_species = {numcvspec}")
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     assert numcvspec == nspecies
     assert inf_norm(cv.mass - rho0) == 0.0

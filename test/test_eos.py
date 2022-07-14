@@ -157,7 +157,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         print(f"prom_omega = {prom_omega}")
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, 2))
 
         assert inf_norm((prom_c - can_c) / can_c) < 1e-14
         assert inf_norm((prom_t - can_t) / can_t) < 1e-14
@@ -260,7 +260,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"pyro_eos.e = {internal_energy}")
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, 2))
 
         tol = 1e-14
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
@@ -364,7 +364,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
         # Print
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, 2))
 
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
@@ -420,7 +420,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     cv = lump(nodes)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     p = eos.pressure(cv)
     exp_p = 1.0
@@ -471,7 +471,7 @@ def test_idealsingle_vortex(ctx_factory):
     cv = vortex(nodes)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     gamma = eos.gamma()
     p = eos.pressure(cv)

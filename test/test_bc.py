@@ -100,7 +100,7 @@ def test_slipwall_identity(actx_factory, dim):
             state_minus = make_fluid_state(cv=cv_minus, gas_model=gas_model)
 
             def bnd_norm(vec):
-                return actx.to_numpy(op.norm(discr, vec, p=np.inf, dd=BTAG_ALL))
+                return actx.to_numpy(op.norm(discr, vec, p=2, dd=BTAG_ALL))
 
             state_plus = \
                 wall.adiabatic_slip_state(discr, btag=BTAG_ALL, gas_model=gas_model,
@@ -158,7 +158,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
-            return actx.to_numpy(op.norm(discr, vec, p=np.inf, dd=BTAG_ALL))
+            return actx.to_numpy(op.norm(discr, vec, p=2, dd=BTAG_ALL))
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
@@ -265,7 +265,7 @@ def test_noslip(actx_factory, dim, flux_func):
 
     # utility to compare stuff on the boundary only
     # from functools import partial
-    # bnd_norm = partial(op.norm, discr, p=np.inf, dd=BTAG_ALL)
+    # bnd_norm = partial(op.norm, discr, p=2, dd=BTAG_ALL)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
 

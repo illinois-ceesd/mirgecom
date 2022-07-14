@@ -188,7 +188,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     flux = inviscid_flux(state)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     assert inf_norm(p - p_exact) < tolerance
     logger.info(f"{dim}d flux = {flux}")
@@ -249,7 +249,7 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
         state = make_fluid_state(cv, GasModel(eos=eos))
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, 2))
 
         assert inf_norm(p - p_exact) < tolerance
         flux = inviscid_flux(state)
@@ -338,7 +338,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
 
         def inf_norm(data):
             if len(data) > 0:
-                return actx.to_numpy(op.norm(discr, data, np.inf, dd="all_faces"))
+                return actx.to_numpy(op.norm(discr, data, 2, dd="all_faces"))
             else:
                 return 0.0
 

@@ -110,7 +110,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     tau = viscous_stress_tensor(fluid_state, grad_cv)
 
     # The errors come from grad_v
-    assert actx.to_numpy(op.norm(discr, tau - exp_tau, np.inf)) < 1e-12
+    assert actx.to_numpy(op.norm(discr, tau - exp_tau, 2)) < 1e-12
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
@@ -200,7 +200,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         nodes = actx.thaw(discr.nodes())
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, 2))
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
@@ -347,7 +347,7 @@ def test_species_diffusive_flux(actx_factory):
     j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     tol = 1e-10
     for idim in range(dim):
@@ -422,7 +422,7 @@ def test_diffusive_heat_flux(actx_factory):
     j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     tol = 1e-10
     for idim in range(dim):
@@ -486,7 +486,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
         expected *= f
     calculated = get_local_max_species_diffusivity(actx, d_alpha)
 
-    assert actx.to_numpy(op.norm(discr, calculated-expected, np.inf)) == 0
+    assert actx.to_numpy(op.norm(discr, calculated-expected, 2)) == 0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -545,4 +545,4 @@ def test_viscous_timestep(actx_factory, dim, mu, vel):
     dt_expected = chlen / (speed_total + (mu / chlen))
 
     error = (dt_expected - dt_field) / dt_expected
-    assert actx.to_numpy(op.norm(discr, error, np.inf)) == 0
+    assert actx.to_numpy(op.norm(discr, error, 2)) == 0

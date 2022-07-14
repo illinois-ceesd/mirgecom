@@ -24,8 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
+import numpy as np  # noqa
 import logging
 import pytest
 from pytools.obj_array import make_obj_array
@@ -76,4 +75,4 @@ def test_restart_cv(actx_factory, nspecies):
 
     resid = test_state - restart_data["state"]
     from mirgecom.simutil import max_component_norm
-    assert max_component_norm(discr, resid, np.inf) == 0
+    assert max_component_norm(discr, resid, 2) == 0

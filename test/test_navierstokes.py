@@ -157,14 +157,14 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert actx.to_numpy(op.norm(discr, rho_resid, np.inf)) < tolerance
-        assert actx.to_numpy(op.norm(discr, rhoe_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rho_resid, 2)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rhoe_resid, 2)) < tolerance
         for i in range(dim):
-            assert actx.to_numpy(op.norm(discr, mom_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, mom_resid[i], 2)) < tolerance
         for i in range(nspecies):
-            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], 2)) < tolerance
 
-        err_max = actx.to_numpy(op.norm(discr, rho_resid, np.inf))
+        err_max = actx.to_numpy(op.norm(discr, rho_resid, 2))
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
@@ -187,15 +187,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
 
-        assert actx.to_numpy(op.norm(discr, rho_resid, np.inf)) < tolerance
-        assert actx.to_numpy(op.norm(discr, rhoe_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rho_resid, 2)) < tolerance
+        assert actx.to_numpy(op.norm(discr, rhoe_resid, 2)) < tolerance
 
         for i in range(dim):
-            assert actx.to_numpy(op.norm(discr, mom_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, mom_resid[i], 2)) < tolerance
         for i in range(nspecies):
-            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], 2)) < tolerance
 
-        err_max = actx.to_numpy(op.norm(discr, rho_resid, np.inf))
+        err_max = actx.to_numpy(op.norm(discr, rho_resid, 2))
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -901,7 +901,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         from grudge.dt_utils import characteristic_lengthscales
         char_len = actx.to_numpy(
-            op.norm(discr, characteristic_lengthscales(actx, discr), np.inf)
+            op.norm(discr, characteristic_lengthscales(actx, discr), 2)
         )
 
         source_eval = evaluate(sym_source, t=0, x=nodes)
@@ -914,8 +914,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         # prs_eos = eos.pressure(cv=cv_exact)
         # prs_resid = (prs_exact - prs_eos)/prs_exact
         # tmp_resid = (tmp_exact - tmp_eos)/tmp_exact
-        # prs_err = actx.to_numpy(op.norm(discr, prs_resid, np.inf))
-        # tmp_err = actx.to_numpy(op.norm(discr, tmp_resid, np.inf))
+        # prs_err = actx.to_numpy(op.norm(discr, prs_resid, 2))
+        # tmp_err = actx.to_numpy(op.norm(discr, tmp_resid, 2))
 
         # print(f"{prs_exact=}\n{prs_eos=}")
         # print(f"{tmp_exact=}\n{tmp_eos=}")
