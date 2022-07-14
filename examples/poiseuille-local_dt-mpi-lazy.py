@@ -39,10 +39,8 @@ from grudge.dof_desc import DTAG_BOUNDARY
 
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import (
-    get_sim_timestep,
-    force_evaluation
-)
+from mirgecom.simutil import get_sim_timestep
+from mirgecom.utils import force_evaluation
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -119,7 +117,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_dt = 1e-10
     current_t = 0
     constant_cfl = True
-    local_dt = False  # XXX declaration necessary for local time stepping.
+    local_dt = True  # XXX declaration necessary for local time stepping.
     current_step = 0
 
     # some i/o frequencies
