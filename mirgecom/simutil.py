@@ -517,7 +517,7 @@ def compare_files_vtu(
     violation = any([max_field_errors[i] > tolerance for i in range(nfields)])
     if violation:
         raise ValueError("Fidelity test failed: Mismatched data array "
-                                 "values with given tolerance. ")
+                                 f"values {tolerance=}.")
 
     print("VTU Fidelity test completed successfully with tolerance", tolerance)
 
