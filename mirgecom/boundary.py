@@ -56,6 +56,7 @@ THE SOFTWARE.
 
 from warnings import warn
 import numpy as np
+from arraycontext import get_container_context_recursively
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
@@ -484,7 +485,7 @@ class PrescribedFluidBoundary(FluidBoundary):
     def av_flux(self, discr, btag, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
         grad_av_minus = op.project(discr, "vol", btag, diffusion)
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(discr.normal(btag))
         grad_av_plus = self._bnd_grad_av_func(
             discr=discr, btag=btag, grad_av_minus=grad_av_minus, **kwargs)
@@ -560,7 +561,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(discr.normal(btag))
 
         # Subtract 2*wall-normal component of q
@@ -1290,7 +1291,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     .. automethod:: adiabatic_slip_grad_av
     """
 
-    def __init__(self, dim=2):
+    def __init__(self):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_wall_state_for_advection,
@@ -1299,8 +1300,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             boundary_temperature_func=self.temperature_bc,
             boundary_gradient_cv_func=self.grad_cv_bc
         )
-
-        self._dim = dim
 
     def adiabatic_wall_state_for_advection(self, discr, btag, gas_model,
                                            state_minus, **kwargs):
@@ -1367,6 +1366,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        dim = state_minus.dim
         if state_minus.nspecies > 0:
             from mirgecom.fluid import species_mass_fraction_gradient
             grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
@@ -1392,7 +1392,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         v_plus = state_minus.velocity \
                       - 1*np.dot(state_minus.velocity, normal)*normal
         # retain only the diagonal terms to force zero shear stress
-        grad_v_plus = grad_v_minus*np.eye(self._dim)
+        grad_v_plus = grad_v_minus*np.eye(dim)
 
         # product rule for momentum
         grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
@@ -1447,7 +1447,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(discr.normal(btag))
 
         # Subtract 2*wall-normal component of q
