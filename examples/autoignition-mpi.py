@@ -46,7 +46,7 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import SymmetryBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
@@ -304,7 +304,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    my_boundary = AdiabaticSlipBoundary()
+    my_boundary = SymmetryBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
     if rst_filename:

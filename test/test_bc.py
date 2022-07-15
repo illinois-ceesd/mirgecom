@@ -57,6 +57,348 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
+def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
+    """Check IsothermalWallBoundary boundary treatment."""
+    actx = actx_factory()
+    order = 1
+
+    wall_temp = 2.0
+    kappa = 3.0
+    sigma = 5.0
+    exp_temp_bc_val = wall_temp
+
+    from mirgecom.transport import SimpleTransport
+    from mirgecom.boundary import IsothermalWallBoundary
+
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+                         transport=SimpleTransport(viscosity=sigma,
+                                                   thermal_conductivity=kappa))
+
+    wall = IsothermalWallBoundary(wall_temperature=wall_temp)
+
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
+    nhat = actx.thaw(discr.normal(BTAG_ALL))
+    print(f"{nhat=}")
+
+    from mirgecom.flux import num_flux_central
+
+    def gradient_flux_interior(int_tpair):
+        from arraycontext import outer
+        normal = actx.thaw(discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
+        return op.project(discr, int_tpair.dd, "all_faces", flux_weak)
+
+    # utility to compare stuff on the boundary only
+    # from functools import partial
+    # bnd_norm = partial(op.norm, discr, p=np.inf, dd=BTAG_ALL)
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+
+    # for velocities in each direction
+    # err_max = 0.0
+    for vdir in range(dim):
+        vel = np.zeros(shape=(dim,))
+
+        # for velocity directions +1, and -1
+        for parity in [1.0, -1.0]:
+            vel[vdir] = parity
+            from mirgecom.initializers import Uniform
+            initializer = Uniform(dim=dim, velocity=vel)
+            uniform_cv = initializer(nodes, eos=gas_model.eos)
+            uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              uniform_state, gas_model)
+            ones = state_minus.mass_density*0 + 1.0
+            print(f"{uniform_state=}")
+            temper = uniform_state.temperature
+            print(f"{temper=}")
+
+            expected_noslip_cv = 1.0*state_minus.cv
+            expected_noslip_cv = expected_noslip_cv.replace(
+                momentum=0*expected_noslip_cv.momentum)
+
+            expected_noslip_momentum = 0*vel*state_minus.mass_density
+            expected_wall_temperature = \
+                exp_temp_bc_val * ones
+
+            print(f"{expected_wall_temperature=}")
+            print(f"{expected_noslip_cv=}")
+
+            cv_interior_pairs = interior_trace_pairs(discr, uniform_state.cv)
+            cv_int_tpair = cv_interior_pairs[0]
+
+            state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
+            state_pair = state_pairs[0]
+
+            cv_flux_int = gradient_flux_interior(cv_int_tpair)
+            print(f"{cv_flux_int=}")
+
+            wall_state = wall.isothermal_wall_state(
+                discr, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+            print(f"{wall_state=}")
+            wall_temperature = wall_state.temperature
+            print(f"{wall_temperature=}")
+
+            cv_grad_flux_wall = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
+                                                 gas_model=gas_model,
+                                                 state_minus=state_minus)
+
+            cv_grad_flux_allfaces = \
+                op.project(discr, as_dofdesc(BTAG_ALL),
+                           as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                           cv_grad_flux_wall)
+
+            print(f"{cv_grad_flux_wall=}")
+
+            cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
+
+            temperature_bc = wall.temperature_bc(state_minus)
+            print(f"{temperature_bc=}")
+
+            t_int_tpair = interior_trace_pair(discr, temper)
+            t_flux_int = gradient_flux_interior(t_int_tpair)
+            t_flux_bc = wall.temperature_gradient_flux(discr, btag=BTAG_ALL,
+                                                       gas_model=gas_model,
+                                                       state_minus=state_minus)
+
+            t_flux_bc = op.project(discr, as_dofdesc(BTAG_ALL),
+                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    t_flux_bc)
+
+            t_flux_bnd = t_flux_bc + t_flux_int
+
+            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
+                                                      gas_model=gas_model,
+                                                      state_minus=state_minus)
+
+            nhat = actx.thaw(discr.normal(state_pair.dd))
+            bnd_flux = flux_func(state_pair, gas_model, nhat)
+            dd = state_pair.dd
+            dd_allfaces = dd.with_dtag("all_faces")
+            i_flux_int = op.project(discr, dd, dd_allfaces, bnd_flux)
+            bc_dd = as_dofdesc(BTAG_ALL)
+            i_flux_bc = op.project(discr, bc_dd, dd_allfaces, i_flux_bc)
+
+            i_flux_bnd = i_flux_bc + i_flux_int
+
+            print(f"{cv_flux_bnd=}")
+            print(f"{t_flux_bnd=}")
+            print(f"{i_flux_bnd=}")
+
+            from mirgecom.operators import grad_operator
+            dd_vol = as_dofdesc("vol")
+            dd_faces = as_dofdesc("all_faces")
+            grad_cv_minus = \
+                op.project(discr, "vol", BTAG_ALL,
+                              grad_operator(discr, dd_vol, dd_faces,
+                                            uniform_state.cv, cv_flux_bnd))
+            grad_t_minus = op.project(discr, "vol", BTAG_ALL,
+                                         grad_operator(discr, dd_vol, dd_faces,
+                                                       temper, t_flux_bnd))
+
+            print(f"{grad_cv_minus=}")
+            print(f"{grad_t_minus=}")
+
+            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=state_minus,
+                                                     grad_cv_minus=grad_cv_minus,
+                                                     grad_t_minus=grad_t_minus)
+            print(f"{v_flux_bc=}")
+
+            assert wall_state.cv == expected_noslip_cv
+            assert actx.np.all(temperature_bc == expected_wall_temperature)
+            for idim in range(dim):
+                assert actx.np.all(wall_state.momentum_density[idim]
+                                   == expected_noslip_momentum[idim])
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
+def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
+    """Check AdiabaticNoslipWallBoundary boundary treatment."""
+    actx = actx_factory()
+    order = 1
+
+    kappa = 3.0
+    sigma = 5.0
+
+    from mirgecom.transport import SimpleTransport
+    from mirgecom.boundary import AdiabaticNoslipWallBoundary
+
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+                         transport=SimpleTransport(viscosity=sigma,
+                                                   thermal_conductivity=kappa))
+
+    wall = AdiabaticNoslipWallBoundary()
+
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
+    nhat = actx.thaw(discr.normal(BTAG_ALL))
+    print(f"{nhat=}")
+
+    from mirgecom.flux import num_flux_central
+
+    def gradient_flux_interior(int_tpair):
+        from arraycontext import outer
+        normal = actx.thaw(discr.normal(int_tpair.dd))
+        # Hard-coding central per [Bassi_1997]_ eqn 13
+        flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
+        return op.project(discr, int_tpair.dd, "all_faces", flux_weak)
+
+    # utility to compare stuff on the boundary only
+    # from functools import partial
+    # bnd_norm = partial(op.norm, discr, p=np.inf, dd=BTAG_ALL)
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+
+    # for velocities in each direction
+    # err_max = 0.0
+    for vdir in range(dim):
+        vel = np.zeros(shape=(dim,))
+
+        # for velocity directions +1, and -1
+        for parity in [1.0, -1.0]:
+            vel[vdir] = parity
+            from mirgecom.initializers import Uniform
+            initializer = Uniform(dim=dim, velocity=vel)
+            uniform_cv = initializer(nodes, eos=gas_model.eos)
+            uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              uniform_state, gas_model)
+            print(f"{uniform_state=}")
+            temper = uniform_state.temperature
+            print(f"{temper=}")
+
+            expected_adv_wall_cv = 1.0*state_minus.cv
+            expected_adv_wall_cv = expected_adv_wall_cv.replace(
+                momentum=-expected_adv_wall_cv.momentum)
+            expected_diff_wall_cv = 1.0*state_minus.cv
+            expected_diff_wall_cv = expected_diff_wall_cv.replace(
+                momentum=0*expected_diff_wall_cv.momentum)
+
+            expected_adv_momentum = -state_minus.momentum_density
+            expected_diff_momentum = 0*state_minus.momentum_density
+            expected_wall_temperature = state_minus.temperature
+
+            print(f"{expected_wall_temperature=}")
+            print(f"{expected_adv_wall_cv=}")
+            print(f"{expected_diff_wall_cv=}")
+
+            cv_interior_pairs = interior_trace_pairs(discr, uniform_state.cv)
+            cv_int_tpair = cv_interior_pairs[0]
+
+            state_pairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
+            state_pair = state_pairs[0]
+
+            cv_flux_int = gradient_flux_interior(cv_int_tpair)
+            print(f"{cv_flux_int=}")
+
+            adv_wall_state = wall.adiabatic_wall_state_for_advection(
+                discr, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+            diff_wall_state = wall.adiabatic_wall_state_for_diffusion(
+                discr, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+
+            print(f"{adv_wall_state=}")
+            print(f"{diff_wall_state=}")
+
+            wall_temperature = adv_wall_state.temperature
+            print(f"{wall_temperature=}")
+
+            cv_grad_flux_wall = wall.cv_gradient_flux(discr, btag=BTAG_ALL,
+                                                 gas_model=gas_model,
+                                                 state_minus=state_minus)
+
+            cv_grad_flux_allfaces = \
+                op.project(discr, as_dofdesc(BTAG_ALL),
+                           as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                           cv_grad_flux_wall)
+
+            print(f"{cv_grad_flux_wall=}")
+
+            cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
+
+            temperature_bc = wall.temperature_bc(state_minus)
+            print(f"{temperature_bc=}")
+
+            t_int_tpair = interior_trace_pair(discr, temper)
+            t_flux_int = gradient_flux_interior(t_int_tpair)
+            t_flux_bc = wall.temperature_gradient_flux(discr, btag=BTAG_ALL,
+                                                       gas_model=gas_model,
+                                                       state_minus=state_minus)
+
+            t_flux_bc = op.project(discr, as_dofdesc(BTAG_ALL),
+                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    t_flux_bc)
+
+            t_flux_bnd = t_flux_bc + t_flux_int
+
+            i_flux_bc = wall.inviscid_divergence_flux(discr, btag=BTAG_ALL,
+                                                      gas_model=gas_model,
+                                                      state_minus=state_minus)
+
+            nhat = actx.thaw(discr.normal(state_pair.dd))
+            bnd_flux = flux_func(state_pair, gas_model, nhat)
+            dd = state_pair.dd
+            dd_allfaces = dd.with_dtag("all_faces")
+            i_flux_int = op.project(discr, dd, dd_allfaces, bnd_flux)
+            bc_dd = as_dofdesc(BTAG_ALL)
+            i_flux_bc = op.project(discr, bc_dd, dd_allfaces, i_flux_bc)
+
+            i_flux_bnd = i_flux_bc + i_flux_int
+
+            print(f"{cv_flux_bnd=}")
+            print(f"{t_flux_bnd=}")
+            print(f"{i_flux_bnd=}")
+
+            from mirgecom.operators import grad_operator
+            dd_vol = as_dofdesc("vol")
+            dd_faces = as_dofdesc("all_faces")
+            grad_cv_minus = \
+                op.project(discr, "vol", BTAG_ALL,
+                              grad_operator(discr, dd_vol, dd_faces,
+                                            uniform_state.cv, cv_flux_bnd))
+            grad_t_minus = op.project(discr, "vol", BTAG_ALL,
+                                         grad_operator(discr, dd_vol, dd_faces,
+                                                       temper, t_flux_bnd))
+
+            print(f"{grad_cv_minus=}")
+            print(f"{grad_t_minus=}")
+
+            v_flux_bc = wall.viscous_divergence_flux(discr, btag=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=state_minus,
+                                                     grad_cv_minus=grad_cv_minus,
+                                                     grad_t_minus=grad_t_minus)
+            print(f"{v_flux_bc=}")
+
+            assert adv_wall_state.cv == expected_adv_wall_cv
+            assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.all(temperature_bc == expected_wall_temperature)
+            for idim in range(dim):
+                assert actx.np.all(adv_wall_state.momentum_density[idim]
+                                   == expected_adv_momentum[idim])
+
+                assert actx.np.all(diff_wall_state.momentum_density[idim]
+                                   == expected_diff_momentum[idim])
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
 def test_slipwall_identity(actx_factory, dim):
     """Identity test - check for the expected boundary solution.
 
