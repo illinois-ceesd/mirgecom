@@ -174,7 +174,10 @@ class SimpleTransport(TransportModel):
 
         In this transport model, the second coefficient of viscosity is defined as:
 
-        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        .. math::
+
+            \lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)
+
         """
         return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
 
@@ -220,7 +223,10 @@ class PowerLawTransport(TransportModel):
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
-        $\mu_{B} = \alpha\mu$
+        .. math::
+
+            \mu_{B} = \alpha\mu
+
         """
         return self._alpha * self.viscosity(cv, dv)
 
@@ -237,7 +243,10 @@ class PowerLawTransport(TransportModel):
 
         In this transport model, the second coefficient of viscosity is defined as:
 
-        $\lambda = \left(\alpha - \frac{2}{3}\right)\mu$
+        .. math::
+
+            \lambda = \left(\alpha - \frac{2}{3}\right)\mu
+
         """
         return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
 
@@ -245,7 +254,10 @@ class PowerLawTransport(TransportModel):
                              eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$.
 
-        $\kappa = \sigma\mu{C}_{v}$
+        .. math::
+
+            \kappa = \sigma\mu{C}_{v}
+
         """
         return (
             self._sigma * self.viscosity(cv, dv)
@@ -273,26 +285,32 @@ class MixtureAveragedTransport(TransportModel):
     .. automethod:: thermal_conductivity
     """
 
-    def __init__(self, pyrometheus_mech, factor=1.0, alpha=0.6):
-        """Initialize power law coefficients and parameters.
+    def __init__(self, pyrometheus_mech, alpha=0.6,
+                     factor=1.0, prandtl=None, lewis=None):
+        r"""Initialize power law coefficients and parameters.
 
-        Parameters
-        ----------
-        pyrometheus_mech:
+        pyrometheus_mech: The mechanism containg the species properties.
+
+        alpha: The bulk viscosity. The default value is "air". Ideally, it should be
+        a function of temperature and species.
 
         factor: Scaling factor to artifically increase or decrease the
         transport coefficients. The default is to keep the physical value, i.e., 1.0.
 
-        alpha: The bulk viscosity. The default value is "air". Ideally, it should be
-        a function of temperature and species.
-        """
+        Prandtl: if required, the Prandtl number specify the relation between the
+        fluid viscosity and the thermal conductivity.
 
+        Lewis: if required, the Lewis number specify the relation between the
+        thermal conductivity and the species diffusivities.
+        """
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
         self._factor = factor
+        self._prandtl = prandtl
+        self._lewis = lewis
 
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
-        r"""Get the gas dynamic viscosity, $\mu$. """
+        r"""Get the gas dynamic viscosity, $\mu$."""
         return (
             self._factor*self._pyro_mech.get_mixture_viscosity_mixavg(
                 dv.temperature, cv.species_mass_fractions)
@@ -301,7 +319,10 @@ class MixtureAveragedTransport(TransportModel):
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
-        $\mu_{B} = \alpha\mu$
+        .. math::
+
+            \mu_{B} = \alpha\mu
+
         """
         return self._alpha*self.viscosity(cv, dv)
 
@@ -310,22 +331,50 @@ class MixtureAveragedTransport(TransportModel):
 
         In this transport model, the second coefficient of viscosity is defined as:
 
-        $\lambda = \left(\alpha - \frac{2}{3}\right)\mu$
+        .. math::
+
+            \lambda = \left(\alpha - \frac{2}{3}\right)\mu
+
         """
         return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
                              eos: GasEOS) -> DOFArray:
-        r"""Get the gas thermal_conductivity, $\kappa$."""
-        return (
-            self._factor*self._pyro_mech.get_mixture_thermal_conductivity_mixavg(
-                dv.temperature, cv.species_mass_fractions)
-        )
+        r"""Get the gas thermal_conductivity, $\kappa$.
+
+        The thermal conductivity can be obtained directly from Pyrometheus using a
+        mixture averaged rule considering all species or based on the user-imposed
+        Prandtl number of the mixture $Pr$ and the heat capacity at constant pressure
+        $C_p$:
+
+        .. math::
+
+            \kappa = \frac{\mu C_p}{Pr}
+
+        """
+        if self._prandtl is not None:
+            return 1.0/self._prandtl*(
+                eos.heat_capacity_cp(cv, dv.temperature)*self.viscosity(cv, dv))
+        return self._factor*(self._pyro_mech.get_mixture_thermal_conductivity_mixavg(
+            dv.temperature, cv.species_mass_fractions))
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
                             eos: GasEOS) -> DOFArray:
-        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return (
-            self._factor*self._pyro_mech.get_species_mass_diffusivities_mixavg(
-                dv.temperature, dv.pressure, cv.species_mass_fractions)
-        )
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
+
+        The species diffusivities can be obtained directly from Pyrometheus using a
+        mixture averaged rule considering all species or based on the user-imposed
+        Lewis number $Le$ of the mixture and the heat capacity at constant pressure
+        $C_p$:
+
+        .. math::
+
+            d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
+
+        """
+        if self._lewis is not None:
+            return self.thermal_conductivity(cv, dv)*(
+                1.0/(cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
+            )
+        return self._factor*(self._pyro_mech.get_species_mass_diffusivities_mixavg(
+            dv.temperature, dv.pressure, cv.species_mass_fractions))
