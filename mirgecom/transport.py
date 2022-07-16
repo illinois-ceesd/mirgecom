@@ -312,7 +312,7 @@ class MixtureAveragedTransport(TransportModel):
         self._prandtl = prandtl
         self._lewis = lewis
         if self._lewis is not None:
-            if ((self.lewis).shape < self._pyro_mech.num_species):
+            if (len(self._lewis) != self._pyro_mech.num_species):
                 raise ValueError("Lewis number should match number of species")
 
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
@@ -380,7 +380,7 @@ class MixtureAveragedTransport(TransportModel):
         """
         if self._lewis is not None:
             return 1.0/self._lewis*(self.thermal_conductivity(cv, dv, eos)/(
-                    cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
+                cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
         return self._factor*(self._pyro_mech.get_species_mass_diffusivities_mixavg(
             dv.temperature, dv.pressure, cv.species_mass_fractions))
