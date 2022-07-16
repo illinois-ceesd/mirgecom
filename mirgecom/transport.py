@@ -70,12 +70,14 @@ class GasTransportVars:
 
     .. attribute:: bulk_viscosity
     .. attribute:: viscosity
+    .. attribute:: volume_viscosity
     .. attribute:: thermal_conductivity
     .. attribute:: species_diffusivity
     """
 
     bulk_viscosity: np.ndarray
     viscosity: np.ndarray
+    volume_viscosity: np.ndarray
     thermal_conductivity: np.ndarray
     species_diffusivity: np.ndarray
 
@@ -129,6 +131,7 @@ class TransportModel:
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv=cv, dv=dv),
             viscosity=self.viscosity(cv=cv, dv=dv),
+            volume_viscosity=self.volume_viscosity(cv=cv, dv=dv),
             thermal_conductivity=self.thermal_conductivity(cv=cv, dv=dv, eos=eos),
             species_diffusivity=self.species_diffusivity(cv=cv, dv=dv, eos=eos)
         )
@@ -301,13 +304,16 @@ class MixtureAveragedTransport(TransportModel):
         fluid viscosity and the thermal conductivity.
 
         Lewis: if required, the Lewis number specify the relation between the
-        thermal conductivity and the species diffusivities.
+        thermal conductivity and the species diffusivities. This should be an array.
         """
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
         self._factor = factor
         self._prandtl = prandtl
         self._lewis = lewis
+        if self._lewis is not None:
+            if ((self.lewis).shape < self._pyro_mech.num_species):
+                raise ValueError("Lewis number should match number of species")
 
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
@@ -339,7 +345,7 @@ class MixtureAveragedTransport(TransportModel):
         return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-                             eos: GasEOS) -> DOFArray:
+                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$.
 
         The thermal conductivity can be obtained directly from Pyrometheus using a
@@ -356,10 +362,10 @@ class MixtureAveragedTransport(TransportModel):
             return 1.0/self._prandtl*(
                 eos.heat_capacity_cp(cv, dv.temperature)*self.viscosity(cv, dv))
         return self._factor*(self._pyro_mech.get_mixture_thermal_conductivity_mixavg(
-            dv.temperature, cv.species_mass_fractions))
+            dv.temperature, cv.species_mass_fractions,))
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-                            eos: GasEOS) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
 
         The species diffusivities can be obtained directly from Pyrometheus using a
@@ -373,8 +379,8 @@ class MixtureAveragedTransport(TransportModel):
 
         """
         if self._lewis is not None:
-            return self.thermal_conductivity(cv, dv)*(
-                1.0/(cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
+            return 1.0/self._lewis*(self.thermal_conductivity(cv, dv, eos)/(
+                    cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
         return self._factor*(self._pyro_mech.get_species_mass_diffusivities_mixavg(
             dv.temperature, dv.pressure, cv.species_mass_fractions))
