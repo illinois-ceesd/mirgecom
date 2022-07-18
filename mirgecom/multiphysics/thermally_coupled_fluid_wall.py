@@ -618,7 +618,7 @@ def coupled_ns_heat_operator(
         fluid_state, wall_temperature,
         time=time,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=quadrature_tag,
         _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
         _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
         _fluid_operator_states_quad=fluid_operator_states_quad)
