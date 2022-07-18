@@ -135,7 +135,7 @@ def test_analytic_comparison(actx_factory):
     resid = vortex_soln - cv
 
     expected_errors = actx.to_numpy(
-        flatten(componentwise_norms(discr, resid, order=np.inf), actx)).tolist()
+        flatten(componentwise_norms(discr, resid, order=2), actx)).tolist()
 
     errors = compare_fluid_solutions(discr, cv, cv)
     assert max(errors) == 0

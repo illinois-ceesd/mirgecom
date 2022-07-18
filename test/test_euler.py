@@ -166,7 +166,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         )
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(discr, x, 2))
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -285,7 +285,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
             quadrature_tag=quadrature_tag)
 
-        err_max = max_component_norm(discr, inviscid_rhs, np.inf)
+        err_max = max_component_norm(discr, inviscid_rhs, 2)
 
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
@@ -368,7 +368,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         )
         expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
 
-        err_max = max_component_norm(discr, inviscid_rhs-expected_rhs, np.inf)
+        err_max = max_component_norm(discr, inviscid_rhs-expected_rhs, 2)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -466,7 +466,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         print(f"expected_rhs = {expected_rhs}")
 
         err_max = actx.to_numpy(
-            op.norm(discr, (inviscid_rhs-expected_rhs), np.inf))
+            op.norm(discr, (inviscid_rhs-expected_rhs), 2))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -616,7 +616,7 @@ def _euler_flow_stepper(actx, parameters):
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, time=t)
-        maxerr = max_component_norm(discr, cv-expected_result, np.inf)
+        maxerr = max_component_norm(discr, cv-expected_result, 2)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:

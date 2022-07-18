@@ -355,8 +355,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         expected_u = p.get_solution(nodes, t)
 
         rel_linf_err = actx.to_numpy(
-            op.norm(discr, u - expected_u, np.inf)
-            / op.norm(discr, expected_u, np.inf))
+            op.norm(discr, u - expected_u, 2)
+            / op.norm(discr, expected_u, 2))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
@@ -437,7 +437,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ("rhs", rhs),
                 ])
 
-    linf_err = actx.to_numpy(op.norm(discr, rhs, np.inf))
+    linf_err = actx.to_numpy(op.norm(discr, rhs, 2))
     assert(linf_err < 1e-11)
 
     # Now check stability
@@ -467,7 +467,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ("u_steady", u_steady),
                 ])
 
-    linf_diff = actx.to_numpy(op.norm(discr, u - u_steady, np.inf))
+    linf_diff = actx.to_numpy(op.norm(discr, u - u_steady, 2))
     assert linf_diff < 0.1
 
 
@@ -531,7 +531,7 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             diffusion_u_ndg = ndgctx.pull_dof_array(actx, "rhs")
 
             def inf_norm(f):
-                return actx.np.linalg.norm(f, np.inf)
+                return actx.np.linalg.norm(f, 2)
 
             err = (inf_norm(diffusion_u_mirgecom-diffusion_u_ndg)
                         / inf_norm(diffusion_u_ndg))
@@ -601,8 +601,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     expected_diffusion_u1 = evaluate(sym_diffusion_u1, x=nodes, t=t)
     rel_linf_err = actx.to_numpy(
-        op.norm(discr, diffusion_u1 - expected_diffusion_u1, np.inf)
-        / op.norm(discr, expected_diffusion_u1, np.inf))
+        op.norm(discr, diffusion_u1 - expected_diffusion_u1, 2)
+        / op.norm(discr, expected_diffusion_u1, 2))
     assert rel_linf_err < 1.e-5
 
     boundaries_vector = [boundaries, boundaries]
@@ -619,8 +619,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         evaluate(sym_diffusion_u2, x=nodes, t=t)
     ])
     rel_linf_err = actx.to_numpy(
-        op.norm(discr, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
-        / op.norm(discr, expected_diffusion_u_vector, np.inf))
+        op.norm(discr, diffusion_u_vector - expected_diffusion_u_vector, 2)
+        / op.norm(discr, expected_diffusion_u_vector, 2))
     assert rel_linf_err < 1.e-5
 
 

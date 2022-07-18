@@ -81,12 +81,12 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
     from mirgecom.simutil import componentwise_norms
     from arraycontext import flatten
     actx = x.array_context
-    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, np.inf), actx))
+    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, 2), actx))
 
     rhs = np.maximum(
         rel_tol * np.maximum(
-            actx.to_numpy(flatten(componentwise_norms(discr, x, np.inf), actx)),
-            actx.to_numpy(flatten(componentwise_norms(discr, y, np.inf), actx))),
+            actx.to_numpy(flatten(componentwise_norms(discr, x, 2), actx)),
+            actx.to_numpy(flatten(componentwise_norms(discr, y, 2), actx))),
         abs_tol)
 
     is_close = np.all(lhs <= rhs)

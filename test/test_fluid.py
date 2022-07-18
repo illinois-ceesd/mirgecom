@@ -83,7 +83,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     tol = 1e-11
     exp_result = vel_fac * np.eye(dim) * ones
-    grad_v_err = [actx.to_numpy(op.norm(discr, grad_v[i] - exp_result[i], np.inf))
+    grad_v_err = [actx.to_numpy(op.norm(discr, grad_v[i] - exp_result[i], 2))
                   for i in range(dim)]
 
     assert max(grad_v_err) < tol
@@ -132,7 +132,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
 
         comp_err = make_obj_array([
             actx.to_numpy(
-                op.norm(discr, grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf))
+                op.norm(discr, grad_v[i] - exact_grad_row(nodes[i], i, dim), 2))
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
@@ -188,7 +188,7 @@ def test_velocity_gradient_structure(actx_factory):
     assert type(grad_v[0, 0]) == DOFArray
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     assert inf_norm(grad_v - exp_result) < tol
     assert inf_norm(grad_v.T - exp_trans) < tol
@@ -240,7 +240,7 @@ def test_species_mass_gradient(actx_factory, dim):
     assert type(grad_y[0, 0]) == DOFArray
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(discr, x, 2))
 
     tol = 1e-11
     for idim in range(dim):
