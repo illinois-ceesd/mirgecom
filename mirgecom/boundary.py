@@ -353,8 +353,8 @@ class PrescribedFluidBoundary(FluidBoundary):
                                               **kwargs)
         return boundary_state.temperature
 
-    def _temperature_for_interior_state(self, discr, btag, gas_model, state_minus,
-                                        **kwargs):
+    def _interior_temperature(self, discr, btag, gas_model, state_minus,
+                              **kwargs):
         return state_minus.temperature
 
     def _identical_state(self, state_minus, **kwargs):
@@ -521,7 +521,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
              DeprecationWarning, stacklevel=2)
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_slip_state,
-            boundary_temperature_func=self._temperature_for_interior_state,
+            boundary_temperature_func=self._interior_temperature,
             boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
 
@@ -595,7 +595,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_noslip_state,
-            boundary_temperature_func=self._temperature_for_interior_state,
+            boundary_temperature_func=self._interior_temperature,
             boundary_grad_av_func=self.adiabatic_noslip_grad_av,
         )
 
@@ -703,7 +703,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     .. automethod:: temperature_bc
     """
 
-    def __init__(self, numdim, numspecies,
+    def __init__(self, numdim, numspecies=0,
                  free_stream_pressure=None,
                  free_stream_velocity=None,
                  free_stream_density=None,
@@ -723,6 +723,9 @@ class FarfieldBoundary(PrescribedFluidBoundary):
             if free_stream_mass_fractions is None:
                 raise ValueError("Free-stream species mixture fractions must be"
                                  " given.")
+            if free_stream_density is not None:
+                raise ValueError("Free-stream density should not be given for "
+                                 "mixtures.")
             if len(free_stream_mass_fractions) != numspecies:
                 raise ValueError("Free-stream species mixture fractions of improper"
                                  " size.")
@@ -757,9 +760,9 @@ class FarfieldBoundary(PrescribedFluidBoundary):
             free_stream_density = 0.*state_minus.cv.mass + self._density
 
         if self._temperature is None:
-            self._temperature = \
-                self._pressure/(gas_model.eos.gas_const()*self._density)
-            free_stream_temperature = 0.*state_minus.temperature + self._temperature
+            free_stream_temperature = \
+                (0.*state_minus.temperature
+                 + (self._pressure / (gas_model.eos.gas_const() * self._density)))
         if self._pressure is None:
             free_stream_pressure = \
                 gas_model.eos.gas_const()*self._density*self._temperature
@@ -790,7 +793,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
                                 temperature_seed=free_stream_temperature)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Get temperature value to weakly prescribe flow temperature at boundary."""
+        """Return farfield temperature for use in grad(temperature)."""
         return 0*state_minus.temperature + self._temperature
 
 
