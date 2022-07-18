@@ -438,7 +438,7 @@ def compare_files_vtu(
         first_file: str,
         second_file: str,
         file_type: str,
-        tolerance: float = 1e-12
+        tolerance
         ):
     """Compare files of vtu type.
 
@@ -507,14 +507,16 @@ def compare_files_vtu(
             raise ValueError("Fidelity test failed: Mismatched data array sizes")
 
         # verify individual values w/in given tolerance
-        print(f"Field: {point_data2.GetArrayName(i)}", end=" ")
+        fieldname = point_data1.GetArrayName(i)
+        print(f"Field: {fieldname}", end=" ")
         for j in range(arr1.GetSize()):
             test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
             if test_err > max_field_errors[i]:
                 max_field_errors[i] = test_err
         print(f"Max Error: {max_field_errors[i]}")
 
-    violation = any([max_field_errors[i] > tolerance for i in range(nfields)])
+    violation = any([max_field_errors[i] > tolerance[fieldname]
+        for i in range(nfields)])
     if violation:
         raise ValueError("Fidelity test failed: Mismatched data array "
                                  f"values {tolerance=}.")
