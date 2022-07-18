@@ -45,7 +45,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    IsothermalNoSlipBoundary
+    IsothermalWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -55,7 +55,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -112,7 +112,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue = cl.CommandQueue(cl_ctx)
 
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000)
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                        allocator=cl_tools.MemoryPool(
+                            cl_tools.ImmediateAllocator(queue)))
     else:
         actx = actx_class(comm, queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
@@ -174,7 +176,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nodes = actx.thaw(discr.nodes())
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, discr, dim,
                              extract_vars_for_logging, units_for_logging)
@@ -233,9 +235,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             boundary_state_func=_boundary_state),
         BoundaryDomainTag("+1"): PrescribedFluidBoundary(
             boundary_state_func=_boundary_state),
-        BoundaryDomainTag("-2"): IsothermalNoSlipBoundary(
+        BoundaryDomainTag("-2"): IsothermalWallBoundary(
             wall_temperature=bottom_boundary_temperature),
-        BoundaryDomainTag("+2"): IsothermalNoSlipBoundary(
+        BoundaryDomainTag("+2"): IsothermalWallBoundary(
             wall_temperature=top_boundary_temperature)}
 
     if rst_filename:

@@ -46,10 +46,11 @@ from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import SymmetryBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
+from mirgecom.utils import force_evaluation
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -257,8 +258,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+    pyro_mechanism = \
+        get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
     # {{{ Initialize simple transport model
@@ -302,7 +304,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    my_boundary = AdiabaticSlipBoundary()
+    my_boundary = SymmetryBoundary()
     boundaries = {BTAG_ALL: my_boundary}
 
     if rst_filename:
@@ -328,6 +330,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # Set the current state from time 0
         current_cv = initializer(eos=gas_model.eos, x_vec=nodes)
         temperature_seed = temperature_seed * ones
+
+    current_cv = force_evaluation(actx, current_cv)
 
     # The temperature_seed going into this function is:
     # - At time 0: the initial temperature input data (maybe from Cantera)

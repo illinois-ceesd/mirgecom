@@ -58,7 +58,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -166,7 +166,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -193,8 +193,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.mechanisms import get_mechanism_input
     mech_input = get_mechanism_input("uiuc")
     sol = cantera.Solution(name="gas", yaml=mech_input)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    pyrometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+    pyrometheus_mechanism = \
+        get_pyrometheus_wrapper_class_from_cantera(sol)(actx.np)
 
     nspecies = pyrometheus_mechanism.num_species
     eos = PyrometheusMixture(pyrometheus_mechanism, temperature_guess=300)

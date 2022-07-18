@@ -45,8 +45,8 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
-    AdiabaticSlipBoundary,
-    IsothermalNoSlipBoundary,
+    SymmetryBoundary,
+    IsothermalWallBoundary,
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -107,7 +107,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         queue = cl.CommandQueue(cl_ctx)
 
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000)
+        actx = actx_class(comm, queue, mpi_base_tag=12000,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
     else:
         actx = actx_class(comm, queue,
                 allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
@@ -252,10 +253,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
-    from mirgecom.thermochemistry import get_thermochemistry_class_by_mechanism_name
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
     pyrometheus_mechanism = \
-        get_thermochemistry_class_by_mechanism_name("uiuc")(actx.np)
-
+        get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
     pyro_eos = PyrometheusMixture(pyrometheus_mechanism,
                                   temperature_guess=init_temperature)
     gas_model = GasModel(eos=pyro_eos, transport=transport_model)
@@ -272,8 +272,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    #    my_boundary = AdiabaticSlipBoundary()
-    my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
+    #    my_boundary = SymmetryBoundary()
+    my_boundary = IsothermalWallBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
     def _get_temperature_update(cv, temperature):
@@ -624,6 +624,7 @@ if __name__ == "__main__":
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
+    lazy = args.lazy
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")

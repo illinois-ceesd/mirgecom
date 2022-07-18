@@ -84,7 +84,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     velocity = make_obj_array([velocity_x, velocity_y, velocity_z])
 
     mass = 2*ones
-    energy = zeros + 2.5
+    energy = zeros + 2.5 + .5*mass*np.dot(velocity, velocity)
     mom = mass * velocity
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)

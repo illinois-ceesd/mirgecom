@@ -67,13 +67,13 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import grudge.op as op
-
-from arraycontext import map_array_container, flatten
-
 from functools import partial
 
+import grudge.op as op
+# from grudge.op import nodal_min, elementwise_min
+from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
+from mirgecom.viscous import get_viscous_timestep
 
 from typing import List
 from grudge.discretization import DiscretizationCollection, PartID
@@ -105,26 +105,48 @@ def check_step(step, interval):
 
 
 def get_sim_timestep(
-        discr, state, t, dt, cfl, t_final, constant_cfl=False,
-        fluid_volume_dd=DD_VOLUME_ALL):
-    """Return the maximum stable timestep for a typical fluid simulation.
+        discr, state, t, dt, cfl, t_final=0.0, constant_cfl=False,
+        local_dt=False, fluid_volume_dd=DD_VOLUME_ALL):
+    r"""Return the maximum stable timestep for a typical fluid simulation.
 
-    This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
-    maximum domain-wide stability-limited timestep for a fluid simulation.
+    This routine returns a constraint-limited timestep size for a fluid
+    simulation.  The returned timestep will be constrained by the specified
+    Courant-Friedrichs-Lewy number, *cfl*, and the simulation max simulated time
+    limit, *t_final*, and subject to the user's optional settings.
+
+    The local fluid timestep, $\delta{t}_l$, is computed by
+    :func:`~mirgecom.viscous.get_viscous_timestep`.  Users are referred to that
+    routine for the details of the local timestep.
+
+    With the remaining simulation time $\Delta{t}_r =
+    \left(\mathit{t\_final}-\mathit{t}\right)$, three modes are supported
+    for the returned timestep, $\delta{t}$:
+
+    - "Constant DT" mode (default): $\delta{t} = \mathbf{\text{min}}
+      \left(\textit{dt},~\Delta{t}_r\right)$
+    - "Constant CFL" mode (constant_cfl=True): $\delta{t} =
+      \mathbf{\text{min}}\left(\mathbf{\text{global\_min}}\left(\delta{t}\_l\right)
+      ,~\Delta{t}_r\right)$
+    - "Local DT" mode (local_dt=True): $\delta{t} = \mathbf{\text{cell\_local\_min}}
+      \left(\delta{t}_l\right)$
+
+    Note that for "Local DT" mode, *t_final* is ignored, and a
+    :class:`~meshmode.dof_array.DOFArray` containing the local *cfl*-limited
+    timestep, where $\mathbf{\text{cell\_local\_min}}\left(\delta{t}\_l\right)$ is
+    defined as the minimum over the cell collocation points. This mode is useful for
+    stepping to convergence of steady-state solutions.
 
     .. important::
-        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
-        which makes it domain-wide regardless of parallel domain decomposition. Thus
-        this routine must be called *collectively* (i.e. by all ranks).
-
-    Two modes are supported:
-        - Constant DT mode: returns the minimum of (t_final-t, dt)
-        - Constant CFL mode: returns (cfl * max_dt)
+        For "Constant CFL" mode, this routine calls the collective
+        :func:`~grudge.op.nodal_min` on the inside which involves MPI collective
+        functions.  Thus all MPI ranks on the
+        :class:`~grudge.discretization.DiscretizationCollection` must call this
+        routine collectively when using "Constant CFL" mode.
 
     Parameters
     ----------
-    discr
-        Grudge discretization or discretization collection?
+    discr: :class:`~grudge.discretization.DiscretizationCollection`
+        The grudge DG discretization to use
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
     t: float
@@ -137,22 +159,34 @@ def get_sim_timestep(
         The current CFL number
     constant_cfl: bool
         True if running constant CFL mode
+    local_dt: bool
+        True if running local DT mode. False by default.
 
     Returns
     -------
-    float
-        The maximum stable DT based on a viscous fluid.
+    float or :class:`~meshmode.dof_array.DOFArray`
+        The global maximum stable DT based on a viscous fluid.
     """
+    if local_dt:
+        actx = state.array_context
+        data_shape = (state.cv.mass[0]).shape
+        if actx.supports_nonscalar_broadcasting:
+            return cfl * actx.np.broadcast_to(
+                op.elementwise_min(discr, get_viscous_timestep(discr, state)),
+                data_shape)
+        else:
+            return cfl * op.elementwise_min(discr,
+                                            get_viscous_timestep(discr, state))
+
+    my_dt = dt
     t_remaining = max(0, t_final - t)
-    mydt = dt
     if constant_cfl:
-        from mirgecom.viscous import get_viscous_timestep
-        from grudge.op import nodal_min
-        mydt = state.array_context.to_numpy(
-            cfl * nodal_min(
+        my_dt = state.array_context.to_numpy(
+            cfl * op.nodal_min(
                 discr, fluid_volume_dd,
                 get_viscous_timestep(discr=discr, state=state)))[()]
-    return min(t_remaining, mydt)
+
+    return min(t_remaining, my_dt)
 
 
 def write_visfile(discr, io_fields, visualizer, vizname,
@@ -705,7 +739,9 @@ def compare_files_vtu(
               "File 2:", point_data2.GetNumberOfArrays())
         raise ValueError("Fidelity test failed: Mismatched data array count")
 
-    for i in range(point_data1.GetNumberOfArrays()):
+    nfields = point_data1.GetNumberOfArrays()
+    max_field_errors = [0 for _ in range(nfields)]
+    for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
 
@@ -722,11 +758,17 @@ def compare_files_vtu(
             raise ValueError("Fidelity test failed: Mismatched data array sizes")
 
         # verify individual values w/in given tolerance
+        print(f"Field: {point_data2.GetArrayName(i)}", end=" ")
         for j in range(arr1.GetSize()):
-            if abs(arr1.GetValue(j) - arr2.GetValue(j)) > tolerance:
-                print("Tolerance:", tolerance)
-                raise ValueError("Fidelity test failed: Mismatched data array "
-                                 "values with given tolerance")
+            test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
+            if test_err > max_field_errors[i]:
+                max_field_errors[i] = test_err
+        print(f"Max Error: {max_field_errors[i]}")
+
+    violation = any([max_field_errors[i] > tolerance for i in range(nfields)])
+    if violation:
+        raise ValueError("Fidelity test failed: Mismatched data array "
+                                 f"values {tolerance=}.")
 
     print("VTU Fidelity test completed successfully with tolerance", tolerance)
 
@@ -892,6 +934,7 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
                          "given tolerance")
 
     # compare other Attributes:
+    maxerrorvalue = 0
     for i in range(len(file_reader1.uniform_grid)):
         curr_cell1 = file_reader1.uniform_grid[i]
         curr_cell2 = file_reader2.uniform_grid[i]
@@ -925,8 +968,13 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
         for i in range(len(values1)):
             if abs(values1[i] - values2[i]) > tolerance:
                 print("Tolerance:", tolerance, "\n", "Cell:", curr_cell1.get("Name"))
-                raise ValueError("Fidelity test failed: Mismatched data values "
-                                 "with given tolerance")
+                if maxerrorvalue < abs(values1[i] - values2[i]):
+                    maxerrorvalue = abs(values1[i] - values2[i])
+
+    if not maxerrorvalue == 0:
+        raise ValueError("Fidelity test failed: Mismatched data array "
+                                 "values with given tolerance. "
+                                 "Max Error Value:", maxerrorvalue)
 
     print("XDMF Fidelity test completed successfully with tolerance", tolerance)
 
@@ -966,6 +1014,7 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
         raise ValueError("Fidelity test failed: Mismatched grid count")
 
     # loop through Grids
+    maxvalueerror = 0
     for i in range(len(objects1)):
         obj_name1 = objects1[i]
         obj_name2 = objects2[i]
@@ -1027,7 +1076,12 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
                 if not np.allclose(curr_datalist1, curr_datalist2, atol=tolerance):
                     print("Tolerance:", tolerance, "\n",
                           "Data List:", curr_listname1)
-                    raise ValueError("Fidelity test failed: Mismatched data "
-                                     "values with given tolerance")
+                    if maxvalueerror < abs(curr_datalist1 - curr_datalist2):
+                        maxvalueerror = abs(curr_datalist1 - curr_datalist2)
+
+    if not maxvalueerror == 0:
+        raise ValueError("Fidelity test failed: Mismatched data "
+                             "values with given tolerance. "
+                             "Max Value Error: ", maxvalueerror)
 
     print("HDF5 Fidelity test completed successfully with tolerance", tolerance)

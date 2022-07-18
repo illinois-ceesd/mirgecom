@@ -54,8 +54,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from warnings import warn
 import numpy as np
 from dataclasses import replace
+from arraycontext import get_container_context_recursively
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import VolumeDomainTag, as_dofdesc
@@ -358,8 +360,8 @@ class PrescribedFluidBoundary(FluidBoundary):
                                               **kwargs)
         return boundary_state.temperature
 
-    def _temperature_for_interior_state(self, discr, dd_bdry, gas_model, state_minus,
-                                        **kwargs):
+    def _interior_temperature(self, discr, dd_bdry, gas_model, state_minus,
+                              **kwargs):
         return state_minus.temperature
 
     def _identical_state(self, state_minus, **kwargs):
@@ -498,7 +500,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         dd_vol = dd_bdry.with_domain_tag(
             VolumeDomainTag(dd_bdry.domain_tag.volume_tag))
         grad_av_minus = op.project(discr, dd_vol, dd_bdry, diffusion)
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(discr.normal(dd_bdry))
         grad_av_plus = self._bnd_grad_av_func(
             discr=discr, dd_bdry=dd_bdry, grad_av_minus=grad_av_minus, **kwargs)
@@ -530,15 +532,13 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
+        warn("AdiabaticSlipBoundary is deprecated. Use SymmetryBoundary instead.",
+             DeprecationWarning, stacklevel=2)
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_slip_state,
-            boundary_temperature_func=self._temperature_for_interior_state,
+            boundary_temperature_func=self._interior_temperature,
             boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
-
-    from warnings import warn
-    warn("AdiabaticSlipBoundary is deprecated. Use SymmetryBoundary instead.",
-        PendingDeprecationWarning)
 
     def adiabatic_slip_state(self, discr, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
@@ -576,8 +576,8 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
-        actx = grad_av_minus.mass[0].array_context
-        nhat = actx.thaw(discr.norm(dd_bdry))
+        actx = get_container_context_recursively(grad_av_minus)
+        nhat = actx.thaw(discr.normal(dd_bdry))
 
         # Subtract 2*wall-normal component of q
         # to enforce q=0 on the wall
@@ -604,22 +604,22 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
+        warn("AdiabaticNoslipMovingBoundary is deprecated. Use "
+             "AdiabaticNoSlipWallBoundary instead.", DeprecationWarning,
+             stacklevel=2)
+
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_noslip_state,
-            boundary_temperature_func=self._temperature_for_interior_state,
+            boundary_temperature_func=self._interior_temperature,
             boundary_grad_av_func=self.adiabatic_noslip_grad_av,
         )
+
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
             wall_velocity = np.zeros(shape=(dim,))
         if len(wall_velocity) != dim:
             raise ValueError(f"Specified wall velocity must be {dim}-vector.")
         self._wall_velocity = wall_velocity
-
-    from warnings import warn
-    warn("AdiabaticNoslipMovingBoundary is deprecated."
-         " Use AdiabaticNoslipWallBoundary instead.",
-        PendingDeprecationWarning)
 
     def adiabatic_noslip_state(
             self, discr, dd_bdry, gas_model, state_minus, **kwargs):
@@ -656,16 +656,14 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
+        warn("IsothermalNoSlipBoundary is deprecated. Use IsothermalWallBoundary "
+             "instead.", DeprecationWarning, stacklevel=2)
+
         self._wall_temp = wall_temperature
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.isothermal_noslip_state,
             boundary_temperature_func=self.temperature_bc
         )
-
-    from warnings import warn
-    warn("IsothermalWallBoundary is deprecated."
-         " Use IsothermalWallBoundary instead.",
-        PendingDeprecationWarning)
 
     def isothermal_noslip_state(
             self, discr, dd_bdry, gas_model, state_minus, **kwargs):
@@ -722,7 +720,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     .. automethod:: temperature_bc
     """
 
-    def __init__(self, numdim, numspecies,
+    def __init__(self, numdim, numspecies=0,
                  free_stream_pressure=None,
                  free_stream_velocity=None,
                  free_stream_density=None,
@@ -742,6 +740,9 @@ class FarfieldBoundary(PrescribedFluidBoundary):
             if free_stream_mass_fractions is None:
                 raise ValueError("Free-stream species mixture fractions must be"
                                  " given.")
+            if free_stream_density is not None:
+                raise ValueError("Free-stream density should not be given for "
+                                 "mixtures.")
             if len(free_stream_mass_fractions) != numspecies:
                 raise ValueError("Free-stream species mixture fractions of improper"
                                  " size.")
@@ -777,9 +778,9 @@ class FarfieldBoundary(PrescribedFluidBoundary):
             free_stream_density = 0.*state_minus.cv.mass + self._density
 
         if self._temperature is None:
-            self._temperature = \
-                self._pressure/(gas_model.eos.gas_const()*self._density)
-            free_stream_temperature = 0.*state_minus.temperature + self._temperature
+            free_stream_temperature = \
+                (0.*state_minus.temperature
+                 + (self._pressure / (gas_model.eos.gas_const() * self._density)))
         if self._pressure is None:
             free_stream_pressure = \
                 gas_model.eos.gas_const()*self._density*self._temperature
@@ -810,7 +811,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
                                 temperature_seed=free_stream_temperature)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Get temperature value to weakly prescribe flow temperature at boundary."""
+        """Return farfield temperature for use in grad(temperature)."""
         return 0*state_minus.temperature + self._temperature
 
 
@@ -1321,7 +1322,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     .. automethod:: adiabatic_slip_grad_av
     """
 
-    def __init__(self, dim=2):
+    def __init__(self):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_wall_state_for_advection,
@@ -1330,8 +1331,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             boundary_temperature_func=self.temperature_bc,
             boundary_gradient_cv_func=self.grad_cv_bc
         )
-
-        self._dim = dim
 
     def adiabatic_wall_state_for_advection(self, discr, dd_bdry, gas_model,
                                            state_minus, **kwargs):
@@ -1399,6 +1398,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        dim = state_minus.dim
         if state_minus.nspecies > 0:
             from mirgecom.fluid import species_mass_fraction_gradient
             grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
@@ -1424,7 +1424,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         v_plus = state_minus.velocity \
                       - 1*np.dot(state_minus.velocity, normal)*normal
         # retain only the diagonal terms to force zero shear stress
-        grad_v_plus = grad_v_minus*np.eye(self._dim)
+        grad_v_plus = grad_v_minus*np.eye(dim)
 
         # product rule for momentum
         grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
@@ -1481,7 +1481,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(discr.normal(dd_bdry))
 
         # Subtract 2*wall-normal component of q
