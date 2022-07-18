@@ -350,7 +350,7 @@ def check_naninf_local(discr: DiscretizationCollection, dd: str,
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state):
+def compare_fluid_solutions(discr, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
@@ -359,12 +359,12 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     actx = red_state.array_context
     resid = red_state - blue_state
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(discr, resid, order=np.inf), actx))
+        flatten(componentwise_norms(discr, resid, order=np.inf, dd=dd), actx))
 
     return resid_errs.tolist()
 
 
-def componentwise_norms(discr, fields, order=np.inf):
+def componentwise_norms(discr, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
     """Return the *order*-norm for each component of *fields*.
 
     .. note::
@@ -372,15 +372,15 @@ def componentwise_norms(discr, fields, order=np.inf):
     """
     if not isinstance(fields, DOFArray):
         return map_array_container(
-            partial(componentwise_norms, discr, order=order), fields)
+            partial(componentwise_norms, discr, order=order, dd=dd), fields)
     if len(fields) > 0:
-        return op.norm(discr, fields, order)
+        return op.norm(discr, fields, order, dd=dd)
     else:
         # FIXME: This work-around for #575 can go away after #569
         return 0
 
 
-def max_component_norm(discr, fields, order=np.inf):
+def max_component_norm(discr, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
     """Return the max *order*-norm over the components of *fields*.
 
     .. note::
@@ -388,7 +388,7 @@ def max_component_norm(discr, fields, order=np.inf):
     """
     actx = fields.array_context
     return max(actx.to_numpy(flatten(
-        componentwise_norms(discr, fields, order), actx)))
+        componentwise_norms(discr, fields, order, dd=dd), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
