@@ -29,8 +29,8 @@ if __name__ == "__main__":
     file_type = file_split[1:]  # remove dot
 
     user_tolerance = {
-    "u": 1e-12,
-    "v": 1e-12
+        "u": 1e-12,
+        "v": 1e-12
     }
 
     if args.tolerance:
