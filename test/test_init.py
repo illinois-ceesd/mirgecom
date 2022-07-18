@@ -63,6 +63,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
     nel_1d = 4
+    norml = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -85,7 +86,7 @@ def test_uniform_init(ctx_factory, dim, nspecies):
 
     def inf_norm(data):
         if len(data) > 0:
-            return actx.to_numpy(op.norm(discr, data, 2))
+            return actx.to_numpy(op.norm(discr, data, norml))
         else:
             return 0.0
 
@@ -102,10 +103,11 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     exp_species_mass = exp_mass * mass_fracs
     mferrmax = inf_norm(cv.species_mass - exp_species_mass)
 
-    assert perrmax < 1e-15
-    assert merrmax < 1e-15
-    assert eerrmax < 1e-15
-    assert mferrmax < 1e-15
+    tol = 1e-15 if norml == np.inf else 1e-14
+    assert perrmax < tol
+    assert merrmax < tol
+    assert eerrmax < tol
+    assert mferrmax < tol
 
 
 def test_lump_init(ctx_factory):
@@ -118,6 +120,7 @@ def test_lump_init(ctx_factory):
     actx = PyOpenCLArrayContext(queue)
     dim = 2
     nel_1d = 4
+    norml = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -141,12 +144,13 @@ def test_lump_init(ctx_factory):
 
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = 1.0
-    errmax = actx.to_numpy(op.norm(discr, p - exp_p, 2))
+    errmax = actx.to_numpy(op.norm(discr, p - exp_p, norml))
 
     logger.info(f"lump_soln = {cv}")
     logger.info(f"pressure = {p}")
 
-    assert errmax < 1e-15
+    tol = 1e-15 if norml == np.inf else 1e-14
+    assert errmax < tol
 
 
 def test_vortex_init(ctx_factory):
@@ -159,6 +163,7 @@ def test_vortex_init(ctx_factory):
     actx = PyOpenCLArrayContext(queue)
     dim = 2
     nel_1d = 4
+    norml = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -178,12 +183,13 @@ def test_vortex_init(ctx_factory):
     gamma = 1.4
     p = 0.4 * (cv.energy - 0.5 * np.dot(cv.momentum, cv.momentum) / cv.mass)
     exp_p = cv.mass ** gamma
-    errmax = actx.to_numpy(op.norm(discr, p - exp_p, 2))
+    errmax = actx.to_numpy(op.norm(discr, p - exp_p, norml))
 
     logger.info(f"vortex_soln = {cv}")
     logger.info(f"pressure = {p}")
 
-    assert errmax < 1e-15
+    tol = 1e-15 if norml == np.inf else 1e-14
+    assert errmax < tol
 
 
 def test_shock_init(ctx_factory):
