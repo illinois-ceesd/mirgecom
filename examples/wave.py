@@ -82,15 +82,15 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
         actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+            allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue))
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy:
             actx = PytatoPyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+                allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue))
         else:
             actx = PyOpenCLArrayContext(queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+                allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue))
 
     dim = 2
     nel_1d = 16
