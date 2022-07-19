@@ -104,6 +104,7 @@ class FluidState:
     .. autoattribute:: nspecies
     .. autoattribute:: pressure
     .. autoattribute:: temperature
+    .. autoattribute:: smoothness
     .. autoattribute:: velocity
     .. autoattribute:: speed
     .. autoattribute:: wavespeed
@@ -143,6 +144,11 @@ class FluidState:
     def temperature(self):
         """Return the gas temperature."""
         return self.dv.temperature
+
+    @property
+    def smoothness(self):
+        """Return the smoothness field."""
+        return self.dv.smoothness
 
     @property
     def mass_density(self):
@@ -250,7 +256,7 @@ class ViscousFluidState(FluidState):
         return self.tv.species_diffusivity
 
 
-def make_fluid_state(cv, gas_model, temperature_seed=None):
+def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
     Parameters
@@ -274,7 +280,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
 
         Thermally consistent fluid state
     """
-    dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed)
+    dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed,
+                                      smoothness=smoothness)
     if gas_model.transport is not None:
         tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
         return ViscousFluidState(cv=cv, dv=dv, tv=tv)
@@ -323,8 +330,13 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
     temperature_seed = None
     if state.is_mixture:
         temperature_seed = op.project(discr, src, tgt, state.dv.temperature)
+
+    smoothness = None
+    if state.dv.smoothness is not None:
+        smoothness = op.project(discr, src, tgt, state.dv.smoothness)
+
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
-                            temperature_seed=temperature_seed)
+                            temperature_seed=temperature_seed, smoothness=smoothness)
 
 
 def _getattr_ish(obj, name):
@@ -334,7 +346,8 @@ def _getattr_ish(obj, name):
         return getattr(obj, name)
 
 
-def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=None):
+def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=None,
+                                 smoothness_pairs=None):
     """Create a fluid state from the conserved vars and equation of state.
 
     This routine helps create a thermally consistent fluid state out of a collection
@@ -367,13 +380,19 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
     from grudge.trace_pair import TracePair
     if temperature_seed_pairs is None:
         temperature_seed_pairs = [None] * len(cv_pairs)
+    if smoothness_pairs is None:
+        smoothness_pairs = [None] * len(cv_pairs)
     return [TracePair(
         cv_pair.dd,
         interior=make_fluid_state(cv_pair.int, gas_model,
-                                  temperature_seed=_getattr_ish(tseed_pair, "int")),
+                                  temperature_seed=_getattr_ish(tseed_pair, "int"),
+                                  smoothness=_getattr_ish(smoothness_pair, "int")),
         exterior=make_fluid_state(cv_pair.ext, gas_model,
-                                  temperature_seed=_getattr_ish(tseed_pair, "ext")))
-        for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
+                                  temperature_seed=_getattr_ish(tseed_pair, "ext"),
+                                  smoothness=_getattr_ish(smoothness_pair, "ext")))
+        for cv_pair, tseed_pair, smoothness_pair in zip(cv_pairs,
+                                                        temperature_seed_pairs,
+                                                        smoothness_pairs)]
 
 
 class _FluidCVTag:
@@ -381,6 +400,10 @@ class _FluidCVTag:
 
 
 class _FluidTemperatureTag:
+    pass
+
+
+class _FluidSmoothnessTag:
     pass
 
 
@@ -464,9 +487,17 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
             for tpair in interior_trace_pairs(discr, volume_state.temperature,
                                               tag=_FluidTemperatureTag)]
 
+    smoothness_interior_pairs = None
+    if volume_state.smoothness is not None:
+        smoothness_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(discr, volume_state.smoothness,
+                                               tag=_FluidSmoothnessTag)]
+
     interior_boundary_states_quad = \
         make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
-                                     tseed_interior_pairs)
+                                     tseed_interior_pairs,
+                                     smoothness_interior_pairs)
 
     # Interpolate the fluid state to the volume quadrature grid
     # (this includes the conserved and dependent quantities)

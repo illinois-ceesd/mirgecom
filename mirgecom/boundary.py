@@ -555,7 +555,8 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
                                 momentum=ext_mom, species_mass=cv_minus.species_mass)
         return make_fluid_state(cv=ext_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def adiabatic_slip_grad_av(self, discr, btag, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
@@ -904,7 +905,8 @@ class OutflowBoundary(PrescribedFluidBoundary):
                                     species_mass=state_minus.cv.species_mass)
 
         return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
 
 class InflowBoundary(PrescribedFluidBoundary):
@@ -1347,6 +1349,9 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
+        #return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                #temperature_seed=state_minus.temperature,
+                                #smoothness=state_minus.smoothness)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
