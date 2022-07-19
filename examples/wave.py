@@ -81,16 +81,26 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
             raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = PyOpenCLProfilingArrayContext(queue,
-            allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue))
+        actx = \
+            PyOpenCLProfilingArrayContext(
+                queue,
+                allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue)),
+            )
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy:
-            actx = PytatoPyOpenCLArrayContext(queue,
-                allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue))
+            actx = \
+                PytatoPyOpenCLArrayContext(
+                    queue,
+                    allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue),
+                )
         else:
-            actx = PyOpenCLArrayContext(queue,
-                allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue))
+            actx = \
+                PyOpenCLArrayContext(
+                    queue,
+                    allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue),
+                    force_device_scalars=True
+                )
 
     dim = 2
     nel_1d = 16
@@ -141,6 +151,7 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         return wave_operator(discr, c=wave_speed, w=w)
 
     compiled_rhs = actx.compile(rhs)
+    fields = force_evaluation(actx, fields)
 
     t = 0
     t_final = 1
