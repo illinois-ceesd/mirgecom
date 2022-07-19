@@ -56,7 +56,7 @@ from mirgecom.boundary import (
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 
-from mirgecom.transport import TransportModel
+from mirgecom.transport import TransportModel, SimpleTransport
 from mirgecom.fluid import ConservedVars
 from meshmode.dof_array import DOFArray
 from typing import Optional
@@ -78,9 +78,13 @@ logger = logging.getLogger(__name__)
 
 
 class ArtificialViscosityTransport(TransportModel):
-    r"""Transport model to add artificial viscosity based on a mesh dependent indicator
+    r"""Transport model add artificial viscosity based on a smoothness indicator
 
     Inherits from (and implements) :class:`TransportModel`.
+
+    Takes a physical transport model and adds the artificial viscosity
+    contribution to it. Defaults to simple transport with inviscid settings.
+    This is equivalend to inviscid flow with artifical viscosity enabled.
 
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
@@ -91,38 +95,31 @@ class ArtificialViscosityTransport(TransportModel):
     """
 
     def __init__(self,
-                 av_alpha, av_prandtl,
-                 bulk_viscosity=0, viscosity=0,
-                 thermal_conductivity=0,
-                 species_diffusivity=None):
+                 av_mu, av_prandtl, physical_transport=None,
+                 av_species_diffusivity=None):
         """Initialize uniform, constant transport properties."""
-        if species_diffusivity is None:
-            species_diffusivity = np.empty((0,), dtype=object)
-        self._mu_bulk = bulk_viscosity
-        self._mu = viscosity
-        self._kappa = thermal_conductivity
-        self._d_alpha = species_diffusivity
-        self._av_alpha = av_alpha
+        if physical_transport is None:
+            self._physical_transport = SimpleTransport()
+        else:
+            self._physical_transport = physical_transport
+
+        if av_species_diffusivity is None:
+            av_species_diffusivity = np.empty((0,), dtype=object)
+
+        self._av_mu = av_mu
         self._av_prandtl = av_prandtl
 
     def bulk_viscosity(self, cv: ConservedVars,
                        dv: Optional[GasDependentVars] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return self._mu_bulk*(0*cv.mass + 1.0)
+        return self._physical_transport.bulk_viscosity(cv, dv)
 
     def viscosity(self, cv: ConservedVars,
                   dv: Optional[GasDependentVars] = None) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
 
-        viscosity = self._mu*(0*cv.mass + 1.0)
-        if dv.smoothness is None:
-            print(f"No smoothness")
-        else:
-            print(f"{dv.smoothness.size=}")
-        if dv.smoothness is not None:
-            viscosity += dv.smoothness*self._av_alpha
-
-        return viscosity
+        return (dv.smoothness*self._av_mu +
+                self._physical_transport.viscosity(cv, dv))
 
     def volume_viscosity(self, cv: ConservedVars,
                          dv: Optional[GasDependentVars] = None) -> DOFArray:
@@ -132,30 +129,24 @@ class ArtificialViscosityTransport(TransportModel):
 
         $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
         """
-        viscosity = (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
-        if dv.smoothness is not None:
-            viscosity += dv.smoothness*self._av_alpha
 
-        return viscosity
+        return (dv.smoothness*self._av_mu +
+                self._physical_transport.volume_viscosity(cv, dv))
 
     def thermal_conductivity(self, cv: ConservedVars,
                              dv: Optional[GasDependentVars] = None,
                              eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        kappa = self._kappa*(0*cv.mass + 1.0)
-
-        if dv.smoothness is not None:
-            # kappa_av = mu_av*cp/Pr
-             kappa += (dv.smoothness*self._av_alpha*
-                       eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
-
-        return kappa
+        av_kappa = (dv.smoothness*self._av_mu *
+                    eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
+        return av_kappa + self._physical_transport.thermal_conductivity(
+            cv, dv, eos)
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._d_alpha*(0*cv.mass + 1.0)
+        return self._physical_transport.species_diffusivity(cv, dv, eos)
 
 
 class MyRuntimeError(RuntimeError):
@@ -261,19 +252,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     #timestepper = rk4_step
     timestepper = euler_step
     force_eval = True
-    t_final = 0.1
-    #t_final = 0.6
+    #t_final = 0.1
+    t_final = 0.6
     current_cfl = 0.1
-    #current_dt = 1.e-4
-    current_dt = 5.e-5
+    current_dt = 1.e-4
+    #current_dt = 5.e-5
     current_t = 0
     constant_cfl = False
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
         return compiled_lsrk45_step(actx, state, t, dt, rhs)
 
-    #timestepper = _compiled_stepper_wrapper
-    #force_eval = False
+    timestepper = _compiled_stepper_wrapper
+    force_eval = False
 
     # default health status bounds
     health_pres_min = 1.0e-4
@@ -315,7 +306,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
     discr = create_discretization_collection(actx, local_mesh, order=order,
                                              mpi_communicator=comm)
-    nodes = thaw(discr.nodes(), actx)
+    nodes = actx.thaw(discr.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -335,15 +326,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
     # Solution setup and initialization
-    s0 = -6.0
-    kappa = 1.0
-    #s0 = np.log10(1.0e-4 / np.power(order, 4))
-    #kappa = 0.5
-    #alpha = 2.0e-2
-    #alpha = 0.1
-    alpha = 3.0e-2
-    #alpha = 1.e-5
     # {{{ Initialize simple transport model
+    kappa = 1.0
+    s0 = np.log10(1.0e-4 / np.power(order, 4))
+    kappa = 0.5
+    alpha = 3.0e-2
     kappa_t = 0.
     sigma_v = 0.
     # }}}
@@ -351,9 +338,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     initializer = DoubleMachReflection()
 
     from mirgecom.gas_model import GasModel, make_fluid_state
-    transport_model = ArtificialViscosityTransport(av_alpha=alpha, av_prandtl=0.75,
-                                                   viscosity=sigma_v,
-                                                   thermal_conductivity=kappa_t)
+    #physical_transport_model = ArtificialViscosityTransport(
+        #viscosity=sigma_v, thermal_conductivity=kappa_t)
+    #transport_model = ArtificialViscosityTransport(
+        #physical_transport_model, av_mu=alpha, av_prandtl=0.75)
+    transport_model = ArtificialViscosityTransport(
+        av_mu=alpha, av_prandtl=0.75)
+
+    #transport_model = ArtificialViscosityTransport(
+        #physical_transport_model, av_alpha=alpha, av_prandtl=0.75, viscosity=sigma_v,
+        #thermal_conductivity=kappa_t)
 
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
@@ -376,8 +370,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     smoothness = smoothness_indicator(discr, current_cv.mass,
                                       kappa=kappa, s0=s0)
-    force_evaluation(actx, smoothness)
-    current_state = create_fluid_state(cv=current_cv, smoothness=smoothness)
+    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
+                                     smoothness=smoothness)
+    force_evaluation(actx, current_state)
 
     from mirgecom.gas_model import project_fluid_state
     from grudge.dof_desc import DOFDesc, as_dofdesc
@@ -385,7 +380,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
-        nodes = thaw(bnd_discr.nodes(), actx)
+        nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
                                                **kwargs),
                                 gas_model=gas_model,
@@ -589,6 +584,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
+    from mirgecom.inviscid import (
+        inviscid_facial_flux_hll,
+        inviscid_facial_flux_rusanov)
+
     def my_rhs(t, state):
 
         # make a smoothness indicator
@@ -604,6 +603,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             ns_operator(discr, state=fluid_state, time=t,
                         boundaries=boundaries,
+                        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                         gas_model=gas_model, quadrature_tag=quadrature_tag)
         )
 
