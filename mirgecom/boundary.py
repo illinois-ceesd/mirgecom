@@ -1322,7 +1322,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def adiabatic_wall_state_for_diffusion(self, discr, btag, gas_model,
                                            state_minus, **kwargs):
@@ -1347,11 +1348,11 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             momentum=mom_plus,
             species_mass=state_minus.species_mass_density
         )
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
         #return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                #temperature_seed=state_minus.temperature,
-                                #smoothness=state_minus.smoothness)
+                                #temperature_seed=state_minus.temperature)
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):

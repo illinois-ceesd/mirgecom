@@ -47,10 +47,10 @@ from mirgecom.integrators import rk4_step, euler_step
 from grudge.shortcuts import compiled_lsrk45_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    AdiabaticNoslipMovingBoundary,
+    #AdiabaticNoslipMovingBoundary,
     PrescribedFluidBoundary,
     OutflowBoundary,
-    AdiabaticSlipBoundary,
+    #AdiabaticSlipBoundary,
     SymmetryBoundary
 )
 from mirgecom.initializers import DoubleMachReflection
@@ -115,6 +115,10 @@ class ArtificialViscosityTransport(TransportModel):
         r"""Get the gas dynamic viscosity, $\mu$."""
 
         viscosity = self._mu*(0*cv.mass + 1.0)
+        if dv.smoothness is None:
+            print(f"No smoothness")
+        else:
+            print(f"{dv.smoothness.size=}")
         if dv.smoothness is not None:
             viscosity += dv.smoothness*self._av_alpha
 
@@ -354,6 +358,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
 
+    def get_fluid_state(cv, smoothness):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                smoothness=smoothness)
+
+    create_fluid_state = actx.compile(get_fluid_state)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -367,48 +376,20 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     smoothness = smoothness_indicator(discr, current_cv.mass,
                                       kappa=kappa, s0=s0)
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
-                                     smoothness=smoothness)
+    force_evaluation(actx, smoothness)
+    current_state = create_fluid_state(cv=current_cv, smoothness=smoothness)
 
     from mirgecom.gas_model import project_fluid_state
     from grudge.dof_desc import DOFDesc, as_dofdesc
-    dd_base_vol = DOFDesc("vol")
-
-    initial_cv = initializer(x_vec=nodes, eos=gas_model.eos)
-    initial_smoothness = smoothness_indicator(discr, initial_cv.mass,
-                                              kappa=kappa, s0=s0)
-    initial_state = make_fluid_state(cv=initial_cv, gas_model=gas_model,
-                                    smoothness=initial_smoothness)
 
     def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = discr.discr_from_dd(btag)
         nodes = thaw(bnd_discr.nodes(), actx)
-        #return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
-                                               #**kwargs),
-                                #gas_model=gas_model)
         return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
                                                **kwargs),
                                 gas_model=gas_model,
                                 smoothness=state_minus.dv.smoothness)
-
-    def get_target_state_on_boundary(btag):
-        return project_fluid_state(
-            discr, dd_base_vol,
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            initial_state, gas_model
-        )
-
-    flow_ref_state = \
-        get_target_state_on_boundary(DTAG_BOUNDARY("flow"))
-
-    flow_ref_state = force_evaluation(actx, flow_ref_state)
-
-    def _target_flow_state_func(**kwargs):
-        return flow_ref_state
-
-    #flow_boundary = PrescribedFluidBoundary(
-        #boundary_state_func=_target_flow_state_func)
 
     flow_boundary = PrescribedFluidBoundary(
         boundary_state_func=_boundary_state)
@@ -418,7 +399,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         DTAG_BOUNDARY("wall"): SymmetryBoundary(),
         DTAG_BOUNDARY("out"): OutflowBoundary(boundary_pressure=1.0),
     }
-
 
     visualizer = make_visualizer(discr, order)
 
@@ -441,9 +421,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     )
     if rank == 0:
         logger.info(init_message)
-
-    from grudge.dt_utils import characteristic_lengthscales
-    length_scales = characteristic_lengthscales(actx, discr)
 
     def vol_min(x):
         from grudge.op import nodal_min
@@ -490,7 +467,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_write_viz(step, t, fluid_state):
         cv = fluid_state.cv
         dv = fluid_state.dv
-
         mu = fluid_state.viscosity
 
         viz_fields = [("cv", cv),
@@ -564,8 +540,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if any([do_viz, do_restart, do_health, do_status]):
                 smoothness = smoothness_indicator(discr, state.mass,
                                                   kappa=kappa, s0=s0)
-                fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
-                                               smoothness=smoothness)
+                force_evaluation(actx, smoothness)
+                fluid_state = create_fluid_state(cv=state,
+                                                 smoothness=smoothness)
                 dv = fluid_state.dv
                 # if the time integrator didn't force_eval, do so now
                 if not force_eval:
@@ -599,7 +576,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+        dt = get_sim_timestep(discr, fluid_state, t, dt,
                               current_cfl, t_final, constant_cfl)
 
         return state, dt
@@ -619,7 +596,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # smoothness indicator is an optional value in make_fluid_state
         smoothness = smoothness_indicator(discr, state.mass,
                                           kappa=kappa, s0=s0)
-        fluid_state = make_fluid_state(state, gas_model, smoothness=smoothness)
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
+                                       smoothness=smoothness)
+
+        #print(f"{fluid_state=}")
 
         return (
             ns_operator(discr, state=fluid_state, time=t,
@@ -633,7 +613,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
-                      post_step_callback=my_post_step, dt=current_dt,
+                      post_step_callback=my_post_step,
+                      dt=current_dt,
                       state=current_state.cv, t=current_t, t_final=t_final)
 
     # Dump the final data
@@ -641,8 +622,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
     smoothness = smoothness_indicator(discr, current_cv.mass,
                                       kappa=kappa, s0=s0)
-    current_state = make_fluid_state(current_cv, gas_model,
-                                     smoothness=smoothness)
+    current_state = create_fluid_state(cv=current_cv,
+                                       smoothness=smoothness)
     final_dv = current_state.dv
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=current_state)
