@@ -259,7 +259,7 @@ class PowerLawTransport(TransportModel):
 
 
 class ArtificialViscosityTransport(TransportModel):
-    r"""Transport that model add artificial viscosity based on a smoothness indicator
+    r"""Transport that model add artificial viscosity based on a smoothness indicator.
 
     Inherits from (and implements) :class:`TransportModel`.
 
@@ -298,7 +298,6 @@ class ArtificialViscosityTransport(TransportModel):
     def viscosity(self, cv: ConservedVars,
                   dv: Optional[GasDependentVars] = None) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-
         return (dv.smoothness*self._av_mu
                 + self._physical_transport.viscosity(cv, dv))
 
@@ -310,7 +309,6 @@ class ArtificialViscosityTransport(TransportModel):
 
         $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
         """
-
         return (dv.smoothness*self._av_mu
                 + self._physical_transport.volume_viscosity(cv, dv))
 

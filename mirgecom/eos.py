@@ -234,7 +234,8 @@ class MixtureEOS(GasEOS):
 
     def dependent_vars(
             self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> MixtureDependentVars:
+            temperature_seed: Optional[DOFArray] = None,
+            smoothness: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -246,7 +247,8 @@ class MixtureEOS(GasEOS):
             temperature=temperature,
             pressure=self.pressure(cv, temperature),
             speed_of_sound=self.sound_speed(cv, temperature),
-            species_enthalpies=self.species_enthalpies(cv, temperature)
+            species_enthalpies=self.species_enthalpies(cv, temperature),
+            smoothness=smoothness
         )
 
 

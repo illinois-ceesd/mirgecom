@@ -30,7 +30,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.shortcuts import make_visualizer
@@ -42,7 +41,7 @@ from mirgecom.artificial_viscosity import (
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step, euler_step
+from mirgecom.integrators import rk4_step
 from grudge.shortcuts import compiled_lsrk45_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
@@ -56,13 +55,10 @@ from mirgecom.transport import ArtificialViscosityTransport, SimpleTransport
 from mirgecom.simutil import get_sim_timestep, force_evaluation
 
 from logpyle import set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
-    set_sim_state
 )
 
 logger = logging.getLogger(__name__)
@@ -509,13 +505,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     from mirgecom.inviscid import (
-        inviscid_facial_flux_hll,
+        # inviscid_facial_flux_hll,
         inviscid_facial_flux_rusanov)
 
     def my_rhs(t, state):
 
         # make a smoothness indicator
-        # call make_fluid_state with a smoothness indicator 
+        # call make_fluid_state with a smoothness indicator
         # smoothness indicator is an optional value in make_fluid_state
         smoothness = smoothness_indicator(discr, state.mass,
                                           kappa=kappa, s0=s0)

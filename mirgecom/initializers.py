@@ -369,7 +369,7 @@ class DoubleMachReflection:
         shock_speed: float
            shock speed, Mach number
         shock_sigma: float
-           initial condition sharpness 
+           initial condition sharpness
         """
         self._shock_location = shock_location
         self._shock_speed = shock_speed
