@@ -159,7 +159,7 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall(
-        actx_factory, order, use_overintegration, visualize=True):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
     actx = actx_factory()
 
@@ -252,13 +252,13 @@ def test_thermally_coupled_fluid_wall(
             (fluid_kappa * base_fluid_temp + wall_kappa * base_wall_temp)
             / (fluid_kappa + wall_kappa))
         interface_flux = (
-            fluid_kappa * wall_kappa / (fluid_kappa + wall_kappa)
+            -fluid_kappa * wall_kappa / (fluid_kappa + wall_kappa)
             * (base_fluid_temp - base_wall_temp))
         fluid_alpha = fluid_kappa/(fluid_density * fluid_heat_capacity)
         wall_alpha = wall_kappa/(wall_density * wall_heat_capacity)
 
         def steady_func(kappa, x, t):
-            return interface_temp + interface_flux/kappa * x[1]
+            return interface_temp - interface_flux/kappa * x[1]
 
         fluid_steady_func = partial(steady_func, fluid_kappa)
         wall_steady_func = partial(steady_func, wall_kappa)
@@ -266,6 +266,11 @@ def test_thermally_coupled_fluid_wall(
         def perturb_func(alpha, x, t):
             w = 1.5 * np.pi
             return 50 * mm.cos(w * x[1]) * mm.exp(-w**2 * alpha * t)
+
+        # This perturbation function is nonzero at the interface, so the two alphas
+        # need to be the same (otherwise the perturbations will decay at different
+        # rates and a discontinuity will form)
+        assert abs(fluid_alpha - wall_alpha) < 1e-12
 
         fluid_perturb_func = partial(perturb_func, fluid_alpha)
         wall_perturb_func = partial(perturb_func, wall_alpha)
@@ -380,31 +385,32 @@ def test_thermally_coupled_fluid_wall(
 
         state = make_obj_array([cv_from_temp(fluid_temp), wall_temp])
 
+        from grudge.dt_utils import characteristic_lengthscales
+        h_min_fluid = actx.to_numpy(
+            op.nodal_min(
+                dcoll, dd_vol_fluid,
+                characteristic_lengthscales(actx, dcoll, dd=dd_vol_fluid)))[()]
+        h_min_wall = actx.to_numpy(
+            op.nodal_min(
+                dcoll, dd_vol_wall,
+                characteristic_lengthscales(actx, dcoll, dd=dd_vol_wall)))[()]
+
         # Set dt once for all scales
         if n == scales[0]:
-            from grudge.dt_utils import characteristic_lengthscales
-            h_min_fluid = actx.to_numpy(
-                op.nodal_min(
-                    dcoll, dd_vol_fluid,
-                    characteristic_lengthscales(actx, dcoll, dd=dd_vol_fluid)))[()]
-            h_min_wall = actx.to_numpy(
-                op.nodal_min(
-                    dcoll, dd_vol_wall,
-                    characteristic_lengthscales(actx, dcoll, dd=dd_vol_wall)))[()]
-
-            dt = 0.001 * min(h_min_fluid**2, h_min_wall**2)
-
-        t = 0
+            dt = 0.00025 * min(h_min_fluid**2, h_min_wall**2)
 
         heat_cfl_fluid = fluid_alpha * dt/h_min_fluid**2
         heat_cfl_wall = wall_alpha * dt/h_min_wall**2
 
         print(f"{heat_cfl_fluid=}, {heat_cfl_wall=}")
+        assert heat_cfl_fluid < 0.05
+        assert heat_cfl_wall < 0.05
 
-        from mirgecom.integrators import euler_step
+        from mirgecom.integrators import rk4_step
 
-        for step in range(100):
-            state = euler_step(state, t, dt, get_rhs)
+        t = 0
+        for step in range(50):
+            state = rk4_step(state, t, dt, get_rhs)
             t += dt
             if step % 5 == 0 and visualize:
                 fluid_state = make_fluid_state(state[0], gas_model)
@@ -434,6 +440,11 @@ def test_thermally_coupled_fluid_wall(
         wall_temp = state[1]
         expected_fluid_temp = fluid_func(fluid_nodes, t)
         expected_wall_temp = wall_func(wall_nodes, t)
+
+        assert np.isfinite(
+            actx.to_numpy(op.norm(dcoll, fluid_temp, 2, dd=dd_vol_fluid)))
+        assert np.isfinite(
+            actx.to_numpy(op.norm(dcoll, wall_temp, 2, dd=dd_vol_wall)))
 
         linf_err_fluid = actx.to_numpy(
             op.norm(dcoll, fluid_temp - expected_fluid_temp, np.inf, dd=dd_vol_fluid)
