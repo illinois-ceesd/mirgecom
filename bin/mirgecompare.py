@@ -28,11 +28,7 @@ if __name__ == "__main__":
     file_split = os.path.splitext(first_file)[1]
     file_type = file_split[1:]  # remove dot
 
-    user_tolerance = {
-        "u": 1e-12,
-        "v": 1e-12
-    }
-
+    user_tolerance = 1e-12
     if args.tolerance:
         user_tolerance = args.tolerance
 

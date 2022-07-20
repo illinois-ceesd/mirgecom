@@ -434,11 +434,20 @@ def create_parallel_grid(comm, generate_grid):
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
 
 
+def configurate(config_key, config_object=None, default_value=None):
+    """Return a configured item from a configuration object."""
+    if config_object is not None:
+        if config_key in config_object:
+            return config_object[config_key]
+
+    return default_value
+
+
 def compare_files_vtu(
         first_file: str,
         second_file: str,
         file_type: str,
-        tolerance
+        tolerance: float
         ):
     """Compare files of vtu type.
 
@@ -490,6 +499,7 @@ def compare_files_vtu(
 
     nfields = point_data1.GetNumberOfArrays()
     max_field_errors = [0 for _ in range(nfields)]
+    field_tol = {}  # tolerance dict here for now
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
@@ -513,10 +523,12 @@ def compare_files_vtu(
             test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
             if test_err > max_field_errors[i]:
                 max_field_errors[i] = test_err
-        print(f"Max Error: {max_field_errors[i]}")
+        print(f"Max Error: {max_field_errors[i]}", end=" ")
+        print(f"Tolerance: {configurate(fieldname, field_tol, tolerance)}")
 
-    violation = any([max_field_errors[i] > tolerance[fieldname]
-        for i in range(nfields)])
+    violation = any([max_field_errors[i] > configurate(fieldname, field_tol,
+                                        tolerance) for i in range(nfields)])
+
     if violation:
         raise ValueError("Fidelity test failed: Mismatched data array "
                                  f"values {tolerance=}.")
