@@ -13,6 +13,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
+.. autoclass:: ArtificialViscosityTransport
 
 Exceptions
 ^^^^^^^^^^
@@ -255,3 +256,75 @@ class PowerLawTransport(TransportModel):
                             eos: GasEOS) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._d_alpha*(0*cv.mass + 1.)
+
+
+class ArtificialViscosityTransport(TransportModel):
+    r"""Transport that model add artificial viscosity based on a smoothness indicator
+
+    Inherits from (and implements) :class:`TransportModel`.
+
+    Takes a physical transport model and adds the artificial viscosity
+    contribution to it. Defaults to simple transport with inviscid settings.
+    This is equivalend to inviscid flow with artifical viscosity enabled.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
+    """
+
+    def __init__(self,
+                 av_mu, av_prandtl, physical_transport=None,
+                 av_species_diffusivity=None):
+        """Initialize uniform, constant transport properties."""
+        if physical_transport is None:
+            self._physical_transport = SimpleTransport()
+        else:
+            self._physical_transport = physical_transport
+
+        if av_species_diffusivity is None:
+            av_species_diffusivity = np.empty((0,), dtype=object)
+
+        self._av_mu = av_mu
+        self._av_prandtl = av_prandtl
+
+    def bulk_viscosity(self, cv: ConservedVars,
+                       dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return self._physical_transport.bulk_viscosity(cv, dv)
+
+    def viscosity(self, cv: ConservedVars,
+                  dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$."""
+
+        return (dv.smoothness*self._av_mu
+                + self._physical_transport.viscosity(cv, dv))
+
+    def volume_viscosity(self, cv: ConservedVars,
+                         dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
+
+        return (dv.smoothness*self._av_mu
+                + self._physical_transport.volume_viscosity(cv, dv))
+
+    def thermal_conductivity(self, cv: ConservedVars,
+                             dv: Optional[GasDependentVars] = None,
+                             eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the gas thermal_conductivity, $\kappa$."""
+        av_kappa = (dv.smoothness*self._av_mu
+                    * eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
+        return av_kappa + self._physical_transport.thermal_conductivity(
+            cv, dv, eos)
+
+    def species_diffusivity(self, cv: ConservedVars,
+                            dv: Optional[GasDependentVars] = None,
+                            eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        return self._physical_transport.species_diffusivity(cv, dv, eos)

@@ -622,7 +622,8 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
                             momentum=ext_mom,
                             species_mass=state_minus.species_mass_density)
         return make_fluid_state(cv=cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
         """Get the exterior solution on the boundary for artificial viscosity."""
@@ -673,7 +674,8 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         )
         tseed = state_minus.temperature if state_minus.is_mixture else None
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=tseed)
+                                temperature_seed=tseed,
+                                smoothness=state_minus.smoothness)
 
     def temperature_bc(self, state_minus, **kwargs):
         r"""Get temperature value to weakly prescribe wall bc.
@@ -788,7 +790,8 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         )
 
         return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
-                                temperature_seed=free_stream_temperature)
+                                temperature_seed=free_stream_temperature,
+                                smoothness=state_minus.smoothness)
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value to weakly prescribe flow temperature at boundary."""
@@ -994,7 +997,8 @@ class InflowBoundary(PrescribedFluidBoundary):
                                      species_mass=species_mass_boundary)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
 
 def grad_cv_wall_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
@@ -1070,7 +1074,8 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
             momentum=mom_plus, species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
@@ -1081,7 +1086,8 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                                  energy=state_minus.energy_density,
                                  species_mass=state_minus.species_mass_density)
         wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
-                                      temperature_seed=state_minus.temperature)
+                                      temperature_seed=state_minus.temperature,
+                                      smoothness=state_minus.smoothness)
         state_pair = TracePair(btag, interior=state_minus, exterior=wall_state)
 
         normal = state_minus.array_context.thaw(discr.normal(btag))
@@ -1177,7 +1183,8 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
             species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def adiabatic_wall_state_for_diffusion(self, discr, btag, gas_model,
                                            state_minus, **kwargs):
@@ -1189,7 +1196,8 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
             species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
     def inviscid_wall_flux(self, discr, btag, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
@@ -1348,8 +1356,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             momentum=mom_plus,
             species_mass=state_minus.species_mass_density
         )
-        #return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                #temperature_seed=state_minus.temperature)
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness=state_minus.smoothness)

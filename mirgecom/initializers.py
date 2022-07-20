@@ -358,7 +358,7 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self, shock_location=1.0/6.0, shock_speed=4.0
+            self, shock_location=1.0/6.0, shock_speed=4.0, shock_sigma=0.05
     ):
         """Initialize double shock reflection parameters.
 
@@ -368,9 +368,12 @@ class DoubleMachReflection:
            initial location of shock
         shock_speed: float
            shock speed, Mach number
+        shock_sigma: float
+           initial condition sharpness 
         """
         self._shock_location = shock_location
         self._shock_speed = shock_speed
+        self._shock_sigma = shock_sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         r"""
@@ -422,7 +425,7 @@ class DoubleMachReflection:
 
         xinter = (self._shock_location + y_rel/np.sqrt(3.0)
                   + 2.0*self._shock_speed*t/np.sqrt(3.0))
-        sigma = 0.05
+        sigma = self._shock_sigma
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
         rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
