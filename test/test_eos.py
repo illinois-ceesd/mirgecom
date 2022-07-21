@@ -283,7 +283,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         def inf_norm(x):
             return actx.to_numpy(op.norm(discr, x, np.inf))
 
-        assert inf_norm((prom_c - can_c) / can_c) < 1e-14
+        assert inf_norm((prom_c - can_c)) < 1e-14
         assert inf_norm((prom_t - can_t) / can_t) < 1e-14
         assert inf_norm((prom_rho - can_rho) / can_rho) < 1e-14
         assert inf_norm((prom_p - can_p) / can_p) < 1e-14
