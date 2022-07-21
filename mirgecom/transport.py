@@ -212,16 +212,25 @@ class PowerLawTransport(TransportModel):
     """
 
     # air-like defaults here
-    def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
-                 species_diffusivity=None):
-        """Initialize power law coefficients and parameters."""
-        if species_diffusivity is None:
+    def __init__(self, scaling_factor=1.0, alpha=0.6, beta=4.093e-7, sigma=2.5,
+                 n=.666, species_diffusivity=None, lewis=None):
+        """Initialize power law coefficients and parameters.
+
+        factor: Scaling factor to artifically increase or decrease the
+        transport coefficients. The default is to keep the physical value, i.e., 1.0.
+
+        lewis: if required, the Lewis number specify the relation between the
+        thermal conductivity and the species diffusivities.
+        """
+        if species_diffusivity is None and lewis is None:
             species_diffusivity = np.empty((0,), dtype=object)
+        self._scaling_factor = scaling_factor
         self._alpha = alpha
         self._beta = beta
         self._sigma = sigma
         self._n = n
         self._d_alpha = species_diffusivity
+        self._lewis = lewis
 
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
@@ -239,7 +248,7 @@ class PowerLawTransport(TransportModel):
 
         $\mu = \beta{T}^n$
         """
-        return self._beta * dv.temperature**self._n
+        return self._scaling_factor * self._beta * dv.temperature**self._n
 
     def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
@@ -269,7 +278,20 @@ class PowerLawTransport(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
                             eos: GasEOS) -> DOFArray:
-        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
+
+        The species diffusivities can be specified directly or based on the
+        user-imposed Lewis number $Le$ of the mixture and the heat capacity at
+        constant pressure $C_p$:
+
+        .. math::
+
+            d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
+        """
+        if self._lewis is not None:
+            return 1.0/self._lewis*(self.thermal_conductivity(cv, dv, eos)/(
+                cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
+            )
         return self._d_alpha*(0*cv.mass + 1.)
 
 
@@ -300,10 +322,10 @@ class MixtureAveragedTransport(TransportModel):
         factor: Scaling factor to artifically increase or decrease the
         transport coefficients. The default is to keep the physical value, i.e., 1.0.
 
-        Prandtl: if required, the Prandtl number specify the relation between the
+        prandtl: if required, the Prandtl number specify the relation between the
         fluid viscosity and the thermal conductivity.
 
-        Lewis: if required, the Lewis number specify the relation between the
+        lewis: if required, the Lewis number specify the relation between the
         thermal conductivity and the species diffusivities. This should be an array.
         """
         self._pyro_mech = pyrometheus_mech
