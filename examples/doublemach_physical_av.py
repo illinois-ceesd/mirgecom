@@ -165,8 +165,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
     timestepper = rk4_step
     force_eval = True
-    # t_final = 0.1
-    t_final = 0.6
+    t_final = 2.e-3
+    # t_final = 0.6
     current_cfl = 0.1
     current_dt = 1.e-4
     current_t = 0
