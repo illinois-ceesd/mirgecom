@@ -23,11 +23,6 @@ Boundary Conditions
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
 .. autoclass:: SymmetryBoundary
-
-Auxilliary Utilities
-^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: grad_cv_wall_bc
 """
 
 __copyright__ = """
@@ -956,37 +951,6 @@ class InflowBoundary(PrescribedFluidBoundary):
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
-
-
-def grad_cv_wall_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
-    """Return grad(CV) modified for no-penetration of solid wall."""
-    from mirgecom.fluid import (
-        velocity_gradient,
-        species_mass_fraction_gradient
-    )
-
-    # Velocity part
-    grad_v_minus = velocity_gradient(state_minus, grad_cv_minus)
-    grad_v_plus = grad_v_minus - np.outer(grad_v_minus@normal, normal)
-    grad_mom_plus = 0*grad_v_plus
-    for i in range(state_minus.dim):
-        grad_mom_plus[i] = (state_minus.mass_density*grad_v_plus[i]
-                            + state_minus.velocity[i]*grad_cv_minus.mass)
-
-    # species mass fraction part
-    grad_species_mass_plus = 0.*grad_cv_minus.species_mass
-    if state_minus.nspecies:
-        grad_y_minus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
-        grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-
-        for i in range(state_minus.nspecies):
-            grad_species_mass_plus[i] = \
-                (state_minus.mass_density*grad_y_plus[i]
-                 + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-
-    return make_conserved(state_minus.dim, mass=grad_cv_minus.mass,
-                          energy=grad_cv_minus.energy, momentum=grad_mom_plus,
-                          species_mass=grad_species_mass_plus)
 
 
 class IsothermalWallBoundary(PrescribedFluidBoundary):
