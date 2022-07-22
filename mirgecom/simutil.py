@@ -437,17 +437,18 @@ def create_parallel_grid(comm, generate_grid):
 def configurate(config_key, config_object=None, default_value=None):
     """Return a configured item from a configuration object."""
     if config_object is not None:
-        if config_key in config_object:
-            return config_object[config_key]
-
-    return default_value
+        d = config_object if isinstance(config_object, dict) else\
+            config_object.__dict__
+        if config_key in d:
+            return d[config_key]
+        return default_value
 
 
 def compare_files_vtu(
         first_file: str,
         second_file: str,
         file_type: str,
-        tolerance: float
+        tolerance: float = 1e-12
         ):
     """Compare files of vtu type.
 
@@ -526,8 +527,8 @@ def compare_files_vtu(
         print(f"Max Error: {max_field_errors[i]}", end=" ")
         print(f"Tolerance: {configurate(fieldname, field_tol, tolerance)}")
 
-    violation = any([max_field_errors[i] > configurate(fieldname, field_tol,
-                                        tolerance) for i in range(nfields)])
+    violation = any([max_field_errors[i] > configurate(point_data1.GetArrayName(i),
+        field_tol, tolerance) for i in range(nfields)])
 
     if violation:
         raise ValueError("Fidelity test failed: Mismatched data array "
