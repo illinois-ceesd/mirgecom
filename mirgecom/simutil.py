@@ -525,10 +525,12 @@ def compare_files_vtu(
             if test_err > max_field_errors[i]:
                 max_field_errors[i] = test_err
         print(f"Max Error: {max_field_errors[i]}", end=" ")
-        print(f"Tolerance: {configurate(fieldname, field_tol, tolerance)}")
+        field_specific_tols = [configurate(point_data1.GetArrayName(i), field_tol,
+            tolerance) for i in range(nfields)]
+        print(f"Tolerance: {field_specific_tols[i]}")
 
-    violation = any([max_field_errors[i] > configurate(point_data1.GetArrayName(i),
-        field_tol, tolerance) for i in range(nfields)])
+    violation = any([max_field_errors[i] > field_specific_tols[i]
+        for i in range(nfields)])
 
     if violation:
         raise ValueError("Fidelity test failed: Mismatched data array "
