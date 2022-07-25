@@ -441,7 +441,7 @@ def configurate(config_key, config_object=None, default_value=None):
             config_object.__dict__
         if config_key in d:
             return d[config_key]
-        return default_value
+    return default_value
 
 
 def compare_files_vtu(
@@ -501,6 +501,8 @@ def compare_files_vtu(
     nfields = point_data1.GetNumberOfArrays()
     max_field_errors = [0 for _ in range(nfields)]
     field_tol = {}  # tolerance dict here for now
+    field_specific_tols = [configurate(point_data1.GetArrayName(i), field_tol,
+            tolerance) for i in range(nfields)]
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
@@ -525,8 +527,6 @@ def compare_files_vtu(
             if test_err > max_field_errors[i]:
                 max_field_errors[i] = test_err
         print(f"Max Error: {max_field_errors[i]}", end=" ")
-        field_specific_tols = [configurate(point_data1.GetArrayName(i), field_tol,
-            tolerance) for i in range(nfields)]
         print(f"Tolerance: {field_specific_tols[i]}")
 
     violation = any([max_field_errors[i] > field_specific_tols[i]
