@@ -32,9 +32,12 @@ if __name__ == "__main__":
     if args.tolerance:
         user_tolerance = args.tolerance
 
+    field_tolerance = {"u": 1e-12, "v": 1e-12}
+
     # use appropriate comparison function for file type
     if file_type == "vtu" or file_type == "pvtu":
-        compare_files_vtu(first_file, second_file, file_type, user_tolerance)
+        compare_files_vtu(first_file, second_file, file_type, user_tolerance,
+            field_tolerance)
     elif file_type == "xmf":
         compare_files_xdmf(first_file, second_file, user_tolerance)
     elif file_type == "h5":

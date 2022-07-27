@@ -448,7 +448,8 @@ def compare_files_vtu(
         first_file: str,
         second_file: str,
         file_type: str,
-        tolerance: float = 1e-12
+        tolerance: float = 1e-12,
+        field_tolerance: [float] = None
         ):
     """Compare files of vtu type.
 
@@ -462,6 +463,8 @@ def compare_files_vtu(
         Vtu files
     tolerance:
         Max acceptable absolute difference
+    field_tolerance:
+        Dictionary of individual field tolerances
 
     Returns
     -------
@@ -500,9 +503,12 @@ def compare_files_vtu(
 
     nfields = point_data1.GetNumberOfArrays()
     max_field_errors = [0 for _ in range(nfields)]
-    field_tol = {}  # tolerance dict here for now
-    field_specific_tols = [configurate(point_data1.GetArrayName(i), field_tol,
-            tolerance) for i in range(nfields)]
+
+    if field_tolerance is None:
+        field_tolerance = {}
+    field_specific_tols = [configurate(point_data1.GetArrayName(i),
+        field_tolerance, tolerance) for i in range(nfields)]
+
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
@@ -529,14 +535,16 @@ def compare_files_vtu(
         print(f"Max Error: {max_field_errors[i]}", end=" ")
         print(f"Tolerance: {field_specific_tols[i]}")
 
-    violation = any([max_field_errors[i] > field_specific_tols[i]
-        for i in range(nfields)])
+    violated_tols = []
+    for i in range(nfields):
+        if max_field_errors[i] > field_specific_tols[i]:
+            violated_tols.append(field_specific_tols[i])
 
-    if violation:
+    if violated_tols:
         raise ValueError("Fidelity test failed: Mismatched data array "
-                                 f"values {tolerance=}.")
+                                 f"values {violated_tols=}.")
 
-    print("VTU Fidelity test completed successfully with tolerance", tolerance)
+    print("VTU Fidelity test completed successfully")
 
 
 class _Hdf5Reader:
