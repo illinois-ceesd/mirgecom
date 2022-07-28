@@ -36,7 +36,6 @@ THE SOFTWARE.
 
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
-from arraycontext import thaw, freeze
 
 
 def cell_volume(actx, dcoll: DiscretizationCollection):

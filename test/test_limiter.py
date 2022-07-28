@@ -20,8 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np
-import pyopencl as cl
-from arraycontext import thaw, freeze
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -34,13 +32,12 @@ from mirgecom.limiter import cell_volume, positivity_preserving_limiter
 from mirgecom.discretization import create_discretization_collection
 import pytest
 
+
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("eps", [1.0, 0.1])
 def test_positivity_preserving_limiter(actx_factory, order, eps):
 
     actx = actx_factory()
-
-    order = 3
 
     dim = 1
     nel_1d = 2
@@ -52,7 +49,7 @@ def test_positivity_preserving_limiter(actx_factory, order, eps):
 
     discr = create_discretization_collection(actx, mesh, order=order)
 
-    #create cells with negative values
+    # create cells with negative values
     nodes = actx.thaw(actx.freeze(discr.nodes()))
     field = nodes[0]*eps
 
@@ -61,5 +58,5 @@ def test_positivity_preserving_limiter(actx_factory, order, eps):
     limited_field = positivity_preserving_limiter(discr, cell_area, field)
 
     error = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
-    
+
     assert error > -1.0e-13
