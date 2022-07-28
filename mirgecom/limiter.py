@@ -36,11 +36,13 @@ THE SOFTWARE.
 
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
+from arraycontext import thaw, freeze
 
 
-def cell_volume(dcoll: DiscretizationCollection, field):
+def cell_volume(actx, dcoll: DiscretizationCollection):
     """Evaluate cell area or volume."""
-    return op.elementwise_integral(dcoll, field*0.0 + 1.0)
+    zeros = actx.thaw(actx.freeze(dcoll.nodes()))[0]
+    return op.elementwise_integral(dcoll, zeros + 1.0)
 
 
 def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field,
@@ -69,9 +71,9 @@ def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field
     _theta = actx.np.minimum(
         1.0, actx.np.minimum(
             actx.np.where(actx.np.less(mmin_i, mmin),
-                     abs((mmin-cell_avgs-1e-13)/(mmin_i-cell_avgs-1e-13)), 1.0),
+                     abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)), 1.0),
             actx.np.where(actx.np.greater(mmax_i, mmax),
-                     abs((mmax-cell_avgs+1e-13)/(mmax_i-cell_avgs+1e-13)), 1.0)
+                     abs((mmax-cell_avgs)/(mmax_i-cell_avgs+1e-13)), 1.0)
             )
         )
 
