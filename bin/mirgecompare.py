@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 
+import json
 from mirgecom.simutil import\
     compare_files_vtu, compare_files_xdmf, compare_files_hdf5
 
@@ -14,6 +15,7 @@ if __name__ == "__main__":
         description="Process files to perform fidelity check")
     parser.add_argument("files", nargs=2, type=str)
     parser.add_argument("--tolerance", type=float)
+    parser.add_argument("-t")
     args = parser.parse_args()
 
     first_file = args.files[0]
@@ -32,7 +34,10 @@ if __name__ == "__main__":
     if args.tolerance:
         user_tolerance = args.tolerance
 
-    field_tolerance = {"u": 1e-12, "v": 1e-12}
+    field_tolerance = {}
+    if args.t:
+        field_tol_inp = json.loads(args.t)
+        field_tolerance = field_tol_inp
 
     # use appropriate comparison function for file type
     if file_type == "vtu" or file_type == "pvtu":
