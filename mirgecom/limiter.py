@@ -1,7 +1,15 @@
 """:mod:`mirgecom.limiter` is for limiters and limiter-related constructs.
+
 Field limiter functions
------------------------
-.. autofunction:: limiter_liu_osher
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: positivity_preserving_limiter
+
+
+Helper Functions
+^^^^^^^^^^^^^^^^
+
+.. autofunction:: cell_volume
 """
 
 __copyright__ = """
@@ -31,13 +39,12 @@ import grudge.op as op
 
 
 def cell_volume(dcoll: DiscretizationCollection, field):
+    """Evaluate cell area or volume."""
     return op.elementwise_integral(dcoll, field*0.0 + 1.0)
 
 
 def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field):
-    """Implement the positivity-preserving limiter of Liu and Osher (1996).
-    """
-
+    """Implement the positivity-preserving limiter of Liu and Osher (1996)."""
     actx = field.array_context
 
     # Compute cell averages of the state
