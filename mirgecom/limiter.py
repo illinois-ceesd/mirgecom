@@ -43,7 +43,8 @@ def cell_volume(dcoll: DiscretizationCollection, field):
     return op.elementwise_integral(dcoll, field*0.0 + 1.0)
 
 
-def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field):
+def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field,
+                                  mmin=0.0, mmax=1.0):
     """Implement the positivity-preserving limiter of Liu and Osher (1996)."""
     actx = field.array_context
 
@@ -58,22 +59,18 @@ def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field
     # negative species. This should only be necessary for coarse grids or
     # underresolved regions... If it is knowingly underresolved, then I think
     # we can abstain to ensure "exact" conservation.
-    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, 0.0), cell_avgs, 0.0)
-    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, 1.0), 1.0, cell_avgs)
+    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
+    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax), mmax, cell_avgs)
 
     # Compute nodal and elementwise max/mins of the field
     mmin_i = op.elementwise_min(dcoll, field)
     mmax_i = op.elementwise_max(dcoll, field)
 
-    # Minimum and maximum physical values
-    mmin = 0.0
-    mmax = 1.0
-
     _theta = actx.np.minimum(
         1.0, actx.np.minimum(
-            actx.np.where(actx.np.less(mmin_i, 0.0),
+            actx.np.where(actx.np.less(mmin_i, mmin),
                      abs((mmin-cell_avgs-1e-13)/(mmin_i-cell_avgs-1e-13)), 1.0),
-            actx.np.where(actx.np.greater(mmax_i, 1.0),
+            actx.np.where(actx.np.greater(mmax_i, mmax),
                      abs((mmax-cell_avgs+1e-13)/(mmax_i-cell_avgs+1e-13)), 1.0)
             )
         )
