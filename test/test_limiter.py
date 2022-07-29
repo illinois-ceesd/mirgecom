@@ -64,6 +64,7 @@ def test_positivity_preserving_limiter(actx_factory, order, dim):
 
     assert error > -1.0e-13
 
+
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("dim", [2, 3])
 def test_bound_preserving_limiter(actx_factory, order, dim):
