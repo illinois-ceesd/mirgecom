@@ -38,7 +38,7 @@ from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
 
-def cell_volume(actx, dcoll: DiscretizationCollection):
+def cell_characteristic_size(actx, dcoll: DiscretizationCollection):
     """Evaluate cell area or volume."""
     zeros = actx.thaw(actx.freeze(dcoll.nodes()))[0]
     return op.elementwise_integral(dcoll, zeros + 1.0)
@@ -52,10 +52,9 @@ def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field
     # Compute cell averages of the state
     cell_avgs = 1.0/volume*op.elementwise_integral(dcoll, field)
 
-    # Without also enforcing the averaged to be bounded, the limiter may fail
-    # since we work with a posteriori correction of the values. This operation
-    # is not described in the paper but greatly increased the robustness after
-    # some numerical exercises with this function.
+    # If the averaged is not bounded, some numerical exercise of this function
+    # failed since we work with a posteriori correction of the values. This
+    # operation is not described in the paper but greatly increased the robustness.
     # This will not make the limiter conservative but it is better than having
     # negative species. This should only be necessary for coarse grids or
     # underresolved regions... If it is knowingly underresolved, then I think

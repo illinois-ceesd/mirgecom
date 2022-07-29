@@ -28,7 +28,10 @@ from meshmode.array_context import (  # noqa
     PytatoPyOpenCLArrayContext
 )
 import grudge.op as op
-from mirgecom.limiter import cell_volume, positivity_preserving_limiter
+from mirgecom.limiter import (
+    cell_characteristic_size,
+    positivity_preserving_limiter
+)
 from mirgecom.discretization import create_discretization_collection
 import pytest
 
@@ -53,7 +56,7 @@ def test_positivity_preserving_limiter(actx_factory, order, eps, dim):
     nodes = actx.thaw(actx.freeze(discr.nodes()))
     field = nodes[0]*eps
 
-    cell_area = cell_volume(actx, discr)
+    cell_area = cell_characteristic_size(actx, discr)
 
     limited_field = positivity_preserving_limiter(discr, cell_area, field)
 
