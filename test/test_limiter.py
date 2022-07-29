@@ -35,11 +35,11 @@ import pytest
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("eps", [1.0, 0.1])
-def test_positivity_preserving_limiter(actx_factory, order, eps):
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_positivity_preserving_limiter(actx_factory, order, eps, dim):
 
     actx = actx_factory()
 
-    dim = 1
     nel_1d = 2
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
