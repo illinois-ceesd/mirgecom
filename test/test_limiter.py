@@ -30,17 +30,16 @@ from meshmode.array_context import (  # noqa
 import grudge.op as op
 from mirgecom.limiter import (
     cell_characteristic_size,
-    positivity_preserving_limiter
+    bound_preserving_limiter
 )
 from mirgecom.discretization import create_discretization_collection
 import pytest
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-@pytest.mark.parametrize("eps", [1.0, 0.1])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-def test_positivity_preserving_limiter(actx_factory, order, eps, dim):
-
+@pytest.mark.parametrize("dim", [2, 3])
+def test_positivity_preserving_limiter(actx_factory, order, dim):
+    """Testing positivity-preserving limiter."""
     actx = actx_factory()
 
     nel_1d = 2
@@ -54,12 +53,42 @@ def test_positivity_preserving_limiter(actx_factory, order, eps, dim):
 
     # create cells with negative values
     nodes = actx.thaw(actx.freeze(discr.nodes()))
+    eps = 0.1
     field = nodes[0]*eps
 
     cell_area = cell_characteristic_size(actx, discr)
 
-    limited_field = positivity_preserving_limiter(discr, cell_area, field)
+    limited_field = bound_preserving_limiter(discr, cell_area, field, mmin=0.0)
 
     error = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
 
     assert error > -1.0e-13
+
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_bound_preserving_limiter(actx_factory, order, dim):
+    """Testing upper bound limiting."""
+    actx = actx_factory()
+
+    nel_1d = 2
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(-0.1,) * dim, b=(0.1,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    discr = create_discretization_collection(actx, mesh, order=order)
+
+    # create cells with values larger than 1.0
+    nodes = actx.thaw(actx.freeze(discr.nodes()))
+    eps = 0.1
+    field = 1.0 + nodes[0]*eps
+
+    cell_area = cell_characteristic_size(actx, discr)
+
+    limited_field = -1.0 + bound_preserving_limiter(discr, cell_area, field,
+                                             mmin=0.0, mmax=1.0)
+
+    error = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
+
+    assert error > 1.0e-13

@@ -53,7 +53,7 @@ from mirgecom.gas_model import GasModel
 from mirgecom.utils import force_evaluation
 from mirgecom.limiter import (
     cell_characteristic_size,
-    positivity_preserving_limiter
+    bound_preserving_limiter
 )
 from mirgecom.fluid import make_conserved
 
@@ -509,8 +509,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         cell_size = cell_characteristic_size(actx, discr)
 
         spec_lim = make_obj_array([
-            positivity_preserving_limiter(discr, cell_size,
-                                          cv.species_mass_fractions[i])
+            bound_preserving_limiter(discr, cell_size,
+                                     cv.species_mass_fractions[i], mmax=1.0)
             for i in range(nspecies)
         ])
 
