@@ -1,15 +1,12 @@
-""":mod:`mirgecom.limiter` is for limiters and limiter-related constructs.
+"""
+:mod:`mirgecom.limiter` is for limiters and limiter-related constructs.
 
 Field limiter functions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: positivity_preserving_limiter
+.. autofunction:: bound_preserving_limiter
+.. autofunction:: cell_characteristic_size
 
-
-Helper Functions
-^^^^^^^^^^^^^^^^
-
-.. autofunction:: cell_volume
 """
 
 __copyright__ = """
@@ -39,40 +36,73 @@ import grudge.op as op
 
 
 def cell_characteristic_size(actx, dcoll: DiscretizationCollection):
-    """Evaluate cell area or volume."""
+    r"""Evaluate cell area or volume."""
     zeros = actx.thaw(actx.freeze(dcoll.nodes()))[0]
     return op.elementwise_integral(dcoll, zeros + 1.0)
 
 
-def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field,
-                                  mmin=0.0, mmax=1.0):
-    """Implement the positivity-preserving limiter of Liu and Osher (1996)."""
+def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
+                                  mmin=0.0, mmax=None, modify_average=True):
+    r"""Implement a slope limiter for bound-preserving properties.
+
+    The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
+    which uses a linear scaling factor of the high-order polynomials.
+
+    By default, the average is also bounded to ensure that the solution is
+    always positive. This option can be modified by an boolean argument.
+    In case the average becomes negative, the limiter will drop to order zero
+    and may not fix the negative values. This operation is not described in
+    the original reference but greatly increased the robustness.
+
+    An additional argument can be added to bound the upper limit.
+
+    Parameters
+    ----------
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        Grudge discretization with boundaries object
+    cell_size: meshmode.dof_array.DOFArray or numpy.ndarray
+        A field or collection of scalar fields to limit
+    field: meshmode.dof_array.DOFArray or numpy.ndarray
+        A field to limit
+    mmin: float
+        Optional float with the target lower bound. Default to 0.0.
+    mmax: float
+        Optional float with the target upper bound. Default to None.
+    modify_average: bool
+        Flag to avoid modification the cell average. Defaults to True.
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        An array container containing the limited field(s).
+    """
     actx = field.array_context
 
     # Compute cell averages of the state
-    cell_avgs = 1.0/volume*op.elementwise_integral(dcoll, field)
+    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
-    # If the averaged is not bounded, some numerical exercise of this function
-    # failed since we work with a posteriori correction of the values. This
-    # operation is not described in the paper but greatly increased the robustness.
-    # This will not make the limiter conservative but it is better than having
-    # negative species. This should only be necessary for coarse grids or
-    # underresolved regions... If it is knowingly underresolved, then I think
-    # we can abstain to ensure "exact" conservation.
-    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
-    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax), mmax, cell_avgs)
+    # Bound cell average in case it don't respect the boundaries
+    if modify_average:
+        cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
-    # Compute nodal and elementwise max/mins of the field
+    # Compute elementwise max/mins of the field
     mmin_i = op.elementwise_min(dcoll, field)
-    mmax_i = op.elementwise_max(dcoll, field)
 
     _theta = actx.np.minimum(
-        1.0, actx.np.minimum(
-            actx.np.where(actx.np.less(mmin_i, mmin),
-                     abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)), 1.0),
-            actx.np.where(actx.np.greater(mmax_i, mmax),
-                     abs((mmax-cell_avgs)/(mmax_i-cell_avgs+1e-13)), 1.0)
-            )
+        1.0, actx.np.where(actx.np.less(mmin_i, mmin),
+                           abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)),
+                           1.0)
+        )
+
+    if mmax is not None:
+        cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax), mmax, cell_avgs)
+
+        mmax_i = op.elementwise_max(dcoll, field)
+
+        _theta = actx.np.minimum(
+            _theta, actx.np.where(actx.np.greater(mmax_i, mmax),
+                                  abs((mmax-cell_avgs)/(mmax_i-cell_avgs+1e-13)),
+                                  1.0)
         )
 
     return _theta*(field - cell_avgs) + cell_avgs
