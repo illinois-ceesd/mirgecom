@@ -37,7 +37,7 @@ import grudge.op as op
 
 def cell_characteristic_size(actx, dcoll: DiscretizationCollection):
     r"""Evaluate cell area or volume."""
-    zeros = actx.thaw(actx.freeze(dcoll.nodes()))[0]
+    zeros = dcoll.zeros(actx)
     return op.elementwise_integral(dcoll, zeros + 1.0)
 
 
