@@ -35,8 +35,8 @@ from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
 
-def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
-                                  mmin=0.0, mmax=None, modify_average=False):
+def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
+                             mmin=0.0, mmax=None, modify_average=False):
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
@@ -94,7 +94,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
 
     cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
-    # Bound cell average in case it doesn't respect the boundaries
+    # Bound cell average in case it doesn't respect the realizability
     if modify_average:
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
