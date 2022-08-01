@@ -63,7 +63,7 @@ def grad_operator(discr, dd_vol, dd_faces, u, flux):
 
 
 def div_operator(discr, dd_vol, dd_faces, v, flux):
-    r"""Compute a DG divergence of vector-valued function *v* with flux given by *flux*.
+    r"""Compute DG divergence of vector-valued func *v* with flux given by *flux*.
 
     Parameters
     ----------
