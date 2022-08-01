@@ -31,14 +31,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from pytools import memoize_in
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
 
 def cell_volume(actx, dcoll: DiscretizationCollection):
     r"""Evaluate cell area or volume."""
-    zeros = dcoll.zeros(actx)
-    return op.elementwise_integral(dcoll, zeros + 1.0)
+    return op.elementwise_integral(dcoll, dcoll.zeros(actx) + 1.0)
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
@@ -74,8 +74,6 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     ----------
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
-    cell_size: meshmode.dof_array.DOFArray or numpy.ndarray
-        The cell area (2D) or volume (3D)
     field: meshmode.dof_array.DOFArray or numpy.ndarray
         A field to limit
     mmin: float
@@ -92,7 +90,14 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     """
     actx = field.array_context
 
+    @memoize_in(dcoll, (cell_volume, "cell_volume"))
+    def cell_volumes():
+        return cell_volume(actx, dcoll)
+
+    cell_size = cell_volumes()
+
     # Compute cell averages of the state
+
     cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
     # Bound cell average in case it doesn't respect the boundaries
