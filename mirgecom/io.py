@@ -38,7 +38,7 @@ def make_init_message(*, dim, order, dt, t_final,
                       initname, eosname, casename,
                       nelements=0, global_nelements=0):
     """Create a summary of some general simulation parameters and inputs."""
-    return(
+    return (
         f"Initialization for Case({casename})\n"
         f"===\n"
         f"Num {dim}d order-{order} elements: {nelements}\n"
