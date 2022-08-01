@@ -62,10 +62,8 @@ from mirgecom.simutil import get_sim_timestep, force_evaluation
 from logpyle import set_dt
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_device_memory_usage
 )
 
 logger = logging.getLogger(__name__)
@@ -170,7 +168,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Timestepping control
     current_step = 0
-    # timestepper = rk4_step
+    timestepper = rk4_step
     timestepper = euler_step
     force_eval = True
     # t_final = 0.1
@@ -329,8 +327,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         alpha = 100
         # cutoff, smoothness below this value is ignored
         beta = 0.01
-        smoothness = actx.np.log(1 +
-                                 actx.np.exp(alpha*(indicator - beta)))/alpha
+        smoothness = actx.np.log(
+            1 + actx.np.exp(alpha*(indicator - beta)))/alpha
         return smoothness*kappa_h*length_scales
 
     compute_smoothness_compiled = actx.compile(compute_smoothness) # noqa
