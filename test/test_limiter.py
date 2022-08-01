@@ -60,9 +60,8 @@ def test_positivity_preserving_limiter(actx_factory, order, dim):
 
     limited_field = bound_preserving_limiter(discr, cell_area, field, mmin=0.0)
 
-    error = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
-
-    assert error > -1.0e-13
+    fld_min = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
+    assert fld_min > -1e-13
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
