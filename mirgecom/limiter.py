@@ -30,9 +30,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from pytools import memoize_in
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
-from pytools import memoize_in
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
@@ -84,17 +84,15 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     """
     actx = field.array_context
 
-    # Evaluate cell area or volume
-    def cell_volume():
-        @memoize_in(dcoll, cell_volume)
-        def get_cell_volume():
-            zeros = dcoll.zeros(actx)
-            return op.elementwise_integral(dcoll, zeros + 1.0)
+    @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume"))
+    def cell_volumes(dcoll):
+        return op.elementwise_integral(dcoll, dcoll.zeros(actx) + 1.0)
 
-        return get_cell_volume()
+    cell_size = cell_volumes(dcoll)
 
     # Compute cell averages of the state
-    cell_avgs = 1.0/cell_volume()*op.elementwise_integral(dcoll, field)
+
+    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:
