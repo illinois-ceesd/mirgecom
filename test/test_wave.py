@@ -203,7 +203,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
     print("Approximation error:")
     print(eoc_rec)
-    assert(eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
+    assert (eoc_rec.order_estimate() >= order - 0.5 or eoc_rec.max_error() < 1e-11)
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])
