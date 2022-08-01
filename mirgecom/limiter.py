@@ -5,7 +5,6 @@ Field limiter functions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: bound_preserving_limiter
-.. autofunction:: cell_volume
 
 """
 
@@ -34,10 +33,6 @@ THE SOFTWARE.
 from pytools import memoize_in
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
-
-
-def cell_volume(actx, dcoll: DiscretizationCollection):
-    r"""Evaluate cell area or volume."""
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
