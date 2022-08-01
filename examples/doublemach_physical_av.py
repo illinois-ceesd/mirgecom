@@ -30,18 +30,20 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
+from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.shortcuts import make_visualizer
 
-
+from mirgecom.euler import euler_operator
 from mirgecom.navierstokes import ns_operator
 from mirgecom.artificial_viscosity import (
+    av_laplacian_operator,
     smoothness_indicator
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step
+from mirgecom.integrators import rk4_step, euler_step
 from grudge.shortcuts import compiled_lsrk45_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
@@ -51,14 +53,21 @@ from mirgecom.boundary import (
 )
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
-from mirgecom.transport import ArtificialViscosityTransport, SimpleTransport
+from mirgecom.transport import (
+    SimpleTransport,
+    ArtificialViscosityTransport,
+    ArtificialViscosityTransportDiv
+)
 from mirgecom.simutil import get_sim_timestep, force_evaluation
 
 from logpyle import set_dt
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
+    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
+    set_sim_state
 )
 
 logger = logging.getLogger(__name__)
@@ -163,12 +172,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Timestepping control
     current_step = 0
-    timestepper = rk4_step
+    #timestepper = rk4_step
+    timestepper = euler_step
     force_eval = True
-    t_final = 2.e-3
-    # t_final = 0.6
+    # t_final = 0.1
+    t_final = 5.0e-3
+    #t_final = 0.6
     current_cfl = 0.1
-    current_dt = 1.e-4
+    #current_dt = 1.e-4
+    current_dt = 2.5e-5
     current_t = 0
     constant_cfl = False
 
@@ -237,12 +249,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_step.max", "------- step walltime: {value:6g} s, ")
         ])
 
+    # which kind of artificial viscostiy?
+    #    0 - none
+    #    1 - laplacian diffusion
+    #    2 - physical viscosity based, rho indicator
+    #    3 - physical viscosity based, div(velocity) indicator
+    use_av = 3
+
     # Solution setup and initialization
     # {{{ Initialize simple transport model
+    # AV settings for 
     kappa = 1.0
     s0 = np.log10(1.0e-4 / np.power(order, 4))
-    kappa = 0.5
-    alpha = 3.0e-2
+    alpha = 0.03
     kappa_t = 0.
     sigma_v = 0.
     # }}}
@@ -259,17 +278,61 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.gas_model import GasModel, make_fluid_state
     physical_transport = SimpleTransport(
         viscosity=sigma_v, thermal_conductivity=kappa_t)
-    transport_model = ArtificialViscosityTransport(
-        physical_transport=physical_transport, av_mu=alpha, av_prandtl=0.75)
+    if use_av == 0 or use_av == 1:
+        transport_model = physical_transport
+    elif use_av == 2:
+        transport_model = ArtificialViscosityTransport(
+            physical_transport=physical_transport, av_mu=alpha, av_prandtl=0.75)
+    elif use_av == 3:
+        transport_model = ArtificialViscosityTransportDiv(
+            physical_transport=physical_transport, av_mu=1.0, av_prandtl=0.75)
 
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    def get_fluid_state(cv, smoothness):
+    def get_fluid_state(cv, smoothness=None):
         return make_fluid_state(cv=cv, gas_model=gas_model,
                                 smoothness=smoothness)
 
     create_fluid_state = actx.compile(get_fluid_state)
+
+    from grudge.dt_utils import characteristic_lengthscales
+    length_scales = characteristic_lengthscales(actx, discr)
+
+    from mirgecom.navierstokes import grad_cv_operator
+
+    # compiled wrapper for grad_cv_operator
+    def _grad_cv_operator(fluid_state, time):
+        return grad_cv_operator(discr=discr, gas_model=gas_model,
+                                boundaries=boundaries,
+                                state=fluid_state,
+                                time=time,
+                                quadrature_tag=quadrature_tag)
+
+    grad_cv_operator_compiled = actx.compile(_grad_cv_operator)
+
+    def compute_smoothness(cv, grad_cv):
+
+        from mirgecom.fluid import velocity_gradient
+        div_v = np.trace(velocity_gradient(cv, grad_cv))
+
+        #kappa_h = 1.5
+        kappa_h = 5
+        gamma = gas_model.eos.gamma(cv)
+        r = gas_model.eos.gas_const(cv)
+        T0 = 0.015
+        c_star = np.sqrt(gamma*r*(2/(gamma+1)*T0))
+        #smoothness = kappa_h*length_scales*div_v/dv.speed_of_sound
+        indicator = -kappa_h*length_scales*div_v/c_star
+
+        # steepness of the smoothed function
+        alpha = 100
+        # cutoff, smoothness below this value is ignored
+        beta = 0.01
+        smoothness = actx.np.log(1 + actx.np.exp(alpha*(indicator - beta)))/alpha
+        return smoothness*kappa_h*length_scales
+
+    compute_smoothness_compiled = actx.compile(compute_smoothness)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -281,8 +344,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_cv = initializer(nodes)
-    smoothness = smoothness_indicator(discr, current_cv.mass,
-                                      kappa=kappa, s0=s0)
+
+    smoothness = None
+    if use_av > 0:
+        smoothness = smoothness_indicator(discr, current_cv.mass,
+                                          kappa=kappa, s0=s0)
+        no_smoothness = 0.*smoothness
+
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
                                      smoothness=smoothness)
     force_evaluation(actx, current_state)
@@ -374,16 +442,35 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         dv = fluid_state.dv
         mu = fluid_state.viscosity
 
-        # exact_cv = initializer(x_vec=nodes, eos=gas_model.eos, time=t)
-        # exact_smoothness = smoothness_indicator(discr, exact_cv.mass,
-        #                                          kappa=kappa, s0=s0)
-        # exact_state = create_fluid_state(cv=exact_cv,
-        #                                  smoothness=exact_smoothness)
+        """
+        exact_cv = initializer(x_vec=nodes, eos=gas_model.eos, time=t)
+        exact_smoothness = smoothness_indicator(discr, exact_cv.mass,
+                                                  kappa=kappa, s0=s0)
+        exact_state = create_fluid_state(cv=exact_cv,
+                                         smoothness=exact_smoothness)
+
+        # try using the divergence to compute the smoothness field
+        #exact_grad_cv = grad_cv_operator_compiled(fluid_state=exact_state,
+                                                  #time=t)
+        exact_grad_cv = grad_cv_operator(discr, gas_model, boundaries, exact_state,
+                                         time=current_t, quadrature_tag=quadrature_tag)
+        from mirgecom.fluid import velocity_gradient
+        exact_grad_v = velocity_gradient(exact_cv, exact_grad_cv)
+
+        # make a smoothness indicator
+        # try using the divergence to compute the smoothness field
+        exact_smoothness = compute_smoothness(exact_cv, exact_grad_cv)
+
+        exact_state = create_fluid_state(cv=exact_cv,
+                                         smoothness=exact_smoothness)
+        """
 
         viz_fields = [("cv", cv),
                       ("dv", dv),
-                      # ("exact_cv", exact_state.cv),
-                      # ("exact_dv", exact_state.dv),
+                      #("exact_cv", exact_state.cv),
+                      #("exact_grad_v_x", exact_grad_v[0]),
+                      #("exact_grad_v_y", exact_grad_v[1]),
+                      #("exact_dv", exact_state.dv),
                       ("mu", mu)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=vizname,
@@ -452,12 +539,36 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_health = check_step(step=step, interval=nhealth)
             do_status = check_step(step=step, interval=nstatus)
 
-            if any([do_viz, do_restart, do_health, do_status]):
-                smoothness = smoothness_indicator(discr, state.mass,
-                                                  kappa=kappa, s0=s0)
-                force_evaluation(actx, smoothness)
-                fluid_state = create_fluid_state(cv=state,
-                                                 smoothness=smoothness)
+            if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
+                if use_av == 0 or use_av == 1:
+                    fluid_state = create_fluid_state(cv=state)
+                elif use_av == 2:
+                    smoothness = smoothness_indicator(discr, state.mass,
+                                                      kappa=kappa, s0=s0)
+                    force_evaluation(actx, smoothness)
+                    fluid_state = create_fluid_state(cv=state,
+                                                     smoothness=smoothness)
+                elif use_av == 3:
+                    fluid_state = create_fluid_state(cv=state,
+                                                   smoothness=no_smoothness)
+
+                    # recompute the dv to have the correct smoothness
+                    # this is forcing a recompile, so we only do it at dump time
+                    # not sure why the compiled version of grad_cv doesn't work
+                    if do_viz:
+                        # use the divergence to compute the smoothness field
+                        force_evaluation(actx, t)
+                        grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
+                                                   time=t, quadrature_tag=quadrature_tag)
+                        #grad_cv = grad_cv_operator_compiled(fluid_state,
+                                                            #time=t)
+                        smoothness = compute_smoothness(state, grad_cv)
+
+                        from dataclasses import replace
+                        force_evaluation(actx, smoothness)
+                        new_dv = replace(fluid_state.dv, smoothness=smoothness)
+                        fluid_state = replace(fluid_state, dv=new_dv)
+
                 dv = fluid_state.dv
                 # if the time integrator didn't force_eval, do so now
                 if not force_eval:
@@ -484,6 +595,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 my_write_viz(step=step, t=t, fluid_state=fluid_state)
 
+            if constant_cfl:
+                dt = get_sim_timestep(discr, fluid_state, t, dt,
+                                      current_cfl, t_final, constant_cfl)
+
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
@@ -491,8 +606,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, fluid_state, t, dt,
-                              current_cfl, t_final, constant_cfl)
 
         return state, dt
 
@@ -505,14 +618,38 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     from mirgecom.inviscid import (
-        # inviscid_facial_flux_hll,
+        inviscid_facial_flux_hll,
         inviscid_facial_flux_rusanov)
 
-    def my_rhs(t, state):
+    def _my_rhs(t, state):
 
-        # make a smoothness indicator
-        # call make_fluid_state with a smoothness indicator
-        # smoothness indicator is an optional value in make_fluid_state
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+
+        return (
+            euler_operator(discr, state=fluid_state, time=t,
+                           boundaries=boundaries,
+                           inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                           gas_model=gas_model, quadrature_tag=quadrature_tag)
+        )
+
+    def _my_rhs_av(t, state):
+
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+
+        return (
+            euler_operator(discr, state=fluid_state, time=t,
+                           boundaries=boundaries,
+                           inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                           gas_model=gas_model, quadrature_tag=quadrature_tag)
+            + av_laplacian_operator(discr, fluid_state=fluid_state,
+                                    boundaries=boundaries,
+                                    time=t, gas_model=gas_model,
+                                    alpha=alpha, s0=s0, kappa=kappa,
+                                    quadrature_tag=quadrature_tag)
+        )
+
+    def _my_rhs_phys_visc_av(t, state):
+
         smoothness = smoothness_indicator(discr, state.mass,
                                           kappa=kappa, s0=s0)
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
@@ -524,6 +661,36 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                         gas_model=gas_model, quadrature_tag=quadrature_tag)
         )
+
+    def _my_rhs_phys_visc_div_av(t, state):
+
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
+                                       smoothness=no_smoothness)
+
+        # use the divergence to compute the smoothness field
+        grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
+                                   time=t, quadrature_tag=quadrature_tag)
+        smoothness = compute_smoothness(state, grad_cv)
+
+        from dataclasses import replace
+        new_dv = replace(fluid_state.dv, smoothness=smoothness)
+        fluid_state = replace(fluid_state, dv=new_dv)
+
+        return (
+            ns_operator(discr, state=fluid_state, time=t,
+                        boundaries=boundaries,
+                        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                        gas_model=gas_model, quadrature_tag=quadrature_tag,
+                        grad_cv=grad_cv)
+        )
+
+    my_rhs = _my_rhs
+    if use_av == 1:
+        my_rhs = _my_rhs_av
+    elif use_av == 2:
+        my_rhs = _my_rhs_phys_visc_av
+    elif use_av == 3:
+        my_rhs = _my_rhs_phys_visc_div_av
 
     current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -538,10 +705,26 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    smoothness = smoothness_indicator(discr, current_cv.mass,
-                                      kappa=kappa, s0=s0)
-    current_state = create_fluid_state(cv=current_cv,
-                                       smoothness=smoothness)
+
+    if use_av == 0 or use_av == 1:
+        current_state = create_fluid_state(cv=current_cv)
+    elif use_av == 2:
+        smoothness = smoothness_indicator(discr, current_cv.mass,
+                                          kappa=kappa, s0=s0)
+        current_state = create_fluid_state(cv=current_cv, smoothness=smoothness)
+    elif use_av == 3:
+        current_state = create_fluid_state(cv=current_cv, smoothness=no_smoothness)
+
+        # use the divergence to compute the smoothness field
+        current_grad_cv = grad_cv_operator(discr, gas_model, boundaries, current_state,
+                                   time=current_t, quadrature_tag=quadrature_tag)
+        #smoothness = compute_smoothness_compiled(current_cv, grad_cv)
+        smoothness = compute_smoothness(current_cv, current_grad_cv)
+
+        from dataclasses import replace
+        new_dv = replace(current_state.dv, smoothness=smoothness)
+        current_state = replace(current_state, dv=new_dv)
+
     final_dv = current_state.dv
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=current_state)
