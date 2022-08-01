@@ -28,10 +28,7 @@ from meshmode.array_context import (  # noqa
     PytatoPyOpenCLArrayContext
 )
 import grudge.op as op
-from mirgecom.limiter import (
-    cell_volume,
-    bound_preserving_limiter
-)
+from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.discretization import create_discretization_collection
 import pytest
 
@@ -56,9 +53,7 @@ def test_positivity_preserving_limiter(actx_factory, order, dim):
     eps = 0.1
     field = nodes[0]*eps
 
-    cell_area = cell_volume(actx, discr)
-
-    limited_field = bound_preserving_limiter(discr, cell_area, field, mmin=0.0)
+    limited_field = bound_preserving_limiter(discr, field, mmin=0.0)
 
     fld_min = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
     assert fld_min > -1e-13
@@ -84,10 +79,7 @@ def test_bound_preserving_limiter(actx_factory, order, dim):
     eps = 0.1
     field = 1.0 + nodes[0]*eps
 
-    cell_area = cell_volume(actx, discr)
-
-    limited_field = -1.0 + bound_preserving_limiter(discr, cell_area, field,
-                                             mmin=0.0, mmax=1.0)
+    limited_field = -1.0 + bound_preserving_limiter(discr, field, mmin=0.0, mmax=1.0)
 
     fld_min = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
     assert fld_min > 1.0e-13
