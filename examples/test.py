@@ -294,7 +294,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             do_health = check_step(step=step, interval=nhealth)
             do_status = check_step(step=step, interval=nstatus)
 
-            grad_cv = grad_cv_operator_compiled(fluid_state, time=t)
+            grad_cv = grad_cv_operator_compiled(fluid_state, time=t) # noqa
 
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)

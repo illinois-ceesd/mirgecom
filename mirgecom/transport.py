@@ -268,7 +268,7 @@ class PowerLawTransport(TransportModel):
 
 
 class ArtificialViscosityTransportDiv(TransportModel):
-    r"""Transport that model add artificial viscosity based on a smoothness indicator.
+    r"""Transport model for add artificial viscosity.
 
     Inherits from (and implements) :class:`TransportModel`.
 
@@ -346,8 +346,9 @@ class ArtificialViscosityTransportDiv(TransportModel):
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._physical_transport.species_diffusivity(cv, dv, eos)
 
+
 class ArtificialViscosityTransport(TransportModel):
-    r"""Transport that model add artificial viscosity based on a smoothness indicator.
+    r"""Transport model that adds artificial viscosity.
 
     Inherits from (and implements) :class:`TransportModel`.
 
