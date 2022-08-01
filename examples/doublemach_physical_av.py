@@ -30,7 +30,6 @@ import pyopencl as cl
 import pyopencl.tools as cl_tools
 from functools import partial
 
-from arraycontext import thaw
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.shortcuts import make_visualizer
@@ -61,7 +60,6 @@ from mirgecom.transport import (
 from mirgecom.simutil import get_sim_timestep, force_evaluation
 
 from logpyle import set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -172,14 +170,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Timestepping control
     current_step = 0
-    #timestepper = rk4_step
+    # timestepper = rk4_step
     timestepper = euler_step
     force_eval = True
     # t_final = 0.1
     t_final = 5.0e-3
-    #t_final = 0.6
+    # t_final = 0.6
     current_cfl = 0.1
-    #current_dt = 1.e-4
+    # current_dt = 1.e-4
     current_dt = 2.5e-5
     current_t = 0
     constant_cfl = False
@@ -220,7 +218,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:  # generate the grid from scratch
         gen_grid = partial(get_doublemach_mesh)
         from mirgecom.simutil import generate_and_distribute_mesh
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm, gen_grid)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    gen_grid)
         local_nelements = local_mesh.nelements
 
     from mirgecom.simutil import global_reduce as _global_reduce
@@ -258,7 +257,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Solution setup and initialization
     # {{{ Initialize simple transport model
-    # AV settings for 
     kappa = 1.0
     s0 = np.log10(1.0e-4 / np.power(order, 4))
     alpha = 0.03
@@ -282,10 +280,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         transport_model = physical_transport
     elif use_av == 2:
         transport_model = ArtificialViscosityTransport(
-            physical_transport=physical_transport, av_mu=alpha, av_prandtl=0.75)
+            physical_transport=physical_transport,
+            av_mu=alpha, av_prandtl=0.75)
     elif use_av == 3:
         transport_model = ArtificialViscosityTransportDiv(
-            physical_transport=physical_transport, av_mu=1.0, av_prandtl=0.75)
+            physical_transport=physical_transport,
+            av_mu=1.0, av_prandtl=0.75)
 
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
@@ -309,30 +309,31 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                 time=time,
                                 quadrature_tag=quadrature_tag)
 
-    grad_cv_operator_compiled = actx.compile(_grad_cv_operator)
+    grad_cv_operator_compiled = actx.compile(_grad_cv_operator) # noqa
 
     def compute_smoothness(cv, grad_cv):
 
         from mirgecom.fluid import velocity_gradient
         div_v = np.trace(velocity_gradient(cv, grad_cv))
 
-        #kappa_h = 1.5
+        # kappa_h = 1.5
         kappa_h = 5
         gamma = gas_model.eos.gamma(cv)
         r = gas_model.eos.gas_const(cv)
-        T0 = 0.015
-        c_star = np.sqrt(gamma*r*(2/(gamma+1)*T0))
-        #smoothness = kappa_h*length_scales*div_v/dv.speed_of_sound
+        static_temp = 0.015
+        c_star = np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
+        # smoothness = kappa_h*length_scales*div_v/dv.speed_of_sound
         indicator = -kappa_h*length_scales*div_v/c_star
 
         # steepness of the smoothed function
         alpha = 100
         # cutoff, smoothness below this value is ignored
         beta = 0.01
-        smoothness = actx.np.log(1 + actx.np.exp(alpha*(indicator - beta)))/alpha
+        smoothness = actx.np.log(1 +
+                                 actx.np.exp(alpha*(indicator - beta)))/alpha
         return smoothness*kappa_h*length_scales
 
-    compute_smoothness_compiled = actx.compile(compute_smoothness)
+    compute_smoothness_compiled = actx.compile(compute_smoothness) # noqa
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -452,8 +453,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # try using the divergence to compute the smoothness field
         #exact_grad_cv = grad_cv_operator_compiled(fluid_state=exact_state,
                                                   #time=t)
-        exact_grad_cv = grad_cv_operator(discr, gas_model, boundaries, exact_state,
-                                         time=current_t, quadrature_tag=quadrature_tag)
+        exact_grad_cv = grad_cv_operator(discr, gas_model, boundaries,
+                                         exact_state, time=current_t,
+                                         quadrature_tag=quadrature_tag)
         from mirgecom.fluid import velocity_gradient
         exact_grad_v = velocity_gradient(exact_cv, exact_grad_cv)
 
@@ -467,10 +469,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         viz_fields = [("cv", cv),
                       ("dv", dv),
-                      #("exact_cv", exact_state.cv),
-                      #("exact_grad_v_x", exact_grad_v[0]),
-                      #("exact_grad_v_y", exact_grad_v[1]),
-                      #("exact_dv", exact_state.dv),
+                      # ("exact_cv", exact_state.cv),
+                      # ("exact_grad_v_x", exact_grad_v[0]),
+                      # ("exact_grad_v_y", exact_grad_v[1]),
+                      # ("exact_dv", exact_state.dv),
                       ("mu", mu)]
         from mirgecom.simutil import write_visfile
         write_visfile(discr, viz_fields, visualizer, vizname=vizname,
@@ -550,18 +552,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                      smoothness=smoothness)
                 elif use_av == 3:
                     fluid_state = create_fluid_state(cv=state,
-                                                   smoothness=no_smoothness)
+                                                     smoothness=no_smoothness)
 
                     # recompute the dv to have the correct smoothness
-                    # this is forcing a recompile, so we only do it at dump time
+                    # this is forcing a recompile, only do it at dump time
                     # not sure why the compiled version of grad_cv doesn't work
                     if do_viz:
                         # use the divergence to compute the smoothness field
                         force_evaluation(actx, t)
-                        grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
-                                                   time=t, quadrature_tag=quadrature_tag)
-                        #grad_cv = grad_cv_operator_compiled(fluid_state,
-                                                            #time=t)
+                        grad_cv = grad_cv_operator(
+                            discr, gas_model, boundaries, fluid_state,
+                            time=t, quadrature_tag=quadrature_tag)
+                        # grad_cv = grad_cv_operator_compiled(fluid_state,
+                        #                                     time=t)
                         smoothness = compute_smoothness(state, grad_cv)
 
                         from dataclasses import replace
@@ -606,7 +609,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-
         return state, dt
 
     def my_post_step(step, t, dt, state):
@@ -617,10 +619,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
-    from mirgecom.inviscid import (
-        inviscid_facial_flux_hll,
-        inviscid_facial_flux_rusanov)
-
     def _my_rhs(t, state):
 
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
@@ -628,7 +626,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             euler_operator(discr, state=fluid_state, time=t,
                            boundaries=boundaries,
-                           inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
         )
 
@@ -639,7 +636,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             euler_operator(discr, state=fluid_state, time=t,
                            boundaries=boundaries,
-                           inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
             + av_laplacian_operator(discr, fluid_state=fluid_state,
                                     boundaries=boundaries,
@@ -658,7 +654,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             ns_operator(discr, state=fluid_state, time=t,
                         boundaries=boundaries,
-                        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                         gas_model=gas_model, quadrature_tag=quadrature_tag)
         )
 
@@ -679,7 +674,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             ns_operator(discr, state=fluid_state, time=t,
                         boundaries=boundaries,
-                        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                         gas_model=gas_model, quadrature_tag=quadrature_tag,
                         grad_cv=grad_cv)
         )
@@ -711,14 +705,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     elif use_av == 2:
         smoothness = smoothness_indicator(discr, current_cv.mass,
                                           kappa=kappa, s0=s0)
-        current_state = create_fluid_state(cv=current_cv, smoothness=smoothness)
+        current_state = create_fluid_state(cv=current_cv,
+                                           smoothness=smoothness)
     elif use_av == 3:
-        current_state = create_fluid_state(cv=current_cv, smoothness=no_smoothness)
+        current_state = create_fluid_state(cv=current_cv,
+                                           smoothness=no_smoothness)
 
         # use the divergence to compute the smoothness field
-        current_grad_cv = grad_cv_operator(discr, gas_model, boundaries, current_state,
-                                   time=current_t, quadrature_tag=quadrature_tag)
-        #smoothness = compute_smoothness_compiled(current_cv, grad_cv)
+        current_grad_cv = grad_cv_operator(
+            discr, gas_model, boundaries, current_state, time=current_t,
+            quadrature_tag=quadrature_tag)
+        # smoothness = compute_smoothness_compiled(current_cv, grad_cv)
         smoothness = compute_smoothness(current_cv, current_grad_cv)
 
         from dataclasses import replace
@@ -764,7 +761,8 @@ if __name__ == "__main__":
             raise ValueError("Can't use lazy and profiling together.")
 
     from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    actx_class = get_reasonable_array_context_class(lazy=lazy,
+                                                    distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
