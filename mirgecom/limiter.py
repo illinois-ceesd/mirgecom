@@ -61,7 +61,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
     cell_size: meshmode.dof_array.DOFArray or numpy.ndarray
-        A field or collection of scalar fields to limit
+        The cell area (2D) or volume (3D)
     field: meshmode.dof_array.DOFArray or numpy.ndarray
         A field to limit
     mmin: float

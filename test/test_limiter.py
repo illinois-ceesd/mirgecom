@@ -89,6 +89,5 @@ def test_bound_preserving_limiter(actx_factory, order, dim):
     limited_field = -1.0 + bound_preserving_limiter(discr, cell_area, field,
                                              mmin=0.0, mmax=1.0)
 
-    error = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
-
-    assert error > 1.0e-13
+    fld_min = actx.np.linalg.norm(op.elementwise_min(discr, limited_field), np.inf)
+    assert fld_min > 1.0e-13
