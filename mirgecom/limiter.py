@@ -5,7 +5,7 @@ Field limiter functions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: bound_preserving_limiter
-.. autofunction:: cell_characteristic_size
+.. autofunction:: cell_volume
 
 """
 
@@ -35,26 +35,40 @@ from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
 
-def cell_characteristic_size(actx, dcoll: DiscretizationCollection):
+def cell_volume(actx, dcoll: DiscretizationCollection):
     r"""Evaluate cell area or volume."""
     zeros = dcoll.zeros(actx)
     return op.elementwise_integral(dcoll, zeros + 1.0)
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
-                                  mmin=0.0, mmax=None, modify_average=True):
+                                  mmin=0.0, mmax=None, modify_average=False):
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
-    which uses a linear scaling factor of the high-order polynomials.
+    which uses a linear scaling factor
 
-    By default, the average is also bounded to ensure that the solution is
-    always positive. This option can be modified by an boolean argument.
-    In case the average becomes negative, the limiter will drop to order zero
-    and may not fix the negative values. This operation is not described in
-    the original reference but greatly increased the robustness.
+    .. math::
 
-    An additional argument can be added to bound the upper limit.
+        \theta = \min\left( \left| \frac{M - \bar{u}_j}{M_j - \bar{u}_j} \right|,
+                            \left| \frac{m - \bar{u}_j}{m_j - \bar{u}_j} \right|,
+                           1 \right)
+
+    to limit the high-order polynomials
+
+    .. math::
+
+        \tilde{p}_j = \theta (p_j - \bar{u}_j) + \bar{u}_j
+
+    The lower and upper bounds are given by $m$ and $M$, respectively, and can be
+    specified by the user. By default, no limiting is perfored to the upper bound.
+
+    The scheme is conservative since the cell average $\bar{u}_j$ is not
+    modified in this operation. However, a boolean argument can be invoked to
+    modify the cell average. Negative values may appear when changing polynomial
+    order during execution or any extra interpolation (i.e., changing grids).
+    If these negative values remain during the temporal integration, the current
+    slope limiter will fail to ensure positive values.
 
     Parameters
     ----------
@@ -69,7 +83,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     mmax: float
         Optional float with the target upper bound. Default to None.
     modify_average: bool
-        Flag to avoid modification the cell average. Defaults to True.
+        Flag to avoid modification the cell average. Defaults to False.
 
     Returns
     -------
@@ -81,13 +95,14 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     # Compute cell averages of the state
     cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
-    # Bound cell average in case it don't respect the boundaries
+    # Bound cell average in case it doesn't respect the boundaries
     if modify_average:
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
     # Compute elementwise max/mins of the field
     mmin_i = op.elementwise_min(dcoll, field)
 
+    # Linear scaling of polynomial coefficients
     _theta = actx.np.minimum(
         1.0, actx.np.where(actx.np.less(mmin_i, mmin),
                            abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)),

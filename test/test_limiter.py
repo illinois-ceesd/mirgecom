@@ -29,7 +29,7 @@ from meshmode.array_context import (  # noqa
 )
 import grudge.op as op
 from mirgecom.limiter import (
-    cell_characteristic_size,
+    cell_volume,
     bound_preserving_limiter
 )
 from mirgecom.discretization import create_discretization_collection
@@ -56,7 +56,7 @@ def test_positivity_preserving_limiter(actx_factory, order, dim):
     eps = 0.1
     field = nodes[0]*eps
 
-    cell_area = cell_characteristic_size(actx, discr)
+    cell_area = cell_volume(actx, discr)
 
     limited_field = bound_preserving_limiter(discr, cell_area, field, mmin=0.0)
 
@@ -84,7 +84,7 @@ def test_bound_preserving_limiter(actx_factory, order, dim):
     eps = 0.1
     field = 1.0 + nodes[0]*eps
 
-    cell_area = cell_characteristic_size(actx, discr)
+    cell_area = cell_volume(actx, discr)
 
     limited_field = -1.0 + bound_preserving_limiter(discr, cell_area, field,
                                              mmin=0.0, mmax=1.0)
