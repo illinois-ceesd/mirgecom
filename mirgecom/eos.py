@@ -113,7 +113,6 @@ class GasEOS(metaclass=ABCMeta):
     .. automethod:: dependent_vars
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
-    .. automethod:: enthalpy
     .. automethod:: gamma
     .. automethod:: get_internal_energy
     .. automethod:: get_density
@@ -127,11 +126,6 @@ class GasEOS(metaclass=ABCMeta):
     def temperature(self, cv: ConservedVars,
                     temperature_seed: Optional[DOFArray] = None) -> DOFArray:
         """Get the gas temperature."""
-
-    #@abstractmethod
-    #def enthalpy(self, cv: ConservedVars,
-                 #temperature_seed: Optional[DOFArray] = None) -> DOFArray:
-        #"""Get the gas specific enthalpy."""
 
     @abstractmethod
     def sound_speed(self, cv: ConservedVars, temperature: DOFArray):
@@ -185,6 +179,11 @@ class GasEOS(metaclass=ABCMeta):
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
+        # MJA, it doesn't appear that we can have a None field embedded inside DV,
+        # make a dummy smoothness in this case
+        if smoothness is None:
+            smoothness = 0. * cv.mass
+
         return GasDependentVars(
             temperature=temperature,
             pressure=self.pressure(cv, temperature),
@@ -280,6 +279,7 @@ class IdealSingleGas(GasEOS):
     .. automethod:: kinetic_energy
     .. automethod:: gamma
     .. automethod:: get_internal_energy
+    .. automethod:: smoothness
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1):

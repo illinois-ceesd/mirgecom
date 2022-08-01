@@ -14,6 +14,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
 .. autoclass:: ArtificialViscosityTransport
+.. autoclass:: ArtificialViscosityTransportDiv
 
 Exceptions
 ^^^^^^^^^^
@@ -285,8 +286,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
 
     def __init__(self,
                  av_mu, av_prandtl, physical_transport=None,
-                 av_species_diffusivity=None,
-                 initial_smoothness=0.):
+                 av_species_diffusivity=None):
         """Initialize uniform, constant transport properties."""
         if physical_transport is None:
             self._physical_transport = SimpleTransport()
@@ -298,32 +298,6 @@ class ArtificialViscosityTransportDiv(TransportModel):
 
         self._av_mu = av_mu
         self._av_prandtl = av_prandtl
-        self._initial_smoothness = initial_smoothness
-
-    def get_smoothness(self, cv, smoothness=None):
-        """Get a *cv*-shape-consistent array containing the smoothness.
-
-        Parameters
-        ----------
-        cv: :class:`~mirgecom.fluid.ConservedVars`
-            :class:`~mirgecom.fluid.ConservedVars` used to conjure the required shape
-            for the returned smoothness.
-        smoothness: float or :class:`~meshmode.dof_array.DOFArray`
-            Optional data from which to initialize smoothness.
-
-        Returns
-        -------
-        :class:`~meshmode.dof_array.DOFArray`
-            The smoothness field used to compute the contribution from ariticial
-            viscosity.
-        """
-        _smoothness = self._initial_smoothness
-        if smoothness is not None:
-            _smoothness = smoothness
-        if isinstance(_smoothness, DOFArray):
-            return _smoothness
-        else:
-            return _smoothness * (0*cv.mass + 1.0)
 
     def av_viscosity(self, cv, dv, eos):
         actx = cv.array_context
@@ -406,9 +380,6 @@ class ArtificialViscosityTransport(TransportModel):
 
     def av_viscosity(self, cv, dv, eos):
         return self._av_mu
-        #actx = cv.array_context
-        #return actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
-                               #+ dv.speed_of_sound**2)
 
     def bulk_viscosity(self, cv: ConservedVars,
                        dv: GasDependentVars,
