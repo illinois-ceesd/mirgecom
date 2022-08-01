@@ -300,6 +300,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
         self._av_prandtl = av_prandtl
 
     def av_viscosity(self, cv, dv, eos):
+        r"""Get the artificial viscosity for the gas."""
         actx = cv.array_context
         return actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
                                + dv.speed_of_sound**2)
@@ -314,7 +315,6 @@ class ArtificialViscosityTransportDiv(TransportModel):
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-
         return (dv.smoothness*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
@@ -380,6 +380,7 @@ class ArtificialViscosityTransport(TransportModel):
         self._av_prandtl = av_prandtl
 
     def av_viscosity(self, cv, dv, eos):
+        r"""Get the artificial viscosity for the gas."""
         return self._av_mu
 
     def bulk_viscosity(self, cv: ConservedVars,
@@ -392,7 +393,6 @@ class ArtificialViscosityTransport(TransportModel):
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-
         return (dv.smoothness*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
