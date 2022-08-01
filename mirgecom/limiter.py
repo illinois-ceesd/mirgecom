@@ -38,7 +38,6 @@ import grudge.op as op
 
 def cell_volume(actx, dcoll: DiscretizationCollection):
     r"""Evaluate cell area or volume."""
-    return op.elementwise_integral(dcoll, dcoll.zeros(actx) + 1.0)
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
@@ -90,11 +89,11 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     """
     actx = field.array_context
 
-    @memoize_in(dcoll, (cell_volume, "cell_volume"))
-    def cell_volumes():
-        return cell_volume(actx, dcoll)
+    @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume"))
+    def cell_volumes(dcoll):
+        return op.elementwise_integral(dcoll, dcoll.zeros(actx) + 1.0)
 
-    cell_size = cell_volumes()
+    cell_size = cell_volumes(dcoll)
 
     # Compute cell averages of the state
 
