@@ -5,7 +5,6 @@ Field limiter functions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: bound_preserving_limiter
-.. autofunction:: cell_volume
 
 """
 
@@ -33,16 +32,11 @@ THE SOFTWARE.
 
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
+from pytools import memoize_in
 
 
-def cell_volume(actx, dcoll: DiscretizationCollection):
-    r"""Evaluate cell area or volume."""
-    zeros = dcoll.zeros(actx)
-    return op.elementwise_integral(dcoll, zeros + 1.0)
-
-
-def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
-                                  mmin=0.0, mmax=None, modify_average=False):
+def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
+                             mmin=0.0, mmax=None, modify_average=False):
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
@@ -74,8 +68,6 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     ----------
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
-    cell_size: meshmode.dof_array.DOFArray or numpy.ndarray
-        The cell area (2D) or volume (3D)
     field: meshmode.dof_array.DOFArray or numpy.ndarray
         A field to limit
     mmin: float
@@ -92,10 +84,19 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
     """
     actx = field.array_context
 
-    # Compute cell averages of the state
-    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
+    # Evaluate cell area or volume
+    def cell_volume():
+        @memoize_in(dcoll, cell_volume)
+        def get_cell_volume():
+            zeros = dcoll.zeros(actx)
+            return op.elementwise_integral(dcoll, zeros + 1.0)
 
-    # Bound cell average in case it doesn't respect the boundaries
+        return get_cell_volume()
+
+    # Compute cell averages of the state
+    cell_avgs = 1.0/cell_volume()*op.elementwise_integral(dcoll, field)
+
+    # Bound cell average in case it doesn't respect the realizability
     if modify_average:
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
