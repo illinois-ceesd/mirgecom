@@ -61,7 +61,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, cell_size, field,
         \tilde{p}_j = \theta (p_j - \bar{u}_j) + \bar{u}_j
 
     The lower and upper bounds are given by $m$ and $M$, respectively, and can be
-    specified by the user. By default, no limiting is perfored to the upper bound.
+    specified by the user. By default, no limiting is performed to the upper bound.
 
     The scheme is conservative since the cell average $\bar{u}_j$ is not
     modified in this operation. However, a boolean argument can be invoked to
