@@ -314,25 +314,25 @@ def test_pulse(ctx_factory, dim):
     print(f"exact: {pulse_check}")
     pulse_resid = pulse - pulse_check
     print(f"pulse residual: {pulse_resid}")
-    assert(inf_norm(pulse_resid) < tol)
+    assert inf_norm(pulse_resid) < tol
 
     # proper scaling with amplitude?
     amp = 2.0
     pulse = 0
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
     pulse_resid = pulse - (pulse_check + pulse_check)
-    assert(inf_norm(pulse_resid) < tol)
+    assert inf_norm(pulse_resid) < tol
 
     # proper scaling with r?
     amp = 1.0
     rcheck = np.sqrt(2.0) * nodes
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=rcheck)
-    assert(inf_norm(pulse - (pulse_check * pulse_check)) < tol)
+    assert inf_norm(pulse - (pulse_check * pulse_check)) < tol
 
     # proper scaling with w?
     w = w / np.sqrt(2.0)
     pulse = make_pulse(amp=amp, r0=r0, w=w, r=nodes)
-    assert(inf_norm(pulse - (pulse_check * pulse_check)) < tol)
+    assert inf_norm(pulse - (pulse_check * pulse_check)) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
