@@ -27,14 +27,13 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
-import grudge.op as op
 from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.discretization import create_discretization_collection
 import pytest
 
 
-@pytest.mark.parametrize("order", [1,2,3,4])
-@pytest.mark.parametrize("dim", [2,3])
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+@pytest.mark.parametrize("dim", [2, 3])
 def test_positivity_preserving_limiter(actx_factory, order, dim):
     """Testing positivity-preserving limiter."""
     actx = actx_factory()
