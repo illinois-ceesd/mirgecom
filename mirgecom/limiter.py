@@ -1,15 +1,11 @@
-""":mod:`mirgecom.limiter` is for limiters and limiter-related constructs.
+"""
+:mod:`mirgecom.limiter` is for limiters and limiter-related constructs.
 
 Field limiter functions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: positivity_preserving_limiter
+.. autofunction:: bound_preserving_limiter
 
-
-Helper Functions
-^^^^^^^^^^^^^^^^
-
-.. autofunction:: cell_volume
 """
 
 __copyright__ = """
@@ -34,48 +30,93 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from pytools import memoize_in
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
 
-def cell_volume(dcoll: DiscretizationCollection, field):
-    """Evaluate cell area or volume."""
-    return op.elementwise_integral(dcoll, field*0.0 + 1.0)
+def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
+                             mmin=0.0, mmax=None, modify_average=False):
+    r"""Implement a slope limiter for bound-preserving properties.
 
+    The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
+    which uses a linear scaling factor
 
-def positivity_preserving_limiter(dcoll: DiscretizationCollection, volume, field):
-    """Implement the positivity-preserving limiter of Liu and Osher (1996)."""
+    .. math::
+
+        \theta = \min\left( \left| \frac{M - \bar{u}_j}{M_j - \bar{u}_j} \right|,
+                            \left| \frac{m - \bar{u}_j}{m_j - \bar{u}_j} \right|,
+                           1 \right)
+
+    to limit the high-order polynomials
+
+    .. math::
+
+        \tilde{p}_j = \theta (p_j - \bar{u}_j) + \bar{u}_j
+
+    The lower and upper bounds are given by $m$ and $M$, respectively, and can be
+    specified by the user. By default, no limiting is performed to the upper bound.
+
+    The scheme is conservative since the cell average $\bar{u}_j$ is not
+    modified in this operation. However, a boolean argument can be invoked to
+    modify the cell average. Negative values may appear when changing polynomial
+    order during execution or any extra interpolation (i.e., changing grids).
+    If these negative values remain during the temporal integration, the current
+    slope limiter will fail to ensure positive values.
+
+    Parameters
+    ----------
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        Grudge discretization with boundaries object
+    field: meshmode.dof_array.DOFArray or numpy.ndarray
+        A field to limit
+    mmin: float
+        Optional float with the target lower bound. Default to 0.0.
+    mmax: float
+        Optional float with the target upper bound. Default to None.
+    modify_average: bool
+        Flag to avoid modification the cell average. Defaults to False.
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        An array container containing the limited field(s).
+    """
     actx = field.array_context
 
+    @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume"))
+    def cell_volumes(dcoll):
+        return op.elementwise_integral(dcoll, dcoll.zeros(actx) + 1.0)
+
+    cell_size = cell_volumes(dcoll)
+
     # Compute cell averages of the state
-    cell_avgs = 1.0/volume*op.elementwise_integral(dcoll, field)
 
-    # Without also enforcing the averaged to be bounded, the limiter may fail
-    # since we work with a posteriori correction of the values. This operation
-    # is not described in the paper but greatly increased the robustness after
-    # some numerical exercises with this function.
-    # This will not make the limiter conservative but it is better than having
-    # negative species. This should only be necessary for coarse grids or
-    # underresolved regions... If it is knowingly underresolved, then I think
-    # we can abstain to ensure "exact" conservation.
-    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, 0.0), cell_avgs, 0.0)
-    cell_avgs = actx.np.where(actx.np.greater(cell_avgs, 1.0), 1.0, cell_avgs)
+    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
-    # Compute nodal and elementwise max/mins of the field
+    # Bound cell average in case it doesn't respect the realizability
+    if modify_average:
+        cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
+
+    # Compute elementwise max/mins of the field
     mmin_i = op.elementwise_min(dcoll, field)
-    mmax_i = op.elementwise_max(dcoll, field)
 
-    # Minimum and maximum physical values
-    mmin = 0.0
-    mmax = 1.0
-
+    # Linear scaling of polynomial coefficients
     _theta = actx.np.minimum(
-        1.0, actx.np.minimum(
-            actx.np.where(actx.np.less(mmin_i, 0.0),
-                     abs((mmin-cell_avgs-1e-13)/(mmin_i-cell_avgs-1e-13)), 1.0),
-            actx.np.where(actx.np.greater(mmax_i, 1.0),
-                     abs((mmax-cell_avgs+1e-13)/(mmax_i-cell_avgs+1e-13)), 1.0)
-            )
+        1.0, actx.np.where(actx.np.less(mmin_i, mmin),
+                           abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)),
+                           1.0)
+        )
+
+    if mmax is not None:
+        cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax), mmax, cell_avgs)
+
+        mmax_i = op.elementwise_max(dcoll, field)
+
+        _theta = actx.np.minimum(
+            _theta, actx.np.where(actx.np.greater(mmax_i, mmax),
+                                  abs((mmax-cell_avgs)/(mmax_i-cell_avgs+1e-13)),
+                                  1.0)
         )
 
     return _theta*(field - cell_avgs) + cell_avgs

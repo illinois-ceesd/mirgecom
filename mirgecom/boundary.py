@@ -23,11 +23,6 @@ Boundary Conditions
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
 .. autoclass:: SymmetryBoundary
-
-Auxilliary Utilities
-^^^^^^^^^^^^^^^^^^^^
-
-.. autofunction:: grad_cv_wall_bc
 """
 
 __copyright__ = """
@@ -703,45 +698,17 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     .. automethod:: temperature_bc
     """
 
-    def __init__(self, numdim, numspecies=0,
-                 free_stream_pressure=None,
-                 free_stream_velocity=None,
-                 free_stream_density=None,
-                 free_stream_temperature=None,
+    def __init__(self, numdim, free_stream_pressure,
+                 free_stream_velocity, free_stream_temperature,
                  free_stream_mass_fractions=None):
         """Initialize the boundary condition object."""
-        if free_stream_velocity is None:
-            raise ValueError("Free-stream velocity must be specified")
         if len(free_stream_velocity) != numdim:
             raise ValueError("Free-stream velocity must be of ambient dimension.")
-
-        if numspecies > 0:
-            if free_stream_pressure is None:
-                raise ValueError("Free-stream pressure must be given.")
-            if free_stream_temperature is None:
-                raise ValueError("Free-stream temperature must be given.")
-            if free_stream_mass_fractions is None:
-                raise ValueError("Free-stream species mixture fractions must be"
-                                 " given.")
-            if free_stream_density is not None:
-                raise ValueError("Free-stream density should not be given for "
-                                 "mixtures.")
-            if len(free_stream_mass_fractions) != numspecies:
-                raise ValueError("Free-stream species mixture fractions of improper"
-                                 " size.")
 
         self._temperature = free_stream_temperature
         self._pressure = free_stream_pressure
         self._species_mass_fractions = free_stream_mass_fractions
         self._velocity = free_stream_velocity
-        self._density = free_stream_density
-
-        num_specified = sum(x is not None for x in [free_stream_temperature,
-                                                    free_stream_pressure,
-                                                    free_stream_density])
-        if num_specified != 2:
-            raise ValueError("Two of [free_stream_pressure, free_stream_temperature,"
-                             " free_stream_density], must be provided.")
 
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.farfield_state
@@ -752,26 +719,14 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         free_stream_mass_fractions = (0.*state_minus.species_mass_fractions
                                       + self._species_mass_fractions)
 
-        if self._temperature is not None:
-            free_stream_temperature = 0.*state_minus.temperature + self._temperature
-        if self._pressure is not None:
-            free_stream_pressure = 0.*state_minus.pressure + self._pressure
-        if self._density is not None:
-            free_stream_density = 0.*state_minus.cv.mass + self._density
-
-        if self._temperature is None:
-            free_stream_temperature = \
-                (0.*state_minus.temperature
-                 + (self._pressure / (gas_model.eos.gas_const() * self._density)))
-        if self._pressure is None:
-            free_stream_pressure = \
-                gas_model.eos.gas_const()*self._density*self._temperature
-        if self._density is None:
-            free_stream_density = gas_model.eos.get_density(
-                pressure=free_stream_pressure, temperature=free_stream_temperature,
-                species_mass_fractions=free_stream_mass_fractions)
-
+        free_stream_temperature = 0.*state_minus.temperature + self._temperature
+        free_stream_pressure = 0.*state_minus.pressure + self._pressure
         free_stream_velocity = 0.*state_minus.velocity + self._velocity
+
+        free_stream_density = gas_model.eos.get_density(
+            pressure=free_stream_pressure, temperature=free_stream_temperature,
+            species_mass_fractions=free_stream_mass_fractions)
+
         free_stream_internal_energy = gas_model.eos.get_internal_energy(
             temperature=free_stream_temperature,
             species_mass_fractions=free_stream_mass_fractions)
@@ -998,37 +953,6 @@ class InflowBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
 
-def grad_cv_wall_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
-    """Return grad(CV) modified for no-penetration of solid wall."""
-    from mirgecom.fluid import (
-        velocity_gradient,
-        species_mass_fraction_gradient
-    )
-
-    # Velocity part
-    grad_v_minus = velocity_gradient(state_minus, grad_cv_minus)
-    grad_v_plus = grad_v_minus - np.outer(grad_v_minus@normal, normal)
-    grad_mom_plus = 0*grad_v_plus
-    for i in range(state_minus.dim):
-        grad_mom_plus[i] = (state_minus.mass_density*grad_v_plus[i]
-                            + state_minus.velocity[i]*grad_cv_minus.mass)
-
-    # species mass fraction part
-    grad_species_mass_plus = 0.*grad_cv_minus.species_mass
-    if state_minus.nspecies:
-        grad_y_minus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
-        grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-
-        for i in range(state_minus.nspecies):
-            grad_species_mass_plus[i] = \
-                (state_minus.mass_density*grad_y_plus[i]
-                 + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-
-    return make_conserved(state_minus.dim, mass=grad_cv_minus.mass,
-                          energy=grad_cv_minus.energy, momentum=grad_mom_plus,
-                          species_mass=grad_species_mass_plus)
-
-
 class IsothermalWallBoundary(PrescribedFluidBoundary):
     r"""Isothermal viscous wall boundary.
 
@@ -1090,7 +1014,6 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
-        # return 2*self._wall_temp - state_minus.temperature
         return 0.*state_minus.temperature + self._wall_temp
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
