@@ -620,7 +620,7 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 
     def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
         """Get the exterior solution on the boundary for artificial viscosity."""
-        return(-grad_av_minus)
+        return -grad_av_minus
 
 
 class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
@@ -1180,7 +1180,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
         """Get the exterior solution on the boundary for artificial viscosity."""
-        return(-grad_av_minus)
+        return -grad_av_minus
 
 
 class SymmetryBoundary(PrescribedFluidBoundary):
