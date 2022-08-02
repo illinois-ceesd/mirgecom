@@ -84,21 +84,21 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         actx = \
             PyOpenCLProfilingArrayContext(
                 queue,
-                allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue)),
-            )
+                allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx, alignment=0, queue=queue)))
+            # )
     else:
         queue = cl.CommandQueue(cl_ctx)
         if lazy:
             actx = \
                 PytatoPyOpenCLArrayContext(
                     queue,
-                    allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue),
+                    allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx, alignment=0, queue=queue)),
                 )
         else:
             actx = \
                 PyOpenCLArrayContext(
                     queue,
-                    allocator=cl_tools.SVMAllocator(cl_ctx, cl.svm_mem_flags.READ_WRITE, queue=queue),
+                    allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx, alignment=0, queue=queue)),
                     force_device_scalars=True
                 )
 
