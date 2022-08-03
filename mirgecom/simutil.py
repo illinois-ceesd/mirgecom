@@ -63,7 +63,7 @@ from functools import partial
 
 from meshmode.dof_array import DOFArray
 
-from typing import List
+from typing import List, Dict
 from grudge.discretization import DiscretizationCollection
 
 
@@ -449,7 +449,7 @@ def compare_files_vtu(
         second_file: str,
         file_type: str,
         tolerance: float = 1e-12,
-        field_tolerance: [float] = None
+        field_tolerance: Dict[str, float] = None
         ):
     """Compare files of vtu type.
 
