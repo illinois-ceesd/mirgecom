@@ -673,6 +673,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from dataclasses import replace
         new_dv = replace(fluid_state.dv, smoothness=smoothness)
         fluid_state = replace(fluid_state, dv=new_dv)
+        new_tv = gas_model.transport.transport_vars(
+            cv=state, dv=new_dv, eos=gas_model.eos)
+        fluid_state = replace(fluid_state, tv=new_tv)
 
         return (
             ns_operator(discr, state=fluid_state, time=t,
