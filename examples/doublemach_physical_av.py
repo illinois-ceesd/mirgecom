@@ -171,8 +171,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     timestepper = rk4_step
     timestepper = euler_step
     force_eval = True
-    # t_final = 0.1
-    t_final = 5.0e-3
+    t_final = 0.1
+    #t_final = 5.0e-3
     # t_final = 0.6
     current_cfl = 0.1
     # current_dt = 1.e-4
@@ -193,7 +193,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     health_temp_max = 100
 
     # Some i/o frequencies
-    nviz = 100
+    nviz = 250
     nrestart = 1000
     nhealth = 1
     nstatus = 1
@@ -565,10 +565,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         #                                     time=t)
                         smoothness = compute_smoothness(state, grad_cv)
 
+                        # this works, but seems a lot of work, not sure if it's really faster
+                        # avoids re-computing the temperature
                         from dataclasses import replace
                         force_evaluation(actx, smoothness)
                         new_dv = replace(fluid_state.dv, smoothness=smoothness)
                         fluid_state = replace(fluid_state, dv=new_dv)
+                        new_tv = gas_model.transport.transport_vars(
+                            cv=state, dv=new_dv, eos=gas_model.eos)
+                        fluid_state = replace(fluid_state, tv=new_tv)
 
                 dv = fluid_state.dv
                 # if the time integrator didn't force_eval, do so now
