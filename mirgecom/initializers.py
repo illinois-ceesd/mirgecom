@@ -396,7 +396,7 @@ class DoubleMachReflection:
         """
         t = time
         # Fail if numdim is other than 2
-        if(len(x_vec)) != 2:
+        if len(x_vec) != 2:
             raise ValueError("Case only defined for 2 dimensions")
         if eos is None:
             eos = IdealSingleGas()
