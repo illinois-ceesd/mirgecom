@@ -36,8 +36,7 @@ if __name__ == "__main__":
 
     field_tolerance = {}
     if args.t:
-        field_tol_inp = json.loads(args.t)
-        field_tolerance = field_tol_inp
+        field_tolerance = json.loads(args.t)
 
     # use appropriate comparison function for file type
     if file_type == "vtu" or file_type == "pvtu":
