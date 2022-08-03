@@ -606,7 +606,7 @@ class PyrometheusMixture(MixtureEOS):
         )
 
     def gamma(self, cv: ConservedVars, temperature):
-        r"""Get mixture-averaged gamma, $\frac{C_p}{C_p - R_s}$.
+        r"""Get mixture-averaged heat capacity ratio, $\frac{C_p}{C_p - R_s}$.
 
         Parameters
         ----------
