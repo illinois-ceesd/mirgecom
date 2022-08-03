@@ -91,7 +91,6 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     cell_size = cell_volumes(dcoll)
 
     # Compute cell averages of the state
-
     cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
 
     # Bound cell average in case it doesn't respect the realizability
