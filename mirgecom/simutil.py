@@ -63,7 +63,7 @@ from functools import partial
 
 from meshmode.dof_array import DOFArray
 
-from typing import List
+from typing import List, Dict
 from grudge.discretization import DiscretizationCollection
 
 
@@ -434,11 +434,22 @@ def create_parallel_grid(comm, generate_grid):
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
 
 
+def configurate(config_key, config_object=None, default_value=None):
+    """Return a configured item from a configuration object."""
+    if config_object is not None:
+        d = config_object if isinstance(config_object, dict) else\
+            config_object.__dict__
+        if config_key in d:
+            return d[config_key]
+    return default_value
+
+
 def compare_files_vtu(
         first_file: str,
         second_file: str,
         file_type: str,
-        tolerance: float = 1e-12
+        tolerance: float = 1e-12,
+        field_tolerance: Dict[str, float] = None
         ):
     """Compare files of vtu type.
 
@@ -452,6 +463,8 @@ def compare_files_vtu(
         Vtu files
     tolerance:
         Max acceptable absolute difference
+    field_tolerance:
+        Dictionary of individual field tolerances
 
     Returns
     -------
@@ -490,6 +503,12 @@ def compare_files_vtu(
 
     nfields = point_data1.GetNumberOfArrays()
     max_field_errors = [0 for _ in range(nfields)]
+
+    if field_tolerance is None:
+        field_tolerance = {}
+    field_specific_tols = [configurate(point_data1.GetArrayName(i),
+        field_tolerance, tolerance) for i in range(nfields)]
+
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
@@ -507,19 +526,25 @@ def compare_files_vtu(
             raise ValueError("Fidelity test failed: Mismatched data array sizes")
 
         # verify individual values w/in given tolerance
-        print(f"Field: {point_data2.GetArrayName(i)}", end=" ")
+        fieldname = point_data1.GetArrayName(i)
+        print(f"Field: {fieldname}", end=" ")
         for j in range(arr1.GetSize()):
             test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
             if test_err > max_field_errors[i]:
                 max_field_errors[i] = test_err
-        print(f"Max Error: {max_field_errors[i]}")
+        print(f"Max Error: {max_field_errors[i]}", end=" ")
+        print(f"Tolerance: {field_specific_tols[i]}")
 
-    violation = any([max_field_errors[i] > tolerance for i in range(nfields)])
-    if violation:
+    violated_tols = []
+    for i in range(nfields):
+        if max_field_errors[i] > field_specific_tols[i]:
+            violated_tols.append(field_specific_tols[i])
+
+    if violated_tols:
         raise ValueError("Fidelity test failed: Mismatched data array "
-                                 f"values {tolerance=}.")
+                                 f"values {violated_tols=}.")
 
-    print("VTU Fidelity test completed successfully with tolerance", tolerance)
+    print("VTU Fidelity test completed successfully")
 
 
 class _Hdf5Reader:
