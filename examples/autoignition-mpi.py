@@ -51,6 +51,8 @@ from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
 from mirgecom.utils import force_evaluation
+from mirgecom.limiter import bound_preserving_limiter
+from mirgecom.fluid import make_conserved
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -500,9 +502,25 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
+    def limiter(cv, temp=None):
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(discr, cv.species_mass_fractions[i], mmax=1.0)
+            for i in range(nspecies)
+        ])
+
+        kin_energy = 0.5*np.dot(cv.velocity, cv.velocity)
+
+        energy_lim = cv.mass*(
+            gas_model.eos.get_internal_energy(temp, species_mass_fractions=spec_lim)
+            + kin_energy
+        )
+
+        return make_conserved(dim=dim, mass=cv.mass, energy=energy_lim,
+                       momentum=cv.momentum, species_mass=cv.mass*spec_lim)
+
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
+        fluid_state = construct_fluid_state(limiter(cv, temp=tseed), tseed)
         dv = fluid_state.dv
 
         try:

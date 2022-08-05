@@ -294,7 +294,7 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
 
 def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
                                       state):
-    """Generate Leap code to advance all state at the same timestep, without substepping.
+    """Generate Leap code to advance all states with uniform dt, without substepping.
 
     Parameters
     ----------
@@ -334,7 +334,7 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
                   max_steps=None, component_id="state", pre_step_callback=None,
                   post_step_callback=None, force_eval=None, local_dt=False):
-    """Determine what stepper we're using and advance the state from (t) to (t_final).
+    """Determine what stepper is used and advance the state from (t) to (t_final).
 
     Parameters
     ----------
