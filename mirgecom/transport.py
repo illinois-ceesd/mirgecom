@@ -302,8 +302,8 @@ class ArtificialViscosityTransportDiv(TransportModel):
     def av_viscosity(self, cv, dv, eos):
         r"""Get the artificial viscosity for the gas."""
         actx = cv.array_context
-        return actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
-                               + dv.speed_of_sound**2)
+        return self._av_mu*actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
+                                        + dv.speed_of_sound**2)
 
     def bulk_viscosity(self, cv: ConservedVars,
                        dv: GasDependentVars,
