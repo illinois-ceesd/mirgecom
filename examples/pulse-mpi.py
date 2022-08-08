@@ -103,10 +103,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     if lazy:
         actx = actx_class(comm, queue, mpi_base_tag=12000,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+                allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx,
+                                           alignment=0, queue=queue)))
     else:
         actx = actx_class(comm, queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
+                allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx,
+                                           alignment=0, queue=queue)),
                 force_device_scalars=True)
 
     # timestepping control
