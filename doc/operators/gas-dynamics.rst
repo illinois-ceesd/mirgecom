@@ -12,4 +12,5 @@ Gas Dynamics
 .. automodule:: mirgecom.navierstokes
 .. automodule:: mirgecom.boundary
 .. automodule:: mirgecom.flux
+.. automodule:: mirgecom.limiter
 .. automodule:: mirgecom.symbolic_fluid
