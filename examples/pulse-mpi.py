@@ -29,7 +29,6 @@ from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
@@ -90,6 +89,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     num_parts = comm.Get_size()
 
     from mirgecom.simutil import global_reduce as _global_reduce
+    from mirgecom.simutil import get_reasonable_memory_pool
+
     global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
@@ -101,15 +102,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000,
-                allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx,
-                                           alignment=0, queue=queue)))
+        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
-        actx = actx_class(comm, queue,
-                allocator=cl_tools.SVMPool(cl_tools.SVMAllocator(cl_ctx,
-                                           alignment=0, queue=queue)),
-                force_device_scalars=True)
+        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
     # timestepping control
     current_step = 0
