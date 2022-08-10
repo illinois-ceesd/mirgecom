@@ -372,8 +372,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     print(eoc_rec)
     # Expected convergence rates from Hesthaven/Warburton book
     expected_order = order+1 if order % 2 == 0 else order
-    assert(eoc_rec.order_estimate() >= expected_order - 0.5
-                or eoc_rec.max_error() < 1e-11)
+    assert (eoc_rec.order_estimate() >= expected_order - 0.5
+            or eoc_rec.max_error() < 1e-11)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
@@ -438,7 +438,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ])
 
     linf_err = actx.to_numpy(op.norm(discr, rhs, np.inf))
-    assert(linf_err < 1e-11)
+    assert linf_err < 1e-11
 
     # Now check stability
 

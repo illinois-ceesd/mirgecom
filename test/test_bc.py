@@ -36,6 +36,7 @@ from mirgecom.eos import IdealSingleGas
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
 from grudge.dof_desc import as_dofdesc
+from mirgecom.fluid import make_conserved
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
@@ -64,129 +65,6 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     actx = actx_factory()
     order = 1
     from mirgecom.boundary import FarfieldBoundary
-
-    # Try creating the boundary with various invalid settings
-    try:
-        bndry = FarfieldBoundary(numdim=dim)
-        raise AssertionError("Allowed creation of invalid farfield boundary.")
-    except ValueError:
-        pass
-
-    try:
-        ff_vel_bad = np.zeros(dim+1)
-        bndry = FarfieldBoundary(numdim=dim, free_stream_velocity=ff_vel_bad)
-        raise AssertionError("Allowed creation of invalid farfield boundary.")
-    except ValueError:
-        pass
-
-    try:
-        ff_vel = np.zeros(dim)
-        bndry = FarfieldBoundary(numdim=dim, free_stream_velocity=ff_vel)
-        raise AssertionError("Allowed creation of invalid farfield boundary.")
-    except ValueError:
-        pass
-
-    # check underspec'd free-stream condition
-    for i in range(3):
-        ptd = [None, None, None]
-        ptd[i] = 1
-        try:
-            bndry = FarfieldBoundary(numdim=dim, free_stream_velocity=ff_vel,
-                                     free_stream_pressure=ptd[0],
-                                     free_stream_temperature=ptd[1],
-                                     free_stream_density=ptd[2])
-            raise AssertionError("Allowed creation of invalid farfield boundary, "
-                                 "free_stream_(pressure, temperature, density) = "
-                                 f"{ptd}")
-        except ValueError:
-            pass
-
-    # check overspec'd
-    ptd = [1, 1, 1]
-    try:
-        bndry = FarfieldBoundary(numdim=dim, free_stream_velocity=ff_vel,
-                                 free_stream_pressure=ptd[0],
-                                 free_stream_temperature=ptd[1],
-                                 free_stream_density=ptd[2])
-        raise AssertionError("Allowed creation of invalid farfield boundary, "
-                             "free_stream_(pressure, temperature, density) = "
-                             f"{ptd}")
-    except ValueError:
-        pass
-
-    # Same checks for mixture states
-    nspec = 10
-    free_stream_y = (1,)*nspec
-    bad_free_stream_y = (1,)*(nspec-1)
-    try:
-        bndry = FarfieldBoundary(numdim=dim, numspecies=nspec,
-                                 free_stream_velocity=ff_vel,
-                                 free_stream_pressure=ptd[0],
-                                 free_stream_temperature=ptd[1],
-                                 free_stream_density=ptd[2])
-        raise AssertionError("Allowed creation of invalid mixture farfield boundary,"
-                             " free_stream_mass_fractions missing.")
-    except ValueError:
-        pass
-
-    try:
-        bndry = FarfieldBoundary(numdim=dim, numspecies=nspec,
-                                 free_stream_mass_fractions=bad_free_stream_y,
-                                 free_stream_velocity=ff_vel,
-                                 free_stream_pressure=ptd[0],
-                                 free_stream_temperature=ptd[1],
-                                 free_stream_density=ptd[2])
-        raise AssertionError("Allowed creation of invalid mixture farfield "
-                             "boundary, invalid free_stream_mass_fractions.")
-    except ValueError:
-        pass
-
-    for dens in [1, None]:
-        ptd = [1, 1, dens]
-        try:
-            bndry = FarfieldBoundary(numdim=dim, numspecies=nspec,
-                                     free_stream_mass_fractions=free_stream_y,
-                                     free_stream_velocity=ff_vel,
-                                     free_stream_pressure=ptd[0],
-                                     free_stream_temperature=ptd[1],
-                                     free_stream_density=ptd[2])
-            if dens is not None:
-                raise AssertionError("Allowed creation of invalid mixture farfield "
-                                     "boundary, invalid free_stream_mass_fractions.")
-        except ValueError:
-            if dens is None:
-                raise AssertionError("Failed to create farfield with valid inputs.")
-            pass
-
-    for i in range(2):
-        ptd = [None, None, None]
-        ptd[i] = 1
-        try:
-            bndry = FarfieldBoundary(numdim=dim, numspecies=nspec,
-                                     free_stream_mass_fractions=free_stream_y,
-                                     free_stream_velocity=ff_vel,
-                                     free_stream_pressure=ptd[0],
-                                     free_stream_temperature=ptd[1],
-                                     free_stream_density=ptd[2])
-            raise AssertionError("Allowed creation of invalid farfield boundary, "
-                                 "free_stream_(pressure, temperature, density) = "
-                                 f"{ptd}")
-        except ValueError:
-            pass
-
-    # Finally, check that all non-mixture valid settings are allowed
-    for i in range(3):
-        ptd = [1, 1, 1]
-        ptd[i] = None
-        try:
-            bndry = FarfieldBoundary(numdim=dim, free_stream_velocity=ff_vel,
-                                     free_stream_pressure=ptd[0],
-                                     free_stream_temperature=ptd[1],
-                                     free_stream_density=ptd[2])
-        except ValueError:
-            raise AssertionError("Disallowed creation of valid farfield boundary, "
-                                 "free_stream_(pressure, temperature, density) = "
-                                 f"{ptd}")
 
     gamma = 1.4
     kappa = 3.0
@@ -347,6 +225,129 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                 assert actx.np.all(ff_bndry_state.momentum_density[idim]
                                    == ff_momentum[idim])
             assert actx.np.all(ff_bndry_state.energy_density == ff_energy)
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
+def test_outflow_boundary(actx_factory, dim, flux_func):
+    """Check OutflowBoundary boundary treatment."""
+    actx = actx_factory()
+    order = 1
+    from mirgecom.boundary import OutflowBoundary
+
+    kappa = 3.0
+    sigma = 5.0
+
+    gas_const = 1.0
+    flowbnd_press = 1.0/1.01
+    flowbnd_press_bc = 2.*flowbnd_press - 1.
+
+    c = np.sqrt(1.4)
+    print(f"{flowbnd_press=}")
+    print(f"{flowbnd_press_bc=}")
+    print(f"{c=}")
+
+    eos = IdealSingleGas(gas_const=gas_const)
+
+    from mirgecom.transport import SimpleTransport
+    from mirgecom.initializers import Uniform
+
+    gas_model = GasModel(eos=eos,
+                         transport=SimpleTransport(viscosity=sigma,
+                                                   thermal_conductivity=kappa))
+    bndry = OutflowBoundary(boundary_pressure=flowbnd_press)
+
+    npts_geom = 17
+    a = 1.0
+    b = 2.0
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+
+    discr = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(discr.nodes())
+    nhat = actx.thaw(discr.normal(BTAG_ALL))
+    print(f"{nhat=}")
+
+    # utility to compare stuff on the boundary only
+    # from functools import partial
+    # bnd_norm = partial(op.norm, discr, p=np.inf, dd=BTAG_ALL)
+
+    logger.info(f"Number of {dim}d elems: {mesh.nelements}")
+
+    # for velocities in each direction
+    # err_max = 0.0
+    for vdir in range(dim):
+        vel = np.zeros(shape=(dim,))
+
+        # for velocity directions +1, and -1
+        for parity in [1.0, -1.0]:
+            vel[vdir] = parity
+
+            initializer = Uniform(dim=dim, velocity=vel)
+            uniform_cv = initializer(nodes, eos=gas_model.eos)
+            uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              uniform_state, gas_model)
+
+            ones = 0*state_minus.mass_density + 1.0
+            print(f"Volume state: {uniform_state=}")
+            temper = uniform_state.temperature
+            speed_of_sound = uniform_state.speed_of_sound
+            print(f"Volume state: {temper=}")
+            print(f"Volume state: {speed_of_sound=}")
+
+            flowbnd_bndry_state = bndry.outflow_state(
+                discr, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+            print(f"{flowbnd_bndry_state=}")
+            flowbnd_bndry_temperature = flowbnd_bndry_state.temperature
+            flowbnd_bndry_pressure = flowbnd_bndry_state.pressure
+            print(f"{flowbnd_bndry_temperature=}")
+            print(f"{flowbnd_bndry_pressure=}")
+
+            nhat = actx.thaw(discr.normal(BTAG_ALL))
+
+            bnd_dens = 1.0*ones
+            bnd_mom = bnd_dens*vel
+            bnd_ener = flowbnd_press_bc/.4 + .5*np.dot(bnd_mom, bnd_mom)
+            exp_flowbnd_cv = make_conserved(dim=dim, mass=bnd_dens,
+                                              momentum=bnd_mom, energy=bnd_ener)
+
+            print(f"{exp_flowbnd_cv=}")
+
+            assert flowbnd_bndry_state.cv == exp_flowbnd_cv
+            assert actx.np.all(flowbnd_bndry_temperature == flowbnd_press_bc)
+            assert actx.np.all(flowbnd_bndry_pressure == flowbnd_press_bc)
+
+            vel = 1.5*vel
+
+            initializer = Uniform(dim=dim, velocity=vel)
+
+            uniform_cv = initializer(nodes, eos=gas_model.eos)
+            uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
+            state_minus = project_fluid_state(discr, "vol", BTAG_ALL,
+                                              uniform_state, gas_model)
+
+            print(f"Volume state: {uniform_state=}")
+            temper = uniform_state.temperature
+            speed_of_sound = uniform_state.speed_of_sound
+            print(f"Volume state: {temper=}")
+            print(f"Volume state: {speed_of_sound=}")
+
+            flowbnd_bndry_state = bndry.outflow_state(
+                discr, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+            print(f"{flowbnd_bndry_state=}")
+            flowbnd_bndry_temperature = flowbnd_bndry_state.temperature
+            print(f"{flowbnd_bndry_temperature=}")
+
+            nhat = actx.thaw(discr.normal(BTAG_ALL))
+
+            bnd_dens = 1.0*ones
+            bnd_mom = bnd_dens*vel
+            bnd_ener = flowbnd_press_bc/.4 + .5*np.dot(bnd_mom, bnd_mom)
+            exp_flowbnd_cv = make_conserved(dim=dim, mass=bnd_dens,
+                                              momentum=bnd_mom, energy=bnd_ener)
+
+            assert flowbnd_bndry_state.cv == exp_flowbnd_cv
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

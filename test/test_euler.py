@@ -506,7 +506,7 @@ def _euler_flow_stepper(actx, parameters):
     numerical_flux_func = parameters["numerical_flux_func"]
 
     if t_final <= t:
-        return(0.0)
+        return 0.0
 
     rank = 0
     dim = mesh.dim
@@ -622,7 +622,7 @@ def _euler_flow_stepper(actx, parameters):
     if maxerr > exittol:
         raise ValueError("Solution failed to follow expected result.")
 
-    return(maxerr)
+    return maxerr
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])

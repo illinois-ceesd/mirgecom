@@ -136,9 +136,9 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
             if dim > 1:
                 mode = sum(mode_id)
             if mode == cutoff:
-                assert(filter_coeff[mode_index] == expected_cutoff_coeff)
+                assert filter_coeff[mode_index] == expected_cutoff_coeff
             if mode == order:
-                assert(filter_coeff[mode_index] == expected_high_coeff)
+                assert filter_coeff[mode_index] == expected_high_coeff
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -221,7 +221,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     logger.info(f"Field = {field}")
     logger.info(f"Filtered = {filtered_field}")
     logger.info(f"Max Errors (poly) = {max_errors}")
-    assert(np.max(max_errors) < tol)
+    assert np.max(max_errors) < tol
 
     # Any order > cutoff fields should have higher modes attenuated
     threshold = 1e-3
@@ -255,4 +255,4 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         field_resid = unfiltered_spectrum - filtered_spectrum
         max_errors = [actx.to_numpy(op.norm(discr, v, np.inf)) for v in field_resid]
         # fields should be different, but not too different
-        assert(tol > np.max(max_errors) > threshold)
+        assert (tol > np.max(max_errors) > threshold)

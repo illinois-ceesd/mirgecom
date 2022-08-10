@@ -79,3 +79,6 @@ References
     `(DOI) <http://doi.org/10.1007/978-3-540-49834-6>`__
 .. [Mengaldo_2014] G. Mengaldo (2009), A Guide to the Implementation of Boundary Conditions in Compact \
     High-Order Methods for Compressible Aerodynamics `(DOI) <https://doi.org/10.2514/6.2014-2923>`__
+.. [Zhang_2011] Z. Zhang and C.W. Shu (2011), Maximum-principle-satisfying and positivity-preserving \
+    high-order schemes for conservation laws, Proceedings of the Royal Society A, 467 2134 \
+    `(DOI) <https://doi.org/10.1098/rspa.2011.0153>`__
