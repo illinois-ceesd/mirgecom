@@ -89,8 +89,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     num_parts = comm.Get_size()
 
     from mirgecom.simutil import global_reduce as _global_reduce
-    from mirgecom.simutil import get_reasonable_memory_pool
-
     global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
@@ -102,6 +100,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
+    from mirgecom.simutil import get_reasonable_memory_pool
     alloc = get_reasonable_memory_pool(cl_ctx, queue)
 
     if lazy:
