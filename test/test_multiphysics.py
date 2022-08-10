@@ -152,8 +152,8 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     linf_err_lower = actx.to_numpy(op.norm(dcoll, rhs[0], np.inf, dd=dd_vol_lower))
     linf_err_upper = actx.to_numpy(op.norm(dcoll, rhs[1], np.inf, dd=dd_vol_upper))
 
-    assert(linf_err_lower < 1e-9)
-    assert(linf_err_upper < 1e-9)
+    assert linf_err_lower < 1e-9
+    assert linf_err_upper < 1e-9
 
 
 @pytest.mark.parametrize("order", [2, 3])
@@ -375,8 +375,8 @@ def test_thermally_coupled_fluid_wall(
             op.norm(dcoll, rhs[1], np.inf, dd=dd_vol_wall)
             / op.norm(dcoll, wall_temp, np.inf, dd=dd_vol_wall))
 
-        assert(linf_err_fluid < 1e-6)
-        assert(linf_err_wall < 1e-6)
+        assert linf_err_fluid < 1e-6
+        assert linf_err_wall < 1e-6
 
         # Now check accuracy/stability
 
@@ -460,10 +460,12 @@ def test_thermally_coupled_fluid_wall(
     print("L^inf error (wall):")
     print(eoc_rec_wall)
 
-    assert(eoc_rec_fluid.order_estimate() >= order - 0.5
-                or eoc_rec_fluid.max_error() < 1e-11)
-    assert(eoc_rec_wall.order_estimate() >= order - 0.5
-                or eoc_rec_wall.max_error() < 1e-11)
+    assert (
+        eoc_rec_fluid.order_estimate() >= order - 0.5
+        or eoc_rec_fluid.max_error() < 1e-11)
+    assert (
+        eoc_rec_wall.order_estimate() >= order - 0.5
+        or eoc_rec_wall.max_error() < 1e-11)
 
 
 if __name__ == "__main__":
