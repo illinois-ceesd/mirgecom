@@ -37,6 +37,7 @@ from pytools.obj_array import (
 )
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
@@ -375,7 +376,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
                                 momentum=dir_mom, species_mass=dir_mf)
         dir_bval = make_conserved(dim, mass=dir_mass, energy=dir_e,
                                   momentum=dir_mom, species_mass=dir_mf)
-        state_tpair = TracePair(BTAG_ALL,
+        state_tpair = TracePair(as_dofdesc(BTAG_ALL),
                                 interior=make_fluid_state(dir_bval, gas_model),
                                 exterior=make_fluid_state(dir_bc, gas_model))
 

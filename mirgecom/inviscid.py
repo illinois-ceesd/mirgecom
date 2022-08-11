@@ -40,6 +40,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
 import grudge.op as op
 from mirgecom.fluid import make_conserved
 
@@ -224,8 +226,9 @@ def inviscid_facial_flux_hll(state_pair, gas_model, normal):
 
 def inviscid_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs,
-        domain_boundary_states, quadrature_tag=None,
-        numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0):
+        domain_boundary_states, quadrature_tag=DISCR_TAG_BASE,
+        numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0,
+        volume_dd=DD_VOLUME_ALL):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the inviscid contributions
@@ -242,38 +245,42 @@ def inviscid_flux_on_element_boundary(
         The physical model constructs for the gas_model
 
     boundaries
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     interior_state_pairs
         A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
 
     domain_boundary_states
        A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
-       keyed by btags in *boundaries*.
+       keyed by boundary domain tags in *boundaries*.
 
     quadrature_tag
-        An optional identifier denoting a particular quadrature
-        discretization to use during operator evaluations.
-        The default value is *None*.
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
 
     numerical_flux_func
         The numerical flux function to use in computing the boundary flux.
 
     time: float
         Time
+
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to compute the flux.
     """
-    from grudge.dof_desc import as_dofdesc
+    dd_vol_quad = volume_dd.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     def _interior_flux(state_pair):
         return op.project(dcoll,
-            state_pair.dd, state_pair.dd.with_dtag("all_faces"),
+            state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
                 state_pair, gas_model,
                 state_pair.int.array_context.thaw(dcoll.normal(state_pair.dd))))
 
     def _boundary_flux(dd_bdry, boundary, state_minus):
         return op.project(dcoll,
-            dd_bdry, dd_bdry.with_dtag("all_faces"),
+            dd_bdry, dd_allfaces_quad,
             boundary.inviscid_divergence_flux(
                 dcoll, dd_bdry, gas_model, state_minus=state_minus,
                 numerical_flux_func=numerical_flux_func, time=time))
@@ -287,10 +294,10 @@ def inviscid_flux_on_element_boundary(
         # Domain boundary faces
         + sum(
             _boundary_flux(
-                as_dofdesc(btag).with_discr_tag(quadrature_tag),
+                dd_vol_quad.with_domain_tag(bdtag),
                 boundary,
-                domain_boundary_states[btag])
-            for btag, boundary in boundaries.items())
+                domain_boundary_states[bdtag])
+            for bdtag, boundary in boundaries.items())
     )
 
     return inviscid_flux_bnd

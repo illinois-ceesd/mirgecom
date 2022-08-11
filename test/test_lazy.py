@@ -102,15 +102,15 @@ def _isclose(dcoll, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #     cl_ctx = ctx_factory()
 #     actx, dcoll = _op_test_fixture(cl_ctx)
 #
-#     from grudge.dof_desc import DTAG_BOUNDARY
+#     from grudge.dof_desc import BoundaryDomainTag
 #     from mirgecom.diffusion import (
 #         _gradient_operator,
 #         DirichletDiffusionBoundary,
 #         NeumannDiffusionBoundary)
 #
 #     boundaries = {
-#         DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
-#         DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
+#         BoundaryDomainTag("x"): DirichletDiffusionBoundary(0),
+#         BoundaryDomainTag("y"): NeumannDiffusionBoundary(0)
 #     }
 #
 #     def op(u):
@@ -173,15 +173,15 @@ def test_lazy_op_diffusion(op_test_data, order):
     eager_actx, lazy_actx, get_dcoll = op_test_data
     dcoll = get_dcoll(order)
 
-    from grudge.dof_desc import DTAG_BOUNDARY
+    from grudge.dof_desc import BoundaryDomainTag
     from mirgecom.diffusion import (
         diffusion_operator,
         DirichletDiffusionBoundary,
         NeumannDiffusionBoundary)
 
     boundaries = {
-        DTAG_BOUNDARY("x"): DirichletDiffusionBoundary(0),
-        DTAG_BOUNDARY("y"): NeumannDiffusionBoundary(0)
+        BoundaryDomainTag("x"): DirichletDiffusionBoundary(0),
+        BoundaryDomainTag("y"): NeumannDiffusionBoundary(0)
     }
 
     def diffusion_op(kappa, u):
@@ -239,9 +239,9 @@ def _get_scalar_lump():
         dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
         spec_amplitudes=np.ones(3))
 
-    def _my_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _my_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(init(x_vec=nodes, eos=gas_model.eos,
                                      **kwargs), gas_model)

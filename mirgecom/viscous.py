@@ -45,6 +45,8 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
 
 import grudge.op as op
 
@@ -335,8 +337,9 @@ def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
 def viscous_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
-        grad_t, interior_grad_t_pairs, quadrature_tag=None,
-        numerical_flux_func=viscous_facial_flux_central, time=0.0):
+        grad_t, interior_grad_t_pairs, quadrature_tag=DISCR_TAG_BASE,
+        numerical_flux_func=viscous_facial_flux_central, time=0.0,
+        volume_dd=DD_VOLUME_ALL):
     """Compute the viscous boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the viscous contributions
@@ -351,14 +354,15 @@ def viscous_flux_on_element_boundary(
         The physical model constructs for the gas model
 
     boundaries
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     interior_state_pairs
         Trace pairs of :class:`~mirgecom.gas_model.FluidState` for the interior faces
 
     domain_boundary_states
        A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
-       keyed by btags in *boundaries*.
+       keyed by boundary domain tags in *boundaries*.
 
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
        The gradient of the fluid conserved quantities.
@@ -374,41 +378,42 @@ def viscous_flux_on_element_boundary(
        Trace pairs for the temperature gradient on interior faces
 
     quadrature_tag
-        An optional identifier denoting a particular quadrature
-        discretization to use during operator evaluations.
-        The default value is *None*.
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
 
     numerical_flux_func
         The numerical flux function to use in computing the boundary flux.
 
     time: float
         Time
-    """
-    from grudge.dof_desc import as_dofdesc
 
-    dd_base = as_dofdesc("vol")
+    volume_dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor of the volume on which to compute the flux.
+    """
+    dd_base = volume_dd
+    dd_vol_quad = dd_base.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     # {{{ - Viscous flux helpers -
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def _fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
         return op.project(dcoll,
-            state_pair.dd, state_pair.dd.with_dtag("all_faces"),
+            state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
                 dcoll=dcoll, gas_model=gas_model, state_pair=state_pair,
                 grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair))
 
     # viscous part of bcs applied here
-    def _fvisc_divergence_flux_boundary(dd_btag, boundary, state_minus):
-        # Make sure we fields on the quadrature grid
-        # restricted to the tag *btag*
+    def _fvisc_divergence_flux_boundary(bdtag, boundary, state_minus):
+        dd_bdry = dd_vol_quad.with_domain_tag(bdtag)
         return op.project(
-            dcoll, dd_btag, dd_btag.with_dtag("all_faces"),
+            dcoll, dd_bdry, dd_allfaces_quad,
             boundary.viscous_divergence_flux(
-                dcoll=dcoll, btag=dd_btag, gas_model=gas_model,
+                dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
                 state_minus=state_minus,
-                grad_cv_minus=op.project(dcoll, dd_base, dd_btag, grad_cv),
-                grad_t_minus=op.project(dcoll, dd_base, dd_btag, grad_t),
+                grad_cv_minus=op.project(dcoll, dd_base, dd_bdry, grad_cv),
+                grad_t_minus=op.project(dcoll, dd_base, dd_bdry, grad_t),
                 time=time, numerical_flux_func=numerical_flux_func))
 
     # }}} viscous flux helpers
@@ -420,9 +425,10 @@ def viscous_flux_on_element_boundary(
         (
             # Domain boundary contributions for the viscous terms
             sum(_fvisc_divergence_flux_boundary(
-                as_dofdesc(btag).with_discr_tag(quadrature_tag),
-                boundary, domain_boundary_states[btag])
-                for btag, boundary in boundaries.items())
+                bdtag,
+                boundary,
+                domain_boundary_states[bdtag])
+                for bdtag, boundary in boundaries.items())
 
             # Interior interface contributions for the viscous terms
             + sum(
@@ -436,7 +442,7 @@ def viscous_flux_on_element_boundary(
     return bnd_term
 
 
-def get_viscous_timestep(dcoll, state):
+def get_viscous_timestep(dcoll, state, *, volume_dd=DD_VOLUME_ALL):
     """Routine returns the the node-local maximum stable viscous timestep.
 
     Parameters
@@ -457,7 +463,8 @@ def get_viscous_timestep(dcoll, state):
     """
     from grudge.dt_utils import characteristic_lengthscales
 
-    length_scales = characteristic_lengthscales(state.array_context, dcoll)
+    length_scales = characteristic_lengthscales(
+        state.array_context, dcoll, dd=volume_dd)
 
     nu = 0
     d_alpha_max = 0
@@ -475,7 +482,7 @@ def get_viscous_timestep(dcoll, state):
     )
 
 
-def get_viscous_cfl(dcoll, dt, state):
+def get_viscous_cfl(dcoll, dt, state, *, volume_dd=DD_VOLUME_ALL):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
@@ -498,7 +505,7 @@ def get_viscous_cfl(dcoll, dt, state):
 
         The CFL at each node.
     """
-    return dt / get_viscous_timestep(dcoll, state=state)
+    return dt / get_viscous_timestep(dcoll, state=state, volume_dd=volume_dd)
 
 
 def get_local_max_species_diffusivity(actx, d_alpha):

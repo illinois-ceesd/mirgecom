@@ -230,9 +230,9 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         from grudge.shortcuts import make_visualizer
         vis = make_visualizer(dcoll, order)
 
-    from grudge.dof_desc import DD_VOLUME_MODAL, DD_VOLUME
+    from grudge.dof_desc import DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL
 
-    modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    modal_map = dcoll.connection_from_dds(DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL)
 
     for field_order in range(cutoff+1, cutoff+4):
         coeff = [1.0 / (i + 1) for i in range(field_order+1)]

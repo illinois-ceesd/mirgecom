@@ -270,9 +270,9 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(vortex_soln, gas_model)
 
-        def _vortex_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
+        def _vortex_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
@@ -350,9 +350,9 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(lump_soln, gas_model)
 
-        def _lump_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
+        def _lump_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
                                     gas_model)
@@ -445,9 +445,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(lump_soln, gas_model)
 
-        def _my_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
+        def _my_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
@@ -664,9 +664,9 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
 
-        def _vortex_boundary(dcoll, btag, state_minus, gas_model, **kwargs):
+        def _vortex_boundary(dcoll, dd_bdry, state_minus, gas_model, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
