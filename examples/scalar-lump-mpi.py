@@ -26,7 +26,6 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 from functools import partial
 from pytools.obj_array import make_obj_array
 
@@ -94,13 +93,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
+    from mirgecom.simutil import get_reasonable_memory_pool
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
-        actx = actx_class(comm, queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-                force_device_scalars=True)
+        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
     # timestepping control
     current_step = 0

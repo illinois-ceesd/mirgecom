@@ -7,6 +7,7 @@ General utilities
 .. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
 .. autofunction:: global_reduce
+.. autofunction:: get_reasonable_memory_pool
 
 Diagnostic utilities
 --------------------
@@ -576,6 +577,21 @@ def species_fraction_anomaly_relaxation(cv, alpha=1.):
 def force_evaluation(actx, expn):
     """Wrap freeze/thaw forcing evaluation of expressions."""
     return actx.thaw(actx.freeze(expn))
+
+
+def get_reasonable_memory_pool(ctx, queue):
+    """Return an SVM or buffer memory pool based on what the device supports."""
+    from pyopencl.characterize import has_coarse_grain_buffer_svm
+    import pyopencl.tools as cl_tools
+
+    if has_coarse_grain_buffer_svm(queue.device) and hasattr(cl_tools, "SVMPool"):
+        logger.info("Using SVM-based memory pool")
+        return cl_tools.SVMPool(cl_tools.SVMAllocator(  # pylint: disable=no-member
+            ctx, alignment=0, queue=queue))
+    else:
+        from warnings import warn
+        warn("No SVM support, returning a CL buffer-based memory pool")
+        return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
 
 
 def configurate(config_key, config_object=None, default_value=None):
