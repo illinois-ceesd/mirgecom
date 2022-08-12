@@ -61,9 +61,18 @@ def grad_facial_flux(u_tpair, normal):
 
 def diffusion_facial_flux(kappa_tpair, grad_u_tpair, normal):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$."""
+    actx = grad_u_tpair.int[0].array_context
+
+    def harmonic_mean(x, y):
+        x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+        return 2*x*y/x_plus_y
+
+    kappa_harmonic_mean = harmonic_mean(kappa_tpair.int, kappa_tpair.ext)
+
     flux_tpair = TracePair(grad_u_tpair.dd,
-        interior=-kappa_tpair.int * np.dot(grad_u_tpair.int, normal),
-        exterior=-kappa_tpair.ext * np.dot(grad_u_tpair.ext, normal))
+        interior=-kappa_harmonic_mean * np.dot(grad_u_tpair.int, normal),
+        exterior=-kappa_harmonic_mean * np.dot(grad_u_tpair.ext, normal))
+
     return flux_tpair.avg
 
 
