@@ -145,9 +145,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 3
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     vis_timer = None

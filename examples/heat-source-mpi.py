@@ -111,8 +111,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 3
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                    mpi_communicator=comm)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
