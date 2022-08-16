@@ -157,7 +157,7 @@ class _AVRTag:
     pass
 
 
-def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
+def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
                           kappa=1., s0=-6., time=0, operator_states_quad=None,
                           grad_cv=None, quadrature_tag=None, boundary_kwargs=None,
                           indicator=None, divergence_numerical_flux=num_flux_central,
@@ -225,27 +225,27 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
             if "time" in boundary_kwargs:
                 time = boundary_kwargs["time"]
 
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     def interp_to_vol_quad(u):
-        return op.project(discr, "vol", dd_vol, u)
+        return op.project(dcoll, "vol", dd_vol, u)
 
     if operator_states_quad is None:
         from mirgecom.gas_model import make_operator_fluid_states
         operator_states_quad = make_operator_fluid_states(
-            discr, fluid_state, gas_model, boundaries, quadrature_tag)
+            dcoll, fluid_state, gas_model, boundaries, quadrature_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
 
     # Get smoothness indicator based on mass component
     if indicator is None:
-        indicator = smoothness_indicator(discr, fluid_state.mass_density,
+        indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                          kappa=kappa, s0=s0)
 
     if grad_cv is None:
         from mirgecom.navierstokes import grad_cv_operator
-        grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
+        grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                    time=time, quadrature_tag=quadrature_tag,
                                    operator_states_quad=operator_states_quad)
 
@@ -254,8 +254,8 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
 
     def central_flux_div(utpair):
         dd = utpair.dd
-        normal = actx.thaw(discr.normal(dd))
-        return op.project(discr, dd, dd.with_dtag("all_faces"),
+        normal = actx.thaw(dcoll.normal(dd))
+        return op.project(dcoll, dd, dd.with_dtag("all_faces"),
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
                           divergence_numerical_flux(utpair.int, utpair.ext)@normal)
@@ -264,20 +264,20 @@ def av_laplacian_operator(discr, boundaries, fluid_state, alpha, gas_model=None,
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
         + sum(central_flux_div(interp_to_surf_quad(tpair=tpair))
-              for tpair in interior_trace_pairs(discr, r, tag=_AVRTag))
+              for tpair in interior_trace_pairs(dcoll, r, tag=_AVRTag))
 
         # Contributions from boundary fluxes
         + sum(boundaries[btag].av_flux(
-            discr,
+            dcoll,
             btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
             diffusion=r) for btag in boundaries)
     )
 
     # Return the AV RHS term
-    return -div_operator(discr, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
+    return -div_operator(dcoll, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
 
 
-def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
+def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
     r"""Calculate the smoothness indicator.
 
     Parameters
@@ -341,7 +341,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
         )
 
     # Convert to modal solution representation
-    modal_map = discr.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
     uhat = modal_map(u)
 
     # Compute smoothness indicator value
@@ -362,7 +362,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
                                          )))
                          .reshape(-1, 1)),
                         uhat[grp.index].shape))
-                for grp in discr.discr_from_dd("vol").groups
+                for grp in dcoll.discr_from_dd("vol").groups
             )
         )
     else:
@@ -374,7 +374,7 @@ def smoothness_indicator(discr, u, kappa=1.0, s0=-6.0):
                     vec=uhat[grp.index],
                     modes_active_flag=highest_mode(grp)
                 )["result"]
-                for grp in discr.discr_from_dd("vol").groups
+                for grp in dcoll.discr_from_dd("vol").groups
             )
         )
 
