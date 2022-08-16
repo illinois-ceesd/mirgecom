@@ -40,8 +40,6 @@ from mirgecom.integrators import rk4_step
 from mirgecom.wave import wave_operator
 from mirgecom.utils import force_evaluation
 
-import pyopencl.tools as cl_tools
-
 from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
@@ -88,13 +86,13 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     else:
         queue = cl.CommandQueue(cl_ctx)
 
+    from mirgecom.simutil import get_reasonable_memory_pool
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
-        actx = actx_class(comm, queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-                force_device_scalars=True)
+        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
     if restart_step is None:
 

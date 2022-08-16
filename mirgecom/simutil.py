@@ -7,6 +7,7 @@ General utilities
 .. autofunction:: get_sim_timestep
 .. autofunction:: write_visfile
 .. autofunction:: global_reduce
+.. autofunction:: get_reasonable_memory_pool
 
 Diagnostic utilities
 --------------------
@@ -468,6 +469,29 @@ def create_parallel_grid(comm, generate_grid):
          "instead. This function will disappear August 1, 2021",
          DeprecationWarning, stacklevel=2)
     return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
+
+
+def get_reasonable_memory_pool(ctx, queue):
+    """Return an SVM or buffer memory pool based on what the device supports."""
+    from pyopencl.characterize import has_coarse_grain_buffer_svm
+    import pyopencl.tools as cl_tools
+
+    if has_coarse_grain_buffer_svm(queue.device) and hasattr(cl_tools, "SVMPool"):
+        logger.info("Using SVM-based memory pool")
+        return cl_tools.SVMPool(cl_tools.SVMAllocator(  # pylint: disable=no-member
+            ctx, alignment=0, queue=queue))
+    else:
+        from warnings import warn
+
+        if not has_coarse_grain_buffer_svm(queue.device):
+            warn(f"No SVM support on {queue.device}, returning a CL buffer-based "
+                  "memory pool. If you are running with PoCL-cuda, please update "
+                  "your PoCL installation.")
+        else:
+            warn("No SVM memory pool support with your version of PyOpenCL, "
+                 "returning a CL buffer-based memory pool. "
+                 "Please update your PyOpenCL version.")
+        return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
 
 
 def configurate(config_key, config_object=None, default_value=None):
