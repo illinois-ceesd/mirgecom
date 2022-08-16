@@ -590,7 +590,14 @@ def get_reasonable_memory_pool(ctx, queue):
             ctx, alignment=0, queue=queue))
     else:
         from warnings import warn
-        warn("No SVM support, returning a CL buffer-based memory pool")
+        if not has_coarse_grain_buffer_svm(queue.device):
+            warn(f"No SVM support on {queue.device}, returning a CL buffer-based "
+                  "memory pool. If you are running with PoCL-cuda, please update "
+                  "your PoCL installation.")
+        else:
+            warn("No SVM memory pool support with your version of PyOpenCL, "
+                 "returning a CL buffer-based memory pool. "
+                 "Please update your PyOpenCL version.")
         return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
 
 
