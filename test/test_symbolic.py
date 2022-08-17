@@ -298,9 +298,9 @@ def test_symbolic_evaluation(actx_factory):
         b=(np.pi/2,)*2,
         nelements_per_axis=(4,)*2)
 
-    discr = create_discretization_collection(actx, mesh, order=2)
+    dcoll = create_discretization_collection(actx, mesh, order=2)
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     sym_coords = pmbl.make_sym_vector("x", 2)
 
@@ -313,8 +313,8 @@ def test_symbolic_evaluation(actx_factory):
 
     expected_f = np.exp(-0.5) * actx.np.cos(nodes[0]) * actx.np.sin(nodes[1])
     assert actx.to_numpy(
-        op.norm(discr, f - expected_f, np.inf)
-        / op.norm(discr, expected_f, np.inf)) < 1e-12
+        op.norm(dcoll, f - expected_f, np.inf)
+        / op.norm(dcoll, expected_f, np.inf)) < 1e-12
 
     # Vector
     sym_f = make_obj_array([
@@ -328,8 +328,8 @@ def test_symbolic_evaluation(actx_factory):
         actx.np.cos(nodes[0]),
         actx.np.sin(nodes[1])])
     assert actx.to_numpy(
-        op.norm(discr, f - expected_f, np.inf)
-        / op.norm(discr, expected_f, np.inf)) < 1e-12
+        op.norm(dcoll, f - expected_f, np.inf)
+        / op.norm(dcoll, expected_f, np.inf)) < 1e-12
 
     # Array container
     from mirgecom.fluid import make_conserved
@@ -353,7 +353,7 @@ def test_symbolic_evaluation(actx_factory):
     # This awkward construction works around an issue with empty
     # arrays inside the CV: (https://github.com/inducer/grudge/issues/266)
     from mirgecom.simutil import compare_fluid_solutions
-    assert max(compare_fluid_solutions(discr, f, expected_f)) < 1e-12
+    assert max(compare_fluid_solutions(dcoll, f, expected_f)) < 1e-12
 
 
 if __name__ == "__main__":
