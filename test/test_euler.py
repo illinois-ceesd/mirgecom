@@ -104,7 +104,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = create_discretization_collection(actx, mesh, order=order,
+        dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
 
         if use_overintegration:
@@ -112,14 +112,14 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         else:
             quadrature_tag = None
 
-        zeros = discr.zeros(actx)
+        zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
 
-        mass_input = discr.zeros(actx) + 1
-        energy_input = discr.zeros(actx) + 2.5
+        mass_input = dcoll.zeros(actx) + 1
+        energy_input = dcoll.zeros(actx) + 2.5
 
         mom_input = make_obj_array(
-            [discr.zeros(actx) for i in range(discr.dim)]
+            [dcoll.zeros(actx) for i in range(dcoll.dim)]
         )
 
         mass_frac_input = flat_obj_array(
@@ -135,13 +135,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         fluid_state = make_fluid_state(cv, gas_model)
 
         expected_rhs = make_conserved(
-            dim, q=make_obj_array([discr.zeros(actx)
+            dim, q=make_obj_array([dcoll.zeros(actx)
                                    for i in range(num_equations)])
         )
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = \
-            euler_operator(discr, state=fluid_state, gas_model=gas_model,
+            euler_operator(dcoll, state=fluid_state, gas_model=gas_model,
                            boundaries=boundaries, time=0.0,
                            quadrature_tag=quadrature_tag,
                            inviscid_numerical_flux_func=numerical_flux_func)
@@ -166,7 +166,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         )
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -180,7 +180,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 
         # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
-            mom_input[i] = discr.zeros(actx) + (-1.0) ** i
+            mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
 
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
@@ -190,7 +190,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(
-            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
             time=0.0, inviscid_numerical_flux_func=numerical_flux_func)
         rhs_resid = inviscid_rhs - expected_rhs
 
@@ -254,7 +254,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        discr = create_discretization_collection(actx, mesh, order=order,
+        dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
 
         if use_overintegration:
@@ -262,7 +262,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         else:
             quadrature_tag = None
 
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
 
         # Init soln with Vortex and expected RHS = 0
         vortex = Vortex2D(center=[0, 0], velocity=[0, 0])
@@ -270,9 +270,9 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(vortex_soln, gas_model)
 
-        def _vortex_boundary(discr, btag, gas_model, state_minus, **kwargs):
+        def _vortex_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(btag)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
@@ -281,11 +281,11 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         }
 
         inviscid_rhs = euler_operator(
-            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
             time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
             quadrature_tag=quadrature_tag)
 
-        err_max = max_component_norm(discr, inviscid_rhs, np.inf)
+        err_max = max_component_norm(dcoll, inviscid_rhs, np.inf)
 
         eoc_rec.add_data_point(1.0 / nel_1d, err_max)
 
@@ -332,7 +332,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = create_discretization_collection(actx, mesh, order=order,
+        dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
 
         if use_overintegration:
@@ -340,7 +340,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         else:
             quadrature_tag = None
 
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
 
         # Init soln with Lump and expected RHS = 0
         center = np.zeros(shape=(dim,))
@@ -350,9 +350,9 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(lump_soln, gas_model)
 
-        def _lump_boundary(discr, btag, gas_model, state_minus, **kwargs):
+        def _lump_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(btag)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
                                     gas_model)
@@ -362,13 +362,13 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         }
 
         inviscid_rhs = euler_operator(
-            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
             time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
             quadrature_tag=quadrature_tag
         )
-        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
+        expected_rhs = lump.exact_rhs(dcoll, cv=lump_soln, time=0)
 
-        err_max = max_component_norm(discr, inviscid_rhs-expected_rhs, np.inf)
+        err_max = max_component_norm(dcoll, inviscid_rhs-expected_rhs, np.inf)
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -419,7 +419,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        discr = create_discretization_collection(actx, mesh, order=order,
+        dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
 
         if use_overintegration:
@@ -427,7 +427,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         else:
             quadrature_tag = None
 
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
 
         centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
         spec_y0s = np.ones(shape=(nspecies,))
@@ -445,9 +445,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(lump_soln, gas_model)
 
-        def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
+        def _my_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(btag)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
@@ -456,17 +456,17 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         }
 
         inviscid_rhs = euler_operator(
-            discr, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
             time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
             quadrature_tag=quadrature_tag
         )
-        expected_rhs = lump.exact_rhs(discr, cv=lump_soln, time=0)
+        expected_rhs = lump.exact_rhs(dcoll, cv=lump_soln, time=0)
 
         print(f"inviscid_rhs = {inviscid_rhs}")
         print(f"expected_rhs = {expected_rhs}")
 
         err_max = actx.to_numpy(
-            op.norm(discr, (inviscid_rhs-expected_rhs), np.inf))
+            op.norm(dcoll, (inviscid_rhs-expected_rhs), np.inf))
         if err_max > maxxerr:
             maxxerr = err_max
 
@@ -512,7 +512,7 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    discr = create_discretization_collection(actx, mesh, order,
+    dcoll = create_discretization_collection(actx, mesh, order,
                                              quadrature_order=2*order+1)
 
     if use_overintegration:
@@ -520,13 +520,13 @@ def _euler_flow_stepper(actx, parameters):
     else:
         quadrature_tag = None
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     cv = initializer(nodes)
     gas_model = GasModel(eos=eos)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    sdt = cfl * get_inviscid_timestep(discr, fluid_state)
+    sdt = cfl * get_inviscid_timestep(dcoll, fluid_state)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -539,7 +539,7 @@ def _euler_flow_stepper(actx, parameters):
         f"EOS:             {eosname}"
     )
 
-    vis = make_visualizer(discr, order)
+    vis = make_visualizer(dcoll, order)
 
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)
@@ -571,7 +571,7 @@ def _euler_flow_stepper(actx, parameters):
 
     def rhs(t, q):
         fluid_state = make_fluid_state(q, gas_model)
-        return euler_operator(discr, fluid_state, boundaries=boundaries,
+        return euler_operator(dcoll, fluid_state, boundaries=boundaries,
                               gas_model=gas_model, time=t,
                               inviscid_numerical_flux_func=numerical_flux_func,
                               quadrature_tag=quadrature_tag)
@@ -603,20 +603,20 @@ def _euler_flow_stepper(actx, parameters):
                 write_soln(state=cv)
 
         cv = rk4_step(cv, t, dt, rhs)
-        cv = filter_modally(discr, "vol", cutoff, frfunc, cv)
+        cv = filter_modally(dcoll, "vol", cutoff, frfunc, cv)
         fluid_state = make_fluid_state(cv, gas_model)
 
         t += dt
         istep += 1
 
-        sdt = cfl * get_inviscid_timestep(discr, fluid_state)
+        sdt = cfl * get_inviscid_timestep(dcoll, fluid_state)
 
     if nstepstatus > 0:
         logger.info("Writing final dump.")
         maxerr = max(write_soln(cv, False))
     else:
         expected_result = initializer(nodes, time=t)
-        maxerr = max_component_norm(discr, cv-expected_result, np.inf)
+        maxerr = max_component_norm(dcoll, cv-expected_result, np.inf)
 
     logger.info(f"Max Error: {maxerr}")
     if maxerr > exittol:
@@ -664,9 +664,9 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
 
-        def _vortex_boundary(discr, btag, state_minus, gas_model, **kwargs):
+        def _vortex_boundary(dcoll, btag, state_minus, gas_model, **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(btag)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
