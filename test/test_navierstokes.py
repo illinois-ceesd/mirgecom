@@ -98,13 +98,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = create_discretization_collection(actx, mesh, order=order)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
-        zeros = discr.zeros(actx)
+        zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
 
-        mass_input = discr.zeros(actx) + 1
-        energy_input = discr.zeros(actx) + 2.5
+        mass_input = dcoll.zeros(actx) + 1
+        energy_input = dcoll.zeros(actx) + 2.5
 
         mom_input = make_obj_array(
             [float(i)*ones for i in range(dim)]
@@ -121,7 +121,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             species_mass=species_mass_input)
 
         expected_rhs = make_conserved(
-            dim, q=make_obj_array([discr.zeros(actx)
+            dim, q=make_obj_array([dcoll.zeros(actx)
                                    for i in range(num_equations)])
         )
         mu = 1.0
@@ -136,7 +136,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
         boundaries = {BTAG_ALL: DummyBoundary()}
 
-        ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+        ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
                              state=state, time=0.0)
 
         rhs_resid = ns_rhs - expected_rhs
@@ -157,19 +157,19 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        assert actx.to_numpy(op.norm(discr, rho_resid, np.inf)) < tolerance
-        assert actx.to_numpy(op.norm(discr, rhoe_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(dcoll, rho_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(dcoll, rhoe_resid, np.inf)) < tolerance
         for i in range(dim):
-            assert actx.to_numpy(op.norm(discr, mom_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(dcoll, mom_resid[i], np.inf)) < tolerance
         for i in range(nspecies):
-            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(dcoll, rhoy_resid[i], np.inf)) < tolerance
 
-        err_max = actx.to_numpy(op.norm(discr, rho_resid, np.inf))
+        err_max = actx.to_numpy(op.norm(dcoll, rho_resid, np.inf))
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
-            mom_input[i] = discr.zeros(actx) + (-1.0) ** i
+            mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
 
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
@@ -177,7 +177,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
 
         state = make_fluid_state(gas_model=gas_model, cv=cv)
         boundaries = {BTAG_ALL: DummyBoundary()}
-        ns_rhs = ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+        ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
                              state=state, time=0.0)
 
         rhs_resid = ns_rhs - expected_rhs
@@ -187,15 +187,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
 
-        assert actx.to_numpy(op.norm(discr, rho_resid, np.inf)) < tolerance
-        assert actx.to_numpy(op.norm(discr, rhoe_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(dcoll, rho_resid, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(dcoll, rhoe_resid, np.inf)) < tolerance
 
         for i in range(dim):
-            assert actx.to_numpy(op.norm(discr, mom_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(dcoll, mom_resid[i], np.inf)) < tolerance
         for i in range(nspecies):
-            assert actx.to_numpy(op.norm(discr, rhoy_resid[i], np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(dcoll, rhoy_resid[i], np.inf)) < tolerance
 
-        err_max = actx.to_numpy(op.norm(discr, rho_resid, np.inf))
+        err_max = actx.to_numpy(op.norm(dcoll, rho_resid, np.inf))
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
 
     logger.info(
@@ -257,7 +257,7 @@ class FluidCase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """Return :class:`dict` mapping boundary tags to bc at time *t*."""
         pass
 
@@ -294,10 +294,10 @@ class FluidManufacturedSolution(FluidCase):
         """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
 
-        def _boundary_state_func(discr, btag, gas_model, state_minus, time=0,
+        def _boundary_state_func(dcoll, btag, gas_model, state_minus, time=0,
                                  **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(btag)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(self.get_solution(x=nodes, t=time), gas_model)
 
@@ -325,9 +325,9 @@ class UniformSolution(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
-        return super().get_boundaries(discr, actx, t)
+        return super().get_boundaries(dcoll, actx, t)
 
     def get_solution(self, x, t):
         """Return sym soln."""
@@ -390,7 +390,7 @@ class ShearFlow(FluidManufacturedSolution):
         periodic = (False,)*self._dim
         return _get_box_mesh(self._dim, a, b, nx, periodic=periodic)
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
         return super().get_boundaries()
 
@@ -455,9 +455,9 @@ class IsentropicVortex(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
-        return super().get_boundaries(discr, actx, t)
+        return super().get_boundaries(dcoll, actx, t)
 
     def get_solution(self, x, t):
         """
@@ -551,9 +551,9 @@ class TestSolution(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
-        return super().get_boundaries(discr, actx, t)
+        return super().get_boundaries(dcoll, actx, t)
 
     def get_solution(self, x, t):
         """Return sym soln."""
@@ -626,13 +626,13 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     mesh = man_soln.get_mesh(n)
 
     from mirgecom.discretization import create_discretization_collection
-    discr = create_discretization_collection(actx, mesh, order)
+    dcoll = create_discretization_collection(actx, mesh, order)
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     source_eval = evaluate(sym_source, t=0, x=nodes)
 
-    source_norms = componentwise_norms(discr, source_eval)
+    source_norms = componentwise_norms(dcoll, source_eval)
 
     assert source_norms.mass < tol
     assert source_norms.energy < tol
@@ -676,10 +676,10 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
     from pytools.convergence import EOCRecorder
     eoc_energy = EOCRecorder()
 
-    def _boundary_state_func(discr, btag, gas_model, state_minus, time=0,
+    def _boundary_state_func(dcoll, btag, gas_model, state_minus, time=0,
                              **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = actx.thaw(bnd_discr.nodes())
         boundary_cv = exact_soln(x=nodes)
         return make_fluid_state(boundary_cv, gas_model)
@@ -703,11 +703,11 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         print(f"{nx=}")
         mesh = _get_box_mesh(dim, a, b, n=nx)
 
-        discr = create_discretization_collection(actx, mesh, order)
+        dcoll = create_discretization_collection(actx, mesh, order)
         from grudge.dt_utils import h_max_from_volume
-        h_max = actx.to_numpy(h_max_from_volume(discr))
+        h_max = actx.to_numpy(h_max_from_volume(dcoll))
 
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
         print(f"{nodes=}")
 
         cv_exact = exact_soln(x=nodes)
@@ -717,14 +717,14 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         fluid_state = exact_fluid_state
 
         # Exact solution should have RHS=0, so the RHS itself is the residual
-        ns_rhs, grad_cv, grad_t = ns_operator(discr, gas_model=gas_model,
+        ns_rhs, grad_cv, grad_t = ns_operator(dcoll, gas_model=gas_model,
                                               state=fluid_state,
                                               boundaries=boundaries,
                                               return_gradients=True)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, order)
+            vis = make_visualizer(dcoll, order)
             vis.write_vtk_file("shear_flow_test_{order}_{n}.vtu".format(
                 order=order, n=n), [
                     ("shear_flow", exact_fluid_state.cv),
@@ -733,7 +733,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
                     ], overwrite=True)
 
         print(f"{grad_cv=}")
-        rhs_norms = componentwise_norms(discr, ns_rhs)
+        rhs_norms = componentwise_norms(dcoll, ns_rhs)
 
         # these ones should be exact at all orders
         assert rhs_norms.mass < tol
@@ -817,9 +817,9 @@ class RoySolution(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
-        return super().get_boundaries(discr, actx, t)
+        return super().get_boundaries(dcoll, actx, t)
 
 
 @pytest.mark.parametrize("order", [1])
@@ -896,12 +896,12 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         mesh = man_soln.get_mesh(n)
 
-        discr = create_discretization_collection(actx, mesh, order)
-        nodes = actx.thaw(discr.nodes())
+        dcoll = create_discretization_collection(actx, mesh, order)
+        nodes = actx.thaw(dcoll.nodes())
 
         from grudge.dt_utils import characteristic_lengthscales
         char_len = actx.to_numpy(
-            op.norm(discr, characteristic_lengthscales(actx, discr), np.inf)
+            op.norm(dcoll, characteristic_lengthscales(actx, dcoll), np.inf)
         )
 
         source_eval = evaluate(sym_source, t=0, x=nodes)
@@ -914,8 +914,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         # prs_eos = eos.pressure(cv=cv_exact)
         # prs_resid = (prs_exact - prs_eos)/prs_exact
         # tmp_resid = (tmp_exact - tmp_eos)/tmp_exact
-        # prs_err = actx.to_numpy(op.norm(discr, prs_resid, np.inf))
-        # tmp_err = actx.to_numpy(op.norm(discr, tmp_resid, np.inf))
+        # prs_err = actx.to_numpy(op.norm(dcoll, prs_resid, np.inf))
+        # tmp_err = actx.to_numpy(op.norm(dcoll, tmp_resid, np.inf))
 
         # print(f"{prs_exact=}\n{prs_eos=}")
         # print(f"{tmp_exact=}\n{tmp_eos=}")
@@ -925,17 +925,17 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
         if isinstance(source_eval.mass, DOFArray):
             from mirgecom.simutil import componentwise_norms
-            source_norms = componentwise_norms(discr, source_eval)
+            source_norms = componentwise_norms(dcoll, source_eval)
         else:
             source_norms = source_eval
 
         logger.info(f"{source_norms=}")
         logger.info(f"{source_eval=}")
 
-        def _boundary_state_func(discr, btag, gas_model, state_minus, time=0,
+        def _boundary_state_func(dcoll, btag, gas_model, state_minus, time=0,
                                  **kwargs):
             actx = state_minus.array_context
-            bnd_discr = discr.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(btag)
             nodes = actx.thaw(bnd_discr.nodes())
             boundary_cv = evaluate(sym_cv, x=nodes, t=time)
             return make_fluid_state(boundary_cv, gas_model)
@@ -946,14 +946,14 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         }
 
         from mirgecom.simutil import max_component_norm
-        err_scale = max_component_norm(discr, cv_exact)
+        err_scale = max_component_norm(dcoll, cv_exact)
 
         def get_rhs(t, cv):
             from mirgecom.gas_model import make_fluid_state
             fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-            rhs_val = ns_operator(discr, boundaries=boundaries, state=fluid_state,
+            rhs_val = ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
                                   gas_model=gas_model) + source_eval
-            print(f"{max_component_norm(discr, rhs_val/err_scale)=}")
+            print(f"{max_component_norm(dcoll, rhs_val/err_scale)=}")
             return rhs_val
 
         t = 0.
@@ -968,8 +968,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
             cv = rk4_step(cv, t, dt, get_rhs)
             t += dt
 
-        soln_resid = compare_fluid_solutions(discr, cv, cv_exact)
-        cv_err_scales = componentwise_norms(discr, cv_exact)
+        soln_resid = compare_fluid_solutions(dcoll, cv, cv_exact)
+        cv_err_scales = componentwise_norms(dcoll, cv_exact)
 
         max_err = soln_resid[0]/cv_err_scales.mass
         max_err = max(max_err, soln_resid[1]/cv_err_scales.energy)

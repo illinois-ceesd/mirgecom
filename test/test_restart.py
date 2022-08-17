@@ -49,8 +49,8 @@ def test_restart_cv(actx_factory, nspecies):
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
     order = 3
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     mass = nodes[0]
     energy = nodes[1]
@@ -76,4 +76,4 @@ def test_restart_cv(actx_factory, nspecies):
 
     resid = test_state - restart_data["state"]
     from mirgecom.simutil import max_component_norm
-    assert max_component_norm(discr, resid, np.inf) == 0
+    assert max_component_norm(dcoll, resid, np.inf) == 0
