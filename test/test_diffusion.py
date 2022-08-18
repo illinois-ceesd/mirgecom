@@ -88,7 +88,7 @@ class HeatProblem(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         """
         Return a :class:`dict` that maps boundary tags to boundary conditions at
         time *t*.
@@ -129,7 +129,7 @@ class DecayingTrig(HeatProblem):
     def get_kappa(self, x, t, u):
         return self._kappa
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         boundaries = {}
 
         for i in range(self.dim-1):
@@ -167,8 +167,8 @@ class DecayingTrigTruncatedDomain(HeatProblem):
     def get_kappa(self, x, t, u):
         return self._kappa
 
-    def get_boundaries(self, discr, actx, t):
-        nodes = actx.thaw(discr.nodes())
+    def get_boundaries(self, dcoll, actx, t):
+        nodes = actx.thaw(dcoll.nodes())
 
         sym_exact_u = self.get_solution(
             pmbl.make_sym_vector("x", self.dim), pmbl.var("t"))
@@ -181,14 +181,14 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         for i in range(self.dim-1):
             lower_btag = DTAG_BOUNDARY("-"+str(i))
             upper_btag = DTAG_BOUNDARY("+"+str(i))
-            upper_grad_u = op.project(discr, "vol", upper_btag, exact_grad_u)
-            normal = actx.thaw(discr.normal(upper_btag))
+            upper_grad_u = op.project(dcoll, "vol", upper_btag, exact_grad_u)
+            normal = actx.thaw(dcoll.normal(upper_btag))
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_btag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_btag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
         lower_btag = DTAG_BOUNDARY("-"+str(self.dim-1))
         upper_btag = DTAG_BOUNDARY("+"+str(self.dim-1))
-        upper_u = op.project(discr, "vol", upper_btag, exact_u)
+        upper_u = op.project(dcoll, "vol", upper_btag, exact_u)
         boundaries[lower_btag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_btag] = DirichletDiffusionBoundary(upper_u)
 
@@ -223,7 +223,7 @@ class OscillatingTrigVarDiff(HeatProblem):
         kappa = 1 + 0.2*kappa
         return kappa
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         boundaries = {}
 
         for i in range(self.dim-1):
@@ -261,7 +261,7 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
     def get_kappa(self, x, t, u):
         return 1 + u**3
 
-    def get_boundaries(self, discr, actx, t):
+    def get_boundaries(self, dcoll, actx, t):
         boundaries = {}
 
         for i in range(self.dim-1):
@@ -326,9 +326,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     for n in scales:
         mesh = p.get_mesh(n)
 
-        discr = create_discretization_collection(actx, mesh, order)
+        dcoll = create_discretization_collection(actx, mesh, order)
 
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
 
         def get_rhs(t, u):
             kappa = p.get_kappa(nodes, t, u)
@@ -338,7 +338,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
                 quadrature_tag = DISCR_TAG_BASE
             return (
                 diffusion_operator(
-                    discr, kappa=kappa, boundaries=p.get_boundaries(discr, actx, t),
+                    dcoll, kappa=kappa, boundaries=p.get_boundaries(dcoll, actx, t),
                     u=u, quadrature_tag=quadrature_tag)
                 + evaluate(sym_f, x=nodes, t=t))
 
@@ -355,13 +355,13 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         expected_u = p.get_solution(nodes, t)
 
         rel_linf_err = actx.to_numpy(
-            op.norm(discr, u - expected_u, np.inf)
-            / op.norm(discr, expected_u, np.inf))
+            op.norm(dcoll, u - expected_u, np.inf)
+            / op.norm(dcoll, expected_u, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, order+3)
+            vis = make_visualizer(dcoll, order+3)
             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
                 order=order, n=n), [
                     ("u", u),
@@ -388,9 +388,9 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     mesh = get_box_mesh(1, -1, 1, n)
 
-    discr = create_discretization_collection(actx, mesh, order)
+    dcoll = create_discretization_collection(actx, mesh, order)
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -423,13 +423,13 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     def get_rhs(t, u):
         return diffusion_operator(
-            discr, kappa=kappa, boundaries=boundaries, u=u)
+            dcoll, kappa=kappa, boundaries=boundaries, u=u)
 
     rhs = get_rhs(0, u_steady)
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, order+3)
+        vis = make_visualizer(dcoll, order+3)
         vis.write_vtk_file("diffusion_discontinuous_kappa_rhs_{order}.vtu"
             .format(order=order), [
                 ("kappa", kappa),
@@ -437,7 +437,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ("rhs", rhs),
                 ])
 
-    linf_err = actx.to_numpy(op.norm(discr, rhs, np.inf))
+    linf_err = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
     assert linf_err < 1e-11
 
     # Now check stability
@@ -467,7 +467,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
                 ("u_steady", u_steady),
                 ])
 
-    linf_diff = actx.to_numpy(op.norm(discr, u - u_steady, np.inf))
+    linf_diff = actx.to_numpy(op.norm(dcoll, u - u_steady, np.inf))
     assert linf_diff < 0.1
 
 
@@ -509,15 +509,15 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
 
             t = 1.23456789
 
-            discr_mirgecom = create_discretization_collection(actx, mesh,
+            dcoll_mirgecom = create_discretization_collection(actx, mesh,
                                                               order=order)
-            nodes_mirgecom = actx.thaw(discr_mirgecom.nodes())
+            nodes_mirgecom = actx.thaw(dcoll_mirgecom.nodes())
 
             u_mirgecom = p.get_solution(nodes_mirgecom, t)
 
             diffusion_u_mirgecom = diffusion_operator(
-                discr_mirgecom, kappa=discr_mirgecom.zeros(actx)+1.,
-                boundaries=p.get_boundaries(discr_mirgecom, actx, t),
+                dcoll_mirgecom, kappa=dcoll_mirgecom.zeros(actx)+1.,
+                boundaries=p.get_boundaries(dcoll_mirgecom, actx, t),
                 u=u_mirgecom)
 
             discr_ndg = ndgctx.get_discr(actx)
@@ -581,9 +581,9 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     mesh = p.get_mesh(n)
 
-    discr = create_discretization_collection(actx, mesh, order=4)
+    dcoll = create_discretization_collection(actx, mesh, order=4)
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     t = 1.23456789
 
@@ -592,24 +592,24 @@ def test_diffusion_obj_array_vectorize(actx_factory):
 
     kappa = p.get_kappa(nodes, t, u1)
 
-    boundaries = p.get_boundaries(discr, actx, t)
+    boundaries = p.get_boundaries(dcoll, actx, t)
 
     diffusion_u1 = diffusion_operator(
-        discr, kappa=kappa, boundaries=boundaries, u=u1)
+        dcoll, kappa=kappa, boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
     expected_diffusion_u1 = evaluate(sym_diffusion_u1, x=nodes, t=t)
     rel_linf_err = actx.to_numpy(
-        op.norm(discr, diffusion_u1 - expected_diffusion_u1, np.inf)
-        / op.norm(discr, expected_diffusion_u1, np.inf))
+        op.norm(dcoll, diffusion_u1 - expected_diffusion_u1, np.inf)
+        / op.norm(dcoll, expected_diffusion_u1, np.inf))
     assert rel_linf_err < 1.e-5
 
     boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
     diffusion_u_vector = diffusion_operator(
-        discr, kappa=kappa, boundaries=boundaries_vector, u=u_vector)
+        dcoll, kappa=kappa, boundaries=boundaries_vector, u=u_vector)
 
     assert isinstance(diffusion_u_vector, np.ndarray)
     assert diffusion_u_vector.shape == (2,)
@@ -619,8 +619,8 @@ def test_diffusion_obj_array_vectorize(actx_factory):
         evaluate(sym_diffusion_u2, x=nodes, t=t)
     ])
     rel_linf_err = actx.to_numpy(
-        op.norm(discr, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
-        / op.norm(discr, expected_diffusion_u_vector, np.inf))
+        op.norm(dcoll, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
+        / op.norm(dcoll, expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
 
 

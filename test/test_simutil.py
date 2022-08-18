@@ -51,9 +51,9 @@ def test_basic_cfd_healthcheck(actx_factory):
     )
 
     order = 3
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
-    zeros = discr.zeros(actx)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = dcoll.zeros(actx)
     ones = zeros + 1.0
 
     # Let's make a very bad state (negative mass)
@@ -67,8 +67,8 @@ def test_basic_cfd_healthcheck(actx_factory):
     pressure = eos.pressure(cv)
 
     from mirgecom.simutil import check_range_local
-    assert check_range_local(discr, "vol", mass, min_value=0, max_value=np.inf)
-    assert check_range_local(discr, "vol", pressure, min_value=1e-6,
+    assert check_range_local(dcoll, "vol", mass, min_value=0, max_value=np.inf)
+    assert check_range_local(dcoll, "vol", pressure, min_value=1e-6,
                              max_value=np.inf)
 
     # Let's make another very bad state (nans)
@@ -81,7 +81,7 @@ def test_basic_cfd_healthcheck(actx_factory):
     pressure = eos.pressure(cv)
 
     from mirgecom.simutil import check_naninf_local
-    assert check_naninf_local(discr, "vol", pressure)
+    assert check_naninf_local(dcoll, "vol", pressure)
 
     # Let's make one last very bad state (inf)
     mass = 1*ones
@@ -92,15 +92,15 @@ def test_basic_cfd_healthcheck(actx_factory):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
-    assert check_naninf_local(discr, "vol", pressure)
+    assert check_naninf_local(dcoll, "vol", pressure)
 
     # What the hey, test a good one
     energy = 2.5 + .5*np.dot(mom, mom)
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     pressure = eos.pressure(cv)
 
-    assert not check_naninf_local(discr, "vol", pressure)
-    assert not check_range_local(discr, "vol", pressure, min_value=0,
+    assert not check_naninf_local(dcoll, "vol", pressure)
+    assert not check_range_local(dcoll, "vol", pressure, min_value=0,
                                  max_value=np.inf)
 
 
@@ -120,9 +120,9 @@ def test_analytic_comparison(actx_factory):
     )
 
     order = 2
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
-    zeros = discr.zeros(actx)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = dcoll.zeros(actx)
     ones = zeros + 1.0
     mass = ones
     energy = ones
@@ -135,10 +135,10 @@ def test_analytic_comparison(actx_factory):
     resid = vortex_soln - cv
 
     expected_errors = actx.to_numpy(
-        flatten(componentwise_norms(discr, resid, order=np.inf), actx)).tolist()
+        flatten(componentwise_norms(dcoll, resid, order=np.inf), actx)).tolist()
 
-    errors = compare_fluid_solutions(discr, cv, cv)
+    errors = compare_fluid_solutions(dcoll, cv, cv)
     assert max(errors) == 0
 
-    errors = compare_fluid_solutions(discr, cv, vortex_soln)
+    errors = compare_fluid_solutions(dcoll, cv, vortex_soln)
     assert errors == expected_errors
