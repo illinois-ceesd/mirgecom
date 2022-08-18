@@ -53,11 +53,11 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
+def make_status_message(*, dcoll, t, step, dt, cfl, dependent_vars):
     r"""Make simulation status and health message."""
     dv = dependent_vars
-    _min = partial(op.nodal_min, discr, "vol")
-    _max = partial(op.nodal_max, discr, "vol")
+    _min = partial(op.nodal_min, dcoll, "vol")
+    _max = partial(op.nodal_max, dcoll, "vol")
     statusmsg = (
         f"Status: {step=} {t=}\n"
         f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"
