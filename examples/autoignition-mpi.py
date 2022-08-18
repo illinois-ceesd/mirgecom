@@ -26,7 +26,6 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -51,6 +50,8 @@ from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel
 from mirgecom.utils import force_evaluation
+from mirgecom.limiter import bound_preserving_limiter
+from mirgecom.fluid import make_conserved
 
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -99,13 +100,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
+    from mirgecom.simutil import get_reasonable_memory_pool
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
     if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
-        actx = actx_class(comm, queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-                force_device_scalars=True)
+        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
     # Some discretization parameters
     dim = 2
@@ -500,9 +501,25 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
+    def limiter(cv, temp=None):
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(discr, cv.species_mass_fractions[i], mmax=1.0)
+            for i in range(nspecies)
+        ])
+
+        kin_energy = 0.5*np.dot(cv.velocity, cv.velocity)
+
+        energy_lim = cv.mass*(
+            gas_model.eos.get_internal_energy(temp, species_mass_fractions=spec_lim)
+            + kin_energy
+        )
+
+        return make_conserved(dim=dim, mass=cv.mass, energy=energy_lim,
+                       momentum=cv.momentum, species_mass=cv.mass*spec_lim)
+
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(cv, tseed)
+        fluid_state = construct_fluid_state(limiter(cv, temp=tseed), tseed)
         dv = fluid_state.dv
 
         try:

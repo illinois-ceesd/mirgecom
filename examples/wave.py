@@ -26,7 +26,6 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.array as cla  # noqa
-import pyopencl.tools as cl_tools
 
 from pytools.obj_array import flat_obj_array
 
@@ -76,33 +75,25 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave.sqlite", mode="wu")
 
+    from mirgecom.simutil import get_reasonable_memory_pool
+
     if use_profiling:
         if lazy:
             raise RuntimeError("Cannot run lazy with profiling.")
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
-        actx = \
-            PyOpenCLProfilingArrayContext(
-                queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)),
-            )
+
+        alloc = get_reasonable_memory_pool(cl_ctx, queue)
+        actx = PyOpenCLProfilingArrayContext(queue, allocator=alloc)
     else:
         queue = cl.CommandQueue(cl_ctx)
+        alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
         if lazy:
-            actx = \
-                PytatoPyOpenCLArrayContext(
-                    queue,
-                    allocator=cl_tools.MemoryPool(
-                        cl_tools.ImmediateAllocator(queue)),
-                )
+            actx = PytatoPyOpenCLArrayContext(queue, allocator=alloc)
         else:
-            actx = \
-                PyOpenCLArrayContext(
-                    queue,
-                    allocator=cl_tools.MemoryPool(
-                        cl_tools.ImmediateAllocator(queue)),
-                    force_device_scalars=True
-                )
+            actx = PyOpenCLArrayContext(queue, allocator=alloc,
+                                        force_device_scalars=True)
 
     dim = 2
     nel_1d = 16
