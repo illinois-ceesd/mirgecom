@@ -498,7 +498,6 @@ def compare_files_vtu(
     """
     import vtk
     import xml.etree.ElementTree as Et
-    from warnings import warn
 
     # read files:
     if file_type == "vtu":
@@ -522,8 +521,8 @@ def compare_files_vtu(
         rank1 = numranks(first_file)
         rank2 = numranks(second_file)
         if rank1 is not rank2:
-            warn(f"File '{first_file}' has {rank1} ranks, "
-                f"but File {second_file} has {rank2} rank.")
+            raise ValueError(f"File '{first_file}' has {rank1} ranks, "
+                f"but File {second_file} has {rank2} ranks.")
 
     reader2.SetFileName(second_file)
     reader2.Update()
