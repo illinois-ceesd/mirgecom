@@ -174,8 +174,11 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
             state = force_evaluation(actx, state)
 
         istep += 1
+
         if local_dt:
-            t += 1
+            dt = force_evaluation(actx, dt)
+            t = force_evaluation(actx, t)
+            t = t + dt
             marching_loc = istep
         else:
             t += dt
