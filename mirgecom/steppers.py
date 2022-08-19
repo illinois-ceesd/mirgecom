@@ -174,8 +174,11 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
             state = force_evaluation(actx, state)
 
         istep += 1
+
         if local_dt:
-            t += 1
+            dt = force_evaluation(actx, dt)
+            t = force_evaluation(actx, t)
+            t = t + dt
             marching_loc = istep
         else:
             t += dt
@@ -337,7 +340,7 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
                   max_steps=None, component_id="state", pre_step_callback=None,
                   post_step_callback=None, force_eval=None, local_dt=False):
-    """Determine what stepper is used and advance the state from (t) to (t_final).
+    """Determine what stepper to use and advance the state from (t) to (t_final).
 
     Parameters
     ----------
