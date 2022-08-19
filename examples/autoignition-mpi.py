@@ -139,6 +139,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 5
     nhealth = 1
     nrestart = 5
+    nlimit = 1
+    limit_species = False
+    if nlimit > 0:
+        limit_species = True
 
     # }}}  Time stepping control
 
@@ -517,8 +521,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_conserved(dim=dim, mass=cv.mass, energy=energy_lim,
                        momentum=cv.momentum, species_mass=cv.mass*spec_lim)
 
+    limiter_compiled = actx.compile(limiter)
+
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
+
+        if limit_species:
+            cv = limiter_compiled(cv, temp=tseed)
+
         fluid_state = construct_fluid_state(limiter(cv, temp=tseed), tseed)
         dv = fluid_state.dv
 
@@ -589,6 +599,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         cv, tseed = state
         from mirgecom.gas_model import make_fluid_state
+        if limit_species:
+            cv = limiter(cv=cv, temp=tseed)
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
         fluid_operator_states = make_operator_fluid_states(
