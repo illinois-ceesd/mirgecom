@@ -512,7 +512,7 @@ def compare_files_vtu(
     output1 = reader1.GetOutput()
 
     # Check rank number
-    def numranks(filename):
+    def numranks(filename: str) -> int:
         tree = Et.parse(filename)
         root = tree.getroot()
         return len(root.findall(".//Piece"))
