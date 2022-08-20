@@ -520,7 +520,7 @@ def compare_files_vtu(
     if file_type == "pvtu":
         rank1 = numranks(first_file)
         rank2 = numranks(second_file)
-        if rank1 is not rank2:
+        if rank1 != rank2:
             raise ValueError(f"File '{first_file}' has {rank1} ranks, "
                 f"but file '{second_file}' has {rank2} ranks.")
 
