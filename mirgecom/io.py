@@ -37,7 +37,8 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
                       initname, eosname, casename,
-                      nelements=0, global_nelements=0):
+                      nelements=0, global_nelements=0,
+                      t_initial=0):
     """Create a summary of some general simulation parameters and inputs."""
     return (
         f"Initialization for Case({casename})\n"
@@ -45,6 +46,7 @@ def make_init_message(*, dim, order, dt, t_final,
         f"Num {dim}d order-{order} elements: {nelements}\n"
         f"Num global elements: {global_nelements}\n"
         f"Timestep:        {dt}\n"
+        f"Initial time:    {t_initial}\n"
         f"Final time:      {t_final}\n"
         f"CFL:             {cfl}\n"
         f"Constant CFL:    {constant_cfl}\n"

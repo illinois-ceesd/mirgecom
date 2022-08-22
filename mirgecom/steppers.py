@@ -173,10 +173,16 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         if force_eval:
             state = force_evaluation(actx, state)
 
-        istep = istep + 1
-        t = t + dt
+        istep += 1
 
-        marching_loc = istep if local_dt else t
+        if local_dt:
+            dt = force_evaluation(actx, dt)
+            t = force_evaluation(actx, t)
+            t = t + dt
+            marching_loc = istep
+        else:
+            t += dt
+            marching_loc = t
 
         if post_step_callback is not None:
             state, dt = post_step_callback(state=state, step=istep, t=t, dt=dt)
