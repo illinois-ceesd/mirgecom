@@ -80,7 +80,6 @@ from mirgecom.viscous import get_viscous_timestep
 from typing import List, Dict
 from grudge.discretization import DiscretizationCollection
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -641,6 +640,7 @@ def compare_files_vtu(
         If it fails the files contain data outside the given tolerance.
     """
     import vtk
+    import xml.etree.ElementTree as Et
 
     # read files:
     if file_type == "vtu":
@@ -653,6 +653,19 @@ def compare_files_vtu(
     reader1.SetFileName(first_file)
     reader1.Update()
     output1 = reader1.GetOutput()
+
+    # Check rank number
+    def numranks(filename: str) -> int:
+        tree = Et.parse(filename)
+        root = tree.getroot()
+        return len(root.findall(".//Piece"))
+
+    if file_type == "pvtu":
+        rank1 = numranks(first_file)
+        rank2 = numranks(second_file)
+        if rank1 != rank2:
+            raise ValueError(f"File '{first_file}' has {rank1} ranks, "
+                f"but file '{second_file}' has {rank2} ranks.")
 
     reader2.SetFileName(second_file)
     reader2.Update()
