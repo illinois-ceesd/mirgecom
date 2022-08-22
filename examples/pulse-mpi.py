@@ -152,10 +152,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    discr = create_discretization_collection(
+    dcoll = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -167,7 +167,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -205,7 +205,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     current_state = make_fluid_state(current_cv, gas_model)
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
 
     initname = "pulse"
     eosname = eos.__class__.__name__
@@ -225,7 +225,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields = [("cv", state),
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
 
@@ -247,8 +247,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(pressure):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", pressure) \
-           or check_range_local(discr, "vol", pressure, .8, 1.5):
+        if check_naninf_local(dcoll, "vol", pressure) \
+           or check_range_local(dcoll, "vol", pressure, .8, 1.5):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
@@ -287,7 +287,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl, t_final,
+        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
                               constant_cfl)
         return state, dt
 
@@ -302,12 +302,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return euler_operator(discr, state=fluid_state, time=t,
+        return euler_operator(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries,
                               gas_model=gas_model,
                               quadrature_tag=quadrature_tag)
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
