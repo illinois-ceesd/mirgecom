@@ -474,9 +474,9 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     return local_mesh, global_nelements
 
 
-def boundary_report(discr, boundaries, outfile_name):
+def boundary_report(dcoll, boundaries, outfile_name):
     """Generate a report of the grid boundaries."""
-    comm = discr.mpi_communicator
+    comm = dcoll.mpi_communicator
     nproc = 1
     rank = 0
     if comm is not None:
@@ -489,18 +489,18 @@ def boundary_report(discr, boundaries, outfile_name):
     local_report.seek(0, 2)
 
     for btag in boundaries:
-        boundary_discr = discr.discr_from_dd(btag)
+        boundary_discr = dcoll.discr_from_dd(btag)
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
         local_report.write(f"{btag}: {nnodes}\n")
 
     if nproc > 1:
         from meshmode.mesh import BTAG_PARTITION
         from grudge.trace_pair import connected_ranks
-        remote_ranks = connected_ranks(discr)
+        remote_ranks = connected_ranks(dcoll)
         local_report.write(f"remote_ranks: {remote_ranks}\n")
         rank_nodes = []
         for remote_rank in remote_ranks:
-            boundary_discr = discr.discr_from_dd(BTAG_PARTITION(remote_rank))
+            boundary_discr = dcoll.discr_from_dd(BTAG_PARTITION(remote_rank))
             nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
             rank_nodes.append(nnodes)
         local_report.write(f"nnodes_pb: {rank_nodes}\n")
