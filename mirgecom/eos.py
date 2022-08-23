@@ -279,7 +279,6 @@ class IdealSingleGas(GasEOS):
     .. automethod:: kinetic_energy
     .. automethod:: gamma
     .. automethod:: get_internal_energy
-    .. automethod:: smoothness
     """
 
     def __init__(self, gamma=1.4, gas_const=287.1):

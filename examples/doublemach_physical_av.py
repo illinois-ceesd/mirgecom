@@ -171,11 +171,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     timestepper = rk4_step
     timestepper = euler_step
     force_eval = True
-    t_final = 0.1
-    #t_final = 5.0e-3
-    # t_final = 0.6
+    t_final = 5.e-4
     current_cfl = 0.1
-    # current_dt = 1.e-4
     current_dt = 2.5e-5
     current_t = 0
     constant_cfl = False
@@ -565,7 +562,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         #                                     time=t)
                         smoothness = compute_smoothness(state, grad_cv)
 
-                        # this works, but seems a lot of work, not sure if it's really faster
+                        # this works, but seems a lot of work,
+                        # not sure if it's really faster
                         # avoids re-computing the temperature
                         from dataclasses import replace
                         force_evaluation(actx, smoothness)
