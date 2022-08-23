@@ -248,6 +248,11 @@ class MixtureEOS(GasEOS):
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
+        # MJA, it doesn't appear that we can have a None field embedded inside DV,
+        # make a dummy smoothness in this case
+        if smoothness is None:
+            smoothness = 0. * cv.mass
+
         return MixtureDependentVars(
             temperature=temperature,
             pressure=self.pressure(cv, temperature),

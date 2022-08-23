@@ -184,8 +184,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     force_eval = False
 
     # default health status bounds
-    health_pres_min = 1.0e-4
-    health_pres_max = 2.0e6
+    health_pres_min = 0.7
+    health_pres_max = 19.
     health_temp_min = 1e-4
     health_temp_max = 100
 

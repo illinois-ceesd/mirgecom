@@ -216,7 +216,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # i.o frequencies
     nstatus = 100
-    nviz = 100
+    nviz = 1
     nhealth = 100
     nrestart = 1000
     do_checkpoint = 0

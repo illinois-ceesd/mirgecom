@@ -629,7 +629,7 @@ class MulticomponentLump:
             rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None
+            spec_centers=None, sigma=1.
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -646,6 +646,8 @@ class MulticomponentLump:
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(dim,)``
+        sigma: float
+            std deviation of the gaussian
         """
         if center is None:
             center = np.zeros(shape=(dim,))
@@ -680,6 +682,7 @@ class MulticomponentLump:
         self._spec_y0s = spec_y0s
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
+        self._sigma = sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -720,7 +723,7 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = x_vec - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
+            r2 = np.dot(rel_pos, rel_pos)/(2*self._sigma**2)
             expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
