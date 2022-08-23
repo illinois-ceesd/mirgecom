@@ -548,7 +548,7 @@ class Lump:
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom)
 
-    def exact_rhs(self, discr, cv, time=0.0):
+    def exact_rhs(self, dcoll, cv, time=0.0):
         """
         Create the RHS for the lump-of-mass solution at time *t*, locations *x_vec*.
 
@@ -565,7 +565,7 @@ class Lump:
         """
         t = time
         actx = cv.array_context
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
         lump_loc = self._center + t * self._velocity
         # coordinates relative to lump center
         rel_center = make_obj_array(
@@ -730,7 +730,7 @@ class MulticomponentLump:
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, cv, time=0.0):
+    def exact_rhs(self, dcoll, cv, time=0.0):
         """
         Create a RHS for multi-component lump soln at time *t*, locations *x_vec*.
 
@@ -747,7 +747,7 @@ class MulticomponentLump:
         """
         t = time
         actx = cv.array_context
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
         loc_update = t * self._velocity
 
         mass = 0 * nodes[0] + self._rho0
@@ -1069,7 +1069,7 @@ class Uniform:
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=species_mass)
 
-    def exact_rhs(self, discr, cv, time=0.0):
+    def exact_rhs(self, dcoll, cv, time=0.0):
         """
         Create the RHS for the uniform solution. (Hint - it should be all zero).
 
@@ -1081,7 +1081,7 @@ class Uniform:
             Time at which RHS is desired (unused)
         """
         actx = cv.array_context
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
         mass = nodes[0].copy()
         mass[:] = 1.0
         massrhs = 0.0 * mass

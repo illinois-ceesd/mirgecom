@@ -176,7 +176,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         default_simplex_group_factory, QuadratureSimplexGroupFactory
 
     order = 2
-    discr = EagerDGDiscretization(
+    dcoll = EagerDGDiscretization(
         actx, local_mesh,
         discr_tag_to_group_factory={
             DISCR_TAG_BASE: default_simplex_group_factory(
@@ -185,7 +185,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         },
         mpi_communicator=comm
     )
-    nodes = thaw(discr.nodes(), actx)
+    nodes = thaw(dcoll.nodes(), actx)
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -195,7 +195,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches([
@@ -245,9 +245,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                          transport=SimpleTransport(viscosity=mu))
     exact = initializer(x_vec=nodes, eos=gas_model.eos)
 
-    def _boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
+    def _boundary_solution(dcoll, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = thaw(bnd_discr.nodes(), actx)
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             cv=state_minus.cv, **kwargs), gas_model)
@@ -277,7 +277,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     vis_timer = None
 
-    visualizer = make_visualizer(discr, order)
+    visualizer = make_visualizer(dcoll, order)
 
     eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -293,10 +293,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_write_status(step, t, dt, state, component_errors):
         dv = state.dv
         from grudge.op import nodal_min, nodal_max
-        p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-        p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
-        t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-        t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+        p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+        p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
+        t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+        t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
         if rank == 0:
             logger.info(f"----- Pressure({p_min}, {p_max})\n"
                         f"----- Temperature({t_min}, {t_max})\n"
@@ -311,7 +311,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("resid", resid)]
 
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True)
 
     def my_write_restart(step, t, state):
@@ -332,28 +332,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(state, dv, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure):
+        if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_range_local(discr, "vol", dv.pressure, 9.999e4,
+        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
                                            1.00101e5), op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
-        if check_naninf_local(discr, "vol", dv.temperature):
+        if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if global_reduce(check_range_local(discr, "vol", dv.temperature, 348, 350),
+        if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
                          op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         exittol = .1
@@ -369,11 +369,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         dv = fluid_state.dv
 
         if constant_cfl:
-            dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
+            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
                                            t_final, constant_cfl, local_dt)
         if local_dt:
             t = force_evaluation(actx, t)
-            dt = force_evaluation(actx, get_sim_timestep(discr, fluid_state, t, dt,
+            dt = force_evaluation(actx, get_sim_timestep(dcoll, fluid_state, t, dt,
                  current_cfl, constant_cfl=constant_cfl, local_dt=local_dt))
 
         try:
@@ -390,7 +390,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_health:
                 from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(discr, state, exact)
+                component_errors = compare_fluid_solutions(dcoll, state, exact)
                 health_errors = global_reduce(
                     my_health_check(state, dv, component_errors), op="lor")
                 if health_errors:
@@ -407,7 +407,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_status:  # needed because logging fails to make output
                 if component_errors is None:
                     from mirgecom.simutil import compare_fluid_solutions
-                    component_errors = compare_fluid_solutions(discr, state, exact)
+                    component_errors = compare_fluid_solutions(dcoll, state, exact)
                 my_write_status(step=step, t=t, dt=dt, state=fluid_state,
                                 component_errors=component_errors)
 
@@ -431,11 +431,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return ns_operator(discr, gas_model=gas_model, boundaries=boundaries,
+        return ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
                            state=fluid_state, time=t,
                            quadrature_tag=quadrature_tag)
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                  current_cfl, constant_cfl=constant_cfl, local_dt=local_dt)
     if local_dt:
         current_dt = force_evaluation(actx, current_dt)
@@ -457,10 +457,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info("Checkpointing final state ...")
     final_dv = current_state.dv
-    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                  current_cfl, constant_cfl=constant_cfl, local_dt=local_dt)
     from mirgecom.simutil import compare_fluid_solutions
-    component_errors = compare_fluid_solutions(discr, current_state.cv, exact)
+    component_errors = compare_fluid_solutions(dcoll, current_state.cv, exact)
 
     my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state)

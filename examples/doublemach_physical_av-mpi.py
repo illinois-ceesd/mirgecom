@@ -222,9 +222,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    discr = create_discretization_collection(actx, local_mesh, order=order,
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              mpi_communicator=comm)
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -292,13 +292,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     create_fluid_state = actx.compile(get_fluid_state)
 
     from grudge.dt_utils import characteristic_lengthscales
-    length_scales = characteristic_lengthscales(actx, discr)
+    length_scales = characteristic_lengthscales(actx, dcoll)
 
     from mirgecom.navierstokes import grad_cv_operator
 
     # compiled wrapper for grad_cv_operator
     def _grad_cv_operator(fluid_state, time):
-        return grad_cv_operator(discr=discr, gas_model=gas_model,
+        return grad_cv_operator(dcoll=dcoll, gas_model=gas_model,
                                 boundaries=boundaries,
                                 state=fluid_state,
                                 time=time,
@@ -343,7 +343,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     smoothness = None
     if use_av > 0:
-        smoothness = smoothness_indicator(discr, current_cv.mass,
+        smoothness = smoothness_indicator(dcoll, current_cv.mass,
                                           kappa=kappa, s0=s0)
         no_smoothness = 0.*smoothness
 
@@ -351,9 +351,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      smoothness=smoothness)
     force_evaluation(actx, current_state)
 
-    def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(dcoll, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
                                                **kwargs),
@@ -369,7 +369,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         DTAG_BOUNDARY("out"): OutflowBoundary(boundary_pressure=1.0),
     }
 
-    visualizer = make_visualizer(discr, order)
+    visualizer = make_visualizer(dcoll, order)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -393,11 +393,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def vol_min(x):
         from grudge.op import nodal_min
-        return actx.to_numpy(nodal_min(discr, "vol", x))[()]
+        return actx.to_numpy(nodal_min(dcoll, "vol", x))[()]
 
     def vol_max(x):
         from grudge.op import nodal_max
-        return actx.to_numpy(nodal_max(discr, "vol", x))[()]
+        return actx.to_numpy(nodal_max(dcoll, "vol", x))[()]
 
     def my_write_status(cv, dv, dt, cfl):
         status_msg = f"-------- dt = {dt:1.3e}, cfl = {cfl:1.4f}"
@@ -422,14 +422,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_get_timestep(t, dt, state):
         t_remaining = max(0, t_final - t)
         if constant_cfl:
-            ts_field = current_cfl * get_viscous_timestep(discr, state=state)
+            ts_field = current_cfl * get_viscous_timestep(dcoll, state=state)
             from grudge.op import nodal_min
-            dt = actx.to_numpy(nodal_min(discr, "vol", ts_field))
+            dt = actx.to_numpy(nodal_min(dcoll, "vol", ts_field))
             cfl = current_cfl
         else:
-            ts_field = get_viscous_cfl(discr, dt=dt, state=state)
+            ts_field = get_viscous_cfl(dcoll, dt=dt, state=state)
             from grudge.op import nodal_max
-            cfl = actx.to_numpy(nodal_max(discr, "vol", ts_field))
+            cfl = actx.to_numpy(nodal_max(dcoll, "vol", ts_field))
 
         return ts_field, cfl, min(t_remaining, dt)
 
@@ -440,7 +440,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         """
         exact_cv = initializer(x_vec=nodes, eos=gas_model.eos, time=t)
-        exact_smoothness = smoothness_indicator(discr, exact_cv.mass,
+        exact_smoothness = smoothness_indicator(dcoll, exact_cv.mass,
                                                   kappa=kappa, s0=s0)
         exact_state = create_fluid_state(cv=exact_cv,
                                          smoothness=exact_smoothness)
@@ -448,7 +448,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # try using the divergence to compute the smoothness field
         #exact_grad_cv = grad_cv_operator_compiled(fluid_state=exact_state,
                                                   #time=t)
-        exact_grad_cv = grad_cv_operator(discr, gas_model, boundaries,
+        exact_grad_cv = grad_cv_operator(dcoll, gas_model, boundaries,
                                          exact_state, time=current_t,
                                          quadrature_tag=quadrature_tag)
         from mirgecom.fluid import velocity_gradient
@@ -470,7 +470,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       # ("exact_dv", exact_state.dv),
                       ("mu", mu)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=vizname,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
                       step=step, t=t, overwrite=True)
 
     def my_write_restart(step, t, state):
@@ -495,31 +495,31 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         #       be changed accordingly.
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure):
+        if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_range_local(discr, "vol", dv.pressure,
+        if global_reduce(check_range_local(dcoll, "vol", dv.pressure,
                                            health_pres_min, health_pres_max),
                          op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
-        if check_naninf_local(discr, "vol", dv.temperature):
+        if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
         if global_reduce(
-                check_range_local(discr, "vol", dv.temperature,
+                check_range_local(dcoll, "vol", dv.temperature,
                                   health_temp_min, health_temp_max),
                 op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
@@ -540,7 +540,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 if use_av == 0 or use_av == 1:
                     fluid_state = create_fluid_state(cv=state)
                 elif use_av == 2:
-                    smoothness = smoothness_indicator(discr, state.mass,
+                    smoothness = smoothness_indicator(dcoll, state.mass,
                                                       kappa=kappa, s0=s0)
                     force_evaluation(actx, smoothness)
                     fluid_state = create_fluid_state(cv=state,
@@ -556,7 +556,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         # use the divergence to compute the smoothness field
                         force_evaluation(actx, t)
                         grad_cv = grad_cv_operator(
-                            discr, gas_model, boundaries, fluid_state,
+                            dcoll, gas_model, boundaries, fluid_state,
                             time=t, quadrature_tag=quadrature_tag)
                         # grad_cv = grad_cv_operator_compiled(fluid_state,
                         #                                     time=t)
@@ -600,7 +600,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_viz(step=step, t=t, fluid_state=fluid_state)
 
             if constant_cfl:
-                dt = get_sim_timestep(discr, fluid_state, t, dt,
+                dt = get_sim_timestep(dcoll, fluid_state, t, dt,
                                       current_cfl, t_final, constant_cfl)
 
         except MyRuntimeError:
@@ -625,7 +625,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
 
         return (
-            euler_operator(discr, state=fluid_state, time=t,
+            euler_operator(dcoll, state=fluid_state, time=t,
                            boundaries=boundaries,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
         )
@@ -635,10 +635,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
 
         return (
-            euler_operator(discr, state=fluid_state, time=t,
+            euler_operator(dcoll, state=fluid_state, time=t,
                            boundaries=boundaries,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
-            + av_laplacian_operator(discr, fluid_state=fluid_state,
+            + av_laplacian_operator(dcoll, fluid_state=fluid_state,
                                     boundaries=boundaries,
                                     time=t, gas_model=gas_model,
                                     alpha=alpha, s0=s0, kappa=kappa,
@@ -647,13 +647,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def _my_rhs_phys_visc_av(t, state):
 
-        smoothness = smoothness_indicator(discr, state.mass,
+        smoothness = smoothness_indicator(dcoll, state.mass,
                                           kappa=kappa, s0=s0)
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
                                        smoothness=smoothness)
 
         return (
-            ns_operator(discr, state=fluid_state, time=t,
+            ns_operator(dcoll, state=fluid_state, time=t,
                         boundaries=boundaries,
                         gas_model=gas_model, quadrature_tag=quadrature_tag)
         )
@@ -664,7 +664,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                        smoothness=no_smoothness)
 
         # use the divergence to compute the smoothness field
-        grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
+        grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                    time=t, quadrature_tag=quadrature_tag)
         smoothness = compute_smoothness(state, grad_cv)
 
@@ -676,7 +676,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = replace(fluid_state, tv=new_tv)
 
         return (
-            ns_operator(discr, state=fluid_state, time=t,
+            ns_operator(dcoll, state=fluid_state, time=t,
                         boundaries=boundaries,
                         gas_model=gas_model, quadrature_tag=quadrature_tag,
                         grad_cv=grad_cv)
@@ -690,7 +690,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     elif use_av == 3:
         my_rhs = _my_rhs_phys_visc_div_av
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
@@ -707,7 +707,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if use_av == 0 or use_av == 1:
         current_state = create_fluid_state(cv=current_cv)
     elif use_av == 2:
-        smoothness = smoothness_indicator(discr, current_cv.mass,
+        smoothness = smoothness_indicator(dcoll, current_cv.mass,
                                           kappa=kappa, s0=s0)
         current_state = create_fluid_state(cv=current_cv,
                                            smoothness=smoothness)
@@ -717,7 +717,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         # use the divergence to compute the smoothness field
         current_grad_cv = grad_cv_operator(
-            discr, gas_model, boundaries, current_state, time=current_t,
+            dcoll, gas_model, boundaries, current_state, time=current_t,
             quadrature_tag=quadrature_tag)
         # smoothness = compute_smoothness_compiled(current_cv, grad_cv)
         smoothness = compute_smoothness(current_cv, current_grad_cv)

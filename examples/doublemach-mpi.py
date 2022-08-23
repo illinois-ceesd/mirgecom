@@ -192,9 +192,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    discr = create_discretization_collection(actx, local_mesh, order=order,
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              mpi_communicator=comm)
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -206,7 +206,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         logmgr.add_watches([
@@ -237,9 +237,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    def _boundary_state(discr, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(dcoll, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
@@ -267,7 +267,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -294,7 +294,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("dv", dv),
                       ("tagged_cells", tagged_cells)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True,
                       comm=comm)
 
@@ -320,29 +320,29 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         #       be changed accordingly.
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure):
+        if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_range_local(discr, "vol", dv.pressure, .9, 18.6),
+        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, .9, 18.6),
                          op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
-        if check_naninf_local(discr, "vol", dv.temperature):
+        if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
         if global_reduce(
-                check_range_local(discr, "vol", dv.temperature, 2.48e-3, 1.16e-2),
+                check_range_local(dcoll, "vol", dv.temperature, 2.48e-3, 1.16e-2),
                 op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         return health_error
@@ -373,7 +373,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
+                tagged_cells = smoothness_indicator(dcoll, state.mass, s0=s0,
                                                     kappa=kappa)
                 my_write_viz(step=step, t=t, state=state, dv=dv,
                              tagged_cells=tagged_cells)
@@ -381,14 +381,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            tagged_cells = smoothness_indicator(discr, state.mass, s0=s0,
+            tagged_cells = smoothness_indicator(dcoll, state.mass, s0=s0,
                                                 kappa=kappa)
             my_write_viz(step=step, t=t, state=state,
                          tagged_cells=tagged_cells, dv=dv)
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+        dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                               current_cfl, t_final, constant_cfl)
 
         return state, dt
@@ -405,17 +405,17 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return (
-            euler_operator(discr, state=fluid_state, time=t,
+            euler_operator(dcoll, state=fluid_state, time=t,
                            boundaries=boundaries,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
-            + av_laplacian_operator(discr, fluid_state=fluid_state,
+            + av_laplacian_operator(dcoll, fluid_state=fluid_state,
                                     boundaries=boundaries,
                                     time=t, gas_model=gas_model,
                                     alpha=alpha, s0=s0, kappa=kappa,
                                     quadrature_tag=quadrature_tag)
         )
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
@@ -429,7 +429,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         logger.info("Checkpointing final state ...")
     current_state = make_fluid_state(current_cv, gas_model)
     final_dv = current_state.dv
-    tagged_cells = smoothness_indicator(discr, current_cv.mass, s0=s0, kappa=kappa)
+    tagged_cells = smoothness_indicator(dcoll, current_cv.mass, s0=s0, kappa=kappa)
     my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv,
                  tagged_cells=tagged_cells)
     my_write_restart(step=current_step, t=current_t, state=current_cv)

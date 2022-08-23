@@ -104,7 +104,7 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
+def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
                             constant_cfl=False, local_dt=False):
     r"""Return the maximum stable timestep for a typical fluid simulation.
 
@@ -144,8 +144,8 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
-        The grudge DG discretization to use
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
+        The grudge DG discretization collection to use
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
     t: float
@@ -171,24 +171,24 @@ def get_sim_timestep(discr, state, t, dt, cfl, t_final=0.0,
         data_shape = (state.cv.mass[0]).shape
         if actx.supports_nonscalar_broadcasting:
             return cfl * actx.np.broadcast_to(
-                op.elementwise_min(discr, get_viscous_timestep(discr, state)),
+                op.elementwise_min(dcoll, get_viscous_timestep(dcoll, state)),
                 data_shape)
         else:
-            return cfl * op.elementwise_min(discr,
-                                            get_viscous_timestep(discr, state))
+            return cfl * op.elementwise_min(dcoll,
+                                            get_viscous_timestep(dcoll, state))
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
     if constant_cfl:
         my_dt = state.array_context.to_numpy(
             cfl * op.nodal_min(
-                discr, "vol",
-                get_viscous_timestep(discr=discr, state=state)))[()]
+                dcoll, "vol",
+                get_viscous_timestep(dcoll=dcoll, state=state)))[()]
 
     return min(t_remaining, my_dt)
 
 
-def write_visfile(discr, io_fields, visualizer, vizname,
+def write_visfile(dcoll, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None,
                   comm=None):
     """Write parallel VTK output for the fields specified in *io_fields*.
@@ -229,8 +229,8 @@ def write_visfile(discr, io_fields, visualizer, vizname,
     from mirgecom.io import make_rank_fname, make_par_fname
 
     if comm is None:  # None is OK for serial writes!
-        comm = discr.mpi_communicator
-        if comm is not None:  # It's *not* OK to get comm from discr
+        comm = dcoll.mpi_communicator
+        if comm is not None:  # It's *not* OK to get comm from dcoll
             from warnings import warn
             warn("Using `write_visfile` in parallel without an MPI communicator is "
                  "deprecated and will stop working in Fall 2022. For parallel "
@@ -358,12 +358,12 @@ def allsync(local_values, comm=None, op=None):
     return global_reduce(local_values, op_string, comm=comm)
 
 
-def check_range_local(discr: DiscretizationCollection, dd: str, field: DOFArray,
+def check_range_local(dcoll: DiscretizationCollection, dd: str, field: DOFArray,
                       min_value: float, max_value: float) -> List[float]:
     """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    local_min = actx.to_numpy(op.nodal_min_loc(discr, dd, field)).item()
-    local_max = actx.to_numpy(op.nodal_max_loc(discr, dd, field)).item()
+    local_min = actx.to_numpy(op.nodal_min_loc(dcoll, dd, field)).item()
+    local_max = actx.to_numpy(op.nodal_max_loc(dcoll, dd, field)).item()
 
     failing_values = []
 
@@ -375,15 +375,15 @@ def check_range_local(discr: DiscretizationCollection, dd: str, field: DOFArray,
     return failing_values
 
 
-def check_naninf_local(discr: DiscretizationCollection, dd: str,
+def check_naninf_local(dcoll: DiscretizationCollection, dd: str,
                        field: DOFArray) -> bool:
     """Return True if there are any NaNs or Infs in the field."""
     actx = field.array_context
-    s = actx.to_numpy(op.nodal_sum_loc(discr, dd, field))
+    s = actx.to_numpy(op.nodal_sum_loc(dcoll, dd, field))
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(discr, red_state, blue_state):
+def compare_fluid_solutions(dcoll, red_state, blue_state):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
@@ -392,12 +392,12 @@ def compare_fluid_solutions(discr, red_state, blue_state):
     actx = red_state.array_context
     resid = red_state - blue_state
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(discr, resid, order=np.inf), actx))
+        flatten(componentwise_norms(dcoll, resid, order=np.inf), actx))
 
     return resid_errs.tolist()
 
 
-def componentwise_norms(discr, fields, order=np.inf):
+def componentwise_norms(dcoll, fields, order=np.inf):
     """Return the *order*-norm for each component of *fields*.
 
     .. note::
@@ -405,15 +405,15 @@ def componentwise_norms(discr, fields, order=np.inf):
     """
     if not isinstance(fields, DOFArray):
         return map_array_container(
-            partial(componentwise_norms, discr, order=order), fields)
+            partial(componentwise_norms, dcoll, order=order), fields)
     if len(fields) > 0:
-        return op.norm(discr, fields, order)
+        return op.norm(dcoll, fields, order)
     else:
         # FIXME: This work-around for #575 can go away after #569
         return 0
 
 
-def max_component_norm(discr, fields, order=np.inf):
+def max_component_norm(dcoll, fields, order=np.inf):
     """Return the max *order*-norm over the components of *fields*.
 
     .. note::
@@ -421,7 +421,7 @@ def max_component_norm(discr, fields, order=np.inf):
     """
     actx = fields.array_context
     return max(actx.to_numpy(flatten(
-        componentwise_norms(discr, fields, order), actx)))
+        componentwise_norms(dcoll, fields, order), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
