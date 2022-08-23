@@ -629,7 +629,7 @@ class MulticomponentLump:
             rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None, sigma=1.
+            spec_centers=None, sigma=1.0
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -723,8 +723,8 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = x_vec - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)/(2*self._sigma**2)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            r2 = np.dot(rel_pos, rel_pos)/(self._sigma**2)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -763,9 +763,9 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = nodes - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
+            r2 = np.dot(rel_pos, rel_pos)/self._sigma**2
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
+            specrhs[i] = self._rho0 * expterm * np.dot(rel_pos, v) / self._sigma**2
 
         return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=specrhs)

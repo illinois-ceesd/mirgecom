@@ -391,7 +391,7 @@ def test_multilump(ctx_factory, dim):
 
     spec_r = make_obj_array([nodes - centers[i] for i in range(nspecies)])
     r2 = make_obj_array([np.dot(spec_r[i], spec_r[i]) for i in range(nspecies)])
-    expfactor = make_obj_array([spec_amplitudes[i] * actx.np.exp(- r2[i])
+    expfactor = make_obj_array([spec_amplitudes[i] * actx.np.exp(-0.5*r2[i])
                                 for i in range(nspecies)])
     exp_mass = make_obj_array([rho0 * (spec_y0s[i] + expfactor[i])
                                for i in range(nspecies)])
