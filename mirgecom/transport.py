@@ -289,7 +289,7 @@ class PowerLawTransport(TransportModel):
             d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
         """
         if self._lewis is not None:
-            return 1.0/self._lewis*(self.thermal_conductivity(cv, dv, eos)/(
+            return (self.thermal_conductivity(cv, dv, eos)/(
                 cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
         return self._d_alpha*(0*cv.mass + 1.)
@@ -401,7 +401,7 @@ class MixtureAveragedTransport(TransportModel):
 
         """
         if self._lewis is not None:
-            return 1.0/self._lewis*(self.thermal_conductivity(cv, dv, eos)/(
+            return (self.thermal_conductivity(cv, dv, eos)/(
                 cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
         return self._factor*(self._pyro_mech.get_species_mass_diffusivities_mixavg(
