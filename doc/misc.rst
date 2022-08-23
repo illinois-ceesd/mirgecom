@@ -82,3 +82,5 @@ References
 .. [Zhang_2011] Z. Zhang and C.W. Shu (2011), Maximum-principle-satisfying and positivity-preserving \
     high-order schemes for conservation laws, Proceedings of the Royal Society A, 467 2134 \
     `(DOI) <https://doi.org/10.1098/rspa.2011.0153>`__
+.. [Kee_2003] Robert J. Kee, Michael E. Coltrin, Peter Glarborg (2003), Chemically Reacting Flow: Theory and Practice \
+    `(DOI) <https://doi.org/10.1002/0471461296>`__
