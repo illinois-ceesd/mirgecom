@@ -33,7 +33,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import MixtureAveragedTransport
 from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
 
@@ -231,14 +231,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
-    # {{{ Initialize simple transport model
-    kappa = 1e-5
-    spec_diffusivity = 1e-5 * np.ones(nspecies)
-    sigma = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
-                                      species_diffusivity=spec_diffusivity)
-    # }}}
-
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
     # generates a set of methods to calculate chemothermomechanical properties and
     # states for this particular mechanism.
@@ -247,9 +239,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyrometheus_mechanism,
                              temperature_guess=init_temperature)
-    gas_model = GasModel(eos=eos, transport=transport_model)
 
     # }}}
+
+    # Initialize mixture-dependent transport model
+    transport_model = MixtureAveragedTransport(pyrometheus_mechanism)
+
+    # Initialize gas model (eos and transport model)
+    gas_model = GasModel(eos=eos, transport=transport_model)
 
     # {{{ MIRGE-Com state initialization
     velocity = np.zeros(shape=(dim,))
