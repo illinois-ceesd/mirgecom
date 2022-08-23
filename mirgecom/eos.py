@@ -554,7 +554,7 @@ class PyrometheusMixture(MixtureEOS):
         self._tguess = temperature_guess
 
     def get_temperature_seed(self, cv, temperature_seed=None):
-        """Get a *cv*-shape-consistent array with which to seed temperature calcuation.
+        """Get a *cv*-shaped array with which to seed temperature calcuation.
 
         Parameters
         ----------
@@ -606,7 +606,7 @@ class PyrometheusMixture(MixtureEOS):
         )
 
     def gamma(self, cv: ConservedVars, temperature):
-        r"""Get mixture-averaged specific heat ratio for mixture $\frac{C_p}{C_p - R_s}$.
+        r"""Get mixture-averaged heat capacity ratio, $\frac{C_p}{C_p - R_s}$.
 
         Parameters
         ----------
