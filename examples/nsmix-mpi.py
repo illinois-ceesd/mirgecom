@@ -479,7 +479,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 from mirgecom.fluid import velocity_gradient
                 ns_rhs, grad_cv, grad_t = \
-                    ns_operator(discr, state=fluid_state, time=t,
+                    ns_operator(dcoll, state=fluid_state, time=t,
                                 boundaries=visc_bnds, gas_model=gas_model,
                                 return_gradients=True, quadrature_tag=quadrature_tag)
                 grad_v = velocity_gradient(cv, grad_cv)
@@ -525,10 +525,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _num_flux_dissipative(u_minus, u_plus, beta):
         return num_flux_central(u_minus, u_plus) + beta*(u_plus - u_minus)/2
 
-    def _viscous_facial_flux_dissipative(discr, state_pair, grad_cv_pair,
+    def _viscous_facial_flux_dissipative(dcoll, state_pair, grad_cv_pair,
                                          grad_t_pair, beta=0., gas_model=None):
         actx = state_pair.int.array_context
-        normal = actx.thaw(discr.normal(state_pair.dd))
+        normal = actx.thaw(dcoll.normal(state_pair.dd))
 
         f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                              grad_t_pair.int)
@@ -576,7 +576,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                 current_cfl, t_final, constant_cfl)
     from mirgecom.fluid import velocity_gradient
     ns_rhs, grad_cv, grad_t = \
-        ns_operator(discr, state=current_state, time=current_t,
+        ns_operator(dcoll, state=current_state, time=current_t,
                     boundaries=visc_bnds, gas_model=gas_model,
                     return_gradients=True)
     grad_v = velocity_gradient(current_state.cv, grad_cv)
