@@ -223,7 +223,7 @@ def inviscid_facial_flux_hll(state_pair, gas_model, normal):
 
 
 def inviscid_flux_on_element_boundary(
-        discr, gas_model, boundaries, interior_state_pairs,
+        dcoll, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, quadrature_tag=None,
         numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0):
     """Compute the inviscid boundary fluxes for the divergence operator.
@@ -235,7 +235,7 @@ def inviscid_flux_on_element_boundary(
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
         A discretization collection encapsulating the DG elements
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
@@ -265,17 +265,17 @@ def inviscid_flux_on_element_boundary(
     from grudge.dof_desc import as_dofdesc
 
     def _interior_flux(state_pair):
-        return op.project(discr,
+        return op.project(dcoll,
             state_pair.dd, state_pair.dd.with_dtag("all_faces"),
             numerical_flux_func(
                 state_pair, gas_model,
-                state_pair.int.array_context.thaw(discr.normal(state_pair.dd))))
+                state_pair.int.array_context.thaw(dcoll.normal(state_pair.dd))))
 
     def _boundary_flux(dd_bdry, boundary, state_minus):
-        return op.project(discr,
+        return op.project(dcoll,
             dd_bdry, dd_bdry.with_dtag("all_faces"),
             boundary.inviscid_divergence_flux(
-                discr, dd_bdry, gas_model, state_minus=state_minus,
+                dcoll, dd_bdry, gas_model, state_minus=state_minus,
                 numerical_flux_func=numerical_flux_func, time=time))
 
     # Compute interface contributions
@@ -296,16 +296,16 @@ def inviscid_flux_on_element_boundary(
     return inviscid_flux_bnd
 
 
-def get_inviscid_timestep(discr, state):
+def get_inviscid_timestep(dcoll, state):
     """Return node-local stable timestep estimate for an inviscid fluid.
 
     The maximum stable timestep is computed from the acoustic wavespeed.
 
     Parameters
     ----------
-    discr: grudge.discretization.DiscretizationCollection
+    dcoll: grudge.discretization.DiscretizationCollection
 
-        the discretization to use
+        the discretization collection to use
 
     state: :class:`~mirgecom.gas_model.FluidState`
 
@@ -319,19 +319,19 @@ def get_inviscid_timestep(discr, state):
     """
     from grudge.dt_utils import characteristic_lengthscales
     return (
-        characteristic_lengthscales(state.array_context, discr)
+        characteristic_lengthscales(state.array_context, dcoll)
         / state.wavespeed
     )
 
 
-def get_inviscid_cfl(discr, state, dt):
+def get_inviscid_cfl(dcoll, state, dt):
     """Return node-local CFL based on current state and timestep.
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
-        the discretization to use
+        the discretization collection to use
 
     dt: float or :class:`~meshmode.dof_array.DOFArray`
 
@@ -347,4 +347,4 @@ def get_inviscid_cfl(discr, state, dt):
 
         The CFL at each node.
     """
-    return dt / get_inviscid_timestep(discr, state=state)
+    return dt / get_inviscid_timestep(dcoll, state=state)

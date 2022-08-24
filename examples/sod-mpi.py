@@ -144,17 +144,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    discr = create_discretization_collection(
+    dcoll = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     vis_timer = None
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -173,9 +173,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos)
 
-    def boundary_solution(discr, btag, gas_model, state_minus, **kwargs):
+    def boundary_solution(dcoll, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
@@ -196,7 +196,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     current_state = make_fluid_state(current_cv, gas_model)
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
@@ -229,7 +229,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("exact", exact),
                       ("residual", resid)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
 
@@ -251,8 +251,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", pressure) \
-           or check_range_local(discr, "vol", pressure, .09, 1.1):
+        if check_naninf_local(dcoll, "vol", pressure) \
+           or check_range_local(dcoll, "vol", pressure, .09, 1.1):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -284,7 +284,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(discr, state, exact)
+                component_errors = compare_fluid_solutions(dcoll, state, exact)
                 health_errors = global_reduce(
                     my_health_check(dv.pressure, component_errors), op="lor")
                 if health_errors:
@@ -308,7 +308,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         exact = initializer(x_vec=nodes, eos=eos, time=t)
                         from mirgecom.simutil import compare_fluid_solutions
                         component_errors = \
-                            compare_fluid_solutions(discr, state, exact)
+                            compare_fluid_solutions(dcoll, state, exact)
                 my_write_status(component_errors)
 
         except MyRuntimeError:
@@ -318,7 +318,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl, t_final,
+        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
                               constant_cfl)
         return state, dt
 
@@ -333,10 +333,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return euler_operator(discr, state=fluid_state, time=t,
+        return euler_operator(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model)
 
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \

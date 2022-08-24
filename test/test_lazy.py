@@ -59,7 +59,7 @@ def op_test_data(ctx_factory):
         queue,
         allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
-    def get_discr(order):
+    def get_dcoll(order):
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*2,
@@ -72,21 +72,21 @@ def op_test_data(ctx_factory):
 
         return create_discretization_collection(eager_actx, mesh, order=order)
 
-    return eager_actx, lazy_actx, get_discr
+    return eager_actx, lazy_actx, get_dcoll
 
 
 # Mimics math.isclose for state arrays
-def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
+def _isclose(dcoll, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
     from mirgecom.simutil import componentwise_norms
     from arraycontext import flatten
     actx = x.array_context
-    lhs = actx.to_numpy(flatten(componentwise_norms(discr, x - y, np.inf), actx))
+    lhs = actx.to_numpy(flatten(componentwise_norms(dcoll, x - y, np.inf), actx))
 
     rhs = np.maximum(
         rel_tol * np.maximum(
-            actx.to_numpy(flatten(componentwise_norms(discr, x, np.inf), actx)),
-            actx.to_numpy(flatten(componentwise_norms(discr, y, np.inf), actx))),
+            actx.to_numpy(flatten(componentwise_norms(dcoll, x, np.inf), actx)),
+            actx.to_numpy(flatten(componentwise_norms(dcoll, y, np.inf), actx))),
         abs_tol)
 
     is_close = np.all(lhs <= rhs)
@@ -100,7 +100,7 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 # FIXME: Re-enable and fix up if/when standalone gradient operator exists
 # def test_lazy_op_gradient(ctx_factory):
 #     cl_ctx = ctx_factory()
-#     actx, discr = _op_test_fixture(cl_ctx)
+#     actx, dcoll = _op_test_fixture(cl_ctx)
 #
 #     from grudge.dof_desc import DTAG_BOUNDARY
 #     from mirgecom.diffusion import (
@@ -114,18 +114,18 @@ def _isclose(discr, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 #     }
 #
 #     def op(u):
-#         return _gradient_operator(discr, boundaries, u)
+#         return _gradient_operator(dcoll, boundaries, u)
 
 #     compiled_op = actx.compile(op)
-#     u = discr.zeros(actx)
+#     u = dcoll.zeros(actx)
 #     compiled_op(u)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_lazy_op_divergence(op_test_data, order):
     """Test divergence operation in lazy context."""
-    eager_actx, lazy_actx, get_discr = op_test_data
-    discr = get_discr(order)
+    eager_actx, lazy_actx, get_dcoll = op_test_data
+    dcoll = get_dcoll(order)
 
     from grudge.trace_pair import interior_trace_pair
     from grudge.dof_desc import as_dofdesc
@@ -137,26 +137,26 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_flux(u_tpair):
         dd = u_tpair.dd
         dd_allfaces = dd.with_dtag("all_faces")
-        normal = discr.normal(dd)
+        normal = dcoll.normal(dd)
         actx = u_tpair.int[0].array_context
         normal = actx.thaw(normal)
         flux = u_tpair.avg @ normal
-        return op.project(discr, dd, dd_allfaces, flux)
+        return op.project(dcoll, dd, dd_allfaces, flux)
 
     def div_op(u):
-        return div_operator(discr, dd_vol, dd_faces,
-                            u, get_flux(interior_trace_pair(discr, u)))
+        return div_operator(dcoll, dd_vol, dd_faces,
+                            u, get_flux(interior_trace_pair(dcoll, u)))
 
     lazy_op = lazy_actx.compile(div_op)
 
     def get_inputs(actx):
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
         return u,
 
     tol = 1e-12
     isclose = partial(
-        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
+        _isclose, dcoll, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return eager_actx.thaw(lazy_actx.freeze(u))
@@ -170,8 +170,8 @@ def test_lazy_op_divergence(op_test_data, order):
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_lazy_op_diffusion(op_test_data, order):
     """Test diffusion operator in lazy context."""
-    eager_actx, lazy_actx, get_discr = op_test_data
-    discr = get_discr(order)
+    eager_actx, lazy_actx, get_dcoll = op_test_data
+    dcoll = get_dcoll(order)
 
     from grudge.dof_desc import DTAG_BOUNDARY
     from mirgecom.diffusion import (
@@ -185,19 +185,19 @@ def test_lazy_op_diffusion(op_test_data, order):
     }
 
     def diffusion_op(kappa, u):
-        return diffusion_operator(discr, kappa, boundaries, u)
+        return diffusion_operator(dcoll, kappa, boundaries, u)
 
     lazy_op = lazy_actx.compile(diffusion_op)
 
     def get_inputs(actx):
-        nodes = actx.thaw(discr.nodes())
-        kappa = discr.zeros(actx) + 1
+        nodes = actx.thaw(dcoll.nodes())
+        kappa = dcoll.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
         return kappa, u
 
     tol = 1e-11
     isclose = partial(
-        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
+        _isclose, dcoll, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return eager_actx.thaw(lazy_actx.freeze(u))
@@ -239,9 +239,9 @@ def _get_scalar_lump():
         dim=2, nspecies=3, velocity=np.ones(2), spec_y0s=np.ones(3),
         spec_amplitudes=np.ones(3))
 
-    def _my_boundary(discr, btag, gas_model, state_minus, **kwargs):
+    def _my_boundary(dcoll, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(init(x_vec=nodes, eos=gas_model.eos,
                                      **kwargs), gas_model)
@@ -262,8 +262,8 @@ def _get_scalar_lump():
 ])
 def test_lazy_op_euler(op_test_data, problem, order):
     """Test Euler operator in lazy context."""
-    eager_actx, lazy_actx, get_discr = op_test_data
-    discr = get_discr(order)
+    eager_actx, lazy_actx, get_dcoll = op_test_data
+    dcoll = get_dcoll(order)
 
     gas_model, init, boundaries, tol = problem
 
@@ -272,18 +272,18 @@ def test_lazy_op_euler(op_test_data, problem, order):
 
     def euler_op(state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(discr, gas_model=gas_model,
+        return euler_operator(dcoll, gas_model=gas_model,
                               boundaries=boundaries, state=fluid_state)
 
     lazy_op = lazy_actx.compile(euler_op)
 
     def get_inputs(actx):
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
         state = init(nodes)
         return state,
 
     isclose = partial(
-        _isclose, discr, rel_tol=tol, abs_tol=tol, return_operands=True)
+        _isclose, dcoll, rel_tol=tol, abs_tol=tol, return_operands=True)
 
     def lazy_to_eager(u):
         return eager_actx.thaw(lazy_actx.freeze(u))
