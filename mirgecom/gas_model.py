@@ -281,7 +281,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None):
     return FluidState(cv=cv, dv=dv)
 
 
-def project_fluid_state(discr, src, tgt, state, gas_model):
+def project_fluid_state(dcoll, src, tgt, state, gas_model):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -289,7 +289,7 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
 
@@ -319,10 +319,10 @@ def project_fluid_state(discr, src, tgt, state, gas_model):
 
         Thermally consistent fluid state
     """
-    cv_sd = op.project(discr, src, tgt, state.cv)
+    cv_sd = op.project(dcoll, src, tgt, state.cv)
     temperature_seed = None
     if state.is_mixture:
-        temperature_seed = op.project(discr, src, tgt, state.dv.temperature)
+        temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed)
 
@@ -384,7 +384,7 @@ class _FluidTemperatureTag:
     pass
 
 
-def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
+def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
                                quadrature_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
@@ -401,7 +401,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
 
@@ -434,10 +434,10 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
     dd_quad_vol = DOFDesc("vol", quadrature_tag)
 
     # project pair to the quadrature discretization and update dd to quad
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, discr, quadrature_tag)
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     domain_boundary_states_quad = {
-        btag: project_fluid_state(discr, dd_base_vol,
+        btag: project_fluid_state(dcoll, dd_base_vol,
                                   as_dofdesc(btag).with_discr_tag(quadrature_tag),
                                   volume_state, gas_model)
         for btag in boundaries
@@ -448,7 +448,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(discr, volume_state.cv, tag=_FluidCVTag)
+        for tpair in interior_trace_pairs(dcoll, volume_state.cv, tag=_FluidCVTag)
     ]
 
     tseed_interior_pairs = None
@@ -461,7 +461,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(discr, volume_state.temperature,
+            for tpair in interior_trace_pairs(dcoll, volume_state.temperature,
                                               tag=_FluidTemperatureTag)]
 
     interior_boundary_states_quad = \
@@ -470,7 +470,7 @@ def make_operator_fluid_states(discr, volume_state, gas_model, boundaries,
 
     # Interpolate the fluid state to the volume quadrature grid
     # (this includes the conserved and dependent quantities)
-    volume_state_quad = project_fluid_state(discr, dd_base_vol, dd_quad_vol,
+    volume_state_quad = project_fluid_state(dcoll, dd_base_vol, dd_quad_vol,
                                             volume_state, gas_model)
 
     return \

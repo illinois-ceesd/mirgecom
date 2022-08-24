@@ -45,15 +45,15 @@ def test_positivity_preserving_limiter(actx_factory, order, dim):
         a=(0.0,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    discr = create_discretization_collection(actx, mesh, order=order)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
 
     # create cells with negative values "eps"
-    nodes = actx.thaw(actx.freeze(discr.nodes()))
+    nodes = actx.thaw(actx.freeze(dcoll.nodes()))
     eps = -0.001
     field = nodes[0] + eps
 
     # apply positivity-preserving limiter
-    limited_field = bound_preserving_limiter(discr, field, mmin=0.0)
+    limited_field = bound_preserving_limiter(dcoll, field, mmin=0.0)
     lmtd_fld_min = np.min(actx.to_numpy(limited_field[0]))
     assert lmtd_fld_min > -1e-13
 
@@ -71,14 +71,14 @@ def test_bound_preserving_limiter(actx_factory, order, dim):
         a=(0.0,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    discr = create_discretization_collection(actx, mesh, order=order)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
 
     # create cells with values larger than 1.0
-    nodes = actx.thaw(actx.freeze(discr.nodes()))
+    nodes = actx.thaw(actx.freeze(dcoll.nodes()))
     eps = 0.01
     field = 0.5 + nodes[0] + eps
 
     # apply limiter
-    limited_field = bound_preserving_limiter(discr, field, mmin=0.0, mmax=1.0)
+    limited_field = bound_preserving_limiter(dcoll, field, mmin=0.0, mmax=1.0)
     lmtd_fld_max = np.max(actx.to_numpy(limited_field[0]))
     assert lmtd_fld_max < 1.0 + 1.0e-13

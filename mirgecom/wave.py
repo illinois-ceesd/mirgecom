@@ -35,12 +35,12 @@ from grudge.trace_pair import TracePair, interior_trace_pairs
 import grudge.op as op
 
 
-def _flux(discr, c, w_tpair):
+def _flux(dcoll, c, w_tpair):
     u = w_tpair[0]
     v = w_tpair[1:]
 
     actx = w_tpair.int[0].array_context
-    normal = actx.thaw(discr.normal(w_tpair.dd))
+    normal = actx.thaw(dcoll.normal(w_tpair.dd))
 
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),
@@ -53,20 +53,20 @@ def _flux(discr, c, w_tpair):
         0.5*normal*np.dot(normal, v.ext-v.int),
         )
 
-    return op.project(discr, w_tpair.dd, "all_faces", c*flux_weak)
+    return op.project(dcoll, w_tpair.dd, "all_faces", c*flux_weak)
 
 
 class _WaveTag:
     pass
 
 
-def wave_operator(discr, c, w):
+def wave_operator(dcoll, c, w):
     """Compute the RHS of the wave equation.
 
     Parameters
     ----------
-    discr: grudge.discretization.DiscretizationCollection
-        the discretization to use
+    dcoll: grudge.discretization.DiscretizationCollection
+        the discretization collection to use
     c: float
         the (constant) wave speed
     w: numpy.ndarray
@@ -80,25 +80,25 @@ def wave_operator(discr, c, w):
     u = w[0]
     v = w[1:]
 
-    dir_u = op.project(discr, "vol", BTAG_ALL, u)
-    dir_v = op.project(discr, "vol", BTAG_ALL, v)
+    dir_u = op.project(dcoll, "vol", BTAG_ALL, u)
+    dir_v = op.project(dcoll, "vol", BTAG_ALL, v)
     dir_bval = flat_obj_array(dir_u, dir_v)
     dir_bc = flat_obj_array(-dir_u, dir_v)
 
     return (
-        op.inverse_mass(discr,
+        op.inverse_mass(dcoll,
             flat_obj_array(
-                -c*op.weak_local_div(discr, "vol", v),
-                -c*op.weak_local_grad(discr, "vol", u)
+                -c*op.weak_local_div(dcoll, "vol", v),
+                -c*op.weak_local_grad(dcoll, "vol", u)
                 )
             +  # noqa: W504
-            op.face_mass(discr,
-                _flux(discr, c=c,
+            op.face_mass(dcoll,
+                _flux(dcoll, c=c,
                       w_tpair=TracePair(BTAG_ALL, interior=dir_bval,
                                         exterior=dir_bc))
                 + sum(
-                    _flux(discr, c=c, w_tpair=tpair)
-                    for tpair in interior_trace_pairs(discr, w, comm_tag=_WaveTag))
+                    _flux(dcoll, c=c, w_tpair=tpair)
+                    for tpair in interior_trace_pairs(dcoll, w, comm_tag=_WaveTag))
                 )
             )
         )
