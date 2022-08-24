@@ -48,7 +48,7 @@ from functools import partial
 logger = logging.getLogger(__name__)
 
 
-def _elbnd_flux(discr, compute_interior_flux, compute_boundary_flux,
+def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,
                 int_tpair, boundaries):
     return (compute_interior_flux(int_tpair)
             + sum(compute_boundary_flux(btag) for btag in boundaries))
@@ -119,27 +119,27 @@ def _cv_test_func(dim):
         dim=dim, mass=sym_mass, energy=sym_energy, momentum=sym_momentum)
 
 
-def central_flux_interior(actx, discr, int_tpair):
+def central_flux_interior(actx, dcoll, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = actx.thaw(discr.normal(int_tpair.dd))
+    normal = actx.thaw(dcoll.normal(int_tpair.dd))
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
     dd_all_faces = int_tpair.dd.with_dtag("all_faces")
-    return op.project(discr, int_tpair.dd, dd_all_faces, flux_weak)
+    return op.project(dcoll, int_tpair.dd, dd_all_faces, flux_weak)
 
 
-def central_flux_boundary(actx, discr, soln_func, btag):
+def central_flux_boundary(actx, dcoll, soln_func, btag):
     """Compute a central flux for boundary faces."""
-    boundary_discr = discr.discr_from_dd(btag)
+    boundary_discr = dcoll.discr_from_dd(btag)
     bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = actx.thaw(discr.normal(btag))
+    bnd_nhat = actx.thaw(dcoll.normal(btag))
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(btag, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
     dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
-    return op.project(discr, bnd_tpair.dd, dd_all_faces, flux_weak)
+    return op.project(dcoll, bnd_tpair.dd, dd_all_faces, flux_weak)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -182,11 +182,11 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        discr = create_discretization_collection(actx, mesh, order=order)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
-        h_max = h_max_from_volume(discr)
+        h_max = h_max_from_volume(dcoll)
 
         def sym_eval(expr, x_vec):
             mapper = sym.EvaluationMapper({"x": x_vec})
@@ -200,9 +200,9 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         test_func = partial(sym_eval, sym_test_func)
         grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
 
-        nodes = actx.thaw(discr.nodes())
-        int_flux = partial(central_flux_interior, actx, discr)
-        bnd_flux = partial(central_flux_boundary, actx, discr, test_func)
+        nodes = actx.thaw(dcoll.nodes())
+        int_flux = partial(central_flux_interior, actx, dcoll)
+        bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
 
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
@@ -210,7 +210,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         from mirgecom.simutil import componentwise_norms
 
         from arraycontext import flatten
-        err_scale = max(flatten(componentwise_norms(discr, exact_grad, np.inf),
+        err_scale = max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                 actx))
 
         if err_scale <= 1e-16:
@@ -219,22 +219,22 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         print(f"{test_data=}")
         print(f"{exact_grad=}")
 
-        test_data_int_tpair = interior_trace_pair(discr, test_data)
+        test_data_int_tpair = interior_trace_pair(dcoll, test_data)
         boundaries = [BTAG_ALL]
-        test_data_flux_bnd = _elbnd_flux(discr, int_flux, bnd_flux,
+        test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
                                          test_data_int_tpair, boundaries)
 
         from mirgecom.operators import grad_operator
         from grudge.dof_desc import as_dofdesc
         dd_vol = as_dofdesc("vol")
         dd_faces = as_dofdesc("all_faces")
-        test_grad = grad_operator(discr, dd_vol, dd_faces,
+        test_grad = grad_operator(dcoll, dd_vol, dd_faces,
                                   test_data, test_data_flux_bnd)
 
         print(f"{test_grad=}")
         grad_err = \
             max(flatten(
-                componentwise_norms(discr, test_grad - exact_grad, np.inf),
+                componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
                 actx) / err_scale)
 
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))

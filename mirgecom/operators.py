@@ -31,13 +31,13 @@ THE SOFTWARE.
 import grudge.op as op
 
 
-def grad_operator(discr, dd_vol, dd_faces, u, flux):
+def grad_operator(dcoll, dd_vol, dd_faces, u, flux):
     r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
     ----------
-    discr: grudge.discretization.DiscretizationCollection
-        the discretization to use
+    dcoll: grudge.discretization.DiscretizationCollection
+        the discretization collection to use
     dd_vol: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the volume discretization.
         This determines the type of quadrature to be used.
@@ -57,18 +57,18 @@ def grad_operator(discr, dd_vol, dd_faces, u, flux):
         the dg gradient operator applied to *u*
     """
     # pylint: disable=invalid-unary-operand-type
-    return - op.inverse_mass(discr,
-        op.weak_local_grad(discr, dd_vol, u)
-        - op.face_mass(discr, dd_faces, flux))
+    return - op.inverse_mass(dcoll,
+        op.weak_local_grad(dcoll, dd_vol, u)
+        - op.face_mass(dcoll, dd_faces, flux))
 
 
-def div_operator(discr, dd_vol, dd_faces, v, flux):
+def div_operator(dcoll, dd_vol, dd_faces, v, flux):
     r"""Compute DG divergence of vector-valued func *v* with flux given by *flux*.
 
     Parameters
     ----------
-    discr: grudge.discretization.DiscretizationCollection
-        the discretization to use
+    dcoll: grudge.discretization.DiscretizationCollection
+        the discretization collection to use
     dd_vol: grudge.dof_desc.DOFDesc
         the degree-of-freedom tag associated with the volume discretization.
         This determines the type of quadrature to be used.
@@ -88,6 +88,6 @@ def div_operator(discr, dd_vol, dd_faces, v, flux):
         the dg divergence operator applied to vector-valued function(s) *v*.
     """
     # pylint: disable=invalid-unary-operand-type
-    return - op.inverse_mass(discr,
-        op.weak_local_div(discr, dd_vol, v)
-        - op.face_mass(discr, dd_faces, flux))
+    return - op.inverse_mass(dcoll,
+        op.weak_local_div(dcoll, dd_vol, v)
+        - op.face_mass(dcoll, dd_faces, flux))

@@ -62,9 +62,9 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     order = 3
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
-    zeros = discr.zeros(actx)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = dcoll.zeros(actx)
     ones = zeros + 1.0
 
     mass = 1*ones
@@ -77,13 +77,13 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     from grudge.op import local_grad
-    grad_cv = local_grad(discr, cv)
+    grad_cv = local_grad(dcoll, cv)
 
     grad_v = velocity_gradient(cv, grad_cv)
 
     tol = 1e-11
     exp_result = vel_fac * np.eye(dim) * ones
-    grad_v_err = [actx.to_numpy(op.norm(discr, grad_v[i] - exp_result[i], np.inf))
+    grad_v_err = [actx.to_numpy(op.norm(dcoll, grad_v[i] - exp_result[i], np.inf))
                   for i in range(dim)]
 
     assert max(grad_v_err) < tol
@@ -111,9 +111,9 @@ def test_velocity_gradient_eoc(actx_factory, dim):
             a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
 
-        discr = create_discretization_collection(actx, mesh, order=order)
-        nodes = actx.thaw(discr.nodes())
-        zeros = discr.zeros(actx)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
+        nodes = actx.thaw(dcoll.nodes())
+        zeros = dcoll.zeros(actx)
 
         mass = nodes[dim-1]*nodes[dim-1]
         energy = zeros + 2.5
@@ -122,7 +122,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
 
         cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
         from grudge.op import local_grad
-        grad_cv = local_grad(discr, cv)
+        grad_cv = local_grad(dcoll, cv)
         grad_v = velocity_gradient(cv, grad_cv)
 
         def exact_grad_row(xdata, gdim, dim):
@@ -132,7 +132,7 @@ def test_velocity_gradient_eoc(actx_factory, dim):
 
         comp_err = make_obj_array([
             actx.to_numpy(
-                op.norm(discr, grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf))
+                op.norm(dcoll, grad_v[i] - exact_grad_row(nodes[i], i, dim), np.inf))
             for i in range(dim)])
         err_max = comp_err.max()
         eoc.add_data_point(h, err_max)
@@ -159,9 +159,9 @@ def test_velocity_gradient_structure(actx_factory):
 
     order = 1
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
-    zeros = discr.zeros(actx)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = dcoll.zeros(actx)
     ones = zeros + 1.0
 
     mass = 2*ones
@@ -176,7 +176,7 @@ def test_velocity_gradient_structure(actx_factory):
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
     from grudge.op import local_grad
-    grad_cv = local_grad(discr, cv)
+    grad_cv = local_grad(dcoll, cv)
     grad_v = velocity_gradient(cv, grad_cv)
 
     tol = 1e-11
@@ -188,7 +188,7 @@ def test_velocity_gradient_structure(actx_factory):
     assert type(grad_v[0, 0]) == DOFArray
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     assert inf_norm(grad_v - exp_result) < tol
     assert inf_norm(grad_v.T - exp_trans) < tol
@@ -208,9 +208,9 @@ def test_species_mass_gradient(actx_factory, dim):
 
     order = 1
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
-    zeros = discr.zeros(actx)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = dcoll.zeros(actx)
     ones = zeros + 1
 
     nspecies = 2*dim
@@ -230,7 +230,7 @@ def test_species_mass_gradient(actx_factory, dim):
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
     from grudge.op import local_grad
-    grad_cv = local_grad(discr, cv)
+    grad_cv = local_grad(dcoll, cv)
 
     from mirgecom.fluid import species_mass_fraction_gradient
     grad_y = species_mass_fraction_gradient(cv, grad_cv)
@@ -240,7 +240,7 @@ def test_species_mass_gradient(actx_factory, dim):
     assert type(grad_y[0, 0]) == DOFArray
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     tol = 1e-11
     for idim in range(dim):

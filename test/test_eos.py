@@ -91,7 +91,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = create_discretization_collection(actx, mesh, order=order)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
@@ -127,7 +127,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         can_r = cantera_soln.net_rates_of_progress
         can_omega = cantera_soln.net_production_rates
 
-        ones = discr.zeros(actx) + 1.0
+        ones = dcoll.zeros(actx) + 1.0
         tin = can_t * ones
         pin = can_p * ones
         yin = make_obj_array([can_y[i] * ones for i in range(nspecies)])
@@ -157,7 +157,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
         print(f"prom_omega = {prom_omega}")
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         assert inf_norm((prom_c - can_c)) < 1e-14
         assert inf_norm((prom_t - can_t) / can_t) < 1e-14
@@ -199,8 +199,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
@@ -226,7 +226,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         print(f"Testing {mechname}(t,P) = ({tempin}, {pressin})")
 
-        ones = discr.zeros(actx) + 1.0
+        ones = dcoll.zeros(actx) + 1.0
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
@@ -260,7 +260,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"pyro_eos.e = {internal_energy}")
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         tol = 1e-14
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
@@ -300,8 +300,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    ones = discr.zeros(actx) + 1.0
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    ones = dcoll.zeros(actx) + 1.0
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
@@ -364,7 +364,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
         # Print
         def inf_norm(x):
-            return actx.to_numpy(op.norm(discr, x, np.inf))
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
@@ -408,8 +408,8 @@ def test_idealsingle_lump(ctx_factory, dim):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     # Init soln with Vortex
     center = np.zeros(shape=(dim,))
@@ -420,7 +420,7 @@ def test_idealsingle_lump(ctx_factory, dim):
     cv = lump(nodes)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     p = eos.pressure(cv)
     exp_p = 1.0
@@ -463,15 +463,15 @@ def test_idealsingle_vortex(ctx_factory):
     order = 3
     logger.info(f"Number of elements {mesh.nelements}")
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
     eos = IdealSingleGas()
     # Init soln with Vortex
     vortex = Vortex2D()
     cv = vortex(nodes)
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     gamma = eos.gamma()
     p = eos.pressure(cv)
