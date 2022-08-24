@@ -632,10 +632,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if grid_only:
         return 0
 
-    discr = create_discretization_collection(actx, local_mesh, order,
+    dcoll = create_discretization_collection(actx, local_mesh, order,
                                              mpi_communicator=comm)
-    nodes = actx.thaw(discr.nodes())
-    ones = discr.zeros(actx) + 1.0
+    nodes = actx.thaw(dcoll.nodes())
+    ones = dcoll.zeros(actx) + 1.0
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
         return compiled_lsrk45_step(actx, state, t, dt, rhs)
@@ -654,14 +654,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def vol_min(x):
         from grudge.op import nodal_min
-        return actx.to_numpy(nodal_min(discr, "vol", x))[()]
+        return actx.to_numpy(nodal_min(dcoll, "vol", x))[()]
 
     def vol_max(x):
         from grudge.op import nodal_max
-        return actx.to_numpy(nodal_max(discr, "vol", x))[()]
+        return actx.to_numpy(nodal_max(dcoll, "vol", x))[()]
 
     from grudge.dt_utils import characteristic_lengthscales
-    length_scales = characteristic_lengthscales(actx, discr)
+    length_scales = characteristic_lengthscales(actx, dcoll)
     h_min = vol_min(length_scales)
     h_max = vol_max(length_scales)
 
@@ -670,7 +670,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         quadrature_tag = None
 
-    ones = discr.zeros(actx) + 1.0
+    ones = dcoll.zeros(actx) + 1.0
 
     if rank == 0:
         print("----- Discretization info ----")
@@ -705,7 +705,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
         if log_dependent:
-            logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+            logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                                                       extract_vars_for_logging,
                                                       units_for_logging)
             logmgr.add_watches([
@@ -865,7 +865,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     if boundary_report:
         from mirgecom.simutil import boundary_report
-        boundary_report(discr, boundaries, f"{casename}_boundaries_np{nparts}.yaml")
+        boundary_report(dcoll, boundaries, f"{casename}_boundaries_np{nparts}.yaml")
 
     if rst_filename:
         current_step = rst_step
@@ -878,12 +878,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             temperature_seed = restart_data["temperature_seed"]
         else:
             rst_cv = restart_data["cv"]
-            old_discr = \
+            old_dcoll = \
                 create_discretization_collection(actx, local_mesh, order=rst_order,
                                                  mpi_communicator=comm)
             from meshmode.discretization.connection import make_same_mesh_connection
-            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
-                                                   old_discr.discr_from_dd("vol"))
+            connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
+                                                   old_dcoll.discr_from_dd("vol"))
             current_cv = connection(rst_cv)
             temperature_seed = connection(restart_data["temperature_seed"])
     else:
@@ -916,7 +916,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
     initname = initializer.__class__.__name__
     eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -950,13 +950,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", temp)),
                                  op="min")
-            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", temp)),
                                  op="max")
-            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", press)),
                                  op="min")
-            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", press)),
                                  op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
@@ -966,7 +966,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_viz(step, t, cv, dv):
         viz_fields = [("cv", cv), ("dv", dv)]
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state, temperature_seed):
@@ -996,18 +996,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         temperature = dv.temperature
 
         from mirgecom.simutil import check_naninf_local
-        if check_naninf_local(discr, "vol", pressure):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_naninf_local(discr, "vol", temperature):
+        if check_naninf_local(dcoll, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
 
         if inert_only == 0:
             # This check is the temperature convergence check
             temp_resid = compute_temperature_update(cv, temperature) / temperature
-            temp_err = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
+            temp_err = (actx.to_numpy(op.nodal_max_loc(dcoll, "vol", temp_resid)))
             if temp_err > 1e-8:
                 health_error = True
                 logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
@@ -1047,7 +1047,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
                     fluid_state = force_evaluation(actx, fluid_state)
 
-                dt = get_sim_timestep(discr, fluid_state, t=t, dt=dt,
+                dt = get_sim_timestep(dcoll, fluid_state, t=t, dt=dt,
                                       cfl=current_cfl, t_final=t_final,
                                       constant_cfl=constant_cfl)
 
@@ -1115,27 +1115,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        fluid_operator_states = make_operator_fluid_states(discr, fluid_state,
+        fluid_operator_states = make_operator_fluid_states(dcoll, fluid_state,
                                                            gas_model, boundaries,
                                                            quadrature_tag)
 
         if inviscid_only:
             fluid_rhs = \
                 euler_operator(
-                    discr, state=fluid_state, time=t,
+                    dcoll, state=fluid_state, time=t,
                     boundaries=boundaries, gas_model=gas_model,
                     inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                     quadrature_tag=quadrature_tag,
                     operator_states_quad=fluid_operator_states)
         else:
-            grad_cv = grad_cv_operator(discr, gas_model, boundaries, fluid_state,
+            grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                        time=t,
                                        numerical_flux_func=num_flux_central,
                                        quadrature_tag=quadrature_tag,
                                        operator_states_quad=fluid_operator_states)
             fluid_rhs = \
                 ns_operator(
-                    discr, state=fluid_state, time=t, boundaries=boundaries,
+                    dcoll, state=fluid_state, time=t, boundaries=boundaries,
                     gas_model=gas_model, quadrature_tag=quadrature_tag,
                     inviscid_numerical_flux_func=inviscid_facial_flux_rusanov)
 
@@ -1146,10 +1146,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if av_on:
             alpha_f = compute_av_alpha_field(fluid_state)
-            indicator = smoothness_indicator(discr, fluid_state.mass_density,
+            indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                              kappa=kappa_sc, s0=s0_sc)
             av_rhs = av_laplacian_operator(
-                discr, fluid_state=fluid_state, boundaries=boundaries, time=t,
+                dcoll, fluid_state=fluid_state, boundaries=boundaries, time=t,
                 gas_model=gas_model, grad_cv=grad_cv,
                 operator_states_quad=fluid_operator_states,
                 alpha=alpha_f, s0=s0_sc, kappa=kappa_sc,
@@ -1176,7 +1176,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         my_rhs = cfd_rhs
 
-    current_dt = get_sim_timestep(discr, current_fluid_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_fluid_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
     current_state = make_obj_array([current_cv, temperature_seed])
@@ -1201,7 +1201,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     final_fluid_state = force_evaluation(actx, final_fluid_state)
 
     final_dv = final_fluid_state.dv
-    dt = get_sim_timestep(discr, final_fluid_state, current_t, current_dt,
+    dt = get_sim_timestep(dcoll, final_fluid_state, current_t, current_dt,
                           current_cfl, t_final, constant_cfl)
 
     my_write_viz(step=current_step, t=current_t, cv=final_cv, dv=final_dv)
