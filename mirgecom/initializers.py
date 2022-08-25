@@ -13,6 +13,8 @@ Solution Initializers
 .. autoclass:: MixtureInitializer
 .. autoclass:: PlanarPoiseuille
 .. autoclass:: ShearFlow
+.. autoclass:: PlanarDiscontinuity
+.. autoclass:: MulticomponentTrig
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
@@ -50,6 +52,7 @@ THE SOFTWARE.
 import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.eos import IdealSingleGas
+from numbers import Number
 from mirgecom.fluid import make_conserved
 
 
@@ -355,7 +358,7 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self, shock_location=1.0/6.0, shock_speed=4.0
+            self, shock_location=1.0/6.0, shock_speed=4.0, shock_sigma=0.05
     ):
         """Initialize double shock reflection parameters.
 
@@ -365,9 +368,12 @@ class DoubleMachReflection:
            initial location of shock
         shock_speed: float
            shock speed, Mach number
+        shock_sigma: float
+           initial condition sharpness
         """
         self._shock_location = shock_location
         self._shock_speed = shock_speed
+        self._shock_sigma = shock_sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         r"""
@@ -419,7 +425,7 @@ class DoubleMachReflection:
 
         xinter = (self._shock_location + y_rel/np.sqrt(3.0)
                   + 2.0*self._shock_speed*t/np.sqrt(3.0))
-        sigma = 0.05
+        sigma = self._shock_sigma
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
         rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
@@ -623,7 +629,7 @@ class MulticomponentLump:
             rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None
+            spec_centers=None, sigma=1.0
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -640,6 +646,8 @@ class MulticomponentLump:
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(dim,)``
+        sigma: float
+            std deviation of the gaussian
         """
         if center is None:
             center = np.zeros(shape=(dim,))
@@ -674,6 +682,7 @@ class MulticomponentLump:
         self._spec_y0s = spec_y0s
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
+        self._sigma = sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -714,8 +723,8 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = x_vec - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            r2 = np.dot(rel_pos, rel_pos)/(self._sigma**2)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -754,12 +763,157 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = nodes - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
+            r2 = np.dot(rel_pos, rel_pos)/self._sigma**2
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
+            specrhs[i] = self._rho0 * expterm * np.dot(rel_pos, v) / self._sigma**2
 
         return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=specrhs)
+
+
+class MulticomponentTrig:
+    r"""Initializer for trig-distributed species fractions.
+
+    The trig lump is defined by:
+
+    .. math::
+
+         \rho &= 1.0\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
+         {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
+         + {a_\alpha}\sin{\omega(\mathbf{r} - \mathbf{v}t)},
+
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
+    and $\gamma$ is taken from the equation-of-state object (eos).
+
+    The user-specified vector of initial values (${{Y}_\alpha}_0$)
+    for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
+    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
+    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
+
+    A call to this object after creation/init creates the trig solution at a given
+    time (*t*) relative to the configured origin (*center*), wave_vector k,  and
+    background flow velocity (*velocity*).
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, *, dim=1, nspecies=0,
+            rho0=1.0, p0=1.0, gamma=1.4,
+            center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None,
+            spec_centers=None,
+            spec_omegas=None,
+            spec_diffusivities=None,
+            wave_vector=None
+    ):
+        r"""Initialize MulticomponentLump parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specify the number of dimensions for the lump
+        rho0: float
+            specifies the value of $\rho_0$
+        p0: float
+            specifies the value of $p_0$
+        center: numpy.ndarray
+            center of lump, shape ``(dim,)``
+        velocity: numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(dim,)``
+        """
+        if center is None:
+            center = np.zeros(shape=(dim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        if center.shape != (dim,) or velocity.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional vector inputs.")
+        if spec_y0s is None:
+            spec_y0s = np.ones(shape=(nspecies,))
+        if spec_centers is None:
+            spec_centers = make_obj_array([np.zeros(shape=dim,)
+                                           for i in range(nspecies)])
+        if spec_omegas is None:
+            spec_omegas = 2.*np.pi*np.ones(shape=(nspecies,))
+
+        if spec_amplitudes is None:
+            spec_amplitudes = np.ones(shape=(nspecies,))
+        if spec_diffusivities is None:
+            spec_diffusivities = np.ones(shape=(nspecies,))
+
+        if wave_vector is None:
+            wave_vector = np.zeros(shape=(dim,))
+            wave_vector[0] = 1
+
+        if len(spec_y0s) != nspecies or\
+           len(spec_amplitudes) != nspecies or\
+               len(spec_centers) != nspecies:
+            raise ValueError(f"Expected nspecies={nspecies} inputs.")
+        for i in range(nspecies):
+            if len(spec_centers[i]) != dim:
+                raise ValueError(f"Expected {dim}-dimensional "
+                                 f"inputs for spec_centers.")
+
+        self._nspecies = nspecies
+        self._dim = dim
+        self._velocity = velocity
+        self._center = center
+        self._p0 = p0
+        self._rho0 = rho0
+        self._spec_y0s = spec_y0s
+        self._spec_centers = spec_centers
+        self._spec_amps = spec_amplitudes
+        self._gamma = gamma
+        self._spec_omegas = spec_omegas
+        self._d = spec_diffusivities
+        self._wave_vector = wave_vector
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        """
+        Create a multi-component lump solution at time *t* and locations *x_vec*.
+
+        The solution at time *t* is created by advecting the component mass lump
+        at the user-specified constant, uniform velocity
+        (``MulticomponentLump._velocity``).
+
+        Parameters
+        ----------
+        time: float
+            Current time at which the solution is desired
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        t = time
+        if x_vec.shape != (self._dim,):
+            print(f"len(x_vec) = {len(x_vec)}")
+            print(f"self._dim = {self._dim}")
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
+        # actx = x_vec[0].array_context
+        mass = 0 * x_vec[0] + self._rho0
+        mom = self._velocity * mass
+        energy = ((self._p0 / (self._gamma - 1.0))
+                  + 0.5*mass*np.dot(self._velocity, self._velocity))
+
+        import mirgecom.math as mm
+        vel_t = t * self._velocity
+        spec_mass = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            spec_x = x_vec - self._spec_centers[i]
+            wave_r = spec_x - vel_t
+            wave_x = np.dot(wave_r, self._wave_vector)
+            expterm = mm.exp(-t*self._d[i]*self._spec_omegas[i]**2)
+            trigterm = mm.sin(self._spec_omegas[i]*wave_x)
+            spec_y = self._spec_y0s[i] + self._spec_amps[i]*expterm*trigterm
+            spec_mass[i] = mass * spec_y
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=spec_mass)
 
 
 class AcousticPulse:
@@ -1021,6 +1175,138 @@ class MixtureInitializer:
                               momentum=mom, species_mass=specmass)
 
 
+class PlanarDiscontinuity:
+    r"""Solution initializer for flow with a discontinuity.
+
+    This initializer creates a physics-consistent flow solution
+    given an initial thermal state (pressure, temperature) and an EOS.
+
+    The solution varies across a planar interface defined by a tanh function
+    located at disc_location for pressure, temperature, velocity, and mass fraction
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, *, dim=3, normal_dir=0, disc_location=0, nspecies=0,
+            temperature_left, temperature_right,
+            pressure_left, pressure_right,
+            velocity_left=None, velocity_right=None,
+            species_mass_left=None, species_mass_right=None,
+            convective_velocity=None, sigma=0.5
+    ):
+        r"""Initialize mixture parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specifies the number of dimensions for the solution
+        normal_dir: int
+            specifies the direction (plane) the discontinuity is applied in
+        disc_location: float or Callable
+            fixed location of discontinuity or optionally a function that
+            returns the time-dependent location.
+        nspecies: int
+            specifies the number of mixture species
+        pressure_left: float
+            pressure to the left of the discontinuity
+        temperature_left: float
+            temperature to the left of the discontinuity
+        velocity_left: numpy.ndarray
+            velocity (vector) to the left of the discontinuity
+        species_mass_left: numpy.ndarray
+            species mass fractions to the left of the discontinuity
+        pressure_right: float
+            pressure to the right of the discontinuity
+        temperature_right: float
+            temperaure to the right of the discontinuity
+        velocity_right: numpy.ndarray
+            velocity (vector) to the right of the discontinuity
+        species_mass_right: numpy.ndarray
+            species mass fractions to the right of the discontinuity
+        sigma: float
+           sharpness parameter
+        """
+        if velocity_left is None:
+            velocity_left = np.zeros(shape=(dim,))
+        if velocity_right is None:
+            velocity_right = np.zeros(shape=(dim,))
+
+        if species_mass_left is None:
+            species_mass_left = np.zeros(shape=(nspecies,))
+        if species_mass_right is None:
+            species_mass_right = np.zeros(shape=(nspecies,))
+
+        self._nspecies = nspecies
+        self._dim = dim
+        self._disc_location = disc_location
+        self._sigma = sigma
+        self._ul = velocity_left
+        self._ur = velocity_right
+        self._uc = convective_velocity
+        self._pl = pressure_left
+        self._pr = pressure_right
+        self._tl = temperature_left
+        self._tr = temperature_right
+        self._yl = species_mass_left
+        self._yr = species_mass_right
+        self._xdir = normal_dir
+        if self._xdir >= self._dim:
+            self._xdir = self._dim - 1
+
+    def __call__(self, x_vec, eos, *, time=0.0):
+        """Create the mixture state at locations *x_vec*.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Coordinates at which solution is desired
+        eos:
+            Mixture-compatible equation-of-state object must provide
+            these functions:
+            `eos.get_density`
+            `eos.get_internal_energy`
+        time: float
+            Time at which solution is desired. The location is (optionally)
+            dependent on time
+        """
+        if x_vec.shape != (self._dim,):
+            raise ValueError(f"Position vector has unexpected dimensionality,"
+                             f" expected {self._dim}.")
+
+        x = x_vec[self._xdir]
+        actx = x.array_context
+        if isinstance(self._disc_location, Number):
+            x0 = self._disc_location
+        else:
+            x0 = self._disc_location(time)
+
+        xtanh = 1.0/self._sigma*(x0 - x)
+        weight = 0.5*(1.0 - actx.np.tanh(xtanh))
+        pressure = self._pl + (self._pr - self._pl)*weight
+        temperature = self._tl + (self._tr - self._tl)*weight
+        velocity = self._ul + (self._ur - self._ul)*weight
+        y = self._yl + (self._yr - self._yl)*weight
+
+        if self._nspecies:
+            mass = eos.get_density(pressure, temperature,
+                                   species_mass_fractions=y)
+        else:
+            mass = pressure/temperature/eos.gas_const()
+
+        specmass = mass * y
+        mom = mass * velocity
+        internal_energy = eos.get_internal_energy(temperature,
+                                                  species_mass_fractions=y)
+
+        kinetic_energy = 0.5 * np.dot(velocity, velocity)
+        energy = mass * (internal_energy + kinetic_energy)
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=specmass)
+
+
 class PlanarPoiseuille:
     r"""Initializer for the planar Poiseuille case.
 
@@ -1122,6 +1408,7 @@ class PlanarPoiseuille:
         """Return the exact gradient of the Poiseuille state."""
         y = x_vec[1]
         x = x_vec[0]
+
         # FIXME: Symbolic infrastructure could perhaps do this better
         ones = x / x
         mass = cv_exact.mass
