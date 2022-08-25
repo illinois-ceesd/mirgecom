@@ -367,7 +367,7 @@ class MixtureAveragedTransport(TransportModel):
         self._factor = factor
         self._prandtl = prandtl
         self._lewis = lewis
-        self._diff_switch
+        self._diff_switch = diff_switch
         if self._lewis is not None:
             if (len(self._lewis) != self._pyro_mech.num_species):
                 raise ValueError("Lewis number should match number of species")
