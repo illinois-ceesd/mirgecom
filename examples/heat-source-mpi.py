@@ -111,7 +111,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 3
 
-    discr = create_discretization_collection(actx, local_mesh, order=order,
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
                     mpi_communicator=comm)
 
     if dim == 2:
@@ -122,14 +122,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     source_width = 0.2
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     boundaries = {
         DTAG_BOUNDARY("dirichlet"): DirichletDiffusionBoundary(0.),
         DTAG_BOUNDARY("neumann"): NeumannDiffusionBoundary(0.)
     }
 
-    u = discr.zeros(actx)
+    u = dcoll.zeros(actx)
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -148,11 +148,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(discr)
+    vis = make_visualizer(dcoll)
 
     def rhs(t, u):
         return (
-            diffusion_operator(discr, kappa=1, boundaries=boundaries, u=u)
+            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     compiled_rhs = actx.compile(rhs)
@@ -179,7 +179,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
-    final_answer = actx.to_numpy(op.norm(discr, u, np.inf))
+    final_answer = actx.to_numpy(op.norm(dcoll, u, np.inf))
     resid = abs(final_answer - 0.00020620711665201585)
     if resid > 1e-15:
         raise ValueError(f"Run did not produce the expected result {resid=}")
