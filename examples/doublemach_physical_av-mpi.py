@@ -57,7 +57,8 @@ from mirgecom.transport import (
     ArtificialViscosityTransport,
     ArtificialViscosityTransportDiv
 )
-from mirgecom.simutil import get_sim_timestep, force_evaluation
+from mirgecom.simutil import get_sim_timestep
+from mirgecom.utils import force_evaluation
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import (
