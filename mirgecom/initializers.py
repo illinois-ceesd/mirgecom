@@ -358,7 +358,7 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self, shock_location=1.0/6.0, shock_speed=4.0
+            self, shock_location=1.0/6.0, shock_speed=4.0, shock_sigma=0.05
     ):
         """Initialize double shock reflection parameters.
 
@@ -368,9 +368,12 @@ class DoubleMachReflection:
            initial location of shock
         shock_speed: float
            shock speed, Mach number
+        shock_sigma: float
+           initial condition sharpness
         """
         self._shock_location = shock_location
         self._shock_speed = shock_speed
+        self._shock_sigma = shock_sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         r"""
@@ -422,7 +425,7 @@ class DoubleMachReflection:
 
         xinter = (self._shock_location + y_rel/np.sqrt(3.0)
                   + 2.0*self._shock_speed*t/np.sqrt(3.0))
-        sigma = 0.05
+        sigma = self._shock_sigma
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
         rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
@@ -626,7 +629,7 @@ class MulticomponentLump:
             rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None
+            spec_centers=None, sigma=1.0
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -643,6 +646,8 @@ class MulticomponentLump:
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(dim,)``
+        sigma: float
+            std deviation of the gaussian
         """
         if center is None:
             center = np.zeros(shape=(dim,))
@@ -677,6 +682,7 @@ class MulticomponentLump:
         self._spec_y0s = spec_y0s
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
+        self._sigma = sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -717,8 +723,8 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = x_vec - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            r2 = np.dot(rel_pos, rel_pos)/(self._sigma**2)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -757,9 +763,9 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = nodes - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
+            r2 = np.dot(rel_pos, rel_pos)/self._sigma**2
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
+            specrhs[i] = self._rho0 * expterm * np.dot(rel_pos, v) / self._sigma**2
 
         return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=specrhs)
