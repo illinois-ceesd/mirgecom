@@ -133,7 +133,7 @@ def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
     Parameters
     ----------
     dcoll: :class:`~grudge.discretization.DiscretizationCollection`
-        The grudge DG discretization collection to use
+        The DG discretization collection to use
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
     t: float
