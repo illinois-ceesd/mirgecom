@@ -206,20 +206,20 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
     class TestBoundary:
 
-        def cv_gradient_flux(self, disc, btag, state_minus, gas_model, **kwargs):
+        def cv_gradient_flux(self, dcoll, btag, state_minus, gas_model, **kwargs):
             cv_int = state_minus.cv
             from grudge.trace_pair import TracePair
             bnd_pair = TracePair(btag,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = actx.thaw(disc.normal(btag))
+            nhat = actx.thaw(dcoll.normal(btag))
             from mirgecom.flux import num_flux_central
             from arraycontext import outer
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
-        def av_flux(self, disc, btag, diffusion, **kwargs):
-            nhat = actx.thaw(disc.normal(btag))
+        def av_flux(self, dcoll, btag, diffusion, **kwargs):
+            nhat = actx.thaw(dcoll.normal(btag))
             diffusion_minus = op.project(dcoll, "vol", btag, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
@@ -227,7 +227,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                       exterior=diffusion_plus)
             from mirgecom.flux import num_flux_central
             flux_weak = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-            return op.project(disc, btag, "all_faces", flux_weak)
+            return op.project(dcoll, btag, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
 
