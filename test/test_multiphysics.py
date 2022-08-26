@@ -29,9 +29,7 @@ from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from meshmode.mesh import BTAG_PARTITION
 from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE
-from grudge.discretization import PartID
 from mirgecom.discretization import create_discretization_collection
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -42,34 +40,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
-
-
-@pytest.mark.parametrize("order", [1, 2, 3, 4])
+@pytest.mark.parametrize("order", [1, 2, 3])
 def test_independent_volumes(actx_factory, order, visualize=False):
     """Check multi-volume machinery by setting up two independent volumes."""
     actx = actx_factory()
 
     n = 8
-    global_mesh = get_box_mesh(2, -1, 1, n)
 
-    mgrp, = global_mesh.groups
-    y = global_mesh.vertices[1, mgrp.vertex_indices]
-    y_elem_avg = np.sum(y, axis=1)/y.shape[1]
-    volume_to_elements = {
-        "Lower": np.where(y_elem_avg < 0)[0],
-        "Upper": np.where(y_elem_avg > 0)[0]}
+    dim = 2
 
-    from meshmode.mesh.processing import partition_mesh
-    volume_meshes = partition_mesh(global_mesh, volume_to_elements)
+    dim_names = ["x", "y", "z"]
+    boundary_tag_to_face = {}
+    for i in range(dim):
+        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
+        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    global_mesh1 = generate_regular_rect_mesh(
+        a=(-1, -2), b=(1, -1),
+        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
+
+    global_mesh2 = generate_regular_rect_mesh(
+        a=(-1, 1), b=(1, 2),
+        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
+
+    volume_meshes = {
+        "Lower": global_mesh1,
+        "Upper": global_mesh2,
+    }
 
     dcoll = create_discretization_collection(actx, volume_meshes, order)
 
@@ -82,20 +81,18 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     lower_boundaries = {
         dd_vol_lower.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
         dd_vol_lower.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_lower.trace("-1").domain_tag: DirichletDiffusionBoundary(0.),
-        dd_vol_lower.trace(BTAG_PARTITION(PartID("Upper"))).domain_tag:
-            DirichletDiffusionBoundary(1.),
+        dd_vol_lower.trace("-1").domain_tag: DirichletDiffusionBoundary(-2.),
+        dd_vol_lower.trace("+1").domain_tag: DirichletDiffusionBoundary(-1.),
     }
 
     upper_boundaries = {
         dd_vol_upper.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
         dd_vol_upper.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_upper.trace(BTAG_PARTITION(PartID("Lower"))).domain_tag:
-            DirichletDiffusionBoundary(0.),
-        dd_vol_upper.trace("+1"): DirichletDiffusionBoundary(1.),
+        dd_vol_upper.trace("-1").domain_tag: DirichletDiffusionBoundary(1.),
+        dd_vol_upper.trace("+1").domain_tag: DirichletDiffusionBoundary(2.),
     }
 
-    lower_u = lower_nodes[1] + 1
+    lower_u = lower_nodes[1]
     upper_u = upper_nodes[1]
 
     u = make_obj_array([lower_u, upper_u])
