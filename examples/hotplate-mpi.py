@@ -44,7 +44,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    IsothermalNoSlipBoundary
+    IsothermalWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -232,9 +232,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                   PrescribedFluidBoundary(boundary_state_func=_boundary_state),
                   DTAG_BOUNDARY("+1"):
                   PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-                  DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(
+                  DTAG_BOUNDARY("-2"): IsothermalWallBoundary(
                       wall_temperature=bottom_boundary_temperature),
-                  DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary(
+                  DTAG_BOUNDARY("+2"): IsothermalWallBoundary(
                       wall_temperature=top_boundary_temperature)}
 
     if rst_filename:

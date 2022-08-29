@@ -46,7 +46,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    AdiabaticNoslipMovingBoundary
+    AdiabaticNoslipWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -246,8 +246,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                   PrescribedFluidBoundary(boundary_state_func=_boundary_solution),
                   DTAG_BOUNDARY("+1"):
                   PrescribedFluidBoundary(boundary_state_func=_boundary_solution),
-                  DTAG_BOUNDARY("-2"): AdiabaticNoslipMovingBoundary(),
-                  DTAG_BOUNDARY("+2"): AdiabaticNoslipMovingBoundary()}
+                  DTAG_BOUNDARY("-2"): AdiabaticNoslipWallBoundary(),
+                  DTAG_BOUNDARY("+2"): AdiabaticNoslipWallBoundary()}
 
     if rst_filename:
         current_t = restart_data["t"]
