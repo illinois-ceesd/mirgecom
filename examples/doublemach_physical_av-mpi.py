@@ -27,7 +27,6 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
