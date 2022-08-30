@@ -126,7 +126,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from dataclasses import replace
 
 from pytools import memoize_in, keyed_memoize_in
 from functools import partial
@@ -265,8 +264,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
 
     def central_flux_div(utpair):
         dd_trace = utpair.dd
-        dd_allfaces = dd_trace.with_domain_tag(
-            replace(dd_trace.domain_tag, tag=FACE_RESTR_ALL))
+        dd_allfaces = dd_trace.with_boundary_tag(FACE_RESTR_ALL)
         normal = actx.thaw(dcoll.normal(dd_trace))
         return op.project(dcoll, dd_trace, dd_allfaces,
                           # This uses a central vector flux along nhat:

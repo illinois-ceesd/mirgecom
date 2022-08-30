@@ -44,10 +44,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from dataclasses import replace
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import VolumeDomainTag, as_dofdesc
+from grudge.dof_desc import as_dofdesc
 from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 import grudge.op as op
@@ -319,8 +318,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        dd_allfaces = dd_bdry.with_domain_tag(
-            replace(dd_bdry.domain_tag, tag=FACE_RESTR_ALL))
+        dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
         return quantity if local else op.project(dcoll,
             dd_bdry, dd_allfaces, quantity)
 
@@ -480,8 +478,7 @@ class PrescribedFluidBoundary(FluidBoundary):
     def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
         dd_bdry = as_dofdesc(dd_bdry)
-        dd_vol = dd_bdry.with_domain_tag(
-            VolumeDomainTag(dd_bdry.domain_tag.volume_tag))
+        dd_vol = dd_bdry.untrace()
         grad_av_minus = op.project(dcoll, dd_vol, dd_bdry, diffusion)
         actx = grad_av_minus.mass[0].array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))

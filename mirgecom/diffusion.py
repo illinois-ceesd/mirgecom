@@ -36,7 +36,6 @@ THE SOFTWARE.
 import abc
 import numpy as np
 import numpy.linalg as la  # noqa
-from dataclasses import replace
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
@@ -51,8 +50,7 @@ def grad_flux(dcoll, u_tpair, *, quadrature_tag=DISCR_TAG_BASE):
 
     dd_trace = u_tpair.dd
     dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
-    dd_allfaces_quad = dd_trace_quad.with_domain_tag(
-        replace(dd_trace_quad.domain_tag, tag=FACE_RESTR_ALL))
+    dd_allfaces_quad = dd_trace_quad.with_boundary_tag(FACE_RESTR_ALL)
 
     normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
 
@@ -73,8 +71,7 @@ def diffusion_flux(
 
     dd_trace = grad_u_tpair.dd
     dd_trace_quad = dd_trace.with_discr_tag(quadrature_tag)
-    dd_allfaces_quad = dd_trace_quad.with_domain_tag(
-        replace(dd_trace_quad.domain_tag, tag=FACE_RESTR_ALL))
+    dd_allfaces_quad = dd_trace_quad.with_boundary_tag(FACE_RESTR_ALL)
 
     normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
 
@@ -210,8 +207,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
             self, dcoll, dd_vol, dd_bdry, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         dd_bdry_quad = dd_bdry.with_discr_tag(quadrature_tag)
-        dd_allfaces_quad = dd_bdry_quad.with_domain_tag(
-            replace(dd_bdry_quad.domain_tag, tag=FACE_RESTR_ALL))
+        dd_allfaces_quad = dd_bdry_quad.with_boundary_tag(FACE_RESTR_ALL)
         # Compute the flux directly instead of constructing an external grad_u value
         # (and the associated TracePair); this approach is simpler in the
         # spatially-varying kappa case (the other approach would result in a

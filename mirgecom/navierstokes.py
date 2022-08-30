@@ -57,7 +57,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import replace
 from functools import partial
 
 from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -106,8 +105,7 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     from arraycontext import outer
     actx = tpair.int.array_context
     dd_trace = tpair.dd
-    dd_allfaces = dd_trace.with_domain_tag(
-        replace(dd_trace.domain_tag, tag=FACE_RESTR_ALL))
+    dd_allfaces = dd_trace.with_boundary_tag(FACE_RESTR_ALL)
     normal = actx.thaw(dcoll.normal(dd_trace))
     flux = outer(numerical_flux_func(tpair.int, tpair.ext), normal)
     return op.project(dcoll, dd_trace, dd_allfaces, flux)

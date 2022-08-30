@@ -30,7 +30,6 @@ import numpy.linalg as la  # noqa
 import pyopencl.clmath  # noqa
 import logging
 import pytest  # noqa
-from dataclasses import replace
 
 from pytools.obj_array import make_obj_array
 from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -186,8 +185,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
         from arraycontext import outer
         flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
-        dd_all_faces = dd_bdry.with_domain_tag(
-            replace(dd_bdry.domain_tag, tag=FACE_RESTR_ALL))
+        dd_all_faces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
         return op.project(dcoll, dd_bdry, dd_all_faces, flux_weak)
 
     for nfac in [1, 2, 4]:
