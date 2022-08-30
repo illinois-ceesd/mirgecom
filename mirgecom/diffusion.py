@@ -101,15 +101,13 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_grad_flux(
-            self, dcoll, dd_vol, dd_bdry, u, *,
-            quadrature_tag=DISCR_TAG_BASE):
+            self, dcoll, dd_bdry, u, *, quadrature_tag=DISCR_TAG_BASE):
         """Compute the flux for grad(u) on the boundary *dd_bdry*."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def get_diffusion_flux(
-            self, dcoll, dd_vol, dd_bdry, kappa, grad_u, *,
-            quadrature_tag=DISCR_TAG_BASE):
+            self, dcoll, dd_bdry, kappa, grad_u, *, quadrature_tag=DISCR_TAG_BASE):
         """Compute the flux for diff(u) on the boundary *dd_bdry*."""
         raise NotImplementedError
 
@@ -143,15 +141,15 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(
-            self, dcoll, dd_vol, dd_bdry, u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        u_int = op.project(dcoll, dd_vol, dd_bdry, u)
+            self, dcoll, dd_bdry, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        u_int = op.project(dcoll, dd_bdry.untrace(), dd_bdry, u)
         u_tpair = TracePair(dd_bdry, interior=u_int, exterior=2*self.value-u_int)
         return grad_flux(dcoll, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, dcoll, dd_vol, dd_bdry, kappa, grad_u, *,
+            self, dcoll, dd_bdry, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        dd_vol = dd_bdry.untrace()
         kappa_int = op.project(dcoll, dd_vol, dd_bdry, kappa)
         kappa_tpair = TracePair(dd_bdry, interior=kappa_int, exterior=kappa_int)
         grad_u_int = op.project(dcoll, dd_vol, dd_bdry, grad_u)
@@ -197,14 +195,13 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(
-            self, dcoll, dd_vol, dd_bdry, u, *,
-            quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        u_int = op.project(dcoll, dd_vol, dd_bdry, u)
+            self, dcoll, dd_bdry, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
+        u_int = op.project(dcoll, dd_bdry.untrace(), dd_bdry, u)
         u_tpair = TracePair(dd_bdry, interior=u_int, exterior=u_int)
         return grad_flux(dcoll, u_tpair, quadrature_tag=quadrature_tag)
 
     def get_diffusion_flux(
-            self, dcoll, dd_vol, dd_bdry, kappa, grad_u, *,
+            self, dcoll, dd_bdry, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
         dd_bdry_quad = dd_bdry.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_bdry_quad.with_boundary_tag(FACE_RESTR_ALL)
@@ -213,7 +210,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         # spatially-varying kappa case (the other approach would result in a
         # grad_u_tpair that lives in the quadrature discretization; diffusion_flux
         # would need to be modified to accept such values).
-        kappa_int_quad = op.project(dcoll, dd_vol, dd_bdry_quad, kappa)
+        kappa_int_quad = op.project(dcoll, dd_bdry.untrace(), dd_bdry_quad, kappa)
         value_quad = op.project(dcoll, dd_bdry, dd_bdry_quad, self.value)
         flux_quad = -kappa_int_quad*value_quad
         return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad, flux_quad)
@@ -295,8 +292,7 @@ def grad_operator(
                 for u_tpair in interior_trace_pairs(
                     dcoll, u, volume_dd=dd_vol_base, tag=_DiffusionStateTag))
             + sum(
-                bdry.get_grad_flux(dcoll, dd_vol_base,
-                    dd_vol_base.with_domain_tag(bdtag), u,
+                bdry.get_grad_flux(dcoll, dd_vol_base.with_domain_tag(bdtag), u,
                     quadrature_tag=quadrature_tag)
                 for bdtag, bdry in boundaries.items())
             )
@@ -449,7 +445,7 @@ def diffusion_operator(
             )
             + sum(
                 bdry.get_diffusion_flux(
-                    dcoll, dd_vol_base, dd_vol_base.with_domain_tag(bdtag), kappa,
+                    dcoll, dd_vol_base.with_domain_tag(bdtag), kappa,
                     grad_u, quadrature_tag=quadrature_tag)
                 for bdtag, bdry in boundaries.items())
             )
