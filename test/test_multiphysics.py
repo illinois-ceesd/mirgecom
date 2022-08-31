@@ -57,77 +57,73 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
-    global_mesh1 = generate_regular_rect_mesh(
-        a=(-1, -2), b=(1, -1),
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
-
-    global_mesh2 = generate_regular_rect_mesh(
-        a=(-1, 1), b=(1, 2),
+    mesh = generate_regular_rect_mesh(
+        a=(-1,)*dim, b=(1,)*dim,
         nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
     volume_meshes = {
-        "Lower": global_mesh1,
-        "Upper": global_mesh2,
+        "vol1": mesh,
+        "vol2": mesh,
     }
 
     dcoll = create_discretization_collection(actx, volume_meshes, order)
 
-    dd_vol_lower = DOFDesc(VolumeDomainTag("Lower"), DISCR_TAG_BASE)
-    dd_vol_upper = DOFDesc(VolumeDomainTag("Upper"), DISCR_TAG_BASE)
+    dd_vol1 = DOFDesc(VolumeDomainTag("vol1"), DISCR_TAG_BASE)
+    dd_vol2 = DOFDesc(VolumeDomainTag("vol2"), DISCR_TAG_BASE)
 
-    lower_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_lower))
-    upper_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_upper))
+    nodes1 = actx.thaw(dcoll.nodes(dd=dd_vol1))
+    nodes2 = actx.thaw(dcoll.nodes(dd=dd_vol2))
 
-    lower_boundaries = {
-        dd_vol_lower.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_lower.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_lower.trace("-1").domain_tag: DirichletDiffusionBoundary(-2.),
-        dd_vol_lower.trace("+1").domain_tag: DirichletDiffusionBoundary(-1.),
+    boundaries1 = {
+        dd_vol1.trace("-0").domain_tag: DirichletDiffusionBoundary(-1.),
+        dd_vol1.trace("+0").domain_tag: DirichletDiffusionBoundary(1.),
+        dd_vol1.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol1.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
     }
 
-    upper_boundaries = {
-        dd_vol_upper.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_upper.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_upper.trace("-1").domain_tag: DirichletDiffusionBoundary(1.),
-        dd_vol_upper.trace("+1").domain_tag: DirichletDiffusionBoundary(2.),
+    boundaries2 = {
+        dd_vol2.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol2.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol2.trace("-1").domain_tag: DirichletDiffusionBoundary(-1.),
+        dd_vol2.trace("+1").domain_tag: DirichletDiffusionBoundary(1.),
     }
 
-    lower_u = lower_nodes[1]
-    upper_u = upper_nodes[1]
+    u1 = nodes1[0]
+    u2 = nodes2[1]
 
-    u = make_obj_array([lower_u, upper_u])
+    u = make_obj_array([u1, u2])
 
     def get_rhs(t, u):
         return make_obj_array([
             diffusion_operator(
-                dcoll, kappa=1, boundaries=lower_boundaries, u=u[0],
-                volume_dd=dd_vol_lower),
+                dcoll, kappa=1, boundaries=boundaries1, u=u[0],
+                volume_dd=dd_vol1),
             diffusion_operator(
-                dcoll, kappa=1, boundaries=upper_boundaries, u=u[1],
-                volume_dd=dd_vol_upper)])
+                dcoll, kappa=1, boundaries=boundaries2, u=u[1],
+                volume_dd=dd_vol2)])
 
     rhs = get_rhs(0, u)
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        viz_lower = make_visualizer(dcoll, order+3, volume_dd=dd_vol_lower)
-        viz_upper = make_visualizer(dcoll, order+3, volume_dd=dd_vol_upper)
-        viz_lower.write_vtk_file(
-            f"multiphysics_independent_volumes_{order}_lower.vtu", [
+        viz1 = make_visualizer(dcoll, order+3, volume_dd=dd_vol1)
+        viz2 = make_visualizer(dcoll, order+3, volume_dd=dd_vol2)
+        viz1.write_vtk_file(
+            f"multiphysics_independent_volumes_{order}_1.vtu", [
                 ("u", u[0]),
                 ("rhs", rhs[0]),
                 ])
-        viz_upper.write_vtk_file(
-            f"multiphysics_independent_volumes_{order}_upper.vtu", [
+        viz2.write_vtk_file(
+            f"multiphysics_independent_volumes_{order}_2.vtu", [
                 ("u", u[1]),
                 ("rhs", rhs[1]),
                 ])
 
-    linf_err_lower = actx.to_numpy(op.norm(dcoll, rhs[0], np.inf, dd=dd_vol_lower))
-    linf_err_upper = actx.to_numpy(op.norm(dcoll, rhs[1], np.inf, dd=dd_vol_upper))
+    linf_err1 = actx.to_numpy(op.norm(dcoll, rhs[0], np.inf, dd=dd_vol1))
+    linf_err2 = actx.to_numpy(op.norm(dcoll, rhs[1], np.inf, dd=dd_vol2))
 
-    assert linf_err_lower < 1e-9
-    assert linf_err_upper < 1e-9
+    assert linf_err1 < 1e-9
+    assert linf_err2 < 1e-9
 
 
 if __name__ == "__main__":
