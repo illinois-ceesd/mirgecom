@@ -105,20 +105,25 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
         extract_vars_for_logging, units_for_logging, volume_dd=DD_VOLUME_ALL):
     """Add default discretization quantities to the logmgr."""
+    if volume_dd != DD_VOLUME_ALL:
+        suffix = f"_{volume_dd.domain_tag.tag}"
+    else:
+        suffix = ""
+
     for reduction_op in ["min", "max", "L2_norm"]:
-        for quantity in ["pressure", "temperature"]:
+        for quantity in ["pressure"+suffix, "temperature"+suffix]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 dcoll, quantity, reduction_op, extract_vars_for_logging,
                 units_for_logging, volume_dd=volume_dd))
 
-        for quantity in ["mass", "energy"]:
+        for quantity in ["mass"+suffix, "energy"+suffix]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 dcoll, quantity, reduction_op, extract_vars_for_logging,
                 units_for_logging, volume_dd=volume_dd))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                dcoll, "momentum", reduction_op, extract_vars_for_logging,
+                dcoll, "momentum"+suffix, reduction_op, extract_vars_for_logging,
                 units_for_logging, axis=d, volume_dd=volume_dd))
 
 
