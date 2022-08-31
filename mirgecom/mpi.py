@@ -101,9 +101,9 @@ def _check_gpu_oversubscription():
                 hostname = MPI.Get_processor_name()
                 dup = [item for item in dev_ids if dev_ids.count(item) > 1]
 
-                raise RuntimeError(
-                      f"Multiple ranks are sharing GPUs on node '{hostname}'."
-                      f" Duplicate PCIe IDs: {dup}.")
+                from warnings import warn
+                warn(f"Multiple ranks are sharing GPUs on node '{hostname}'. "
+                     f"Duplicate PCIe IDs: {dup}.")
 
 
 def mpi_entry_point(func):
