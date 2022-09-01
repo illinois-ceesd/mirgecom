@@ -476,7 +476,7 @@ def get_reasonable_memory_pool(ctx, queue):
     import pyopencl.tools as cl_tools
 
     if has_coarse_grain_buffer_svm(queue.device) and hasattr(cl_tools, "SVMPool"):
-        logger.info("Using SVM-based memory pool on {queue.device}.")
+        logger.info(f"Using SVM-based memory pool on {queue.device}.")
         return cl_tools.SVMPool(cl_tools.SVMAllocator(  # pylint: disable=no-member
             ctx, alignment=0, queue=queue))
     else:
