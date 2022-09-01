@@ -33,6 +33,7 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
 from meshmode.array_context import (  # noqa
@@ -132,11 +133,11 @@ def test_lazy_op_divergence(op_test_data, order):
     from mirgecom.operators import div_operator
 
     dd_vol = as_dofdesc("vol")
-    dd_faces = as_dofdesc("all_faces")
+    dd_allfaces = as_dofdesc("all_faces")
 
     def get_flux(u_tpair):
         dd = u_tpair.dd
-        dd_allfaces = dd.with_dtag("all_faces")
+        dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
         normal = dcoll.normal(dd)
         actx = u_tpair.int[0].array_context
         normal = actx.thaw(normal)
@@ -144,7 +145,7 @@ def test_lazy_op_divergence(op_test_data, order):
         return op.project(dcoll, dd, dd_allfaces, flux)
 
     def div_op(u):
-        return div_operator(dcoll, dd_vol, dd_faces,
+        return div_operator(dcoll, dd_vol, dd_allfaces,
                             u, get_flux(interior_trace_pair(dcoll, u)))
 
     lazy_op = lazy_actx.compile(div_op)

@@ -46,7 +46,11 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 
 import grudge.op as op
 
@@ -339,7 +343,7 @@ def viscous_flux_on_element_boundary(
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
         grad_t, interior_grad_t_pairs, quadrature_tag=DISCR_TAG_BASE,
         numerical_flux_func=viscous_facial_flux_central, time=0.0,
-        volume_dd=DD_VOLUME_ALL):
+        dd=DD_VOLUME_ALL):
     """Compute the viscous boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the viscous contributions
@@ -387,11 +391,17 @@ def viscous_flux_on_element_boundary(
     time: float
         Time
 
-    volume_dd: grudge.dof_desc.DOFDesc
-        The DOF descriptor of the volume on which to compute the flux.
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which the fluid lives. Must be
+        a volume on the base discretization.
     """
-    dd_base = volume_dd
-    dd_vol_quad = dd_base.with_discr_tag(quadrature_tag)
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     # {{{ - Viscous flux helpers -
@@ -405,15 +415,15 @@ def viscous_flux_on_element_boundary(
                 grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair))
 
     # viscous part of bcs applied here
-    def _fvisc_divergence_flux_boundary(bdtag, boundary, state_minus):
-        dd_bdry = dd_vol_quad.with_domain_tag(bdtag)
+    def _fvisc_divergence_flux_boundary(bdtag, boundary, state_minus_quad):
+        dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
         return op.project(
-            dcoll, dd_bdry, dd_allfaces_quad,
+            dcoll, dd_bdry_quad, dd_allfaces_quad,
             boundary.viscous_divergence_flux(
-                dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-                state_minus=state_minus,
-                grad_cv_minus=op.project(dcoll, dd_base, dd_bdry, grad_cv),
-                grad_t_minus=op.project(dcoll, dd_base, dd_bdry, grad_t),
+                dcoll=dcoll, dd_bdry=dd_bdry_quad, gas_model=gas_model,
+                state_minus=state_minus_quad,
+                grad_cv_minus=op.project(dcoll, dd_vol, dd_bdry_quad, grad_cv),
+                grad_t_minus=op.project(dcoll, dd_vol, dd_bdry_quad, grad_t),
                 time=time, numerical_flux_func=numerical_flux_func))
 
     # }}} viscous flux helpers
@@ -442,7 +452,7 @@ def viscous_flux_on_element_boundary(
     return bnd_term
 
 
-def get_viscous_timestep(dcoll, state, *, volume_dd=DD_VOLUME_ALL):
+def get_viscous_timestep(dcoll, state, *, dd=DD_VOLUME_ALL):
     """Routine returns the the node-local maximum stable viscous timestep.
 
     Parameters
@@ -455,16 +465,26 @@ def get_viscous_timestep(dcoll, state, *, volume_dd=DD_VOLUME_ALL):
 
         Full fluid conserved and thermal state
 
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be
+        a volume on the base discretization.
+
     Returns
     -------
     :class:`~meshmode.dof_array.DOFArray`
 
         The maximum stable timestep at each node.
     """
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
     from grudge.dt_utils import characteristic_lengthscales
 
     length_scales = characteristic_lengthscales(
-        state.array_context, dcoll, dd=volume_dd)
+        state.array_context, dcoll, dd=dd)
 
     nu = 0
     d_alpha_max = 0
@@ -482,7 +502,7 @@ def get_viscous_timestep(dcoll, state, *, volume_dd=DD_VOLUME_ALL):
     )
 
 
-def get_viscous_cfl(dcoll, dt, state, *, volume_dd=DD_VOLUME_ALL):
+def get_viscous_cfl(dcoll, dt, state, *, dd=DD_VOLUME_ALL):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
@@ -499,13 +519,18 @@ def get_viscous_cfl(dcoll, dt, state, *, volume_dd=DD_VOLUME_ALL):
 
         The full fluid conserved and thermal state
 
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be
+        a volume on the base discretization.
+
     Returns
     -------
     :class:`~meshmode.dof_array.DOFArray`
 
         The CFL at each node.
     """
-    return dt / get_viscous_timestep(dcoll, state=state, volume_dd=volume_dd)
+    return dt / get_viscous_timestep(dcoll, state=state, dd=dd)
 
 
 def get_local_max_species_diffusivity(actx, d_alpha):

@@ -48,7 +48,11 @@ THE SOFTWARE.
 import numpy as np
 from functools import partial
 
-from grudge.dof_desc import DISCR_TAG_MODAL, as_dofdesc
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    DISCR_TAG_MODAL,
+)
 
 from arraycontext import map_array_container
 
@@ -167,7 +171,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     )
 
 
-def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
+def filter_modally(dcoll, cutoff, mode_resp_func, field, *, dd=DD_VOLUME_ALL):
     """Stand-alone procedural interface to spectral filtering.
 
     For each element group in the discretization, and restriction,
@@ -185,15 +189,15 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     ----------
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
-    dd: :class:`grudge.dof_desc.DOFDesc` or as accepted by
-        :func:`grudge.dof_desc.as_dofdesc`
-        Describe the type of DOF vector on which to operate.
     cutoff: int
         Mode below which *field* will not be filtered
     mode_resp_func:
         Modal response function returns a filter coefficient for input mode id
     field: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the relevant field(s) to filter.
+    dd: grudge.dof_desc.DOFDesc
+        Describe the type of DOF vector on which to operate. Must be on the base
+        discretization.
 
     Returns
     -------
@@ -202,10 +206,13 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     """
     if not isinstance(field, DOFArray):
         return map_array_container(
-            partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
+            partial(filter_modally, dcoll, cutoff, mode_resp_func, dd=dd), field
         )
 
-    dd_nodal = as_dofdesc(dd)
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_nodal = dd
     dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
 
     discr = dcoll.discr_from_dd(dd_nodal)

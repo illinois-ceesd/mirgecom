@@ -35,6 +35,7 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests
 )
 from meshmode.mesh import BTAG_ALL
+from meshmode.discretization.connection import FACE_RESTR_ALL
 import grudge.op as op
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
@@ -443,11 +444,11 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     # Prescribed boundaries are used for inflow/outflow-type boundaries
     # where we expect to _preserve_ the soln gradient
     from grudge.dof_desc import as_dofdesc
-    dd_bnd = as_dofdesc(BTAG_ALL)
-    all_faces_dd = dd_bnd.with_dtag("all_faces")
+    dd_bdry = as_dofdesc(BTAG_ALL)
+    dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
     expected_av_flux_prescribed_boundary = av_diffusion_boundary@boundary_nhat
     print(f"{expected_av_flux_prescribed_boundary=}")
-    exp_av_flux = op.project(dcoll, dd_bnd, all_faces_dd,
+    exp_av_flux = op.project(dcoll, dd_bdry, dd_allfaces,
                                 expected_av_flux_prescribed_boundary)
     print(f"{exp_av_flux=}")
 

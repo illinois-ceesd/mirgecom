@@ -41,7 +41,11 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 import grudge.op as op
 from mirgecom.fluid import make_conserved
 
@@ -228,7 +232,7 @@ def inviscid_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, quadrature_tag=DISCR_TAG_BASE,
         numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0,
-        volume_dd=DD_VOLUME_ALL):
+        dd=DD_VOLUME_ALL):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the inviscid contributions
@@ -265,10 +269,17 @@ def inviscid_flux_on_element_boundary(
     time: float
         Time
 
-    volume_dd: grudge.dof_desc.DOFDesc
-        The DOF descriptor of the volume on which to compute the flux.
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which the fluid lives. Must be
+        a volume on the base discretization.
     """
-    dd_vol_quad = volume_dd.with_discr_tag(quadrature_tag)
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     def _interior_flux(state_pair):
@@ -278,11 +289,12 @@ def inviscid_flux_on_element_boundary(
                 state_pair, gas_model,
                 state_pair.int.array_context.thaw(dcoll.normal(state_pair.dd))))
 
-    def _boundary_flux(dd_bdry, boundary, state_minus):
+    def _boundary_flux(bdtag, boundary, state_minus_quad):
+        dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
         return op.project(dcoll,
-            dd_bdry, dd_allfaces_quad,
+            dd_bdry_quad, dd_allfaces_quad,
             boundary.inviscid_divergence_flux(
-                dcoll, dd_bdry, gas_model, state_minus=state_minus,
+                dcoll, dd_bdry_quad, gas_model, state_minus=state_minus_quad,
                 numerical_flux_func=numerical_flux_func, time=time))
 
     # Compute interface contributions
@@ -294,7 +306,7 @@ def inviscid_flux_on_element_boundary(
         # Domain boundary faces
         + sum(
             _boundary_flux(
-                dd_vol_quad.with_domain_tag(bdtag),
+                bdtag,
                 boundary,
                 domain_boundary_states[bdtag])
             for bdtag, boundary in boundaries.items())

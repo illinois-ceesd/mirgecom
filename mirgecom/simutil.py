@@ -94,7 +94,7 @@ def check_step(step, interval):
 
 def get_sim_timestep(
         dcoll, state, t, dt, cfl, t_final, constant_cfl=False,
-        fluid_volume_dd=DD_VOLUME_ALL):
+        fluid_dd=DD_VOLUME_ALL):
     """Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
@@ -125,6 +125,9 @@ def get_sim_timestep(
         The current CFL number
     constant_cfl: bool
         True if running constant CFL mode
+    fluid_dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *state* lives. Must be a
+        volume on the base discretization.
 
     Returns
     -------
@@ -138,7 +141,7 @@ def get_sim_timestep(
         from grudge.op import nodal_min
         mydt = state.array_context.to_numpy(
             cfl * nodal_min(
-                dcoll, fluid_volume_dd,
+                dcoll, fluid_dd,
                 get_viscous_timestep(dcoll=dcoll, state=state)))[()]
     return min(t_remaining, mydt)
 

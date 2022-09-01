@@ -40,7 +40,12 @@ import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE, as_dofdesc
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+    as_dofdesc,
+)
 from grudge.trace_pair import (
     TracePair,
     interior_trace_pairs,
@@ -206,8 +211,8 @@ class _DiffusionGradTag:
 
 
 def grad_operator(
-        dcoll, boundaries, u, *, quadrature_tag=DISCR_TAG_BASE,
-        volume_dd=DD_VOLUME_ALL, comm_tag=None):
+        dcoll, boundaries, u, *, quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
+        comm_tag=None):
     r"""
     Compute the gradient of *u*.
 
@@ -226,8 +231,9 @@ def grad_operator(
     quadrature_tag:
         quadrature tag indicating which discretization in *dcoll* to use for
         overintegration
-    volume_dd: grudge.dof_desc.DOFDesc
-        the DOF descriptor of the volume on which to apply the operator
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *u* lives. Must be a volume
+        on the base discretization.
     comm_tag: Hashable
         Tag for distributed communication
 
@@ -244,7 +250,7 @@ def grad_operator(
         return obj_array_vectorize_n_args(
             lambda boundaries_i, u_i: grad_operator(
                 dcoll, boundaries_i, u_i, quadrature_tag=quadrature_tag,
-                volume_dd=volume_dd),
+                dd=dd),
             make_obj_array(boundaries), u)
 
     actx = u.array_context
@@ -258,8 +264,13 @@ def grad_operator(
             raise TypeError(f"Unrecognized boundary type for tag {bdtag}. "
                 "Must be an instance of DiffusionBoundary.")
 
-    dd_vol_base = volume_dd
-    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
@@ -274,21 +285,21 @@ def grad_operator(
 
     def boundary_flux(bdtag, bdry):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
-        u_minus_quad = op.project(dcoll, dd_vol_base, dd_bdry_quad, u)
+        u_minus_quad = op.project(dcoll, dd_vol, dd_bdry_quad, u)
         return op.project(
             dcoll, dd_bdry_quad, dd_allfaces_quad,
             bdry.get_grad_flux(dcoll, dd_bdry_quad, u_minus_quad))
 
     return op.inverse_mass(
-        dcoll, dd_vol_base,
-        op.weak_local_grad(dcoll, dd_vol_base, -u)
+        dcoll, dd_vol,
+        op.weak_local_grad(dcoll, dd_vol, -u)
         -  # noqa: W504
         op.face_mass(
             dcoll, dd_allfaces_quad,
             sum(
                 interior_flux(u_tpair)
                 for u_tpair in interior_trace_pairs(
-                    dcoll, u, volume_dd=dd_vol_base,
+                    dcoll, u, volume_dd=dd_vol,
                     comm_tag=(_DiffusionStateTag, comm_tag)))
             + sum(
                 boundary_flux(bdtag, bdry)
@@ -299,7 +310,7 @@ def grad_operator(
 
 def diffusion_operator(
         dcoll, kappa, boundaries, u, *, return_grad_u=False,
-        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL, comm_tag=None,
+        quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None):
@@ -329,8 +340,9 @@ def diffusion_operator(
     quadrature_tag:
         quadrature tag indicating which discretization in *dcoll* to use for
         overintegration
-    volume_dd: grudge.dof_desc.DOFDesc
-        the DOF descriptor of the volume on which to apply the operator
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *u* lives. Must be a volume
+        on the base discretization.
     comm_tag: Hashable
         Tag for distributed communication
 
@@ -349,7 +361,7 @@ def diffusion_operator(
         return obj_array_vectorize_n_args(
             lambda boundaries_i, u_i: diffusion_operator(
                 dcoll, kappa, boundaries_i, u_i, return_grad_u=return_grad_u,
-                quadrature_tag=quadrature_tag, volume_dd=volume_dd),
+                quadrature_tag=quadrature_tag, dd=dd),
             make_obj_array(boundaries), u)
 
     actx = u.array_context
@@ -363,17 +375,21 @@ def diffusion_operator(
             raise TypeError(f"Unrecognized boundary type for tag {bdtag}. "
                 "Must be an instance of DiffusionBoundary.")
 
-    dd_vol_base = volume_dd
-    dd_vol_quad = dd_vol_base.with_discr_tag(quadrature_tag)
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if grad_u is None:
         grad_u = grad_operator(
-            dcoll, boundaries, u, quadrature_tag=quadrature_tag,
-            volume_dd=dd_vol_base)
+            dcoll, boundaries, u, quadrature_tag=quadrature_tag, dd=dd_vol)
 
-    kappa_quad = op.project(dcoll, dd_vol_base, dd_vol_quad, kappa)
-    grad_u_quad = op.project(dcoll, dd_vol_base, dd_vol_quad, grad_u)
+    kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
+    grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
@@ -388,15 +404,15 @@ def diffusion_operator(
 
     def boundary_flux(bdtag, bdry):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
-        kappa_minus_quad = op.project(dcoll, dd_vol_base, dd_bdry_quad, kappa)
-        grad_u_minus_quad = op.project(dcoll, dd_vol_base, dd_bdry_quad, grad_u)
+        kappa_minus_quad = op.project(dcoll, dd_vol, dd_bdry_quad, kappa)
+        grad_u_minus_quad = op.project(dcoll, dd_vol, dd_bdry_quad, grad_u)
         return op.project(
             dcoll, dd_bdry_quad, dd_allfaces_quad,
             bdry.get_diffusion_flux(
                 dcoll, dd_bdry_quad, kappa_minus_quad, grad_u_minus_quad))
 
     diff_u = op.inverse_mass(
-        dcoll, dd_vol_base,
+        dcoll, dd_vol,
         op.weak_local_div(dcoll, dd_vol_quad, -kappa_quad*grad_u_quad)
         -  # noqa: W504
         op.face_mass(
@@ -405,10 +421,10 @@ def diffusion_operator(
                 interior_flux(kappa_tpair, grad_u_tpair)
                 for kappa_tpair, grad_u_tpair in zip(
                     interior_trace_pairs(
-                        dcoll, kappa, volume_dd=dd_vol_base,
+                        dcoll, kappa, volume_dd=dd_vol,
                         comm_tag=(_DiffusionKappaTag, comm_tag)),
                     interior_trace_pairs(
-                        dcoll, grad_u, volume_dd=dd_vol_base,
+                        dcoll, grad_u, volume_dd=dd_vol,
                         comm_tag=(_DiffusionGradTag, comm_tag)))
             )
             + sum(

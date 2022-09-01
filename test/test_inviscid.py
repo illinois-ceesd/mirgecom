@@ -37,6 +37,7 @@ from pytools.obj_array import (
 )
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
@@ -334,7 +335,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         nhat = actx.thaw(dcoll.normal(interior_state_pair.dd))
         bnd_flux = num_flux(interior_state_pair, gas_model, nhat)
         dd = interior_state_pair.dd
-        dd_allfaces = dd.with_dtag("all_faces")
+        dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
         interior_face_flux = op.project(dcoll, dd, dd_allfaces, bnd_flux)
 
         def inf_norm(data):
@@ -383,7 +384,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         nhat = actx.thaw(dcoll.normal(state_tpair.dd))
         bnd_flux = num_flux(state_tpair, gas_model, nhat)
         dd = state_tpair.dd
-        dd_allfaces = dd.with_dtag("all_faces")
+        dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
         boundary_flux = op.project(dcoll, dd, dd_allfaces, bnd_flux)
 
         assert inf_norm(boundary_flux.mass) < tolerance

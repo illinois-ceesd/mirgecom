@@ -103,10 +103,10 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
 
 
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
-        extract_vars_for_logging, units_for_logging, volume_dd=DD_VOLUME_ALL):
+        extract_vars_for_logging, units_for_logging, dd=DD_VOLUME_ALL):
     """Add default discretization quantities to the logmgr."""
-    if volume_dd != DD_VOLUME_ALL:
-        suffix = f"_{volume_dd.domain_tag.tag}"
+    if dd != DD_VOLUME_ALL:
+        suffix = f"_{dd.domain_tag.tag}"
     else:
         suffix = ""
 
@@ -114,17 +114,17 @@ def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
         for quantity in ["pressure"+suffix, "temperature"+suffix]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 dcoll, quantity, reduction_op, extract_vars_for_logging,
-                units_for_logging, volume_dd=volume_dd))
+                units_for_logging, dd=dd))
 
         for quantity in ["mass"+suffix, "energy"+suffix]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 dcoll, quantity, reduction_op, extract_vars_for_logging,
-                units_for_logging, volume_dd=volume_dd))
+                units_for_logging, dd=dd))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 dcoll, "momentum"+suffix, reduction_op, extract_vars_for_logging,
-                units_for_logging, axis=d, volume_dd=volume_dd))
+                units_for_logging, axis=d, dd=dd))
 
 
 # {{{ Package versions
@@ -250,7 +250,7 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
     def __init__(self, dcoll: DiscretizationCollection, quantity: str, op: str,
                  extract_vars_for_logging, units_logging, name: str = None,
-                 axis: Optional[int] = None, volume_dd=DD_VOLUME_ALL):
+                 axis: Optional[int] = None, dd=DD_VOLUME_ALL):
         unit = units_logging(quantity)
 
         if name is None:
@@ -267,13 +267,13 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._discr_reduction = partial(oper.nodal_min, self.dcoll, volume_dd)
+            self._discr_reduction = partial(oper.nodal_min, self.dcoll, dd)
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(oper.nodal_max, self.dcoll, volume_dd)
+            self._discr_reduction = partial(oper.nodal_max, self.dcoll, dd)
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(oper.norm, self.dcoll, p=2, dd=volume_dd)
+            self._discr_reduction = partial(oper.norm, self.dcoll, p=2, dd=dd)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")

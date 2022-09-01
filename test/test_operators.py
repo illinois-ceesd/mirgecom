@@ -126,8 +126,8 @@ def central_flux_interior(actx, dcoll, int_tpair):
     normal = actx.thaw(dcoll.normal(int_tpair.dd))
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
-    dd_all_faces = int_tpair.dd.with_dtag("all_faces")
-    return op.project(dcoll, int_tpair.dd, dd_all_faces, flux_weak)
+    dd_allfaces = int_tpair.dd.with_dtag("all_faces")
+    return op.project(dcoll, int_tpair.dd, dd_allfaces, flux_weak)
 
 
 def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
@@ -140,8 +140,8 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
-    dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
-    return op.project(dcoll, bnd_tpair.dd, dd_all_faces, flux_weak)
+    dd_allfaces = bnd_tpair.dd.with_dtag("all_faces")
+    return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -228,8 +228,8 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
 
         from mirgecom.operators import grad_operator
         dd_vol = as_dofdesc("vol")
-        dd_faces = as_dofdesc("all_faces")
-        test_grad = grad_operator(dcoll, dd_vol, dd_faces,
+        dd_allfaces = as_dofdesc("all_faces")
+        test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
                                   test_data, test_data_flux_bnd)
 
         print(f"{test_grad=}")

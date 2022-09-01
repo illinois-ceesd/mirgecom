@@ -59,7 +59,11 @@ from mirgecom.transport import (
     TransportModel,
     GasTransportVars
 )
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 import grudge.op as op
 from grudge.trace_pair import (
     interior_trace_pairs,
@@ -386,7 +390,7 @@ class _FluidTemperatureTag:
 
 def make_operator_fluid_states(
         dcoll, volume_state, gas_model, boundaries, quadrature_tag=DISCR_TAG_BASE,
-        volume_dd=DD_VOLUME_ALL, comm_tag=None):
+        dd=DD_VOLUME_ALL, comm_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
     This routine prepares a model-consistent fluid state for each of the volume and
@@ -422,8 +426,9 @@ def make_operator_fluid_states(
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
 
-    volume_dd: grudge.dof_desc.DOFDesc
-        the DOF descriptor of the volume on which to construct the states
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *volume_state* lives. Must
+        be a volume on the base discretization.
 
     comm_tag: Hashable
         Tag for distributed communication
@@ -438,15 +443,20 @@ def make_operator_fluid_states(
         boundary domain tags in *boundaries*, all on the quadrature grid (if
         specified).
     """
-    dd_base_vol = volume_dd
-    dd_quad_vol = dd_base_vol.with_discr_tag(quadrature_tag)
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
 
     # project pair to the quadrature discretization and update dd to quad
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     domain_boundary_states_quad = {
-        bdtag: project_fluid_state(dcoll, dd_base_vol,
-                                  dd_quad_vol.with_domain_tag(bdtag),
+        bdtag: project_fluid_state(dcoll, dd_vol,
+                                  dd_vol_quad.with_domain_tag(bdtag),
                                   volume_state, gas_model)
         for bdtag in boundaries
     }
@@ -457,7 +467,7 @@ def make_operator_fluid_states(
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
-            dcoll, volume_state.cv, volume_dd=dd_base_vol,
+            dcoll, volume_state.cv, volume_dd=dd_vol,
             comm_tag=(_FluidCVTag, comm_tag))
     ]
 
@@ -472,7 +482,7 @@ def make_operator_fluid_states(
             # discretization (if any)
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
-                dcoll, volume_state.temperature, volume_dd=dd_base_vol,
+                dcoll, volume_state.temperature, volume_dd=dd_vol,
                 comm_tag=(_FluidTemperatureTag, comm_tag))]
 
     interior_boundary_states_quad = \
@@ -481,7 +491,7 @@ def make_operator_fluid_states(
 
     # Interpolate the fluid state to the volume quadrature grid
     # (this includes the conserved and dependent quantities)
-    volume_state_quad = project_fluid_state(dcoll, dd_base_vol, dd_quad_vol,
+    volume_state_quad = project_fluid_state(dcoll, dd_vol, dd_vol_quad,
                                             volume_state, gas_model)
 
     return \

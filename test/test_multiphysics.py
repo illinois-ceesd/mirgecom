@@ -96,11 +96,9 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     def get_rhs(t, u):
         return make_obj_array([
             diffusion_operator(
-                dcoll, kappa=1, boundaries=boundaries1, u=u[0],
-                volume_dd=dd_vol1),
+                dcoll, kappa=1, boundaries=boundaries1, u=u[0], dd=dd_vol1),
             diffusion_operator(
-                dcoll, kappa=1, boundaries=boundaries2, u=u[1],
-                volume_dd=dd_vol2)])
+                dcoll, kappa=1, boundaries=boundaries2, u=u[1], dd=dd_vol2)])
 
     rhs = get_rhs(0, u)
 

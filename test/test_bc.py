@@ -30,6 +30,7 @@ import logging
 import pytest
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
@@ -355,7 +356,7 @@ def test_noslip(actx_factory, dim, flux_func):
             nhat = actx.thaw(dcoll.normal(state_pair.dd))
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
             i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
@@ -368,13 +369,13 @@ def test_noslip(actx_factory, dim, flux_func):
 
             from mirgecom.operators import grad_operator
             dd_vol = as_dofdesc("vol")
-            dd_faces = as_dofdesc("all_faces")
+            dd_allfaces = as_dofdesc("all_faces")
             grad_cv_minus = \
                 op.project(dcoll, "vol", BTAG_ALL,
-                              grad_operator(dcoll, dd_vol, dd_faces,
+                              grad_operator(dcoll, dd_vol, dd_allfaces,
                                             uniform_state.cv, cv_flux_bnd))
             grad_t_minus = op.project(dcoll, "vol", BTAG_ALL,
-                                         grad_operator(dcoll, dd_vol, dd_faces,
+                                         grad_operator(dcoll, dd_vol, dd_allfaces,
                                                        temper, t_flux_bnd))
 
             print(f"{grad_cv_minus=}")
@@ -564,9 +565,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             nhat = actx.thaw(dcoll.normal(state_pair.dd))
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
-            bc_dd = as_dofdesc(BTAG_ALL)
-            i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
+            dd_bdry = as_dofdesc(BTAG_ALL)
+            i_flux_bc = op.project(dcoll, dd_bdry, dd_allfaces, i_flux_bc)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
 
             i_flux_bnd = i_flux_bc + i_flux_int
@@ -577,9 +578,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
 
             from mirgecom.operators import grad_operator
             dd_vol = as_dofdesc("vol")
-            dd_faces = as_dofdesc("all_faces")
-            grad_cv = grad_operator(dcoll, dd_vol, dd_faces, cv, cv_flux_bnd)
-            grad_t = grad_operator(dcoll, dd_vol, dd_faces, temper, t_flux_bnd)
+            dd_allfaces = as_dofdesc("all_faces")
+            grad_cv = grad_operator(dcoll, dd_vol, dd_allfaces, cv, cv_flux_bnd)
+            grad_t = grad_operator(dcoll, dd_vol, dd_allfaces, temper, t_flux_bnd)
             grad_cv_minus = op.project(dcoll, "vol", BTAG_ALL, grad_cv)
             grad_t_minus = op.project(dcoll, "vol", BTAG_ALL, grad_t)
 

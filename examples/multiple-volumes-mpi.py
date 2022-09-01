@@ -187,7 +187,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         for i in range(nvolumes):
             logmgr_add_many_discretization_quantities(
                 logmgr, dcoll, dim, partial(extract_vars, i), units,
-                volume_dd=volume_dds[i])
+                dd=volume_dds[i])
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -349,7 +349,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 dcoll, state=fluid_state, time=t,
                 boundaries={dd.trace(BTAG_ALL).domain_tag: wall},
                 gas_model=gas_model, quadrature_tag=quadrature_tag,
-                volume_dd=dd, comm_tag=dd)
+                dd=dd, comm_tag=dd)
             for dd, fluid_state in zip(volume_dds, fluid_states)])
 
     current_dt = my_get_timestep(
