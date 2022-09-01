@@ -278,7 +278,7 @@ def viscous_flux(state, grad_cv, grad_t):
             momentum=tau, species_mass=-j)
 
 
-def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
+def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
                                 gas_model=None):
     r"""Return a central facial flux for the divergence operator.
 
@@ -294,9 +294,9 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
-        The discretization to use
+        The discretization collection to use
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
         The physical model for the gas. Unused for this numerical flux function.
@@ -324,7 +324,7 @@ def viscous_facial_flux_central(discr, state_pair, grad_cv_pair, grad_t_pair,
     """
     from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
-    normal = actx.thaw(discr.normal(state_pair.dd))
+    normal = actx.thaw(dcoll.normal(state_pair.dd))
 
     f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                          grad_t_pair.int)
@@ -427,7 +427,7 @@ def viscous_facial_flux_central_harmonic(discr, state_pair, grad_cv_pair,
 
 
 def viscous_flux_on_element_boundary(
-        discr, gas_model, boundaries, interior_state_pairs,
+        dcoll, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
         grad_t, interior_grad_t_pairs, quadrature_tag=None,
         numerical_flux_func=viscous_facial_flux_central, time=0.0):
@@ -438,7 +438,7 @@ def viscous_flux_on_element_boundary(
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
         A discretization collection encapsulating the DG elements
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
@@ -486,10 +486,10 @@ def viscous_flux_on_element_boundary(
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def _fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
-        return op.project(discr,
+        return op.project(dcoll,
             state_pair.dd, state_pair.dd.with_dtag("all_faces"),
             numerical_flux_func(
-                discr=discr, gas_model=gas_model, state_pair=state_pair,
+                dcoll=dcoll, gas_model=gas_model, state_pair=state_pair,
                 grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair))
 
     # viscous part of bcs applied here
@@ -497,12 +497,12 @@ def viscous_flux_on_element_boundary(
         # Make sure we fields on the quadrature grid
         # restricted to the tag *btag*
         return op.project(
-            discr, dd_btag, dd_btag.with_dtag("all_faces"),
+            dcoll, dd_btag, dd_btag.with_dtag("all_faces"),
             boundary.viscous_divergence_flux(
-                discr=discr, btag=dd_btag, gas_model=gas_model,
+                dcoll=dcoll, btag=dd_btag, gas_model=gas_model,
                 state_minus=state_minus,
-                grad_cv_minus=op.project(discr, dd_base, dd_btag, grad_cv),
-                grad_t_minus=op.project(discr, dd_base, dd_btag, grad_t),
+                grad_cv_minus=op.project(dcoll, dd_base, dd_btag, grad_cv),
+                grad_t_minus=op.project(dcoll, dd_base, dd_btag, grad_t),
                 time=time, numerical_flux_func=numerical_flux_func))
 
     # }}} viscous flux helpers
@@ -530,7 +530,7 @@ def viscous_flux_on_element_boundary(
     return bnd_term
 
 
-def get_viscous_timestep(discr, state):
+def get_viscous_timestep(dcoll, state):
     r"""Routine returns the the node-local maximum stable viscous timestep.
 
     The locally required timestep $\delta{t}_l$ is calculated from the fluid
@@ -548,9 +548,9 @@ def get_viscous_timestep(discr, state):
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
-        the discretization to use
+        the discretization collection to use
 
     state: :class:`~mirgecom.gas_model.FluidState`
 
@@ -564,7 +564,7 @@ def get_viscous_timestep(discr, state):
     """
     from grudge.dt_utils import characteristic_lengthscales
 
-    length_scales = characteristic_lengthscales(state.array_context, discr)
+    length_scales = characteristic_lengthscales(state.array_context, dcoll)
 
     nu = 0
     d_alpha_max = 0
@@ -582,14 +582,14 @@ def get_viscous_timestep(discr, state):
     )
 
 
-def get_viscous_cfl(discr, dt, state):
+def get_viscous_cfl(dcoll, dt, state):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
     ----------
-    discr: :class:`~grudge.discretization.DiscretizationCollection`
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
-        the discretization to use
+        the discretization collection to use
 
     dt: float or :class:`~meshmode.dof_array.DOFArray`
 
@@ -605,7 +605,7 @@ def get_viscous_cfl(discr, dt, state):
 
         The CFL at each node.
     """
-    return dt / get_viscous_timestep(discr, state=state)
+    return dt / get_viscous_timestep(dcoll, state=state)
 
 
 def get_local_max_species_diffusivity(actx, d_alpha):

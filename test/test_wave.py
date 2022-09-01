@@ -164,9 +164,9 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
     for n in [8, 10, 12] if p.dim == 3 else [8, 12, 16]:
         mesh = p.mesh_factory(n)
 
-        discr = create_discretization_collection(actx, mesh, order=order)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
-        nodes = actx.thaw(discr.nodes())
+        nodes = actx.thaw(dcoll.nodes())
 
         def sym_eval(expr, t):
             return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
@@ -178,19 +178,19 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
 
         fields = flat_obj_array(u, v)
 
-        rhs = wave_operator(discr, c=p.c, w=fields)
+        rhs = wave_operator(dcoll, c=p.c, w=fields)
         rhs[0] = rhs[0] + sym_eval(sym_f, t_check)
 
         expected_rhs = sym_eval(sym_rhs, t_check)
 
         rel_linf_err = actx.to_numpy(
-            op.norm(discr, rhs - expected_rhs, np.inf)
-            / op.norm(discr, expected_rhs, np.inf))
+            op.norm(dcoll, rhs - expected_rhs, np.inf)
+            / op.norm(dcoll, expected_rhs, np.inf))
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(discr, order)
+            vis = make_visualizer(dcoll, order)
             vis.write_vtk_file("wave_accuracy_{order}_{n}.vtu".format(order=order,
                         n=n), [
                             ("u", fields[0]),
@@ -227,15 +227,15 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     mesh = p.mesh_factory(8)
 
-    discr = create_discretization_collection(actx, mesh, order=order)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
 
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     def sym_eval(expr, t):
         return sym.EvaluationMapper({"c": p.c, "x": nodes, "t": t})(expr)
 
     def get_rhs(t, w):
-        result = wave_operator(discr, c=p.c, w=w)
+        result = wave_operator(dcoll, c=p.c, w=w)
         result[0] += sym_eval(sym_f, t)
         return result
 
@@ -258,7 +258,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     if visualize:
         from grudge.shortcuts import make_visualizer
-        vis = make_visualizer(discr, order)
+        vis = make_visualizer(dcoll, order)
         vis.write_vtk_file("wave_stability.vtu",
                 [
                     ("u", fields[0]),
@@ -268,7 +268,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
                     ])
 
     def inf_norm(x):
-        return actx.to_numpy(op.norm(discr, x, np.inf))
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     err = inf_norm(fields-expected_fields)
     max_err = inf_norm(expected_fields)

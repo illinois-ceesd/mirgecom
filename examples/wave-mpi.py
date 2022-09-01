@@ -130,17 +130,17 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
     order = 3
 
-    discr = create_discretization_collection(
+    dcoll = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = actx.thaw(discr.nodes())
+    nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
-    nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
+    nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
 
-    dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol", nodal_dt))[()]
+    dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol", nodal_dt))[()]
 
     t_final = 1
 
@@ -150,7 +150,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
         fields = flat_obj_array(
             bump(actx, nodes),
-            [discr.zeros(actx) for i in range(dim)]
+            [dcoll.zeros(actx) for i in range(dim)]
             )
 
     else:
@@ -160,12 +160,12 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         restart_fields = restart_data["fields"]
         old_order = restart_data["order"]
         if old_order != order:
-            old_discr = create_discretization_collection(
+            old_dcoll = create_discretization_collection(
                 actx, local_mesh, order=old_order, mpi_communicator=comm
             )
             from meshmode.discretization.connection import make_same_mesh_connection
-            connection = make_same_mesh_connection(actx, discr.discr_from_dd("vol"),
-                                                   old_discr.discr_from_dd("vol"))
+            connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
+                                                   old_dcoll.discr_from_dd("vol"))
             fields = connection(restart_fields)
         else:
             fields = restart_fields
@@ -187,10 +187,10 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(discr)
+    vis = make_visualizer(dcoll)
 
     def rhs(t, w):
-        return wave_operator(discr, c=wave_speed, w=w)
+        return wave_operator(dcoll, c=wave_speed, w=w)
     fields = force_evaluation(actx, fields)
     compiled_rhs = actx.compile(rhs)
 
@@ -217,7 +217,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
             )
 
         if istep % 10 == 0:
-            print(istep, t, actx.to_numpy(op.norm(discr, fields[0], 2)))
+            print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
             vis.write_parallel_vtk_file(
                 comm,
                 "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
@@ -237,7 +237,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
-    final_soln = actx.to_numpy(op.norm(discr, fields[0], 2))
+    final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
     assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
 

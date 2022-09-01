@@ -108,20 +108,20 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
 
     order = 3
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
-    nodal_dt = characteristic_lengthscales(actx, discr) / wave_speed
-    dt = actx.to_numpy(current_cfl * op.nodal_min(discr, "vol",
+    nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
+    dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol",
                                                   nodal_dt))[()]
 
     print("%d elements" % mesh.nelements)
 
     fields = flat_obj_array(bump(actx, nodes),
-                            [discr.zeros(actx) for i in range(dim)])
+                            [dcoll.zeros(actx) for i in range(dim)])
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -140,10 +140,10 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(discr)
+    vis = make_visualizer(dcoll)
 
     def rhs(t, w):
-        return wave_operator(discr, c=wave_speed, w=w)
+        return wave_operator(dcoll, c=wave_speed, w=w)
 
     compiled_rhs = actx.compile(rhs)
     fields = force_evaluation(actx, fields)
@@ -161,7 +161,7 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         if istep % 10 == 0:
             if use_profiling:
                 print(actx.tabulate_profiling_data())
-            print(istep, t, actx.to_numpy(op.norm(discr, fields[0], 2)))
+            print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
