@@ -149,10 +149,6 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 
-class _AVCVTag:
-    pass
-
-
 class _AVRTag:
     pass
 
