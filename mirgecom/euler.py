@@ -68,7 +68,7 @@ from mirgecom.operators import div_operator
 
 def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                   quadrature_tag=None, operator_states_quad=None):
+                   quadrature_tag=None, comm_tag=None, operator_states_quad=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -107,13 +107,16 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
         The default value is *None*.
+
+    comm_tag: Hashable
+        Tag for distributed communication
     """
     dd_quad_vol = DOFDesc("vol", quadrature_tag)
     dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
 
     if operator_states_quad is None:
-        operator_states_quad = make_operator_fluid_states(dcoll, state, gas_model,
-                                                          boundaries, quadrature_tag)
+        operator_states_quad = make_operator_fluid_states(
+            dcoll, state, gas_model, boundaries, quadrature_tag, comm_tag)
 
     volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
         operator_states_quad
