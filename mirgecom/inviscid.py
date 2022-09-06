@@ -315,7 +315,7 @@ def inviscid_flux_on_element_boundary(
     return inviscid_flux_bnd
 
 
-def get_inviscid_timestep(dcoll, state):
+def get_inviscid_timestep(dcoll, state, dd=DD_VOLUME_ALL):
     """Return node-local stable timestep estimate for an inviscid fluid.
 
     The maximum stable timestep is computed from the acoustic wavespeed.
@@ -330,15 +330,25 @@ def get_inviscid_timestep(dcoll, state):
 
         Full fluid conserved and thermal state
 
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be
+        a volume on the base discretization.
+
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
 
         The maximum stable timestep at each node.
     """
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
     from grudge.dt_utils import characteristic_lengthscales
     return (
-        characteristic_lengthscales(state.array_context, dcoll)
+        characteristic_lengthscales(state.array_context, dcoll, dd=dd)
         / state.wavespeed
     )
 
