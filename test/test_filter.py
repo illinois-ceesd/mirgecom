@@ -205,7 +205,7 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
         r = nodes[0]
         result = 0
         for n, a in enumerate(coeff):
-            result += a * r ** n
+            result = result + a * r ** n
         return make_obj_array([result])
 
     # Any order {cutoff} and below fields should be unharmed
