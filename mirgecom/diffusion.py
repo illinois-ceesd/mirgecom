@@ -281,47 +281,9 @@ def grad_operator(
         )
 
 
-# Yuck
-def _normalize_arguments(*args, **kwargs):
-    if len(args) >= 2 and not isinstance(args[1], (dict, list)):
-        # Old deprecated positional argument list
-        pos_arg_names = ["kappa", "quad_tag", "boundaries", "u"]
-    else:
-        pos_arg_names = ["kappa", "boundaries", "u"]
-
-    arg_dict = {
-        arg_name: arg
-        for arg_name, arg in zip(pos_arg_names[:len(args)], args)}
-    arg_dict.update(kwargs)
-
-    from warnings import warn
-
-    if "alpha" in arg_dict:
-        warn(
-            "alpha argument is deprecated and will disappear in Q3 2022. "
-            "Use kappa instead.", DeprecationWarning, stacklevel=3)
-        kappa = arg_dict["alpha"]
-    else:
-        kappa = arg_dict["kappa"]
-
-    boundaries = arg_dict["boundaries"]
-    u = arg_dict["u"]
-
-    if "quad_tag" in arg_dict:
-        warn(
-            "quad_tag argument is deprecated and will disappear in Q3 2022. "
-            "Use quadrature_tag instead.", DeprecationWarning, stacklevel=3)
-        quadrature_tag = arg_dict["quad_tag"]
-    elif "quadrature_tag" in arg_dict:
-        quadrature_tag = arg_dict["quadrature_tag"]
-    else:
-        # quadrature_tag is optional
-        quadrature_tag = DISCR_TAG_BASE
-
-    return kappa, boundaries, u, quadrature_tag
-
-
-def diffusion_operator(dcoll, *args, return_grad_u=False, comm_tag=None, **kwargs):
+def diffusion_operator(
+        dcoll, kappa, boundaries, u, *, return_grad_u=False,
+        quadrature_tag=DISCR_TAG_BASE, comm_tag=None):
     r"""
     Compute the diffusion operator.
 
@@ -358,8 +320,6 @@ def diffusion_operator(dcoll, *args, return_grad_u=False, comm_tag=None, **kwarg
     grad_u: numpy.ndarray
         the gradient of *u*; only returned if *return_grad_u* is True
     """
-    kappa, boundaries, u, quadrature_tag = _normalize_arguments(*args, **kwargs)
-
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
             raise TypeError("boundaries must be a list if u is an object array")
