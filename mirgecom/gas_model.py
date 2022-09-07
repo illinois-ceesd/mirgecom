@@ -63,6 +63,7 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
+    as_dofdesc,
 )
 import grudge.op as op
 from grudge.trace_pair import (
@@ -443,6 +444,10 @@ def make_operator_fluid_states(
         boundary domain tags in *boundaries*, all on the quadrature grid (if
         specified).
     """
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")
     if dd.discretization_tag != DISCR_TAG_BASE:
