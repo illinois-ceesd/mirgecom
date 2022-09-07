@@ -48,6 +48,7 @@ from grudge.dof_desc import (
 )
 import grudge.op as op
 from mirgecom.fluid import make_conserved
+from mirgecom.utils import normalize_boundaries
 
 
 def inviscid_flux(state):
@@ -273,6 +274,8 @@ def inviscid_flux_on_element_boundary(
         the DOF descriptor of the discretization on which the fluid lives. Must be
         a volume on the base discretization.
     """
+    boundaries = normalize_boundaries(boundaries)
+
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")
     if dd.discretization_tag != DISCR_TAG_BASE:

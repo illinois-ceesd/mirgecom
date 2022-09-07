@@ -145,8 +145,9 @@ from grudge.dof_desc import (
     VolumeDomainTag,
     DISCR_TAG_BASE,
     DISCR_TAG_MODAL,
-    as_dofdesc,
 )
+
+from mirgecom.utils import normalize_boundaries
 
 import grudge.op as op
 
@@ -213,9 +214,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     :class:`mirgecom.fluid.ConservedVars`
         The artificial viscosity operator applied to *q*.
     """
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     cv = fluid_state.cv
     actx = cv.array_context

@@ -44,7 +44,6 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
-    as_dofdesc,
 )
 from grudge.trace_pair import (
     TracePair,
@@ -52,6 +51,7 @@ from grudge.trace_pair import (
     tracepair_with_discr_tag,
 )
 import grudge.op as op
+from mirgecom.utils import normalize_boundaries
 
 
 def grad_facial_flux(u_tpair, normal):
@@ -255,9 +255,7 @@ def grad_operator(
 
     actx = u.array_context
 
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     for bdtag, bdry in boundaries.items():
         if not isinstance(bdry, DiffusionBoundary):
@@ -366,9 +364,7 @@ def diffusion_operator(
 
     actx = u.array_context
 
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     for bdtag, bdry in boundaries.items():
         if not isinstance(bdry, DiffusionBoundary):

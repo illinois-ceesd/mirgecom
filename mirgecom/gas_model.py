@@ -63,13 +63,13 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
-    as_dofdesc,
 )
 import grudge.op as op
 from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag
 )
+from mirgecom.utils import normalize_boundaries
 
 
 @dataclass(frozen=True)
@@ -444,9 +444,7 @@ def make_operator_fluid_states(
         boundary domain tags in *boundaries*, all on the quadrature grid (if
         specified).
     """
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")

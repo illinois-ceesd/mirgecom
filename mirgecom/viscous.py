@@ -60,6 +60,8 @@ from mirgecom.fluid import (
     make_conserved
 )
 
+from mirgecom.utils import normalize_boundaries
+
 
 # low level routine works with numpy arrays and can be tested without
 # a full grid + fluid state, etc
@@ -395,6 +397,8 @@ def viscous_flux_on_element_boundary(
         the DOF descriptor of the discretization on which the fluid lives. Must be
         a volume on the base discretization.
     """
+    boundaries = normalize_boundaries(boundaries)
+
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")
     if dd.discretization_tag != DISCR_TAG_BASE:

@@ -70,7 +70,6 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
-    as_dofdesc,
 )
 
 import grudge.op as op
@@ -91,6 +90,7 @@ from mirgecom.operators import (
     div_operator, grad_operator
 )
 from mirgecom.gas_model import make_operator_fluid_states
+from mirgecom.utils import normalize_boundaries
 
 
 class _NSGradCVTag:
@@ -163,9 +163,7 @@ def grad_cv_operator(
         CV object with vector components representing the gradient of the fluid
         conserved variables.
     """
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")
@@ -266,9 +264,7 @@ def grad_t_operator(
         Array of :class:`~meshmode.dof_array.DOFArray` representing the gradient of
         the fluid temperature.
     """
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")
@@ -414,9 +410,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
 
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")

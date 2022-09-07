@@ -59,7 +59,6 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
-    as_dofdesc,
 )
 
 from mirgecom.gas_model import make_operator_fluid_states
@@ -70,6 +69,7 @@ from mirgecom.inviscid import (
 )
 
 from mirgecom.operators import div_operator
+from mirgecom.utils import normalize_boundaries
 
 
 def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
@@ -125,9 +125,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
         Tag for distributed communication
     """
-    boundaries = {
-        as_dofdesc(bdtag).domain_tag: bdry
-        for bdtag, bdry in boundaries.items()}
+    boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
         raise TypeError("dd must represent a volume")
