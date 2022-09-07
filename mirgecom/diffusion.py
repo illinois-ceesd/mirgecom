@@ -230,7 +230,7 @@ class _DiffusionGradTag:
 
 def grad_operator(
         dcoll, boundaries, u, *, quadrature_tag=DISCR_TAG_BASE,
-        volume_dd=DD_VOLUME_ALL):
+        volume_dd=DD_VOLUME_ALL, comm_tag=None):
     r"""
     Compute the gradient of *u*.
 
@@ -251,6 +251,8 @@ def grad_operator(
         overintegration
     volume_dd: grudge.dof_desc.DOFDesc
         the DOF descriptor of the volume on which to apply the operator
+    comm_tag: Hashable
+        Tag for distributed communication
 
     Returns
     -------
@@ -290,7 +292,8 @@ def grad_operator(
             sum(
                 grad_flux(dcoll, u_tpair, quadrature_tag=quadrature_tag)
                 for u_tpair in interior_trace_pairs(
-                    dcoll, u, volume_dd=dd_vol_base, tag=_DiffusionStateTag))
+                    dcoll, u, volume_dd=dd_vol_base,
+                    comm_tag=(_DiffusionStateTag, comm_tag)))
             + sum(
                 bdry.get_grad_flux(dcoll, dd_vol_base.with_domain_tag(bdtag), u,
                     quadrature_tag=quadrature_tag)
@@ -353,7 +356,7 @@ def _normalize_arguments(*args, **kwargs):
 
 
 def diffusion_operator(
-        dcoll, *args, return_grad_u=False, volume_dd=DD_VOLUME_ALL,
+        dcoll, *args, return_grad_u=False, volume_dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None,
@@ -386,6 +389,8 @@ def diffusion_operator(
         overintegration
     volume_dd: grudge.dof_desc.DOFDesc
         the DOF descriptor of the volume on which to apply the operator
+    comm_tag: Hashable
+        Tag for distributed communication
 
     Returns
     -------
@@ -439,9 +444,11 @@ def diffusion_operator(
                     dcoll, kappa_tpair, grad_u_tpair, quadrature_tag=quadrature_tag)
                 for kappa_tpair, grad_u_tpair in zip(
                     interior_trace_pairs(
-                        dcoll, kappa, volume_dd=dd_vol_base, tag=_DiffusionKappaTag),
+                        dcoll, kappa, volume_dd=dd_vol_base,
+                        comm_tag=(_DiffusionKappaTag, comm_tag)),
                     interior_trace_pairs(
-                        dcoll, grad_u, volume_dd=dd_vol_base, tag=_DiffusionGradTag))
+                        dcoll, grad_u, volume_dd=dd_vol_base,
+                        comm_tag=(_DiffusionGradTag, comm_tag)))
             )
             + sum(
                 bdry.get_diffusion_flux(

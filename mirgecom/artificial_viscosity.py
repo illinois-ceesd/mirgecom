@@ -150,10 +150,6 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 
-class _AVCVTag:
-    pass
-
-
 class _AVRTag:
     pass
 
@@ -162,6 +158,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
                           kappa=1., s0=-6., time=0, quadrature_tag=DISCR_TAG_BASE,
                           volume_dd=DD_VOLUME_ALL, boundary_kwargs=None,
                           indicator=None, divergence_numerical_flux=num_flux_central,
+                          comm_tag=None,
                           operator_states_quad=None,
                           grad_cv=None,
                           **kwargs):
@@ -207,6 +204,9 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     volume_dd: grudge.dof_desc.DOFDesc
         The DOF descriptor of the volume on which to apply the operator.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
@@ -242,7 +242,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
         from mirgecom.gas_model import make_operator_fluid_states
         operator_states_quad = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries, quadrature_tag,
-            volume_dd=dd_base)
+            volume_dd=dd_base, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -257,6 +257,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
         grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                    time=time, quadrature_tag=quadrature_tag,
                                    volume_dd=dd_base,
+                                   comm_tag=comm_tag,
                                    operator_states_quad=operator_states_quad)
 
     # Compute R = alpha*grad(Q)
@@ -277,7 +278,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
         sum(
             central_flux_div(interp_to_surf_quad(tpair=tpair))
             for tpair in interior_trace_pairs(
-                dcoll, r, volume_dd=dd_base, tag=_AVRTag))
+                dcoll, r, volume_dd=dd_base, comm_tag=(_AVRTag, comm_tag)))
 
         # Contributions from boundary fluxes
         + sum(

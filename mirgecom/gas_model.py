@@ -386,7 +386,7 @@ class _FluidTemperatureTag:
 
 def make_operator_fluid_states(
         dcoll, volume_state, gas_model, boundaries, quadrature_tag=DISCR_TAG_BASE,
-        volume_dd=DD_VOLUME_ALL):
+        volume_dd=DD_VOLUME_ALL, comm_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
     This routine prepares a model-consistent fluid state for each of the volume and
@@ -425,6 +425,9 @@ def make_operator_fluid_states(
     volume_dd: grudge.dof_desc.DOFDesc
         the DOF descriptor of the volume on which to construct the states
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
@@ -454,7 +457,8 @@ def make_operator_fluid_states(
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
-            dcoll, volume_state.cv, volume_dd=dd_base_vol, tag=_FluidCVTag)
+            dcoll, volume_state.cv, volume_dd=dd_base_vol,
+            comm_tag=(_FluidCVTag, comm_tag))
     ]
 
     tseed_interior_pairs = None
@@ -469,7 +473,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.temperature, volume_dd=dd_base_vol,
-                tag=_FluidTemperatureTag)]
+                comm_tag=(_FluidTemperatureTag, comm_tag))]
 
     interior_boundary_states_quad = \
         make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,

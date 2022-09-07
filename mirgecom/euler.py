@@ -70,6 +70,7 @@ from mirgecom.operators import div_operator
 def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                    quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL,
+                   comm_tag=None,
                    operator_states_quad=None):
     r"""Compute RHS of the Euler flow equations.
 
@@ -112,14 +113,17 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
     volume_dd: grudge.dof_desc.DOFDesc
         The DOF descriptor of the volume on which to apply the operator.
+
+    comm_tag: Hashable
+        Tag for distributed communication
     """
     dd_quad_vol = volume_dd.with_discr_tag(quadrature_tag)
     dd_quad_allfaces = dd_quad_vol.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
-        operator_states_quad = make_operator_fluid_states(dcoll, state, gas_model,
-                                                          boundaries, quadrature_tag,
-                                                          volume_dd=volume_dd)
+        operator_states_quad = make_operator_fluid_states(
+            dcoll, state, gas_model, boundaries, quadrature_tag,
+            volume_dd=volume_dd, comm_tag=comm_tag)
 
     volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
         operator_states_quad

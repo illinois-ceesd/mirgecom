@@ -114,7 +114,7 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
 def grad_cv_operator(
         dcoll, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=num_flux_central,
-        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL,
+        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
@@ -151,6 +151,9 @@ def grad_cv_operator(
     volume_dd: grudge.dof_desc.DOFDesc
         The DOF descriptor of the volume on which to apply the operator.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
@@ -169,7 +172,7 @@ def grad_cv_operator(
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            volume_dd=dd_vol_base)
+            volume_dd=dd_vol_base, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -209,7 +212,7 @@ def grad_cv_operator(
 def grad_t_operator(
         dcoll, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=num_flux_central,
-        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL,
+        quadrature_tag=DISCR_TAG_BASE, volume_dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
@@ -245,6 +248,9 @@ def grad_t_operator(
     volume_dd: grudge.dof_desc.DOFDesc
         The DOF descriptor of the volume on which to apply the operator.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`numpy.ndarray`
@@ -263,7 +269,7 @@ def grad_t_operator(
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            volume_dd=dd_vol_base)
+            volume_dd=dd_vol_base, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -309,7 +315,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                 gradient_numerical_flux_func=num_flux_central,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
-                volume_dd=DD_VOLUME_ALL,
+                volume_dd=DD_VOLUME_ALL, comm_tag=None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
@@ -360,6 +366,9 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     volume_dd: grudge.dof_desc.DOFDesc
         The DOF descriptor of the volume on which to apply the operator.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     operator_states_quad
         Optional iterable container providing the full fluid states
         (:class:`~mirgecom.gas_model.FluidState`) on the quadrature
@@ -409,7 +418,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            volume_dd=dd_vol_base)
+            volume_dd=dd_vol_base, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -436,7 +445,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
-            dcoll, grad_cv, volume_dd=dd_vol_base, tag=_NSGradCVTag)
+            dcoll, grad_cv, volume_dd=dd_vol_base, comm_tag=(_NSGradCVTag, comm_tag))
     ]
 
     # }}} Compute grad(CV)
@@ -456,7 +465,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
-            dcoll, grad_t, volume_dd=dd_vol_base, tag=_NSGradTemperatureTag)
+            dcoll, grad_t, volume_dd=dd_vol_base,
+            comm_tag=(_NSGradTemperatureTag, comm_tag))
     ]
 
     # }}} compute grad(temperature)
