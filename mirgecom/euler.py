@@ -117,6 +117,10 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
     comm_tag: Hashable
         Tag for distributed communication
     """
+    boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in boundaries.items()}
+
     dd_quad_vol = volume_dd.with_discr_tag(quadrature_tag)
     dd_quad_allfaces = dd_quad_vol.trace(FACE_RESTR_ALL)
 
