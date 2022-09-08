@@ -126,6 +126,8 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     to compute boundary fluxes as shown in [Hesthaven_2008]_, Section 7.1.
 
     .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
     """
 
     def __init__(self, value):
@@ -141,7 +143,6 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        """Get gradient flux."""
         u_int = op.project(dcoll, "vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=2*self.value-u_int)
         return grad_flux(dcoll, u_tpair, quadrature_tag=quadrature_tag)
@@ -149,7 +150,6 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        """Get diffusion flux."""
         kappa_int = op.project(dcoll, "vol", dd, kappa)
         kappa_tpair = TracePair(dd, interior=kappa_int, exterior=kappa_int)
         grad_u_int = op.project(dcoll, "vol", dd, grad_u)
@@ -181,6 +181,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
 
     .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
     """
 
     def __init__(self, value):
@@ -196,7 +198,6 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd, u, *, quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        """Get gradient flux."""
         u_int = op.project(dcoll, "vol", dd, u)
         u_tpair = TracePair(dd, interior=u_int, exterior=u_int)
         return grad_flux(dcoll, u_tpair, quadrature_tag=quadrature_tag)
@@ -204,7 +205,6 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd, kappa, grad_u, *,
             quadrature_tag=DISCR_TAG_BASE):  # noqa: D102
-        """Get diffusion flux."""
         dd_quad = dd.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_quad.with_dtag("all_faces")
         # Compute the flux directly instead of constructing an external grad_u value
