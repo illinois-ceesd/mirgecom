@@ -95,6 +95,8 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     to compute boundary fluxes as shown in [Hesthaven_2008]_, Section 7.1.
 
     .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
     """
 
     def __init__(self, value):
@@ -152,6 +154,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
 
     .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
     """
 
     def __init__(self, value):
