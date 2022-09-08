@@ -149,10 +149,6 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 
-class _AVCVTag:
-    pass
-
-
 class _AVRTag:
     pass
 
@@ -161,7 +157,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
                           kappa=1., s0=-6., time=0, operator_states_quad=None,
                           grad_cv=None, quadrature_tag=None, boundary_kwargs=None,
                           indicator=None, divergence_numerical_flux=num_flux_central,
-                          **kwargs):
+                          comm_tag=None, **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -205,6 +201,9 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     boundary_kwargs: :class:`dict`
         dictionary of extra arguments to pass through to the boundary conditions
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
@@ -233,7 +232,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     if operator_states_quad is None:
         from mirgecom.gas_model import make_operator_fluid_states
         operator_states_quad = make_operator_fluid_states(
-            dcoll, fluid_state, gas_model, boundaries, quadrature_tag)
+            dcoll, fluid_state, gas_model, boundaries, quadrature_tag, comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -247,7 +246,8 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
         from mirgecom.navierstokes import grad_cv_operator
         grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                    time=time, quadrature_tag=quadrature_tag,
-                                   operator_states_quad=operator_states_quad)
+                                   operator_states_quad=operator_states_quad,
+                                   comm_tag=comm_tag)
 
     # Compute R = alpha*grad(Q)
     r = -alpha * indicator * grad_cv
@@ -264,7 +264,8 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
         + sum(central_flux_div(interp_to_surf_quad(tpair=tpair))
-              for tpair in interior_trace_pairs(dcoll, r, tag=_AVRTag))
+              for tpair in interior_trace_pairs(dcoll, r,
+                    comm_tag=(_AVRTag, comm_tag)))
 
         # Contributions from boundary fluxes
         + sum(boundaries[btag].av_flux(
