@@ -4,6 +4,7 @@
 #
 name: ceesd
 channels:
+- conda-forge/label/pocl_dev
 - conda-forge
 - nodefaults
 dependencies:
