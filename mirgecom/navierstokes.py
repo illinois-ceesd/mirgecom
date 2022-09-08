@@ -107,7 +107,7 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
 def grad_cv_operator(
         dcoll, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=num_flux_central,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=DISCR_TAG_BASE, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
@@ -140,6 +140,9 @@ def grad_cv_operator(
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
@@ -152,7 +155,8 @@ def grad_cv_operator(
 
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag)
+            dcoll, state, gas_model, boundaries, quadrature_tag,
+            comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -194,7 +198,7 @@ def grad_cv_operator(
 def grad_t_operator(
         dcoll, gas_model, boundaries, state, *, time=0.0,
         numerical_flux_func=num_flux_central,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=DISCR_TAG_BASE, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None):
@@ -227,6 +231,9 @@ def grad_t_operator(
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`numpy.ndarray`
@@ -239,7 +246,7 @@ def grad_t_operator(
 
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag)
+            dcoll, state, gas_model, boundaries, quadrature_tag, comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -287,6 +294,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                 gradient_numerical_flux_func=num_flux_central,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 quadrature_tag=DISCR_TAG_BASE, return_gradients=False,
+                comm_tag=None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
@@ -352,6 +360,9 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         $\nabla(\text{CV})$ and $\nabla(T)$ along with the RHS for the Navier-Stokes
         equations.  Useful for debugging and visualization.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
@@ -378,7 +389,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # otherwise they stay on the interpolatory/base domain.
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag)
+            dcoll, state, gas_model, boundaries, quadrature_tag, comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -404,7 +415,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(dcoll, grad_cv, tag=_NSGradCVTag)
+        for tpair in interior_trace_pairs(
+            dcoll, grad_cv, comm_tag=(_NSGradCVTag, comm_tag))
     ]
 
     # }}} Compute grad(CV)
@@ -423,7 +435,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(dcoll, grad_t, tag=_NSGradTemperatureTag)
+        for tpair in interior_trace_pairs(
+            dcoll, grad_t, comm_tag=(_NSGradTemperatureTag, comm_tag))
     ]
 
     # }}} compute grad(temperature)

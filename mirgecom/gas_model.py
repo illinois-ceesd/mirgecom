@@ -408,7 +408,7 @@ class _FluidSmoothnessTag:
 
 
 def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
-                               quadrature_tag=None):
+                               quadrature_tag=None, comm_tag=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
     This routine prepares a model-consistent fluid state for each of the volume and
@@ -444,6 +444,9 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
         discretization to use during operator evaluations.
         The default value is *None*.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     Returns
     -------
     (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
@@ -471,7 +474,8 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(dcoll, volume_state.cv, tag=_FluidCVTag)
+        for tpair in interior_trace_pairs(dcoll, volume_state.cv,
+            comm_tag=(_FluidCVTag, comm_tag))
     ]
 
     tseed_interior_pairs = None
@@ -484,8 +488,9 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(dcoll, volume_state.temperature,
-                                              tag=_FluidTemperatureTag)]
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.temperature,
+                comm_tag=(_FluidTemperatureTag, comm_tag))]
 
     smoothness_interior_pairs = None
     if volume_state.smoothness is not None:
