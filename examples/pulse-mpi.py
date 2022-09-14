@@ -153,7 +153,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 b=(box_ur,)*dim,
                                 nelements_per_axis=(nel_1d,)*dim,
                                 boundary_tag_to_face={
-                                    "outlet": ["+x","-y","+y"],
+                                    "outlet": ["+x", "-y", "+y"],
                                     "inlet": ["-x"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
