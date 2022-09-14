@@ -1550,7 +1550,6 @@ class LinearizedBoundary(PrescribedFluidBoundary):
                  free_stream_temperature=None,
                  free_stream_species_mass_fractions=None):
         """Initialize the boundary condition object."""
-
         self._ref_state = free_stream_state
         self._mass = free_stream_density
         self._velocity = free_stream_velocity
@@ -1564,7 +1563,6 @@ class LinearizedBoundary(PrescribedFluidBoundary):
 
     def outflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
         """."""
-
         if self._ref_state is None:
             ref_mass = self._mass
             ref_velocity = self._velocity
