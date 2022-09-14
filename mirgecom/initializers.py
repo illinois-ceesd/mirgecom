@@ -63,8 +63,9 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
         raise ValueError("State is overspecified, require only 2 of (pressure, "
                          "temperature, density)")
 
-    if ((pressure is not None and (temperature is None or density is not None))
-          or (temperature is not None and (pressure is None or density is None))):
+    if ((pressure is not None and (temperature is None and density is None))
+          or (temperature is not None and (pressure is None and density is None))
+          or (density is not None and (pressure is None and temperature is None))):
         raise ValueError("State is underspecified, require 2 of (pressure, "
                          "temperature, density)")
 
@@ -81,8 +82,7 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
     if density is None:
         density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
 
-    internal_energy = gas_model.eos.get_internal_energy(
-        temperature=temperature, mass=density, mass_fractions=mass_fractions)
+    internal_energy = gas_model.eos.get_internal_energy(temperature, mass_fractions)
 
     species_mass = None if mass_fractions is None else density * mass_fractions
 
@@ -769,7 +769,7 @@ class AcousticPulse:
 
     .. math::
 
-        {\rho}E(\mathbf{r}) = {\rho}E + a_0 * G(\mathbf{r})\\
+        q(\mathbf{r}) = q_0 + a_0 * G(\mathbf{r})\\
         G(\mathbf{r}) = \exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
     where $\mathbf{r}$ are the nodal coordinates, and $\mathbf{r}_0$,
@@ -819,17 +819,25 @@ class AcousticPulse:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (unused)
+            Equation of state class to be used in construction of soln
         """
         if eos is None:
             eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        return cv.replace(
-            energy=cv.energy + make_pulse(
-                amp=self._amp, w=self._width, r0=self._center, r=x_vec)
-        )
+        gamma = eos.gamma()
+
+        int_energy = cv.energy - 0.5*cv.mass*np.dot(cv.velocity, cv.velocity)
+        pressure = int_energy*(gamma-1.0) + \
+            make_pulse(amp=self._amp, w=self._width, r0=self._center, r=x_vec)
+
+        # isentropic relations
+        mass = pressure**(1.0/gamma)
+
+        energy = pressure/(gamma-1.0) + 0.5*mass*np.dot(cv.velocity, cv.velocity)
+
+        return cv.replace(mass=mass, energy=energy)
 
 
 class Uniform:

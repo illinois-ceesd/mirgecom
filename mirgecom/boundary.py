@@ -23,6 +23,7 @@ Boundary Conditions
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
 .. autoclass:: SymmetryBoundary
+.. autoclass:: LinearizedBoundary
 """
 
 __copyright__ = """
@@ -59,6 +60,7 @@ import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state
+from pytools.obj_array import make_obj_array
 
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
 
@@ -811,7 +813,11 @@ class OutflowBoundary(PrescribedFluidBoundary):
         """Initialize the boundary condition object."""
         self._pressure = boundary_pressure
         PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.outflow_state
+            self, boundary_state_func=self.outflow_state,
+            inviscid_flux_func=self.inviscid_boundary_flux,
+            viscous_flux_func=self.viscous_boundary_flux,
+            boundary_temperature_func=self.temperature_bc,
+            boundary_gradient_cv_func=self.grad_cv_bc
         )
 
     def outflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
@@ -837,6 +843,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
         kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
         gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
 
+        # evaluate internal energy based on prescribed pressure
         pressure_plus = 2.0*self._pressure - state_minus.pressure
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(state_minus.cv)
@@ -853,7 +860,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
             boundary_pressure = actx.np.where(actx.np.greater(boundary_speed,
                                                               speed_of_sound),
                                               state_minus.pressure, pressure_plus)
-            internal_energy = (boundary_pressure / (gamma - 1.0))
+            internal_energy = boundary_pressure/(gamma - 1.0)
 
         total_energy = internal_energy + kinetic_energy
         cv_outflow = make_conserved(dim=state_minus.dim, mass=state_minus.cv.mass,
@@ -863,6 +870,136 @@ class OutflowBoundary(PrescribedFluidBoundary):
 
         return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
+
+    def outflow_state_for_diffusion(self, dcoll, btag, gas_model,
+                                           state_minus, **kwargs):
+        """Return state."""
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(btag))
+
+        # boundary-normal velocity
+        boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
+        boundary_speed = actx.np.sqrt(np.dot(boundary_vel, boundary_vel))
+        speed_of_sound = state_minus.speed_of_sound
+        kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
+        gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
+
+        # evaluate internal energy based on prescribed pressure
+        pressure_plus = self._pressure + 0.0*state_minus.pressure
+        if state_minus.is_mixture:
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temp_plus = (
+                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                state_minus.temperature,
+                pressure_plus/(state_minus.cv.mass*gas_const))
+            )
+
+            internal_energy = state_minus.cv.mass*(
+                gas_model.eos.get_internal_energy(
+                    temp_plus, state_minus.species_mass_fractions)
+            )
+        else:
+            boundary_pressure = (
+                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                              state_minus.pressure, pressure_plus)
+            )
+            internal_energy = (boundary_pressure / (gamma - 1.0))
+
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density,
+            energy=kinetic_energy + internal_energy,
+            momentum=state_minus.momentum_density,
+            species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.dv.smoothness)
+
+    def inviscid_boundary_flux(self, dcoll, btag, gas_model, state_minus,
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
+        """."""
+        outflow_state = self.outflow_state(
+            dcoll, btag, gas_model, state_minus)
+        state_pair = TracePair(btag, interior=state_minus, exterior=outflow_state)
+
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(btag))
+        return numerical_flux_func(state_pair, gas_model, normal)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return state_minus.temperature
+
+    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        dim = state_minus.dim
+
+        # extrapolate density and its gradient
+        mass_plus = state_minus.mass_density
+        grad_mass_plus = grad_cv_minus.mass \
+                         - 1*np.dot(grad_cv_minus.mass, normal)*normal
+
+        from mirgecom.fluid import velocity_gradient
+        v_minus = state_minus.velocity
+        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
+
+        # retain only the diagonal terms to force zero shear stress
+        v_plus = state_minus.velocity
+        grad_v_plus = grad_v_minus*np.eye(dim)
+
+        # product rule for momentum
+        grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
+
+        # the energy has to be modified accordingly:
+        # first, get gradient of internal energy, i.e., no kinetic energy
+        grad_int_energy_minus = grad_cv_minus.energy \
+            - (0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
+                + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus)))
+        # remove normal component
+        grad_int_energy_plus = grad_int_energy_minus \
+                         - 1*np.dot(grad_int_energy_minus, normal)*normal
+        # then modify gradient of kinetic energy to match the changes in velocity
+        grad_kin_energy_plus = \
+            0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
+                + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
+        grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
+
+        # extrapolate species mass
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+
+        return make_conserved(grad_cv_minus.dim,
+                              mass=grad_mass_plus,
+                              energy=grad_energy_plus,
+                              momentum=grad_momentum_density_plus,
+                              species_mass=grad_species_mass_plus)
+
+    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
+
+    def viscous_boundary_flux(self, dcoll, btag, gas_model, state_minus,
+                          grad_cv_minus, grad_t_minus,
+                          numerical_flux_func=viscous_facial_flux_central,
+                                           **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux."""
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(btag))
+
+        state_plus = self.outflow_state_for_diffusion(
+            dcoll=dcoll, btag=btag, gas_model=gas_model, state_minus=state_minus)
+
+        grad_cv_plus = self.grad_cv_bc(state_minus=state_minus,
+                                       grad_cv_minus=grad_cv_minus,
+                                       normal=normal, **kwargs)
+        grad_t_plus = self.grad_temperature_bc(grad_t_minus, normal)
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
+                             grad_t=grad_t_plus)
+
+        return f_ext@normal
 
 
 class InflowBoundary(PrescribedFluidBoundary):
@@ -886,7 +1023,8 @@ class InflowBoundary(PrescribedFluidBoundary):
         self._free_stream_state = initialize_fluid_state(
             dim, gas_model, density=free_stream_density,
             velocity=free_stream_velocity,
-            mass_fractions=free_stream_mass_fractions, pressure=free_stream_pressure,
+            mass_fractions=free_stream_mass_fractions,
+            pressure=free_stream_pressure,
             temperature=free_stream_temperature)
 
         self._gamma = gas_model.eos.gamma(
@@ -934,14 +1072,22 @@ class InflowBoundary(PrescribedFluidBoundary):
         entropy_boundary = c_plus*c_plus/(gamma_plus*rho_plus**(gamma_plus-1))
         rho_boundary = c_boundary*c_boundary/(gamma_plus * entropy_boundary)
         pressure_boundary = rho_boundary * c_boundary2 / gamma_plus
-        energy_boundary = (
-            pressure_boundary / (gamma_plus - 1)
-            + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
-        )
+
         species_mass_boundary = None
         if self._free_stream_state.is_mixture:
+            energy_boundary = rho_boundary * (
+                gas_model.eos.get_internal_energy(
+                    self._free_stream_state.temperature,
+                    self._free_stream_state.species_mass_fractions)
+            ) + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+
             species_mass_boundary = (
                 rho_boundary * self._free_stream_state.species_mass_fractions
+            )
+        else:
+            energy_boundary = (
+                pressure_boundary / (gamma_plus - 1)
+                + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
             )
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
@@ -950,7 +1096,8 @@ class InflowBoundary(PrescribedFluidBoundary):
                                      species_mass=species_mass_boundary)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness=state_minus.smoothness)
 
 
 class IsothermalWallBoundary(PrescribedFluidBoundary):
@@ -1307,7 +1454,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
         # extrapolate density and its gradient
         mass_plus = state_minus.mass_density
-        grad_mass_plus = grad_cv_minus.mass
+        grad_mass_plus = grad_cv_minus.mass \
+            - 1*np.dot(grad_cv_minus.mass, normal)*normal
 
         from mirgecom.fluid import velocity_gradient
         v_minus = state_minus.velocity
@@ -1326,13 +1474,16 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         # the energy has to be modified accordingly:
         # first, get gradient of internal energy, i.e., no kinetic energy
         grad_int_energy_minus = grad_cv_minus.energy \
-            - 0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
-                + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus))
-        grad_int_energy_plus = grad_int_energy_minus
+            - (0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
+               + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus)))
+        # remove normal component
+        grad_int_energy_plus = grad_int_energy_minus \
+            - 1*np.dot(grad_int_energy_minus, normal)*normal
         # then modify gradient of kinetic energy to match the changes in velocity
         grad_kin_energy_plus = \
             0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
                 + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
+        # lastly, evaluate gradient of energy
         grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
 
         return make_conserved(grad_cv_minus.dim,
@@ -1387,3 +1538,88 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                               energy=-grad_av_minus.energy,
                               momentum=-s_mom_flux,
                               species_mass=-grad_av_minus.species_mass)
+
+
+class LinearizedBoundary(PrescribedFluidBoundary):
+    r"""."""
+
+    def __init__(self, dim, free_stream_state=None,
+                 free_stream_density=None,
+                 free_stream_velocity=None,
+                 free_stream_pressure=None,
+                 free_stream_temperature=None,
+                 free_stream_species_mass_fractions=None):
+        """Initialize the boundary condition object."""
+
+        self._ref_state = free_stream_state
+        self._mass = free_stream_density
+        self._velocity = free_stream_velocity
+        self._pressure = free_stream_pressure
+        self._temperature = free_stream_temperature
+        self._Y = free_stream_species_mass_fractions
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.outflow_state
+        )
+
+    def outflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
+        """."""
+
+        if self._ref_state is None:
+            ref_mass = self._mass
+            ref_velocity = self._velocity
+            ref_pressure = self._pressure
+            species_mass_fractions = self._Y
+        else:
+            ref_mass = self._ref_state.cv.mass
+            ref_velocity = self._ref_state.velocity
+            ref_pressure = self._ref_state.pressure
+            species_mass_fractions = self._ref_state.cv.species_mass_fractions
+
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(btag))
+
+        rtilde = state_minus.cv.mass - ref_mass
+        utilde = state_minus.velocity[0] - ref_velocity[0]
+        vtilde = state_minus.velocity[1] - ref_velocity[1]
+        ptilde = state_minus.dv.pressure - ref_pressure
+
+        un_tilde = +utilde*nhat[0] + vtilde*nhat[1]
+        ut_tilde = -utilde*nhat[1] + vtilde*nhat[0]
+
+        a = state_minus.speed_of_sound
+
+        c1 = -rtilde*a**2 + ptilde
+        c2 = ref_mass*a*ut_tilde
+        c3 = ref_mass*a*un_tilde + ptilde
+        c4 = 0.0  # zero-out the last characteristic variable
+        r_tilde_bnd = 1.0/(a**2)*(-c1 + 0.5*c3 + 0.5*c4)
+        un_tilde_bnd = 1.0/(ref_mass*a)*(0.5*c3 - 0.5*c4)
+        ut_tilde_bnd = 1.0/(ref_mass*a)*c2
+        p_tilde_bnd = 0.5*c3 + 0.5*c4
+
+        mass = r_tilde_bnd + ref_mass
+
+        u_x = ref_velocity[0] + (nhat[0]*un_tilde_bnd - nhat[1]*ut_tilde_bnd)
+        u_y = ref_velocity[1] + (nhat[1]*un_tilde_bnd + nhat[0]*ut_tilde_bnd)
+
+        pressure = p_tilde_bnd + ref_pressure
+
+        kin_energy = 0.5*mass*(u_x**2 + u_y**2)
+        if state_minus.is_mixture:
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temperature = ref_pressure/(ref_mass*gas_const)
+            int_energy = mass*gas_model.eos.get_internal_energy(
+                temperature, species_mass_fractions)
+        else:
+            int_energy = pressure/(gas_model.eos.gamma() - 1.0)
+
+        boundary_cv = (
+            make_conserved(dim=2, mass=mass,
+                           energy=kin_energy + int_energy,
+                           momentum=make_obj_array([u_x*mass, u_y*mass]),
+                           species_mass=state_minus.cv.species_mass)
+        )
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)

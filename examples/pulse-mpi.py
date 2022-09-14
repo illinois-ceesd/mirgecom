@@ -44,9 +44,12 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import SymmetryBoundary
+from mirgecom.boundary import (
+    PrescribedFluidBoundary,
+    LinearizedBoundary
+)
 from mirgecom.initializers import (
-    Lump,
+    Uniform,
     AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
@@ -145,8 +148,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         box_ll = -1
         box_ur = 1
         nel_1d = 16
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        generate_mesh = partial(generate_regular_rect_mesh,
+                                a=(box_ll,)*dim,
+                                b=(box_ur,)*dim,
+                                nelements_per_axis=(nel_1d,)*dim,
+                                boundary_tag_to_face={
+                                    "outlet": ["+x","-y","+y"],
+                                    "inlet": ["-x"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
@@ -182,27 +190,32 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    eos = IdealSingleGas()
+    eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
     gas_model = GasModel(eos=eos)
     vel = np.zeros(shape=(dim,))
+    vel[0] = 0.1
     orig = np.zeros(shape=(dim,))
-    initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    wall = SymmetryBoundary()
-    boundaries = {BTAG_ALL: wall}
-    uniform_state = initializer(nodes)
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
-                                   center=orig)
-    if rst_filename:
-        current_t = restart_data["t"]
-        current_step = restart_data["step"]
-        current_cv = restart_data["cv"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, current_step, current_t)
-    else:
-        # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
+    initializer = Uniform(dim=dim, velocity=vel)
+    uniform_state = initializer(nodes, eos=eos)
 
+    def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
+        inflow_bnd_discr = dcoll.discr_from_dd(btag)
+        inflow_nodes = actx.thaw(inflow_bnd_discr.nodes())
+        inflow_bnd_cond = initializer(inflow_nodes, eos=eos)
+        return make_fluid_state(cv=inflow_bnd_cond, gas_model=gas_model)
+
+    outflow_bnd = LinearizedBoundary(dim=2, free_stream_density=1.0,
+                                     free_stream_velocity=vel,
+                                     free_stream_pressure=1.0)
+    inflow_bnd = \
+        PrescribedFluidBoundary(boundary_state_func=_inflow_bnd_state_func)
+
+    from grudge.dof_desc import DTAG_BOUNDARY
+    boundaries = {DTAG_BOUNDARY("inlet"): inflow_bnd,
+                  DTAG_BOUNDARY("outlet"): outflow_bnd}
+
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+    current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
     current_state = make_fluid_state(current_cv, gas_model)
 
     visualizer = make_visualizer(dcoll)
@@ -248,7 +261,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.5):
+           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
@@ -278,7 +291,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                my_write_viz(step=step, t=t, state=state, dv=dv)
+                my_write_viz(step=step, t=t, state=state)
 
         except MyRuntimeError:
             if rank == 0:
