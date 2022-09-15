@@ -204,12 +204,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Riemann inflow
     from mirgecom.initializers import initialize_flow_solution
+    from mirgecom.utils import force_evaluation
+
     free_stream_cv = initialize_flow_solution(
         actx, dcoll, gas_model, btag=DTAG_BOUNDARY("inlet"),
         pressure=1.0, temperature=1.0, velocity=velocity)
 
     inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
                                                gas_model=gas_model)
+    inflow_freestream_state = force_evaluation(actx, inflow_freestream_state)
 
     def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
         return inflow_freestream_state
@@ -224,6 +227,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     outflow_freestream_state = make_fluid_state(cv=free_stream_cv,
                                                 gas_model=gas_model)
+    outflow_freestream_state = force_evaluation(actx, outflow_freestream_state)
 
     def _outflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
         return outflow_freestream_state
