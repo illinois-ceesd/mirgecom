@@ -22,6 +22,8 @@ fi
 
 for example in $examples_dir/*.py
 do
+    date
+    printf "***\n***\n***\n"
     if [[ "$example" == *"-mpi-lazy.py" ]]
     then
         echo "*** Running parallel lazy example (1 rank): $example"
@@ -36,6 +38,8 @@ do
         echo "*** Running serial example: $example"
         python ${example}
     fi
+    date
+    printf "***\n***\n"
     if [[ $? -eq 0 ]]
     then
         ((numsuccess=numsuccess+1))
