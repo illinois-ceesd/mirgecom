@@ -35,6 +35,9 @@ from mirgecom.utils import force_evaluation
 from pytools import memoize_in
 from arraycontext import get_container_context_recursively_opt
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def _compile_timestepper(actx, timestepper, rhs):
     """Create lazy evaluation version of the timestepper."""
@@ -81,7 +84,8 @@ def _advance_state_stepper_func(rhs, timestepper,
                                 pre_step_callback=None,
                                 post_step_callback=None,
                                 force_eval=None,
-                                logmgr=None, eos=None, dim=None):
+                                logmgr=None, eos=None, dim=None,
+                                vmprof_filename=None):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -117,6 +121,10 @@ def _advance_state_stepper_func(rhs, timestepper,
         An optional boolean indicating whether to force lazy evaluation between
         timesteps. By default, attempts to deduce whether this is necessary based
         on the behavior of the timestepper.
+    vmprof_filename
+        An optional string that, if not None or an empty string, enables vmprof
+        profiling of the time stepping loop and saves the profile to the filename
+        indicated.
 
     Returns
     -------
@@ -135,6 +143,15 @@ def _advance_state_stepper_func(rhs, timestepper,
         return istep, t, state
 
     compiled_rhs = _compile_rhs(actx, rhs)
+
+    if vmprof_filename:
+        import vmprof
+        import os
+
+        logger.info(f"Logging vmprof profile to '{vmprof_filename}'.")
+
+        outfd = os.open(vmprof_filename, os.O_RDWR | os.O_CREAT | os.O_TRUNC)
+        vmprof.enable(outfd)
 
     while t < t_final:
         if logmgr:
@@ -170,6 +187,10 @@ def _advance_state_stepper_func(rhs, timestepper,
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
+
+    if vmprof_filename:
+        vmprof.disable()
+        os.close(outfd)
 
     return istep, t, state
 
@@ -328,7 +349,8 @@ def advance_state(rhs, timestepper, state, t_final,
                   pre_step_callback=None,
                   post_step_callback=None,
                   force_eval=None,
-                  logmgr=None, eos=None, dim=None):
+                  logmgr=None, eos=None, dim=None,
+                  vmprof_filename=None):
     """Determine what stepper is used and advance the state from (t) to (t_final).
 
     Parameters
@@ -370,6 +392,10 @@ def advance_state(rhs, timestepper, state, t_final,
         An optional boolean indicating whether to force lazy evaluation between
         timesteps. By default, attempts to deduce whether this is necessary based
         on the behavior of the timestepper.
+    vmprof_filename
+        An optional string that, if not None or an empty string, enables vmprof
+        profiling of the time stepping loop and saves the profile to the filename
+        indicated.
 
     Returns
     -------
@@ -418,7 +444,7 @@ def advance_state(rhs, timestepper, state, t_final,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 force_eval=force_eval,
-                logmgr=logmgr, eos=eos, dim=dim,
+                logmgr=logmgr, eos=eos, dim=dim, vmprof_filename=vmprof_filename,
             )
 
     return current_step, current_t, current_state

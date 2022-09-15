@@ -76,7 +76,7 @@ class MyRuntimeError(RuntimeError):
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_overintegration=False, use_profiling=False,
          casename=None, lazy=False, rst_filename=None, log_dependent=True,
-         viscous_terms_on=False):
+         viscous_terms_on=False, vmprof=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -93,6 +93,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+
+    if vmprof:
+        vmprof_filename = f"{casename}.vmprof"
+    else:
+        vmprof_filename = None
 
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
@@ -612,7 +617,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([current_cv, temperature_seed]),
-                      t=current_t, t_final=t_final)
+                      t=current_t, t_final=t_final,
+                      vmprof_filename=vmprof_filename,)
 
     # Dump the final data
     if rank == 0:
@@ -650,13 +656,15 @@ if __name__ == "__main__":
     parser.add_argument("--navierstokes", action="store_true",
                         help="turns on compressible Navier-Stokes RHS")
     parser.add_argument("--profiling", action="store_true",
-        help="turn on detailed performance profiling")
+        help="turn on detailed kernel performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--vmprof", action="store_true",
+        help="Enable vmprof profiling of time stepping loop")
     args = parser.parse_args()
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
@@ -680,6 +688,7 @@ if __name__ == "__main__":
     main(actx_class, use_logmgr=args.log, use_leap=args.leap,
          use_overintegration=args.overintegration, use_profiling=args.profiling,
          lazy=lazy, casename=casename, rst_filename=rst_filename,
-         log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
+         log_dependent=log_dependent, viscous_terms_on=args.navierstokes,
+         vmprof=args.vmprof)
 
 # vim: foldmethod=marker
