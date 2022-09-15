@@ -231,10 +231,10 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 @pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
                                        inviscid_facial_flux_hll])
 def test_outflow_boundary(actx_factory, dim, flux_func):
-    """Check OutflowBoundary boundary treatment."""
+    """Check PressureOutflowBoundary boundary treatment."""
     actx = actx_factory()
     order = 1
-    from mirgecom.boundary import OutflowBoundary
+    from mirgecom.boundary import PressureOutflowBoundary
 
     kappa = 3.0
     sigma = 5.0
@@ -256,7 +256,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
     gas_model = GasModel(eos=eos,
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
-    bndry = OutflowBoundary(boundary_pressure=flowbnd_press)
+    bndry = PressureOutflowBoundary(boundary_pressure=flowbnd_press)
 
     npts_geom = 17
     a = 1.0
