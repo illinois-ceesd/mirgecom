@@ -16,7 +16,7 @@ dependencies:
 - pudb
 - islpy
 - oct2py
-- pyopencl=2022.1.6
+- pyopencl
 - pymetis
 - python=3.9
 - pip
