@@ -32,7 +32,7 @@ import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_QUAD, DTAG_BOUNDARY
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -45,8 +45,8 @@ from mirgecom.io import make_init_message
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    PrescribedFluidBoundary,
-    LinearizedBoundary
+    LinearizedBoundary,
+    InflowBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -192,25 +192,27 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
     gas_model = GasModel(eos=eos)
-    vel = np.zeros(shape=(dim,))
-    vel[0] = 0.1
+    velocity = np.zeros(shape=(dim,))
+    velocity[0] = 0.1
     orig = np.zeros(shape=(dim,))
-    initializer = Uniform(dim=dim, velocity=vel)
+    initializer = Uniform(dim=dim, velocity=velocity)
     uniform_state = initializer(nodes, eos=eos)
 
+    from mirgecom.initializers import initialize_flow_solution
+    free_stream_cv = initialize_flow_solution(
+        actx, dcoll, gas_model, btag=DTAG_BOUNDARY("inlet"),
+        pressure=1.0, temperature=1.0, velocity=velocity)
+
     def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
-        inflow_bnd_discr = dcoll.discr_from_dd(btag)
-        inflow_nodes = actx.thaw(inflow_bnd_discr.nodes())
-        inflow_bnd_cond = initializer(inflow_nodes, eos=eos)
-        return make_fluid_state(cv=inflow_bnd_cond, gas_model=gas_model)
+        return make_fluid_state(cv=free_stream_cv, gas_model=gas_model)
+
+    inflow_bnd = InflowBoundary(dim=2,
+                                free_stream_state_func=_inflow_bnd_state_func)
 
     outflow_bnd = LinearizedBoundary(dim=2, free_stream_density=1.0,
-                                     free_stream_velocity=vel,
+                                     free_stream_velocity=velocity,
                                      free_stream_pressure=1.0)
-    inflow_bnd = \
-        PrescribedFluidBoundary(boundary_state_func=_inflow_bnd_state_func)
 
-    from grudge.dof_desc import DTAG_BOUNDARY
     boundaries = {DTAG_BOUNDARY("inlet"): inflow_bnd,
                   DTAG_BOUNDARY("outlet"): outflow_bnd}
 

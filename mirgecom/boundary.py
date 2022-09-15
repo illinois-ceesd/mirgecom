@@ -912,8 +912,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
             species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.dv.smoothness)
+                                temperature_seed=state_minus.temperature)
 
     def inviscid_boundary_flux(self, dcoll, btag, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
@@ -1012,25 +1011,9 @@ class InflowBoundary(PrescribedFluidBoundary):
     .. automethod:: inflow_state
     """
 
-    def __init__(self, dim, free_stream_pressure=None, free_stream_temperature=None,
-                 free_stream_density=None, free_stream_velocity=None,
-                 free_stream_mass_fractions=None, gas_model=None):
+    def __init__(self, dim, free_stream_state_func):
         """Initialize the boundary condition object."""
-        if free_stream_velocity is None:
-            raise ValueError("InflowBoundary requires *free_stream_velocity*.")
-
-        from mirgecom.initializers import initialize_fluid_state
-        self._free_stream_state = initialize_fluid_state(
-            dim, gas_model, density=free_stream_density,
-            velocity=free_stream_velocity,
-            mass_fractions=free_stream_mass_fractions,
-            pressure=free_stream_pressure,
-            temperature=free_stream_temperature)
-
-        self._gamma = gas_model.eos.gamma(
-            self._free_stream_state.cv,
-            temperature=self._free_stream_state.temperature
-        )
+        self.free_stream_state_func = free_stream_state_func
 
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.inflow_state
@@ -1045,10 +1028,14 @@ class InflowBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(btag))
 
-        v_plus = np.dot(self._free_stream_state.velocity, nhat)
-        rho_plus = self._free_stream_state.mass_density
-        c_plus = self._free_stream_state.speed_of_sound
-        gamma_plus = self._gamma
+        free_stream_state = self.free_stream_state_func(
+            dcoll, btag, gas_model, state_minus, **kwargs)
+
+        v_plus = np.dot(free_stream_state.velocity, nhat)
+        rho_plus = free_stream_state.mass_density
+        c_plus = free_stream_state.speed_of_sound
+        gamma_plus = gas_model.eos.gamma(free_stream_state.cv,
+                                         free_stream_state.temperature)
 
         v_minus = np.dot(state_minus.velocity, nhat)
         gamma_minus = gas_model.eos.gamma(state_minus.cv,
@@ -1064,7 +1051,7 @@ class InflowBoundary(PrescribedFluidBoundary):
 
         velocity_boundary = (r_minus + r_plus)/2
         velocity_boundary = (
-            self._free_stream_state.velocity + (velocity_boundary - v_plus)*nhat
+            free_stream_state.velocity + (velocity_boundary - v_plus)*nhat
         )
 
         c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
@@ -1074,20 +1061,20 @@ class InflowBoundary(PrescribedFluidBoundary):
         pressure_boundary = rho_boundary * c_boundary2 / gamma_plus
 
         species_mass_boundary = None
-        if self._free_stream_state.is_mixture:
+        if free_stream_state.is_mixture:
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(
-                    self._free_stream_state.temperature,
-                    self._free_stream_state.species_mass_fractions)
-            ) + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+                    temperature=free_stream_state.temperature,
+                    species_mass_fractions=free_stream_state.species_mass_fractions)
+            ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
 
             species_mass_boundary = (
-                rho_boundary * self._free_stream_state.species_mass_fractions
+                rho_boundary * free_stream_state.species_mass_fractions
             )
         else:
             energy_boundary = (
                 pressure_boundary / (gamma_plus - 1)
-                + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
             )
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
@@ -1096,8 +1083,7 @@ class InflowBoundary(PrescribedFluidBoundary):
                                      species_mass=species_mass_boundary)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
+                                temperature_seed=state_minus.temperature)
 
 
 class IsothermalWallBoundary(PrescribedFluidBoundary):
@@ -1533,7 +1519,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                                   np.dot(grad_av_minus.momentum, nhat))
         s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
 
-        # flip components to set a neumann condition
+        # flip components to set a Neumann condition
         return make_conserved(dim, mass=-grad_av_minus.mass,
                               energy=-grad_av_minus.energy,
                               momentum=-s_mom_flux,
@@ -1541,7 +1527,30 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
 
 class LinearizedBoundary(PrescribedFluidBoundary):
-    r"""."""
+    r"""Characteristics outflow BCs for linearized Euler equations.
+
+    Implement non-reflecting outflow based on characteristic variables for
+    the Euler equations assuming small perturbations based on [Giles_1988]_.
+    The equations assume an uniform, steady flow and linerize the Euler eqs.
+    in this reference state, yielding a linear equation in the form
+
+    .. math::
+        \frac{\partial U}{\partial t} + A \frac{\partial U}{\partial x} +
+        B \frac{\partial U}{\partial y} = 0
+
+    where where U is the vector of perturbation (primitive) variables and
+    the coefficient matrices A and B are constant matrices based on the
+    uniform, steady variables.
+
+    Using the linear hyperbolic system theory, this equation can be further
+    simplified by ignoring the y-axis terms (tangent) such that wave propagation
+    occurs only along the x-axis direction (normal). Then, the eigendecomposition
+    results in a orthogonal system where the wave have characteristic directions
+    of propagations and enable the creation of non-reflecting outflow boundaries.
+
+    This can also be applied for Navier-Stokes equations in regions where
+    viscous effects are not dominant, such as the far-field.
+    """
 
     def __init__(self, dim, free_stream_state=None,
                  free_stream_density=None,
@@ -1562,7 +1571,7 @@ class LinearizedBoundary(PrescribedFluidBoundary):
         )
 
     def outflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
-        """."""
+        """Non-reflecting outflow."""
         if self._ref_state is None:
             ref_mass = self._mass
             ref_velocity = self._velocity
@@ -1597,10 +1606,8 @@ class LinearizedBoundary(PrescribedFluidBoundary):
         p_tilde_bnd = 0.5*c3 + 0.5*c4
 
         mass = r_tilde_bnd + ref_mass
-
         u_x = ref_velocity[0] + (nhat[0]*un_tilde_bnd - nhat[1]*ut_tilde_bnd)
         u_y = ref_velocity[1] + (nhat[1]*un_tilde_bnd + nhat[0]*ut_tilde_bnd)
-
         pressure = p_tilde_bnd + ref_pressure
 
         kin_energy = 0.5*mass*(u_x**2 + u_y**2)

@@ -16,7 +16,7 @@ Solution Initializers
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
-.. autofunction:: initialize_fluid_state
+.. autofunction:: initialize_flow_solution
 
 Initialization Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -53,8 +53,9 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
-def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
-                           density=None, velocity=None, mass_fractions=None):
+def initialize_flow_solution(actx, dcoll, gas_model, btag=None, pressure=None,
+                             temperature=None,
+                             density=None, velocity=None, mass_fractions=None):
     """Create a fluid state from a set of minimal input data."""
     if gas_model is None:
         raise ValueError("Gas model is required to create a FluidState.")
@@ -68,6 +69,14 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
           or (density is not None and (pressure is None and temperature is None))):
         raise ValueError("State is underspecified, require 2 of (pressure, "
                          "temperature, density)")
+
+    dim = dcoll.dim
+
+    if btag is None:
+        nodes = actx.thaw(dcoll.nodes())
+    else:
+        nodes = actx.thaw(dcoll.nodes(btag))
+    zeros = nodes[0]*0.0
 
     if velocity is None:
         velocity = np.zeros(dim)
@@ -84,16 +93,16 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
 
     internal_energy = gas_model.eos.get_internal_energy(temperature, mass_fractions)
 
-    species_mass = None if mass_fractions is None else density * mass_fractions
+    species_mass = None if mass_fractions is None \
+        else (density + zeros)*mass_fractions
 
     total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
     momentum = density*velocity
 
-    cv = make_conserved(dim=dim, mass=density, energy=total_energy,
-                        momentum=momentum, species_mass=species_mass)
-
-    from mirgecom.gas_model import make_fluid_state
-    return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=temperature)
+    return make_conserved(dim=dim, mass=density + zeros,
+                          energy=total_energy + zeros,
+                          momentum=momentum + zeros,
+                          species_mass=species_mass)
 
 
 def make_pulse(amp, r0, w, r):
