@@ -46,7 +46,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     LinearizedBoundary,
-    InflowBoundary
+    Riemann_InflowBoundary,
+    Riemann_OutflowBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -118,7 +119,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
+    t_final = 2.0
     current_cfl = 1.0
     current_dt = .005
     current_t = 0
@@ -153,7 +154,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 b=(box_ur,)*dim,
                                 nelements_per_axis=(nel_1d,)*dim,
                                 boundary_tag_to_face={
-                                    "outlet": ["+x", "-y", "+y"],
+                                    "outlet_y": ["-y", "+y"],
+                                    "outlet_x": ["+x"],
                                     "inlet": ["-x"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -198,23 +200,44 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     initializer = Uniform(dim=dim, velocity=velocity)
     uniform_state = initializer(nodes, eos=eos)
 
+    # Riemann inflow
     from mirgecom.initializers import initialize_flow_solution
     free_stream_cv = initialize_flow_solution(
         actx, dcoll, gas_model, btag=DTAG_BOUNDARY("inlet"),
         pressure=1.0, temperature=1.0, velocity=velocity)
 
+    inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
+                                               gas_model=gas_model)
+
     def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
-        return make_fluid_state(cv=free_stream_cv, gas_model=gas_model)
+        return inflow_freestream_state
 
-    inflow_bnd = InflowBoundary(dim=2,
-                                free_stream_state_func=_inflow_bnd_state_func)
+    riemann_inflow_bnd = Riemann_InflowBoundary(dim=2,
+        free_stream_state_func=_inflow_bnd_state_func)
 
-    outflow_bnd = LinearizedBoundary(dim=2, free_stream_density=1.0,
+    # Riemann outflow
+    free_stream_cv = initialize_flow_solution(
+        actx, dcoll, gas_model, btag=DTAG_BOUNDARY("outlet_x"),
+        pressure=1.0, temperature=1.0, velocity=velocity)
+
+    outflow_freestream_state = make_fluid_state(cv=free_stream_cv,
+                                                gas_model=gas_model)
+
+    def _outflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
+        return outflow_freestream_state
+
+    riemann_outflow_bnd = Riemann_OutflowBoundary(dim=2,
+        free_stream_state_func=_outflow_bnd_state_func)
+
+    # Linearized outflow
+    linear_outflow_bnd = LinearizedBoundary(dim=2, free_stream_density=1.0,
                                      free_stream_velocity=velocity,
                                      free_stream_pressure=1.0)
 
-    boundaries = {DTAG_BOUNDARY("inlet"): inflow_bnd,
-                  DTAG_BOUNDARY("outlet"): outflow_bnd}
+    # boundaries
+    boundaries = {DTAG_BOUNDARY("inlet"): riemann_inflow_bnd,
+                  DTAG_BOUNDARY("outlet_y"): linear_outflow_bnd,
+                  DTAG_BOUNDARY("outlet_x"): riemann_outflow_bnd}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
     current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
@@ -293,7 +316,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                my_write_viz(step=step, t=t, state=state)
+                my_write_viz(step=step, t=t, state=state, dv=dv)
 
         except MyRuntimeError:
             if rank == 0:

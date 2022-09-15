@@ -931,50 +931,11 @@ class OutflowBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        dim = state_minus.dim
-
-        # extrapolate density and its gradient
-        mass_plus = state_minus.mass_density
-        grad_mass_plus = grad_cv_minus.mass \
-                         - 1*np.dot(grad_cv_minus.mass, normal)*normal
-
-        from mirgecom.fluid import velocity_gradient
-        v_minus = state_minus.velocity
-        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
-
-        # retain only the diagonal terms to force zero shear stress
-        v_plus = state_minus.velocity
-        grad_v_plus = grad_v_minus*np.eye(dim)
-
-        # product rule for momentum
-        grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
-
-        # the energy has to be modified accordingly:
-        # first, get gradient of internal energy, i.e., no kinetic energy
-        grad_int_energy_minus = grad_cv_minus.energy \
-            - (0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
-                + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus)))
-        # remove normal component
-        grad_int_energy_plus = grad_int_energy_minus \
-                         - 1*np.dot(grad_int_energy_minus, normal)*normal
-        # then modify gradient of kinetic energy to match the changes in velocity
-        grad_kin_energy_plus = \
-            0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
-                + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
-        grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
-
-        # extrapolate species mass
-        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
-
-        return make_conserved(grad_cv_minus.dim,
-                              mass=grad_mass_plus,
-                              energy=grad_energy_plus,
-                              momentum=grad_momentum_density_plus,
-                              species_mass=grad_species_mass_plus)
+        return grad_cv_minus
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
-        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
+        return grad_t_minus
 
     def viscous_boundary_flux(self, dcoll, btag, gas_model, state_minus,
                           grad_cv_minus, grad_t_minus,
@@ -1001,7 +962,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
         return f_ext@normal
 
 
-class InflowBoundary(PrescribedFluidBoundary):
+class Riemann_InflowBoundary(PrescribedFluidBoundary):
     r"""Inflow boundary treatment.
 
     This class implements an Riemann invariant for inflow boundary as described by
@@ -1022,8 +983,8 @@ class InflowBoundary(PrescribedFluidBoundary):
     def inflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
-        This is the partially non-reflective boundary state described by
-        [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
+        This is the Riemann Invariant Boundary Condition described by
+        [Mengaldo_2014]_ in eqs. 8 to 18.
         """
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(btag))
@@ -1060,16 +1021,110 @@ class InflowBoundary(PrescribedFluidBoundary):
         rho_boundary = c_boundary*c_boundary/(gamma_plus * entropy_boundary)
         pressure_boundary = rho_boundary * c_boundary2 / gamma_plus
 
+        # evaluating gas constant based on free stream species
+        gas_const = gas_model.eos.gas_const(free_stream_state.cv)
+        temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
+
         species_mass_boundary = None
         if free_stream_state.is_mixture:
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(
-                    temperature=free_stream_state.temperature,
+                    temperature=temperature_boundary,
                     species_mass_fractions=free_stream_state.species_mass_fractions)
             ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
 
             species_mass_boundary = (
                 rho_boundary * free_stream_state.species_mass_fractions
+            )
+        else:
+            energy_boundary = (
+                pressure_boundary / (gamma_plus - 1)
+                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+            )
+
+        boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
+                                     energy=energy_boundary,
+                                     momentum=rho_boundary * velocity_boundary,
+                                     species_mass=species_mass_boundary)
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+
+class Riemann_OutflowBoundary(PrescribedFluidBoundary):
+    r"""Outflow boundary treatment.
+
+    This class implements an Riemann invariant for inflow boundary as described by
+    [Mengaldo_2014]_.
+
+    .. automethod:: __init__
+    .. automethod:: outflow_state
+    """
+
+    def __init__(self, dim, free_stream_state_func):
+        """Initialize the boundary condition object."""
+        self.free_stream_state_func = free_stream_state_func
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.outflow_state
+        )
+
+    def outflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
+
+        This is the Riemann Invariant Boundary Condition described by
+        [Mengaldo_2014]_ in eqs. 8 to 18.
+        """
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(btag))
+
+        free_stream_state = self.free_stream_state_func(
+            dcoll, btag, gas_model, state_minus, **kwargs)
+
+        v_plus = np.dot(free_stream_state.velocity, nhat)
+        c_plus = free_stream_state.speed_of_sound
+        gamma_plus = gas_model.eos.gamma(free_stream_state.cv,
+                                         free_stream_state.temperature)
+
+        v_minus = np.dot(state_minus.velocity, nhat)
+        rho_minus = state_minus.mass_density
+        gamma_minus = gas_model.eos.gamma(state_minus.cv,
+                                          temperature=state_minus.temperature)
+        c_minus = state_minus.speed_of_sound
+
+        ones = 0*v_minus + 1
+        r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
+        r_plus_supersonic = (v_plus + 2*c_plus/(gamma_plus - 1))*ones
+        r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
+        r_plus = actx.np.where(actx.np.greater(v_minus, c_minus), r_plus_supersonic,
+                               r_plus_subsonic)
+
+        velocity_boundary = (r_minus + r_plus)/2
+        velocity_boundary = (
+            state_minus.velocity + (velocity_boundary - v_minus)*nhat
+        )
+
+        c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
+        c_boundary2 = c_boundary**2
+        entropy_boundary = c_minus*c_minus/(gamma_minus*rho_minus**(gamma_minus-1))
+        rho_boundary = c_boundary*c_boundary/(gamma_minus * entropy_boundary)
+        pressure_boundary = rho_boundary * c_boundary2 / gamma_minus
+
+        # using gas constant based on state_minus species
+        gas_const = gas_model.eos.gas_const(state_minus.cv)
+        temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
+
+        species_mass_boundary = None
+        if free_stream_state.is_mixture:
+            energy_boundary = rho_boundary * (
+                gas_model.eos.get_internal_energy(
+                    temperature=temperature_boundary,
+                    species_mass_fractions=free_stream_state.species_mass_fractions)
+            ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+
+            # extrapolate species
+            species_mass_boundary = (
+                rho_boundary * state_minus.species_mass_fractions
             )
         else:
             energy_boundary = (
