@@ -120,7 +120,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2.0
+    t_final = 0.1
     current_cfl = 1.0
     current_dt = .005
     current_t = 0
@@ -236,7 +236,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         free_stream_velocity=velocity, free_stream_pressure=1.0)
 
     # Prescribed pressure outflow
-    pressure_outflow_bnd = PressureOutflowBoundary(dim=2, boundary_pressure=1.0)
+    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
 
     # boundaries
     boundaries = {DTAG_BOUNDARY("inlet"): riemann_inflow_bnd,
