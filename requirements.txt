@@ -12,13 +12,13 @@ pyyaml
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git@3da6f85d#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
---editable git+https://github.com/inducer/loopy.git@bcabd9f1#egg=loopy
+--editable git+https://github.com/inducer/loopy.git#egg=loopy
 --editable git+https://github.com/inducer/dagrt.git@f1ec99cf#egg=dagrt
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git@3efb63fc#egg=modepy
---editable git+https://github.com/inducer/arraycontext.git@9d7feaea#egg=arraycontext
---editable git+https://github.com/inducer/meshmode.git@4581407d#egg=meshmode
---editable git+https://github.com/inducer/grudge.git@286c766d#egg=grudge
+--editable git+https://github.com/inducer/arraycontext.git#egg=arraycontext
+--editable git+https://github.com/inducer/meshmode.git#egg=meshmode
+--editable git+https://github.com/inducer/grudge.git#egg=grudge
 --editable git+https://github.com/inducer/pytato.git@69e2a6c2#egg=pytato
 --editable git+https://github.com/ecisneros8/pyrometheus.git@feeee935#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git@42e89c8e#egg=logpyle
