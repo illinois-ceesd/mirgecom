@@ -18,8 +18,9 @@ Boundary Conditions
 .. autoclass:: AdiabaticNoslipMovingBoundary
 .. autoclass:: IsothermalNoSlipBoundary
 .. autoclass:: FarfieldBoundary
-.. autoclass:: InflowBoundary
-.. autoclass:: OutflowBoundary
+.. autoclass:: RiemannInflowBoundary
+.. autoclass:: RiemannOutflowBoundary
+.. autoclass:: PressureOutflowBoundary
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
 .. autoclass:: SymmetryBoundary
@@ -754,12 +755,11 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         return 0*state_minus.temperature + self._temperature
 
 
-class OutflowBoundary(PrescribedFluidBoundary):
-    r"""Outflow boundary treatment.
+class PressureOutflowBoundary(PrescribedFluidBoundary):
+    r"""Outflow boundary treatment with prescribed pressure.
 
     This class implements an outflow boundary as described by
-    [Mengaldo_2014]_.  The boundary condition is implemented
-    as:
+    [Mengaldo_2014]_.  The boundary condition is implemented as:
 
     .. math::
 
@@ -962,7 +962,7 @@ class OutflowBoundary(PrescribedFluidBoundary):
         return f_ext@normal
 
 
-class Riemann_InflowBoundary(PrescribedFluidBoundary):
+class RiemannInflowBoundary(PrescribedFluidBoundary):
     r"""Inflow boundary treatment.
 
     This class implements an Riemann invariant for inflow boundary as described by
@@ -1051,7 +1051,7 @@ class Riemann_InflowBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
 
-class Riemann_OutflowBoundary(PrescribedFluidBoundary):
+class RiemannOutflowBoundary(PrescribedFluidBoundary):
     r"""Outflow boundary treatment.
 
     This class implements an Riemann invariant for inflow boundary as described by

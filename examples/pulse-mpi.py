@@ -46,8 +46,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     LinearizedBoundary,
-    Riemann_InflowBoundary,
-    Riemann_OutflowBoundary
+    RiemannInflowBoundary,
+    RiemannOutflowBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -212,7 +212,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
         return inflow_freestream_state
 
-    riemann_inflow_bnd = Riemann_InflowBoundary(dim=2,
+    riemann_inflow_bnd = RiemannInflowBoundary(dim=2,
         free_stream_state_func=_inflow_bnd_state_func)
 
     # Riemann outflow
@@ -226,7 +226,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def _outflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
         return outflow_freestream_state
 
-    riemann_outflow_bnd = Riemann_OutflowBoundary(dim=2,
+    riemann_outflow_bnd = RiemannOutflowBoundary(dim=2,
         free_stream_state_func=_outflow_bnd_state_func)
 
     # Linearized outflow
