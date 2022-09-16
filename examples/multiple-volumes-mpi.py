@@ -41,7 +41,10 @@ from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD, DOFDesc
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import euler_operator
+from mirgecom.euler import (
+    euler_operator,
+    extract_vars_for_logging
+)
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh
@@ -61,7 +64,6 @@ from mirgecom.gas_model import (
     make_fluid_state
 )
 from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
