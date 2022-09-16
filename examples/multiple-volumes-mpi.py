@@ -1,4 +1,9 @@
-"""Demonstrate multiple independent volumes."""
+"""
+Demonstrate multiple non-interacting volumes.
+
+Runs several acoustic pulse simulations with different pulse amplitudes
+simultaneously.
+"""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
