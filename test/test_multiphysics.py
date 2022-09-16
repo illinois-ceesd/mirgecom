@@ -74,6 +74,9 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     nodes1 = actx.thaw(dcoll.nodes(dd=dd_vol1))
     nodes2 = actx.thaw(dcoll.nodes(dd=dd_vol2))
 
+    # Set solution to x for volume 1
+    # Set solution to y for volume 2
+
     boundaries1 = {
         dd_vol1.trace("-0").domain_tag: DirichletDiffusionBoundary(-1.),
         dd_vol1.trace("+0").domain_tag: DirichletDiffusionBoundary(1.),
