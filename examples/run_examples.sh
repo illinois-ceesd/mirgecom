@@ -30,7 +30,7 @@ do
     printf "***\n***\n"
     if [[ "$example" == *"-mpi-lazy.py" ]]
     then
-        echo "*** Running parallel lazy example (1 rank): $example"
+        echo "*** Running parallel lazy example (2 ranks): $example"
         set -x
         ${mpi_exec} -n 2 python -u -O -m mpi4py ${example} --lazy
         set +x
