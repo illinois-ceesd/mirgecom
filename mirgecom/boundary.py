@@ -463,9 +463,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                                   **kwargs):
-        """
-        Get the "temperature flux" for *dd_bdry* for use in the gradient operator.
-        """
+        """Get the T flux for *dd_bdry* for use in the gradient operator."""
         dd_bdry = as_dofdesc(dd_bdry)
         return self._temperature_grad_flux_func(dcoll, dd_bdry, gas_model,
                                                 state_minus, **kwargs)
