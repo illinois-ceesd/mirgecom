@@ -983,11 +983,13 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
     def inflow_state(self, dcoll, btag, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
-        This is the Riemann Invariant Boundary Condition described by
-        [Mengaldo_2014]_ in eqs. 8 to 18.
+        This is the partially non-reflective boundary state described by
+        [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
         """
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(btag))
+
+        ones = 0.0*nhat[0] + 1.0
 
         free_stream_state = self.free_stream_state_func(
             dcoll, btag, gas_model, state_minus, **kwargs)
@@ -1002,13 +1004,13 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         gamma_minus = gas_model.eos.gamma(state_minus.cv,
                                           temperature=state_minus.temperature)
         c_minus = state_minus.speed_of_sound
-
-        ones = 0*v_minus + 1
-        r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
-        r_plus_supersonic = (v_plus + 2*c_plus/(gamma_plus - 1))*ones
         r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
-        r_plus = actx.np.where(actx.np.greater(v_minus, c_minus), r_plus_supersonic,
-                               r_plus_subsonic)
+
+        # eqs. 17 and 19
+        r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
+        r_plus_supersonic = v_plus + 2*c_plus/(gamma_plus - 1)
+        r_plus = actx.np.where(actx.np.greater(v_minus, c_minus),
+                               r_plus_supersonic, r_plus_subsonic)
 
         velocity_boundary = (r_minus + r_plus)/2
         velocity_boundary = (
@@ -1016,20 +1018,21 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         )
 
         c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
-        c_boundary2 = c_boundary**2
-        entropy_boundary = c_plus*c_plus/(gamma_plus*rho_plus**(gamma_plus-1))
-        rho_boundary = c_boundary*c_boundary/(gamma_plus * entropy_boundary)
-        pressure_boundary = rho_boundary * c_boundary2 / gamma_plus
 
-        # evaluating gas constant based on free stream species
-        gas_const = gas_model.eos.gas_const(free_stream_state.cv)
-        temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
+        # isentropic relations, using minus state (Eq. 23 and 24)
+        gamma_boundary = 1.0*gamma_plus
+        entropy_boundary = \
+            c_plus**2/(gamma_boundary*rho_plus**(gamma_boundary-1))
+        rho_boundary = (
+            c_boundary**2/(gamma_boundary * entropy_boundary)
+        )**(1.0/(gamma_plus-1.0))  # in the reference, Eq. 24 lacks the exponent.
+        pressure_boundary = rho_boundary * c_boundary**2 / gamma_boundary
 
         species_mass_boundary = None
         if free_stream_state.is_mixture:
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(
-                    temperature=temperature_boundary,
+                    temperature=free_stream_state.temperature,
                     species_mass_fractions=free_stream_state.species_mass_fractions)
             ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
 
@@ -1038,7 +1041,7 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
             )
         else:
             energy_boundary = (
-                pressure_boundary / (gamma_plus - 1)
+                pressure_boundary / (gamma_boundary - 1)
                 + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
             )
 
@@ -1054,8 +1057,9 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
 class RiemannOutflowBoundary(PrescribedFluidBoundary):
     r"""Outflow boundary treatment.
 
-    This class implements an Riemann invariant for inflow boundary as described by
-    [Mengaldo_2014]_.
+    This class implements an Riemann invariant for outflow boundary as described
+    by [Mengaldo_2014]_. Note that the "minus" and "plus" are different from the
+    reference to the current Mirge-COM definition.
 
     .. automethod:: __init__
     .. automethod:: outflow_state
@@ -1078,48 +1082,55 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(btag))
 
+        ones = 0.0*nhat[0] + 1.0
+
         free_stream_state = self.free_stream_state_func(
             dcoll, btag, gas_model, state_minus, **kwargs)
 
-        v_plus = np.dot(free_stream_state.velocity, nhat)
+        v_plus = np.dot(free_stream_state.velocity*ones, nhat)
         c_plus = free_stream_state.speed_of_sound
         gamma_plus = gas_model.eos.gamma(free_stream_state.cv,
                                          free_stream_state.temperature)
+        r_plus = v_plus - 2.0*c_plus/(gamma_plus - 1.0)
 
-        v_minus = np.dot(state_minus.velocity, nhat)
         rho_minus = state_minus.mass_density
-        gamma_minus = gas_model.eos.gamma(state_minus.cv,
-                                          temperature=state_minus.temperature)
+        v_minus = np.dot(state_minus.velocity, nhat)
         c_minus = state_minus.speed_of_sound
+        gamma_minus = gas_model.eos.gamma(
+            state_minus.cv, temperature=state_minus.temperature)
 
-        ones = 0*v_minus + 1
-        r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
-        r_plus_supersonic = (v_plus + 2*c_plus/(gamma_plus - 1))*ones
-        r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
-        r_plus = actx.np.where(actx.np.greater(v_minus, c_minus), r_plus_supersonic,
-                               r_plus_subsonic)
+        # eqs 17 and 27
+        r_minus_subsonic = v_minus + 2.0*c_minus/(gamma_minus - 1.0)
+        r_minus_supersonic = v_minus - 2.0*c_minus/(gamma_minus - 1.0)
+        r_minus = actx.np.where(actx.np.greater(v_minus, c_minus),
+                                r_minus_supersonic, r_minus_subsonic)
 
-        velocity_boundary = (r_minus + r_plus)/2
+        velocity_boundary = (r_minus + r_plus)/2.0
         velocity_boundary = (
             state_minus.velocity + (velocity_boundary - v_minus)*nhat
         )
 
-        c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
-        c_boundary2 = c_boundary**2
-        entropy_boundary = c_minus*c_minus/(gamma_minus*rho_minus**(gamma_minus-1))
-        rho_boundary = c_boundary*c_boundary/(gamma_minus * entropy_boundary)
-        pressure_boundary = rho_boundary * c_boundary2 / gamma_minus
+        c_boundary = (gamma_minus - 1.0)*(r_minus - r_plus)/4.0
 
-        # using gas constant based on state_minus species
-        gas_const = gas_model.eos.gas_const(state_minus.cv)
-        temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
+        # isentropic relations, using minus state (Eq. 24 and 29)
+        gamma_boundary = 1.0*gamma_minus
+        entropy_boundary = \
+            c_minus**2/(gamma_boundary*rho_minus**(gamma_boundary-1.0))
+        rho_boundary = (
+            c_boundary**2/(gamma_boundary * entropy_boundary)
+        )**(1.0/(gamma_minus-1.0))  # in the reference, Eq. 24 lacks the exponent.
+        pressure_boundary = rho_boundary*c_boundary**2/gamma_boundary
 
         species_mass_boundary = None
         if free_stream_state.is_mixture:
+
+            # using gas constant based on state_minus species
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
+
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(
-                    temperature=temperature_boundary,
-                    species_mass_fractions=free_stream_state.species_mass_fractions)
+                    temperature_boundary, free_stream_state.species_mass_fractions)
             ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
 
             # extrapolate species
@@ -1128,13 +1139,13 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
             )
         else:
             energy_boundary = (
-                pressure_boundary / (gamma_plus - 1)
+                pressure_boundary / (gamma_boundary - 1)
                 + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
             )
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
                                      energy=energy_boundary,
-                                     momentum=rho_boundary * velocity_boundary,
+                                     momentum=rho_boundary*velocity_boundary,
                                      species_mass=species_mass_boundary)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,

@@ -46,7 +46,6 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     LinearizedBoundary,
-    PressureOutflowBoundary,
     RiemannInflowBoundary,
     RiemannOutflowBoundary
 )
@@ -151,13 +150,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         box_ur = 1
         nel_1d = 16
         generate_mesh = partial(generate_regular_rect_mesh,
-                                a=(box_ll,)*dim,
-                                b=(box_ur,)*dim,
+                                a=(box_ll,)*dim, b=(box_ur,)*dim,
                                 nelements_per_axis=(nel_1d,)*dim,
                                 boundary_tag_to_face={
-                                    "outlet_T": ["+y"],
-                                    "outlet_B": ["-y"],
-                                    "outlet_R": ["+x"],
+                                    "outlet_L": ["+y"],
+                                    "outlet_R": ["-y", "+x"],
                                     "inlet": ["-x"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -220,7 +217,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     riemann_inflow_bnd = RiemannInflowBoundary(dim=2,
         free_stream_state_func=_inflow_bnd_state_func)
 
-    # Riemann outflow
+    # Riemann outflow, requires a free-stream state
     free_stream_cv = initialize_flow_solution(
         actx, dcoll, gas_model, btag=DTAG_BOUNDARY("outlet_R"),
         pressure=1.0, temperature=1.0, velocity=velocity)
@@ -239,13 +236,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     linear_outflow_bnd = LinearizedBoundary(dim=2, free_stream_density=1.0,
         free_stream_velocity=velocity, free_stream_pressure=1.0)
 
-    # Prescribed pressure outflow
-    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
-
     # boundaries
     boundaries = {DTAG_BOUNDARY("inlet"): riemann_inflow_bnd,
-                  DTAG_BOUNDARY("outlet_T"): linear_outflow_bnd,
-                  DTAG_BOUNDARY("outlet_B"): pressure_outflow_bnd,
+                  DTAG_BOUNDARY("outlet_L"): linear_outflow_bnd,
                   DTAG_BOUNDARY("outlet_R"): riemann_outflow_bnd}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
