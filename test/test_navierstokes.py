@@ -294,10 +294,10 @@ class FluidManufacturedSolution(FluidCase):
         """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
 
-        def _boundary_state_func(dcoll, btag, gas_model, state_minus, time=0,
+        def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, time=0,
                                  **kwargs):
             actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
             return make_fluid_state(self.get_solution(x=nodes, t=time), gas_model)
 
@@ -676,10 +676,10 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
     from pytools.convergence import EOCRecorder
     eoc_energy = EOCRecorder()
 
-    def _boundary_state_func(dcoll, btag, gas_model, state_minus, time=0,
+    def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, time=0,
                              **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         boundary_cv = exact_soln(x=nodes)
         return make_fluid_state(boundary_cv, gas_model)
@@ -932,10 +932,10 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         logger.info(f"{source_norms=}")
         logger.info(f"{source_eval=}")
 
-        def _boundary_state_func(dcoll, btag, gas_model, state_minus, time=0,
+        def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, time=0,
                                  **kwargs):
             actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(btag)
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
             boundary_cv = evaluate(sym_cv, x=nodes, t=time)
             return make_fluid_state(boundary_cv, gas_model)
