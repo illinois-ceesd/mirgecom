@@ -838,11 +838,12 @@ class AcousticPulse:
         gamma = eos.gamma()
 
         int_energy = cv.energy - 0.5*cv.mass*np.dot(cv.velocity, cv.velocity)
-        pressure = int_energy*(gamma-1.0) + \
+        ref_pressure = int_energy*(gamma-1.0)
+        pressure = ref_pressure + \
             make_pulse(amp=self._amp, w=self._width, r0=self._center, r=x_vec)
 
         # isentropic relations
-        mass = pressure**(1.0/gamma)
+        mass = cv.mass*(pressure/ref_pressure)**(1.0/gamma)
 
         energy = pressure/(gamma-1.0) + 0.5*mass*np.dot(cv.velocity, cv.velocity)
 
