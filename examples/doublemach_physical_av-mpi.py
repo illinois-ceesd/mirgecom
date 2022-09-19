@@ -309,14 +309,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def compute_smoothness(cv, grad_cv):
 
         from mirgecom.fluid import velocity_gradient
-        div_v = np.trace(velocity_gradient(cv, grad_cv))
+        div_v = actx.einsum("ii->i", velocity_gradient(cv, grad_cv))
 
         # kappa_h = 1.5
         kappa_h = 5
         gamma = gas_model.eos.gamma(cv)
         r = gas_model.eos.gas_const(cv)
         static_temp = 0.015
-        c_star = np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
+        c_star = actx.np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
         # smoothness = kappa_h*length_scales*div_v/dv.speed_of_sound
         indicator = -kappa_h*length_scales*div_v/c_star
 
