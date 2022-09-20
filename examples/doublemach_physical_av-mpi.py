@@ -550,17 +550,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                      smoothness=no_smoothness)
 
                     # recompute the dv to have the correct smoothness
-                    # this is forcing a recompile, only do it at dump time
-                    # not sure why the compiled version of grad_cv doesn't work
                     if do_viz:
                         # use the divergence to compute the smoothness field
                         force_evaluation(actx, t)
-                        grad_cv = grad_cv_operator(
-                            dcoll, gas_model, boundaries, fluid_state,
-                            time=t, quadrature_tag=quadrature_tag)
-                        # grad_cv = grad_cv_operator_compiled(fluid_state,
-                        #                                     time=t)
-                        smoothness = compute_smoothness(state, grad_cv)
+                        # grad_cv = grad_cv_operator(
+                        #     dcoll, gas_model, boundaries, fluid_state,
+                        #     time=t, quadrature_tag=quadrature_tag)
+                        grad_cv = grad_cv_operator_compiled(fluid_state,
+                                                            t)
+                        smoothness = compute_smoothness_compiled(state, grad_cv)
 
                         # this works, but seems a lot of work,
                         # not sure if it's really faster
@@ -716,10 +714,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                            smoothness=no_smoothness)
 
         # use the divergence to compute the smoothness field
-        current_grad_cv = grad_cv_operator(
-            dcoll, gas_model, boundaries, current_state, time=current_t,
-            quadrature_tag=quadrature_tag)
-        # smoothness = compute_smoothness_compiled(current_cv, grad_cv)
+        # current_grad_cv = grad_cv_operator(
+        #     dcoll, gas_model, boundaries, current_state, time=current_t,
+        #     quadrature_tag=quadrature_tag)
+        current_grad_cv = grad_cv_operator_compiled(current_state, current_t)
         smoothness = compute_smoothness(current_cv, current_grad_cv)
 
         from dataclasses import replace
