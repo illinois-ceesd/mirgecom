@@ -33,26 +33,30 @@ do
         echo "*** Running parallel lazy example (2 ranks): $example"
         set -x
         ${mpi_exec} -n 2 python -u -O -m mpi4py ${example} --lazy
+        example_return_code=$?
         set +x
     elif [[ "$example" == *"-mpi.py" ]]; then
         echo "*** Running parallel example (2 ranks): $example"
         set -x
         ${mpi_exec} -n 2 $mpi_launcher python -u -O -m mpi4py ${example}
+        example_return_code=$?
         set +x
     elif [[ "$example" == *"-lazy.py" ]]; then
         echo "*** Running serial lazy example: $example"
         set -x
         python -u -O ${example} --lazy
+        example_return_code=$?
         set +x
     else
         echo "*** Running serial example: $example"
         set -x
         python -u -O ${example}
+        example_return_code=$?
         set +x
     fi
     date
     printf "***\n"
-    if [[ $? -eq 0 ]]
+    if [[ $example_return_code -eq 0 ]]
     then
         ((numsuccess=numsuccess+1))
         echo "*** Example $example succeeded."
