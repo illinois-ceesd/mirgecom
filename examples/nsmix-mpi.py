@@ -157,9 +157,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:

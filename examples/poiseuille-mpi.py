@@ -32,8 +32,7 @@ from functools import partial
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DTAG_BOUNDARY
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
@@ -171,9 +170,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 2
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
@@ -238,19 +235,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                          transport=SimpleTransport(viscosity=mu))
     exact = initializer(x_vec=nodes, eos=gas_model.eos)
 
-    def _boundary_solution(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             cv=state_minus.cv, **kwargs), gas_model)
 
-    boundaries = {DTAG_BOUNDARY("-1"):
-                  PrescribedFluidBoundary(boundary_state_func=_boundary_solution),
-                  DTAG_BOUNDARY("+1"):
-                  PrescribedFluidBoundary(boundary_state_func=_boundary_solution),
-                  DTAG_BOUNDARY("-2"): AdiabaticNoslipWallBoundary(),
-                  DTAG_BOUNDARY("+2"): AdiabaticNoslipWallBoundary()}
+    boundaries = {
+        BoundaryDomainTag("-1"):
+            PrescribedFluidBoundary(
+                boundary_state_func=_boundary_solution),
+        BoundaryDomainTag("+1"):
+            PrescribedFluidBoundary(
+                boundary_state_func=_boundary_solution),
+        BoundaryDomainTag("-2"): AdiabaticNoslipWallBoundary(),
+        BoundaryDomainTag("+2"): AdiabaticNoslipWallBoundary()}
 
     if rst_filename:
         current_t = restart_data["t"]
