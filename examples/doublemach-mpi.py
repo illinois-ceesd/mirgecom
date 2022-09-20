@@ -30,7 +30,7 @@ import pyopencl as cl
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
 
 
@@ -192,8 +192,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             mpi_communicator=comm)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
@@ -237,22 +236,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    def _boundary_state(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
     boundaries = {
-        DTAG_BOUNDARY("ic1"):
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        DTAG_BOUNDARY("ic2"):
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        DTAG_BOUNDARY("ic3"):
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        DTAG_BOUNDARY("wall"): AdiabaticNoslipMovingBoundary(),
-        DTAG_BOUNDARY("out"): AdiabaticNoslipMovingBoundary(),
+        BoundaryDomainTag("ic1"):
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("ic2"):
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("ic3"):
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("wall"): AdiabaticNoslipMovingBoundary(),
+        BoundaryDomainTag("out"): AdiabaticNoslipMovingBoundary(),
     }
 
     if rst_filename:
