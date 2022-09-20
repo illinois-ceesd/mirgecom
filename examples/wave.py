@@ -37,11 +37,6 @@ from mirgecom.wave import wave_operator
 from mirgecom.integrators import rk4_step
 from mirgecom.utils import force_evaluation
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
-
 from mirgecom.profiling import PyOpenCLProfilingArrayContext
 
 from logpyle import IntervalTimer, set_dt
@@ -70,7 +65,7 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
-def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
+def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
     """Drive the example."""
     cl_ctx = cl.create_some_context()
 
@@ -92,9 +87,9 @@ def main(use_profiling=False, use_logmgr=False, lazy: bool = False):
         alloc = get_reasonable_memory_pool(cl_ctx, queue)
 
         if lazy:
-            actx = PytatoPyOpenCLArrayContext(queue, allocator=alloc)
+            actx = actx_class(queue, allocator=alloc)
         else:
-            actx = PyOpenCLArrayContext(queue, allocator=alloc,
+            actx = actx_class(queue, allocator=alloc,
                                         force_device_scalars=True)
 
     dim = 2
@@ -187,6 +182,11 @@ if __name__ == "__main__":
         help="enable lazy evaluation")
     args = parser.parse_args()
 
-    main(use_profiling=args.profile, use_logmgr=args.logging, lazy=args.lazy)
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=args.lazy,
+                                                    distributed=False)
+
+    main(actx_class, use_profiling=args.profile,
+         use_logmgr=args.logging, lazy=args.lazy)
 
 # vim: foldmethod=marker
