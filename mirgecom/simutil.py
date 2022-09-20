@@ -66,6 +66,7 @@ from meshmode.dof_array import DOFArray
 
 from typing import List, Dict
 from grudge.discretization import DiscretizationCollection
+from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.viscous import get_viscous_timestep
 
 logger = logging.getLogger(__name__)
@@ -92,8 +93,9 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
-                            constant_cfl=False, local_dt=False):
+def get_sim_timestep(
+        dcoll, state, t, dt, cfl, t_final=0.0, constant_cfl=False,
+        local_dt=False, fluid_dd=DD_VOLUME_ALL):
     r"""Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns a constraint-limited timestep size for a fluid
@@ -148,6 +150,9 @@ def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
         True if running constant CFL mode
     local_dt: bool
         True if running local DT mode. False by default.
+    fluid_dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *state* lives. Must be a
+        volume on the base discretization.
 
     Returns
     -------
@@ -159,19 +164,21 @@ def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
         data_shape = (state.cv.mass[0]).shape
         if actx.supports_nonscalar_broadcasting:
             return cfl * actx.np.broadcast_to(
-                op.elementwise_min(dcoll, get_viscous_timestep(dcoll, state)),
+                op.elementwise_min(
+                    dcoll, fluid_dd,
+                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
                 data_shape)
         else:
-            return cfl * op.elementwise_min(dcoll,
-                                            get_viscous_timestep(dcoll, state))
+            return cfl * op.elementwise_min(
+                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
     if constant_cfl:
         my_dt = state.array_context.to_numpy(
             cfl * op.nodal_min(
-                dcoll, "vol",
-                get_viscous_timestep(dcoll=dcoll, state=state)))[()]
+                dcoll, fluid_dd,
+                get_viscous_timestep(dcoll=dcoll, state=state, dd=fluid_dd)))[()]
 
     return min(t_remaining, my_dt)
 
@@ -371,7 +378,7 @@ def check_naninf_local(dcoll: DiscretizationCollection, dd: str,
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(dcoll, red_state, blue_state):
+def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
@@ -380,12 +387,12 @@ def compare_fluid_solutions(dcoll, red_state, blue_state):
     actx = red_state.array_context
     resid = red_state - blue_state
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(dcoll, resid, order=np.inf), actx))
+        flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx))
 
     return resid_errs.tolist()
 
 
-def componentwise_norms(dcoll, fields, order=np.inf):
+def componentwise_norms(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
     """Return the *order*-norm for each component of *fields*.
 
     .. note::
@@ -393,15 +400,15 @@ def componentwise_norms(dcoll, fields, order=np.inf):
     """
     if not isinstance(fields, DOFArray):
         return map_array_container(
-            partial(componentwise_norms, dcoll, order=order), fields)
+            partial(componentwise_norms, dcoll, order=order, dd=dd), fields)
     if len(fields) > 0:
-        return op.norm(dcoll, fields, order)
+        return op.norm(dcoll, fields, order, dd=dd)
     else:
         # FIXME: This work-around for #575 can go away after #569
         return 0
 
 
-def max_component_norm(dcoll, fields, order=np.inf):
+def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
     """Return the max *order*-norm over the components of *fields*.
 
     .. note::
@@ -409,7 +416,7 @@ def max_component_norm(dcoll, fields, order=np.inf):
     """
     actx = fields.array_context
     return max(actx.to_numpy(flatten(
-        componentwise_norms(dcoll, fields, order), actx)))
+        componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
