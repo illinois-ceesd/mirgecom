@@ -30,7 +30,7 @@ import pyopencl as cl
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
@@ -222,8 +222,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             mpi_communicator=comm)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
@@ -352,9 +351,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      smoothness=smoothness)
     force_evaluation(actx, current_state)
 
-    def _boundary_state(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
                                                **kwargs),
@@ -365,9 +364,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         boundary_state_func=_boundary_state)
 
     boundaries = {
-        DTAG_BOUNDARY("flow"): flow_boundary,
-        DTAG_BOUNDARY("wall"): SymmetryBoundary(),
-        DTAG_BOUNDARY("out"): OutflowBoundary(boundary_pressure=1.0),
+        BoundaryDomainTag("flow"): flow_boundary,
+        BoundaryDomainTag("wall"): SymmetryBoundary(),
+        BoundaryDomainTag("out"): OutflowBoundary(boundary_pressure=1.0),
     }
 
     visualizer = make_visualizer(dcoll, order)

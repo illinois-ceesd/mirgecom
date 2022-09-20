@@ -46,11 +46,15 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import grudge.dof_desc as dof_desc
+from functools import partial
+
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    DISCR_TAG_MODAL,
+)
 
 from arraycontext import map_array_container
-
-from functools import partial
 
 from meshmode.dof_array import DOFArray
 
@@ -167,7 +171,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     )
 
 
-def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
+def filter_modally(dcoll, cutoff, mode_resp_func, field, *, dd=DD_VOLUME_ALL):
     """Stand-alone procedural interface to spectral filtering.
 
     For each element group in the discretization, and restriction,
@@ -185,37 +189,38 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     ----------
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
-    dd: :class:`grudge.dof_desc.DOFDesc` or as accepted by
-        :func:`grudge.dof_desc.as_dofdesc`
-        Describe the type of DOF vector on which to operate.
     cutoff: int
         Mode below which *field* will not be filtered
     mode_resp_func:
         Modal response function returns a filter coefficient for input mode id
     field: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the relevant field(s) to filter.
+    dd: grudge.dof_desc.DOFDesc
+        Describe the type of DOF vector on which to operate. Must be on the base
+        discretization.
 
     Returns
     -------
     result: :class:`mirgecom.fluid.ConservedVars`
         An array container containing the filtered field(s).
     """
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
-
     if not isinstance(field, DOFArray):
         return map_array_container(
-            partial(filter_modally, dcoll, dd, cutoff, mode_resp_func), field
+            partial(filter_modally, dcoll, cutoff, mode_resp_func, dd=dd), field
         )
 
-    actx = field.array_context
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
 
-    modal_map = dcoll.connection_from_dds(dd, dd_modal)
-    nodal_map = dcoll.connection_from_dds(dd_modal, dd)
+    dd_nodal = dd
+    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
+
+    discr = dcoll.discr_from_dd(dd_nodal)
+
+    actx = field.array_context
+
+    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
+    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
     field = modal_map(field)
     field = apply_spectral_filter(actx, field, discr, cutoff,
                                   mode_resp_func)

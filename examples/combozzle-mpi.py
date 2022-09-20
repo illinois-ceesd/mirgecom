@@ -32,9 +32,8 @@ from functools import partial
 from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DTAG_BOUNDARY
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
 from mirgecom.discretization import create_discretization_collection
 
 
@@ -632,8 +631,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if grid_only:
         return 0
 
-    dcoll = create_discretization_collection(actx, local_mesh, order,
-                                             mpi_communicator=comm)
+    dcoll = create_discretization_collection(actx, local_mesh, order)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
 
@@ -858,8 +856,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if not periodic:
         if multiple_boundaries:
             for idir in range(dim):
-                boundaries[DTAG_BOUNDARY(f"+{idir}")] = wall
-                boundaries[DTAG_BOUNDARY(f"-{idir}")] = wall
+                boundaries[BoundaryDomainTag(f"+{idir}")] = wall
+                boundaries[BoundaryDomainTag(f"-{idir}")] = wall
         else:
             boundaries = {BTAG_ALL: wall}
 
@@ -879,8 +877,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             rst_cv = restart_data["cv"]
             old_dcoll = \
-                create_discretization_collection(actx, local_mesh, order=rst_order,
-                                                 mpi_communicator=comm)
+                create_discretization_collection(actx, local_mesh, order=rst_order)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_dcoll.discr_from_dd("vol"))

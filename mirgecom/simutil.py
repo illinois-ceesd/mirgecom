@@ -79,6 +79,8 @@ from mirgecom.viscous import get_viscous_timestep
 
 from typing import List, Dict
 from grudge.discretization import DiscretizationCollection
+from grudge.dof_desc import DD_VOLUME_ALL
+from mirgecom.utils import normalize_boundaries
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +106,9 @@ def check_step(step, interval):
     return False
 
 
-def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
-                            constant_cfl=False, local_dt=False):
+def get_sim_timestep(
+        dcoll, state, t, dt, cfl, t_final=0.0, constant_cfl=False,
+        local_dt=False, fluid_dd=DD_VOLUME_ALL):
     r"""Return the maximum stable timestep for a typical fluid simulation.
 
     This routine returns a constraint-limited timestep size for a fluid
@@ -160,6 +163,9 @@ def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
         True if running constant CFL mode
     local_dt: bool
         True if running local DT mode. False by default.
+    fluid_dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *state* lives. Must be a
+        volume on the base discretization.
 
     Returns
     -------
@@ -171,19 +177,21 @@ def get_sim_timestep(dcoll, state, t, dt, cfl, t_final=0.0,
         data_shape = (state.cv.mass[0]).shape
         if actx.supports_nonscalar_broadcasting:
             return cfl * actx.np.broadcast_to(
-                op.elementwise_min(dcoll, get_viscous_timestep(dcoll, state)),
+                op.elementwise_min(
+                    dcoll, fluid_dd,
+                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
                 data_shape)
         else:
-            return cfl * op.elementwise_min(dcoll,
-                                            get_viscous_timestep(dcoll, state))
+            return cfl * op.elementwise_min(
+                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
     if constant_cfl:
         my_dt = state.array_context.to_numpy(
             cfl * op.nodal_min(
-                dcoll, "vol",
-                get_viscous_timestep(dcoll=dcoll, state=state)))[()]
+                dcoll, fluid_dd,
+                get_viscous_timestep(dcoll=dcoll, state=state, dd=fluid_dd)))[()]
 
     return min(t_remaining, my_dt)
 
@@ -383,7 +391,7 @@ def check_naninf_local(dcoll: DiscretizationCollection, dd: str,
     return not np.isfinite(s)
 
 
-def compare_fluid_solutions(dcoll, red_state, blue_state):
+def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     """Return inf norm of (*red_state* - *blue_state*) for each component.
 
     .. note::
@@ -392,12 +400,12 @@ def compare_fluid_solutions(dcoll, red_state, blue_state):
     actx = red_state.array_context
     resid = red_state - blue_state
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(dcoll, resid, order=np.inf), actx))
+        flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx))
 
     return resid_errs.tolist()
 
 
-def componentwise_norms(dcoll, fields, order=np.inf):
+def componentwise_norms(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
     """Return the *order*-norm for each component of *fields*.
 
     .. note::
@@ -405,15 +413,15 @@ def componentwise_norms(dcoll, fields, order=np.inf):
     """
     if not isinstance(fields, DOFArray):
         return map_array_container(
-            partial(componentwise_norms, dcoll, order=order), fields)
+            partial(componentwise_norms, dcoll, order=order, dd=dd), fields)
     if len(fields) > 0:
-        return op.norm(dcoll, fields, order)
+        return op.norm(dcoll, fields, order, dd=dd)
     else:
         # FIXME: This work-around for #575 can go away after #569
         return 0
 
 
-def max_component_norm(dcoll, fields, order=np.inf):
+def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
     """Return the max *order*-norm over the components of *fields*.
 
     .. note::
@@ -421,7 +429,7 @@ def max_component_norm(dcoll, fields, order=np.inf):
     """
     actx = fields.array_context
     return max(actx.to_numpy(flatten(
-        componentwise_norms(dcoll, fields, order), actx)))
+        componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
 def generate_and_distribute_mesh(comm, generate_mesh):
@@ -474,8 +482,10 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     return local_mesh, global_nelements
 
 
-def boundary_report(dcoll, boundaries, outfile_name):
+def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL):
     """Generate a report of the grid boundaries."""
+    boundaries = normalize_boundaries(boundaries)
+
     comm = dcoll.mpi_communicator
     nproc = 1
     rank = 0
@@ -488,22 +498,22 @@ def boundary_report(dcoll, boundaries, outfile_name):
     local_report = StringIO(local_header)
     local_report.seek(0, 2)
 
-    for btag in boundaries:
-        boundary_discr = dcoll.discr_from_dd(btag)
+    for bdtag in boundaries:
+        boundary_discr = dcoll.discr_from_dd(bdtag)
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-        local_report.write(f"{btag}: {nnodes}\n")
+        local_report.write(f"{bdtag}: {nnodes}\n")
 
-    if nproc > 1:
-        from meshmode.mesh import BTAG_PARTITION
-        from grudge.trace_pair import connected_ranks
-        remote_ranks = connected_ranks(dcoll)
-        local_report.write(f"remote_ranks: {remote_ranks}\n")
-        rank_nodes = []
-        for remote_rank in remote_ranks:
-            boundary_discr = dcoll.discr_from_dd(BTAG_PARTITION(remote_rank))
-            nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-            rank_nodes.append(nnodes)
-        local_report.write(f"nnodes_pb: {rank_nodes}\n")
+    from meshmode.mesh import BTAG_PARTITION
+    from meshmode.distributed import get_connected_parts
+    connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
+    local_report.write(f"connected_part_ids: {connected_part_ids}\n")
+    part_nodes = []
+    for connected_part_id in connected_part_ids:
+        boundary_discr = dcoll.discr_from_dd(BTAG_PARTITION(connected_part_id))
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        part_nodes.append(nnodes)
+    if part_nodes:
+        local_report.write(f"nnodes_pb: {part_nodes}\n")
 
     local_report.write("-----\n")
     local_report.seek(0)

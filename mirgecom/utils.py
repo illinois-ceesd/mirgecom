@@ -3,6 +3,7 @@
 .. autoclass:: StatisticsAccumulator
 .. autofunction:: asdict_shallow
 .. autofunction:: force_evaluation
+.. autofunction:: normalize_boundaries
 """
 
 __copyright__ = """
@@ -117,3 +118,15 @@ def force_evaluation(actx, x):
     if actx is None:
         return x
     return actx.freeze_thaw(x)
+
+
+def normalize_boundaries(boundaries):
+    """
+    Normalize the keys of *boundaries*.
+
+    Promotes boundary tags to :class:`grudge.dof_desc.BoundaryDomainTag`.
+    """
+    from grudge.dof_desc import as_dofdesc
+    return {
+        as_dofdesc(key).domain_tag: bdry
+        for key, bdry in boundaries.items()}
