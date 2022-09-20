@@ -153,11 +153,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    discr = create_discretization_collection(
+    dcoll = create_discretization_collection(
         actx, local_mesh, order=order, mpi_communicator=comm
     )
-    nodes = actx.thaw(discr.nodes())
-    ones = discr.zeros(actx) + 1.0
+    nodes = actx.thaw(dcoll.nodes())
+    ones = dcoll.zeros(actx) + 1.0
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -174,7 +174,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
         if log_dependent:
-            logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+            logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                                                       extract_vars_for_logging,
                                                       units_for_logging)
             logmgr.add_watches([
@@ -299,7 +299,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-    visualizer = make_visualizer(discr, order + 3 if dim == 2 else order)
+    visualizer = make_visualizer(dcoll, order + 3 if dim == 2 else order)
     initname = initializer.__class__.__name__
     eosname = gas_model.eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -328,9 +328,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             cfl = current_cfl
         else:
             from mirgecom.viscous import get_viscous_cfl
-            cfl_field = get_viscous_cfl(discr, dt, state=state)
+            cfl_field = get_viscous_cfl(dcoll, dt, state=state)
             from grudge.op import nodal_max
-            cfl = actx.to_numpy(nodal_max(discr, "vol", cfl_field))
+            cfl = actx.to_numpy(nodal_max(dcoll, "vol", cfl_field))
         status_msg = f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}"
 
         if ((dv is not None) and (not log_dependent)):
@@ -338,13 +338,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             press = dv.pressure
 
             from grudge.op import nodal_min_loc, nodal_max_loc
-            tmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", temp)),
+            tmin = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", temp)),
                                  op="min")
-            tmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", temp)),
+            tmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", temp)),
                                  op="max")
-            pmin = global_reduce(actx.to_numpy(nodal_min_loc(discr, "vol", press)),
+            pmin = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", press)),
                                  op="min")
-            pmax = global_reduce(actx.to_numpy(nodal_max_loc(discr, "vol", press)),
+            pmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", press)),
                                  op="max")
             dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
@@ -356,7 +356,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields = [("cv", state),
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, comm=comm)
 
     def my_write_restart(step, t, state, tseed):
@@ -383,28 +383,28 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         #       be changed accordingly.
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(discr, "vol", dv.pressure):
+        if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_range_local(discr, "vol", dv.pressure, 9.9e4, 1.06e5),
+        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.9e4, 1.06e5),
                          op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            p_min = actx.to_numpy(nodal_min(discr, "vol", dv.pressure))
-            p_max = actx.to_numpy(nodal_max(discr, "vol", dv.pressure))
+            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
             logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
-        if check_naninf_local(discr, "vol", dv.temperature):
+        if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if global_reduce(check_range_local(discr, "vol", dv.temperature, 1450, 1570),
+        if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 1450, 1570),
                          op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(discr, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(discr, "vol", dv.temperature))
+            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
         # This check is the temperature convergence check
@@ -412,7 +412,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # in lazy mode.
         from grudge import op
         temp_resid = get_temperature_update(cv, dv.temperature) / dv.temperature
-        temp_err = (actx.to_numpy(op.nodal_max_loc(discr, "vol", temp_resid)))
+        temp_err = (actx.to_numpy(op.nodal_max_loc(dcoll, "vol", temp_resid)))
         if temp_err > 1e-8:
             health_error = True
             logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
@@ -447,7 +447,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 my_write_viz(step=step, t=t, state=cv, dv=dv)
 
-            dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl,
+            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
             if do_status:
                 my_write_status(step, t, dt, dv=dv, state=fluid_state)
@@ -478,12 +478,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         cv, tseed = state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        ns_rhs = ns_operator(discr, state=fluid_state, time=t,
+        ns_rhs = ns_operator(dcoll, state=fluid_state, time=t,
                              boundaries=visc_bnds, gas_model=gas_model)
         cv_rhs = ns_rhs + eos.get_species_source_terms(cv, fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
 
-    current_dt = get_sim_timestep(discr, current_state, current_t,
+    current_dt = get_sim_timestep(dcoll, current_state, current_t,
                                   current_dt, current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_stepper_state = \
@@ -501,7 +501,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_cv, tseed = current_stepper_state
     current_state = get_fluid_state(current_cv, tseed)
     final_dv = current_state.dv
-    final_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
+    final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
     my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=current_state.cv,

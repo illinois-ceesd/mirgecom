@@ -86,8 +86,8 @@ def test_tag_cells(ctx_factory, dim, order):
     nel_1d = 2
     tolerance = 1.e-16
 
-    def norm_indicator(expected, discr, soln, **kwargs):
-        return (op.norm(discr, expected-smoothness_indicator(discr, soln, **kwargs),
+    def norm_indicator(expected, dcoll, soln, **kwargs):
+        return (op.norm(dcoll, expected-smoothness_indicator(dcoll, soln, **kwargs),
                         np.inf))
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -96,18 +96,18 @@ def test_tag_cells(ctx_factory, dim, order):
         a=(-1.0, )*dim,  b=(1.0, )*dim,  n=(nel_1d, ) * dim
     )
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
     nele = mesh.nelements
     zeros = 0.0*nodes[0]
 
     # Test jump discontinuity
     soln = actx.np.where(nodes[0] > 0.0+zeros, 1.0+zeros, zeros)
-    err = norm_indicator(1.0, discr, soln)
+    err = norm_indicator(1.0, dcoll, soln)
     assert err < tolerance,  "Jump discontinuity should trigger indicator (1.0)"
 
     # get meshmode polynomials
-    group = discr.discr_from_dd("vol").groups[0]
+    group = dcoll.discr_from_dd("vol").groups[0]
     basis = group.basis()  # only one group
     unit_nodes = group.unit_nodes
     modes = group.mode_ids()
@@ -121,7 +121,7 @@ def test_tag_cells(ctx_factory, dim, order):
             expected = 1.0
         else:
             expected = 0.0
-        err = norm_indicator(expected, discr, soln)
+        err = norm_indicator(expected, dcoll, soln)
         assert err < tolerance,  "Only highest modes should trigger indicator (1.0)"
 
     # Test s0
@@ -140,7 +140,7 @@ def test_tag_cells(ctx_factory, dim, order):
     ele_soln = ((phi_n_p+eps)*basis[n_p](unit_nodes)
                 + phi_n_pm1*basis[n_pm1](unit_nodes))
     soln[0].set(np.tile(ele_soln, (nele, 1)))
-    err = norm_indicator(1.0, discr, soln, s0=s0, kappa=0.0)
+    err = norm_indicator(1.0, dcoll, soln, s0=s0, kappa=0.0)
     assert err < tolerance,  (
         "A function with an indicator >s0 should trigger indicator")
 
@@ -148,7 +148,7 @@ def test_tag_cells(ctx_factory, dim, order):
     ele_soln = ((phi_n_p-eps)*basis[n_p](unit_nodes)
                 + phi_n_pm1*basis[n_pm1](unit_nodes))
     soln[0].set(np.tile(ele_soln, (nele, 1)))
-    err = norm_indicator(0.0, discr, soln, s0=s0, kappa=0.0)
+    err = norm_indicator(0.0, dcoll, soln, s0=s0, kappa=0.0)
     assert err < tolerance, (
         "A function with an indicator <s0 should not trigger indicator")
 
@@ -159,22 +159,22 @@ def test_tag_cells(ctx_factory, dim, order):
     ele_soln = (phi_n_p*basis[n_p](unit_nodes)
                 + phi_n_pm1*basis[n_pm1](unit_nodes))
     soln[0].set(np.tile(ele_soln, (nele, 1)))
-    err = norm_indicator(0.5, discr, soln, s0=s0, kappa=kappa)
+    err = norm_indicator(0.5, dcoll, soln, s0=s0, kappa=kappa)
     assert err < 1.0e-10,  "A function with s_e=s_0 should return 0.5"
 
     # test bounds
     # lower bound
     shift = 1.0e-5
-    err = norm_indicator(0.0, discr, soln, s0=s0+kappa+shift, kappa=kappa)
+    err = norm_indicator(0.0, dcoll, soln, s0=s0+kappa+shift, kappa=kappa)
     assert err < tolerance,  "s_e<s_0-kappa should not trigger indicator"
-    err = norm_indicator(0.0, discr, soln, s0=s0+kappa-shift, kappa=kappa)
+    err = norm_indicator(0.0, dcoll, soln, s0=s0+kappa-shift, kappa=kappa)
     assert err > tolerance,  "s_e>s_0-kappa should trigger indicator"
 
     # upper bound
-    err = norm_indicator(1.0, discr, soln, s0=s0-(kappa+shift), kappa=kappa)
+    err = norm_indicator(1.0, dcoll, soln, s0=s0-(kappa+shift), kappa=kappa)
     # s_e>s_0+kappa should fully trigger indicator (1.0)
     assert err < tolerance
-    err = norm_indicator(1.0, discr, soln, s0=s0-(kappa-shift), kappa=kappa)
+    err = norm_indicator(1.0, dcoll, soln, s0=s0-(kappa-shift), kappa=kappa)
     # s_e<s_0+kappa should not fully trigger indicator (1.0)
     assert err > tolerance
 
@@ -201,33 +201,33 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         a=(1.0, )*dim, b=(2.0, )*dim, nelements_per_axis=(nel_1d, )*dim
     )
 
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     class TestBoundary:
 
-        def cv_gradient_flux(self, disc, btag, state_minus, gas_model, **kwargs):
+        def cv_gradient_flux(self, dcoll, btag, state_minus, gas_model, **kwargs):
             cv_int = state_minus.cv
             from grudge.trace_pair import TracePair
             bnd_pair = TracePair(btag,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = actx.thaw(disc.normal(btag))
+            nhat = actx.thaw(dcoll.normal(btag))
             from mirgecom.flux import num_flux_central
             from arraycontext import outer
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
-        def av_flux(self, disc, btag, diffusion, **kwargs):
-            nhat = actx.thaw(disc.normal(btag))
-            diffusion_minus = op.project(discr, "vol", btag, diffusion)
+        def av_flux(self, dcoll, btag, diffusion, **kwargs):
+            nhat = actx.thaw(dcoll.normal(btag))
+            diffusion_minus = op.project(dcoll, "vol", btag, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
             bnd_grad_pair = TracePair(btag, interior=diffusion_minus,
                                       exterior=diffusion_plus)
             from mirgecom.flux import num_flux_central
             flux_weak = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-            return op.project(disc, btag, "all_faces", flux_weak)
+            return op.project(dcoll, btag, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
 
@@ -245,11 +245,11 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         )
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-        rhs = av_laplacian_operator(discr, boundaries=boundaries,
+        rhs = av_laplacian_operator(dcoll, boundaries=boundaries,
                                     gas_model=gas_model,
                                     fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
         print(f"{rhs=}")
-        err = op.norm(discr, rhs-exp_rhs_1d, np.inf)
+        err = op.norm(dcoll, rhs-exp_rhs_1d, np.inf)
         assert err < tolerance
 
     # Quadratic field return constant 2*dim
@@ -262,10 +262,10 @@ def test_artificial_viscosity(ctx_factory, dim, order):
         species_mass=make_obj_array([soln for _ in range(dim)])
     )
     fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-    rhs = av_laplacian_operator(discr, boundaries=boundaries,
+    rhs = av_laplacian_operator(dcoll, boundaries=boundaries,
                                 gas_model=gas_model,
                                 fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
-    err = op.norm(discr, 2.*dim-rhs, np.inf)
+    err = op.norm(dcoll, 2.*dim-rhs, np.inf)
     assert err < tolerance
 
 
@@ -294,8 +294,8 @@ def test_trig(ctx_factory, dim, order):
             periodic=(True,)*dim
         )
 
-        discr = create_discretization_collection(actx, mesh, order=order)
-        nodes = actx.thaw(discr.nodes())
+        dcoll = create_discretization_collection(actx, mesh, order=order)
+        nodes = actx.thaw(dcoll.nodes())
 
         boundaries = {}
 
@@ -316,11 +316,11 @@ def test_trig(ctx_factory, dim, order):
             species_mass=make_obj_array([soln for _ in range(dim)])
         )
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-        rhs = av_laplacian_operator(discr, boundaries=boundaries,
+        rhs = av_laplacian_operator(dcoll, boundaries=boundaries,
                                     gas_model=gas_model,
                                     fluid_state=fluid_state, alpha=1.0, s0=-np.inf)
 
-        err_rhs = actx.to_numpy(op.norm(discr, rhs-exp_rhs, np.inf))
+        err_rhs = actx.to_numpy(op.norm(dcoll, rhs-exp_rhs, np.inf))
         eoc_rec.add_data_point(1.0/nel_1d, err_rhs)
 
     logger.info(
@@ -402,9 +402,9 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=transport_model)
 
-    def _boundary_state_func(discr, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = discr.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(btag)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
@@ -414,12 +414,12 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     b = 2.0
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
     from mirgecom.discretization import create_discretization_collection
-    discr = create_discretization_collection(actx, mesh, order=order)
-    nodes = actx.thaw(discr.nodes())
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
     cv = prescribed_soln(r=nodes, eos=gas_model.eos)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    boundary_nhat = actx.thaw(discr.normal(BTAG_ALL))
+    boundary_nhat = actx.thaw(dcoll.normal(BTAG_ALL))
 
     from mirgecom.boundary import (
         PrescribedFluidBoundary,
@@ -434,12 +434,12 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     fluid_boundaries = {BTAG_ALL: prescribed_boundary}
     from mirgecom.navierstokes import grad_cv_operator
     fluid_grad_cv = \
-        grad_cv_operator(discr, gas_model, fluid_boundaries, fluid_state)
+        grad_cv_operator(dcoll, gas_model, fluid_boundaries, fluid_state)
 
     # Put in a testing field for AV - doesn't matter what - as long as it
     # is spatially-dependent in all dimensions.
     av_diffusion = 0. * fluid_grad_cv + np.dot(nodes, nodes)
-    av_diffusion_boundary = op.project(discr, "vol", BTAG_ALL, av_diffusion)
+    av_diffusion_boundary = op.project(dcoll, "vol", BTAG_ALL, av_diffusion)
 
     # Prescribed boundaries are used for inflow/outflow-type boundaries
     # where we expect to _preserve_ the soln gradient
@@ -448,12 +448,12 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     all_faces_dd = dd_bnd.with_dtag("all_faces")
     expected_av_flux_prescribed_boundary = av_diffusion_boundary@boundary_nhat
     print(f"{expected_av_flux_prescribed_boundary=}")
-    exp_av_flux = op.project(discr, dd_bnd, all_faces_dd,
+    exp_av_flux = op.project(dcoll, dd_bnd, all_faces_dd,
                                 expected_av_flux_prescribed_boundary)
     print(f"{exp_av_flux=}")
 
     prescribed_boundary_av_flux = \
-        prescribed_boundary.av_flux(discr, BTAG_ALL, av_diffusion)
+        prescribed_boundary.av_flux(dcoll, BTAG_ALL, av_diffusion)
     print(f"{prescribed_boundary_av_flux=}")
 
     bnd_flux_resid = (prescribed_boundary_av_flux - exp_av_flux)
@@ -462,11 +462,11 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
 
     # Solid wall boundaries are expected to have 0 AV flux
     wall_bnd_flux = \
-        adiabatic_noslip.av_flux(discr, BTAG_ALL, av_diffusion)
+        adiabatic_noslip.av_flux(dcoll, BTAG_ALL, av_diffusion)
     print(f"adiabatic_noslip: {wall_bnd_flux=}")
     assert wall_bnd_flux == 0
 
     wall_bnd_flux = \
-        isothermal_noslip.av_flux(discr, BTAG_ALL, av_diffusion)
+        isothermal_noslip.av_flux(dcoll, BTAG_ALL, av_diffusion)
     print(f"isothermal_noslip: {wall_bnd_flux=}")
     assert wall_bnd_flux == 0
