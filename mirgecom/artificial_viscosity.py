@@ -130,6 +130,7 @@ import numpy as np
 from pytools import memoize_in, keyed_memoize_in
 from functools import partial
 from meshmode.dof_array import DOFArray
+from meshmode.discretization.connection import FACE_RESTR_ALL
 
 from mirgecom.flux import num_flux_central
 from mirgecom.operators import div_operator
@@ -140,11 +141,13 @@ from grudge.trace_pair import (
 )
 
 from grudge.dof_desc import (
-    DOFDesc,
-    as_dofdesc,
-    DD_VOLUME_MODAL,
-    DD_VOLUME
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+    DISCR_TAG_MODAL,
 )
+
+from mirgecom.utils import normalize_boundaries
 
 import grudge.op as op
 
@@ -154,10 +157,12 @@ class _AVRTag:
 
 
 def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
-                          kappa=1., s0=-6., time=0, operator_states_quad=None,
-                          grad_cv=None, quadrature_tag=None, boundary_kwargs=None,
-                          indicator=None, divergence_numerical_flux=num_flux_central,
-                          comm_tag=None, **kwargs):
+                          kappa=1., s0=-6., time=0, quadrature_tag=DISCR_TAG_BASE,
+                          dd=DD_VOLUME_ALL, boundary_kwargs=None, indicator=None,
+                          divergence_numerical_flux=num_flux_central, comm_tag=None,
+                          operator_states_quad=None,
+                          grad_cv=None,
+                          **kwargs):
     r"""Compute the artificial viscosity right-hand-side.
 
     Computes the the right-hand-side term for artificial viscosity.
@@ -196,10 +201,10 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     quadrature_tag
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
-        The default value is *None*.
 
-    boundary_kwargs: :class:`dict`
-        dictionary of extra arguments to pass through to the boundary conditions
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *fluid_state* lives.
+        Must be a volume on the base discretization.
 
     comm_tag: Hashable
         Tag for distributed communication
@@ -209,10 +214,19 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     :class:`mirgecom.fluid.ConservedVars`
         The artificial viscosity operator applied to *q*.
     """
+    boundaries = normalize_boundaries(boundaries)
+
     cv = fluid_state.cv
     actx = cv.array_context
-    dd_vol = DOFDesc("vol", quadrature_tag)
-    dd_faces = DOFDesc("all_faces", quadrature_tag)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     from warnings import warn
 
@@ -227,12 +241,13 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     def interp_to_vol_quad(u):
-        return op.project(dcoll, "vol", dd_vol, u)
+        return op.project(dcoll, dd_vol, dd_vol_quad, u)
 
     if operator_states_quad is None:
         from mirgecom.gas_model import make_operator_fluid_states
         operator_states_quad = make_operator_fluid_states(
-            dcoll, fluid_state, gas_model, boundaries, quadrature_tag, comm_tag)
+            dcoll, fluid_state, gas_model, boundaries, quadrature_tag,
+            dd=dd_vol, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -240,45 +255,52 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     # Get smoothness indicator based on mass component
     if indicator is None:
         indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
-                                         kappa=kappa, s0=s0)
+                                         kappa=kappa, s0=s0, dd=dd_vol)
 
     if grad_cv is None:
         from mirgecom.navierstokes import grad_cv_operator
         grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                    time=time, quadrature_tag=quadrature_tag,
-                                   operator_states_quad=operator_states_quad,
-                                   comm_tag=comm_tag)
+                                   dd=dd_vol,
+                                   comm_tag=comm_tag,
+                                   operator_states_quad=operator_states_quad)
 
     # Compute R = alpha*grad(Q)
     r = -alpha * indicator * grad_cv
 
-    def central_flux_div(utpair):
-        dd = utpair.dd
-        normal = actx.thaw(dcoll.normal(dd))
-        return op.project(dcoll, dd, dd.with_dtag("all_faces"),
+    def central_flux_div(utpair_quad):
+        dd_trace_quad = utpair_quad.dd
+        dd_allfaces_quad = dd_trace_quad.with_boundary_tag(FACE_RESTR_ALL)
+        normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+        return op.project(dcoll, dd_trace_quad, dd_allfaces_quad,
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
-                          divergence_numerical_flux(utpair.int, utpair.ext)@normal)
+                          divergence_numerical_flux(
+                              utpair_quad.int, utpair_quad.ext)@normal_quad)
 
     # Total flux of grad(Q) across element boundaries
     r_bnd = (
         # Rank-local and cross-rank (across parallel partitions) contributions
-        + sum(central_flux_div(interp_to_surf_quad(tpair=tpair))
-              for tpair in interior_trace_pairs(dcoll, r,
-                    comm_tag=(_AVRTag, comm_tag)))
+        sum(
+            central_flux_div(interp_to_surf_quad(tpair=tpair))
+            for tpair in interior_trace_pairs(
+                dcoll, r, volume_dd=dd_vol, comm_tag=(_AVRTag, comm_tag)))
 
         # Contributions from boundary fluxes
-        + sum(boundaries[btag].av_flux(
-            dcoll,
-            btag=as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            diffusion=r) for btag in boundaries)
+        + sum(
+            bdry.av_flux(
+                dcoll,
+                dd_bdry=dd_vol.with_domain_tag(bdtag),
+                diffusion=r)
+            for bdtag, bdry in boundaries.items())
     )
 
     # Return the AV RHS term
-    return -div_operator(dcoll, dd_vol, dd_faces, interp_to_vol_quad(r), r_bnd)
+    return -div_operator(
+        dcoll, dd_vol_quad, dd_allfaces_quad, interp_to_vol_quad(r), r_bnd)
 
 
-def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
+def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
     r"""Calculate the smoothness indicator.
 
     Parameters
@@ -305,7 +327,7 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
 
     actx = u.array_context
 
-    @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl"))
+    @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl", dd))
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
         from arraycontext import make_loopy_program
@@ -331,8 +353,7 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
         return lp.tag_inames(t_unit, {"iel": ConcurrentElementInameTag(),
                                       "idof": ConcurrentDOFInameTag()})
 
-    @keyed_memoize_in(actx, (smoothness_indicator,
-                             "highest_mode"),
+    @keyed_memoize_in(actx, (smoothness_indicator, "highest_mode", dd),
                       lambda grp: grp.discretization_key())
     def highest_mode(grp):
         return actx.from_numpy(
@@ -342,7 +363,9 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
         )
 
     # Convert to modal solution representation
-    modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    dd_vol = dd
+    dd_modal = dd_vol.with_discr_tag(DISCR_TAG_MODAL)
+    modal_map = dcoll.connection_from_dds(dd_vol, dd_modal)
     uhat = modal_map(u)
 
     # Compute smoothness indicator value
@@ -363,7 +386,7 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
                                          )))
                          .reshape(-1, 1)),
                         uhat[grp.index].shape))
-                for grp in dcoll.discr_from_dd("vol").groups
+                for grp in dcoll.discr_from_dd(dd_vol).groups
             )
         )
     else:
@@ -375,7 +398,7 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0):
                     vec=uhat[grp.index],
                     modes_active_flag=highest_mode(grp)
                 )["result"]
-                for grp in dcoll.discr_from_dd("vol").groups
+                for grp in dcoll.discr_from_dd(dd_vol).groups
             )
         )
 

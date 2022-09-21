@@ -30,6 +30,7 @@ import logging
 import pytest
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.initializers import Lump
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.eos import IdealSingleGas
@@ -147,12 +148,13 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
             print(f"{cv_flux_int=}")
 
             ff_bndry_state = bndry.farfield_state(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             print(f"{ff_bndry_state=}")
             ff_bndry_temperature = ff_bndry_state.temperature
             print(f"{ff_bndry_temperature=}")
 
-            cv_grad_flux_bndry = bndry.cv_gradient_flux(dcoll, btag=BTAG_ALL,
+            cv_grad_flux_bndry = bndry.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                         gas_model=gas_model,
                                                         state_minus=state_minus)
 
@@ -170,7 +172,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
             t_flux_int = gradient_flux_interior(t_int_tpair)
-            t_flux_bc = bndry.temperature_gradient_flux(dcoll, btag=BTAG_ALL,
+            t_flux_bc = bndry.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                         gas_model=gas_model,
                                                         state_minus=state_minus)
 
@@ -180,7 +182,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
-            i_flux_bc = bndry.inviscid_divergence_flux(dcoll, btag=BTAG_ALL,
+            i_flux_bc = bndry.inviscid_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
 
@@ -212,7 +214,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-            v_flux_bc = bndry.viscous_divergence_flux(dcoll, btag=BTAG_ALL,
+            v_flux_bc = bndry.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                       gas_model=gas_model,
                                                       state_minus=state_minus,
                                                       grad_cv_minus=grad_cv_minus,
@@ -297,7 +299,8 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"Volume state: {speed_of_sound=}")
 
             flowbnd_bndry_state = bndry.outflow_state(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             print(f"{flowbnd_bndry_state=}")
             flowbnd_bndry_temperature = flowbnd_bndry_state.temperature
             flowbnd_bndry_pressure = flowbnd_bndry_state.pressure
@@ -334,7 +337,8 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"Volume state: {speed_of_sound=}")
 
             flowbnd_bndry_state = bndry.outflow_state(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             print(f"{flowbnd_bndry_state=}")
             flowbnd_bndry_temperature = flowbnd_bndry_state.temperature
             print(f"{flowbnd_bndry_temperature=}")
@@ -437,12 +441,13 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
             print(f"{cv_flux_int=}")
 
             wall_state = wall.isothermal_wall_state(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             print(f"{wall_state=}")
             wall_temperature = wall_state.temperature
             print(f"{wall_temperature=}")
 
-            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, btag=BTAG_ALL,
+            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                  gas_model=gas_model,
                                                  state_minus=state_minus)
 
@@ -460,7 +465,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
             t_flux_int = gradient_flux_interior(t_int_tpair)
-            t_flux_bc = wall.temperature_gradient_flux(dcoll, btag=BTAG_ALL,
+            t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
 
@@ -470,7 +475,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
-            i_flux_bc = wall.inviscid_divergence_flux(dcoll, btag=BTAG_ALL,
+            i_flux_bc = wall.inviscid_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
@@ -502,7 +507,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-            v_flux_bc = wall.viscous_divergence_flux(dcoll, btag=BTAG_ALL,
+            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                      gas_model=gas_model,
                                                      state_minus=state_minus,
                                                      grad_cv_minus=grad_cv_minus,
@@ -604,9 +609,11 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
             print(f"{cv_flux_int=}")
 
             adv_wall_state = wall.adiabatic_wall_state_for_advection(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             diff_wall_state = wall.adiabatic_wall_state_for_diffusion(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
 
             print(f"{adv_wall_state=}")
             print(f"{diff_wall_state=}")
@@ -614,7 +621,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
             wall_temperature = adv_wall_state.temperature
             print(f"{wall_temperature=}")
 
-            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, btag=BTAG_ALL,
+            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                  gas_model=gas_model,
                                                  state_minus=state_minus)
 
@@ -632,7 +639,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
             t_flux_int = gradient_flux_interior(t_int_tpair)
-            t_flux_bc = wall.temperature_gradient_flux(dcoll, btag=BTAG_ALL,
+            t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
 
@@ -642,7 +649,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
-            i_flux_bc = wall.inviscid_divergence_flux(dcoll, btag=BTAG_ALL,
+            i_flux_bc = wall.inviscid_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
@@ -674,7 +681,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-            v_flux_bc = wall.viscous_divergence_flux(dcoll, btag=BTAG_ALL,
+            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                      gas_model=gas_model,
                                                      state_minus=state_minus,
                                                      grad_cv_minus=grad_cv_minus,
@@ -794,9 +801,11 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             print(f"{cv_flux_int=}")
 
             adv_wall_state = wall.adiabatic_wall_state_for_advection(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             diff_wall_state = wall.adiabatic_wall_state_for_diffusion(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
 
             print(f"{adv_wall_state=}")
             print(f"{diff_wall_state=}")
@@ -804,7 +813,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             wall_temperature = adv_wall_state.temperature
             print(f"{wall_temperature=}")
 
-            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, btag=BTAG_ALL,
+            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                  gas_model=gas_model,
                                                  state_minus=state_minus)
 
@@ -822,7 +831,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
             t_flux_int = gradient_flux_interior(t_int_tpair)
-            t_flux_bc = wall.temperature_gradient_flux(dcoll, btag=BTAG_ALL,
+            t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
 
@@ -832,7 +841,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
-            i_flux_bc = wall.inviscid_divergence_flux(dcoll, btag=BTAG_ALL,
+            i_flux_bc = wall.inviscid_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
@@ -864,7 +873,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-            v_flux_bc = wall.viscous_divergence_flux(dcoll, btag=BTAG_ALL,
+            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                      gas_model=gas_model,
                                                      state_minus=state_minus,
                                                      grad_cv_minus=grad_cv_minus,
@@ -929,11 +938,14 @@ def test_slipwall_identity(actx_factory, dim):
                 return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
 
             state_plus = \
-                wall.adiabatic_slip_state(dcoll, btag=BTAG_ALL, gas_model=gas_model,
-                                          state_minus=state_minus)
+                wall.adiabatic_slip_state(
+                    dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                    state_minus=state_minus)
 
-            bnd_pair = TracePair(BTAG_ALL, interior=state_minus.cv,
-                                 exterior=state_plus.cv)
+            bnd_pair = TracePair(
+                as_dofdesc(BTAG_ALL),
+                interior=state_minus.cv,
+                exterior=state_plus.cv)
 
             # check that mass and energy are preserved
             mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass
@@ -1004,14 +1016,18 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                                                     state=fluid_state,
                                                     gas_model=gas_model)
 
-                bnd_soln = wall.adiabatic_slip_state(dcoll, btag=BTAG_ALL,
+                bnd_soln = wall.adiabatic_slip_state(dcoll, dd_bdry=BTAG_ALL,
                                                      gas_model=gas_model,
                                                      state_minus=interior_soln)
 
-                bnd_pair = TracePair(BTAG_ALL, interior=interior_soln.cv,
-                                     exterior=bnd_soln.cv)
-                state_pair = TracePair(BTAG_ALL, interior=interior_soln,
-                                       exterior=bnd_soln)
+                bnd_pair = TracePair(
+                    as_dofdesc(BTAG_ALL),
+                    interior=interior_soln.cv,
+                    exterior=bnd_soln.cv)
+                state_pair = TracePair(
+                    as_dofdesc(BTAG_ALL),
+                    interior=interior_soln,
+                    exterior=bnd_soln)
 
                 # Check the total velocity component normal
                 # to each surface.  It should be zero.  The
@@ -1135,10 +1151,11 @@ def test_noslip(actx_factory, dim, flux_func):
             print(f"{cv_flux_int=}")
 
             wall_state = wall.isothermal_noslip_state(
-                dcoll, btag=BTAG_ALL, gas_model=gas_model, state_minus=state_minus)
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             print(f"{wall_state=}")
 
-            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, btag=BTAG_ALL,
+            cv_grad_flux_wall = wall.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                  gas_model=gas_model,
                                                  state_minus=state_minus)
 
@@ -1156,7 +1173,7 @@ def test_noslip(actx_factory, dim, flux_func):
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
-            t_flux_bc = wall.temperature_gradient_flux(dcoll, btag=BTAG_ALL,
+            t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
 
@@ -1166,14 +1183,14 @@ def test_noslip(actx_factory, dim, flux_func):
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
-            i_flux_bc = wall.inviscid_divergence_flux(dcoll, btag=BTAG_ALL,
+            i_flux_bc = wall.inviscid_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
             nhat = actx.thaw(dcoll.normal(state_pair.dd))
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
             i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
@@ -1186,19 +1203,19 @@ def test_noslip(actx_factory, dim, flux_func):
 
             from mirgecom.operators import grad_operator
             dd_vol = as_dofdesc("vol")
-            dd_faces = as_dofdesc("all_faces")
+            dd_allfaces = as_dofdesc("all_faces")
             grad_cv_minus = \
                 op.project(dcoll, "vol", BTAG_ALL,
-                              grad_operator(dcoll, dd_vol, dd_faces,
+                              grad_operator(dcoll, dd_vol, dd_allfaces,
                                             uniform_state.cv, cv_flux_bnd))
             grad_t_minus = op.project(dcoll, "vol", BTAG_ALL,
-                                         grad_operator(dcoll, dd_vol, dd_faces,
+                                         grad_operator(dcoll, dd_vol, dd_allfaces,
                                                        temper, t_flux_bnd))
 
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-            v_flux_bc = wall.viscous_divergence_flux(dcoll, btag=BTAG_ALL,
+            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                      gas_model=gas_model,
                                                      state_minus=state_minus,
                                                      grad_cv_minus=grad_cv_minus,
@@ -1287,9 +1304,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     # (*note): Most people will never change these as they are used internally
     #          to compute a DG gradient of Q and temperature.
 
-    def _boundary_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
@@ -1347,7 +1364,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
 
             cv_int_tpair = interior_trace_pair(dcoll, cv)
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
-            cv_flux_bc = domain_boundary.cv_gradient_flux(dcoll, btag=BTAG_ALL,
+            cv_flux_bc = domain_boundary.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                gas_model=gas_model,
                                                state_minus=state_minus)
 
@@ -1360,7 +1377,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             t_int_tpair = interior_trace_pair(dcoll, temper)
             t_flux_int = scalar_flux_interior(t_int_tpair)
             t_flux_bc = \
-                domain_boundary.temperature_gradient_flux(dcoll, btag=BTAG_ALL,
+                domain_boundary.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                           gas_model=gas_model,
                                                           state_minus=state_minus)
 
@@ -1371,7 +1388,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             t_flux_bnd = t_flux_bc + t_flux_int
 
             i_flux_bc = \
-                domain_boundary.inviscid_divergence_flux(dcoll, btag=BTAG_ALL,
+                domain_boundary.inviscid_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
                                                          gas_model=gas_model,
                                                          state_minus=state_minus)
 
@@ -1382,9 +1399,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             nhat = actx.thaw(dcoll.normal(state_pair.dd))
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
-            bc_dd = as_dofdesc(BTAG_ALL)
-            i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
+            dd_bdry = as_dofdesc(BTAG_ALL)
+            i_flux_bc = op.project(dcoll, dd_bdry, dd_allfaces, i_flux_bc)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
 
             i_flux_bnd = i_flux_bc + i_flux_int
@@ -1395,9 +1412,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
 
             from mirgecom.operators import grad_operator
             dd_vol = as_dofdesc("vol")
-            dd_faces = as_dofdesc("all_faces")
-            grad_cv = grad_operator(dcoll, dd_vol, dd_faces, cv, cv_flux_bnd)
-            grad_t = grad_operator(dcoll, dd_vol, dd_faces, temper, t_flux_bnd)
+            dd_allfaces = as_dofdesc("all_faces")
+            grad_cv = grad_operator(dcoll, dd_vol, dd_allfaces, cv, cv_flux_bnd)
+            grad_t = grad_operator(dcoll, dd_vol, dd_allfaces, temper, t_flux_bnd)
             grad_cv_minus = op.project(dcoll, "vol", BTAG_ALL, grad_cv)
             grad_t_minus = op.project(dcoll, "vol", BTAG_ALL, grad_t)
 
@@ -1405,11 +1422,10 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             print(f"{grad_t_minus=}")
 
             v_flux_bc = \
-                domain_boundary.viscous_divergence_flux(dcoll=dcoll, btag=BTAG_ALL,
-                                                        gas_model=gas_model,
-                                                        state_minus=state_minus,
-                                                        grad_cv_minus=grad_cv_minus,
-                                                        grad_t_minus=grad_t_minus)
+                domain_boundary.viscous_divergence_flux(
+                    dcoll=dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                    state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+                    grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
             bc_soln = \
                 domain_boundary._boundary_state_pair(dcoll, BTAG_ALL, gas_model,
