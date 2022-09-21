@@ -32,7 +32,9 @@ import logging
 import pytest  # noqa
 
 from pytools.obj_array import make_obj_array
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
+from grudge.dof_desc import as_dofdesc
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
@@ -161,8 +163,9 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,
                     int_tpairs, boundaries):
-        return ((sum(compute_interior_flux(int_tpair) for int_tpair in int_tpairs))
-                + sum(compute_boundary_flux(btag) for btag in boundaries))
+        return (
+            sum(compute_interior_flux(int_tpair) for int_tpair in int_tpairs)
+            + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
 
     from mirgecom.flux import num_flux_central
 
@@ -170,20 +173,20 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         normal = actx.thaw(dcoll.normal(int_tpair.dd))
         from arraycontext import outer
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
-        dd_all_faces = int_tpair.dd.with_dtag("all_faces")
-        return op.project(dcoll, int_tpair.dd, dd_all_faces, flux_weak)
+        dd_allfaces = int_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
+        return op.project(dcoll, int_tpair.dd, dd_allfaces, flux_weak)
 
-    def cv_flux_boundary(btag):
-        boundary_discr = dcoll.discr_from_dd(btag)
+    def cv_flux_boundary(dd_bdry):
+        boundary_discr = dcoll.discr_from_dd(dd_bdry)
         bnd_nodes = actx.thaw(boundary_discr.nodes())
         cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
-        bnd_nhat = actx.thaw(dcoll.normal(btag))
+        bnd_nhat = actx.thaw(dcoll.normal(dd_bdry))
         from grudge.trace_pair import TracePair
-        bnd_tpair = TracePair(btag, interior=cv_bnd, exterior=cv_bnd)
+        bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
         from arraycontext import outer
         flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
-        dd_all_faces = bnd_tpair.dd.with_dtag("all_faces")
-        return op.project(dcoll, bnd_tpair.dd, dd_all_faces, flux_weak)
+        dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
+        return op.project(dcoll, dd_bdry, dd_allfaces, flux_weak)
 
     for nfac in [1, 2, 4]:
 
@@ -213,10 +216,9 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         cv_flux_bnd = _elbnd_flux(dcoll, cv_flux_interior, cv_flux_boundary,
                                   cv_int_tpairs, boundaries)
         from mirgecom.operators import grad_operator
-        from grudge.dof_desc import as_dofdesc
         dd_vol = as_dofdesc("vol")
-        dd_faces = as_dofdesc("all_faces")
-        grad_cv = grad_operator(dcoll, dd_vol, dd_faces, cv, cv_flux_bnd)
+        dd_allfaces = as_dofdesc("all_faces")
+        grad_cv = grad_operator(dcoll, dd_vol, dd_allfaces, cv, cv_flux_bnd)
 
         xp_grad_cv = initializer.exact_grad(x_vec=nodes, eos=eos, cv_exact=cv)
         xp_grad_v = 1/cv.mass * xp_grad_cv.momentum
