@@ -130,9 +130,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
     order = 3
 
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485
@@ -161,8 +159,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         old_order = restart_data["order"]
         if old_order != order:
             old_dcoll = create_discretization_collection(
-                actx, local_mesh, order=old_order, mpi_communicator=comm
-            )
+                actx, local_mesh, order=old_order)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_dcoll.discr_from_dd("vol"))
