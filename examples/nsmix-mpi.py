@@ -283,8 +283,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_fluid_state(cv=cv, gas_model=gas_model,
                                 temperature_seed=temp_seed)
 
+    def _ns_operator_for_viz(fluid_state, time):
+        ns_rhs, grad_cv, grad_t = \
+            ns_operator(dcoll, state=fluid_state, time=time,
+                        boundaries=visc_bnds, gas_model=gas_model,
+                        return_gradients=True, quadrature_tag=quadrature_tag)
+        return make_obj_array([ns_rhs, grad_cv, grad_t])
+
     get_temperature_update = actx.compile(_get_temperature_update)
     get_fluid_state = actx.compile(_get_fluid_state)
+    get_ns_rhs_and_grads = actx.compile(_ns_operator_for_viz)
 
     tseed = can_t
     if rst_filename:
@@ -475,11 +483,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=step, t=t, state=cv, tseed=tseed)
 
             if do_viz:
+                viz_stuff = \
+                    get_ns_rhs_and_grads(fluid_state, t)
+                ns_rhs = viz_stuff[0]
+                grad_cv = viz_stuff[1]
+                grad_t = viz_stuff[2]
+
                 from mirgecom.fluid import velocity_gradient
-                ns_rhs, grad_cv, grad_t = \
-                    ns_operator(dcoll, state=fluid_state, time=t,
-                                boundaries=visc_bnds, gas_model=gas_model,
-                                return_gradients=True, quadrature_tag=quadrature_tag)
                 grad_v = velocity_gradient(cv, grad_cv)
                 chem_rhs = \
                     pyro_eos.get_species_source_terms(cv,
