@@ -605,7 +605,7 @@ def get_reasonable_memory_pool(ctx, queue):
                   "your PoCL installation.")
         else:
             warn("No SVM memory pool support with your version of PyOpenCL, "
-                 "returning a CL buffer-based memory pool. "
+                 f"returning a CL buffer-based memory pool on {queue.device}. "
                  "Please update your PyOpenCL version.")
         return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
 
