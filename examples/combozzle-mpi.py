@@ -191,10 +191,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     z_scale = 1
 
     # - params for unscaled npts/axis
-    domain_xlen = 1.
-    domain_ylen = 1.
-    domain_zlen = 1.
-    chlen = .25  # default to 4 elements/axis = x_len/chlen
+    domain_xlen = .01
+    domain_ylen = .01
+    domain_zlen = .01
+    chlen = .0025  # default to 4 elements/axis = x_len/chlen
 
     # }}} discretization params
 
@@ -206,9 +206,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Time loop control parameters
     current_step = 0
-    t_final = 2e-8
+    t_final = 2e-12
     current_cfl = 0.05
-    current_dt = 1e-9
+    current_dt = 1e-13
     current_t = 0
     constant_cfl = False
     integrator = "euler"
@@ -220,7 +220,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nrestart = 1000
     do_checkpoint = 0
     boundary_report = 0
-    do_callbacks = 1
+    do_callbacks = 0
 
     # }}}  Time stepping control
 
@@ -723,10 +723,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # -- Pick up a CTI for the thermochemistry config
         # --- Note: Users may add their own CTI file by dropping it into
         # ---       mirgecom/mechanisms alongside the other CTI files.
-        from mirgecom.mechanisms import get_mechanism_cti
-        mech_cti = get_mechanism_cti("uiuc")
-
-        cantera_soln = cantera.Solution(phase_id="gas", source=mech_cti)
+        from mirgecom.mechanisms import get_mechanism_input
+        mech_input = get_mechanism_input("uiuc")
+        cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
         nspecies = cantera_soln.n_species
 
         # Initial temperature, pressure, and mixutre mole fractions are needed
