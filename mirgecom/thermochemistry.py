@@ -138,10 +138,10 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
 def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
                                                 temperature_niter=5):
     """Grab a pyrometheus mechanism class from the mech name."""
-    from mirgecom.mechanisms import get_mechanism_cti
-    mech_input_source = get_mechanism_cti(mechanism_name)
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input_source = get_mechanism_input(mechanism_name)
     from cantera import Solution
-    cantera_soln = Solution(phase_id="gas", source=mech_input_source)
+    cantera_soln = Solution(name="gas", yaml=mech_input_source)
     return \
         get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter)
 
