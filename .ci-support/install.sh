@@ -31,5 +31,6 @@ rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
 
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+conda update ffmpeg
 pip install -r requirements.txt
 python setup.py install
