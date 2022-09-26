@@ -231,7 +231,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
-    # {{{ Initialize simple transport model
+    # {{{ Initialize transport model
     if transp_model == "Simple":
         kappa = 1e-5
         spec_diffusivity = 1e-5 * np.ones(nspecies)
