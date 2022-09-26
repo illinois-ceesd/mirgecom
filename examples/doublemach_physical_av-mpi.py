@@ -553,18 +553,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     if do_viz:
                         # use the divergence to compute the smoothness field
                         force_evaluation(actx, t)
-                        # grad_cv = grad_cv_operator(
-                        #     dcoll, gas_model, boundaries, fluid_state,
-                        #     time=t, quadrature_tag=quadrature_tag)
-                        grad_cv = grad_cv_operator_compiled(fluid_state,
-                                                            t)
+                        grad_cv = grad_cv_operator_compiled(fluid_state, time=t)
                         smoothness = compute_smoothness_compiled(state, grad_cv)
 
                         # this works, but seems a lot of work,
                         # not sure if it's really faster
                         # avoids re-computing the temperature
                         from dataclasses import replace
-                        force_evaluation(actx, smoothness)
                         new_dv = replace(fluid_state.dv, smoothness=smoothness)
                         fluid_state = replace(fluid_state, dv=new_dv)
                         new_tv = gas_model.transport.transport_vars(
@@ -714,11 +709,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                            smoothness=no_smoothness)
 
         # use the divergence to compute the smoothness field
-        # current_grad_cv = grad_cv_operator(
-        #     dcoll, gas_model, boundaries, current_state, time=current_t,
-        #     quadrature_tag=quadrature_tag)
-        current_grad_cv = grad_cv_operator_compiled(current_state, current_t)
-        smoothness = compute_smoothness(current_cv, current_grad_cv)
+        current_grad_cv = grad_cv_operator_compiled(current_state,
+                                                    time=current_t)
+        smoothness = compute_smoothness_compiled(current_cv,
+                                                 current_grad_cv)
 
         from dataclasses import replace
         new_dv = replace(current_state.dv, smoothness=smoothness)
