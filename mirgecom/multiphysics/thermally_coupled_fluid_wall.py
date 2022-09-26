@@ -598,6 +598,7 @@ def coupled_ns_heat_operator(
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
 
+    # FIXME: Maybe better to project CV and recompute T instead?
     temperature_inter_vol_tpairs = _temperature_inter_volume_trace_pairs(
         dcoll,
         gas_model, wall_model,
