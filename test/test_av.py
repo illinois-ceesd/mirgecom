@@ -37,7 +37,6 @@ from meshmode.array_context import (  # noqa
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
 import grudge.op as op
-
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
@@ -50,7 +49,6 @@ from mirgecom.gas_model import (
 from mirgecom.eos import IdealSingleGas
 
 from mirgecom.discretization import create_discretization_collection
-
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
