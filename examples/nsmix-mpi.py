@@ -232,13 +232,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
     # {{{ Initialize simple transport model
-    if transp_model == 'Simple':
+    if transp_model == "Simple":
         kappa = 1e-5
         spec_diffusivity = 1e-5 * np.ones(nspecies)
         sigma = 1e-5
         transport_model = SimpleTransport(viscosity=sigma,
             thermal_conductivity=kappa, species_diffusivity=spec_diffusivity)
-    if transp_model == 'PowerLaw':
+    if transp_model == "PowerLaw":
         kappa = 1e-5
         lewis = np.ones((nspecies))
         i_h2 = cantera_soln.species_index("H2")
