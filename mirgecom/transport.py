@@ -135,6 +135,7 @@ class TransportModel:
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv=cv, dv=dv, eos=eos),
             viscosity=self.viscosity(cv=cv, dv=dv, eos=eos),
+            volume_viscosity=self.volume_viscosity(cv=cv, dv=dv, eos=eos),
             thermal_conductivity=self.thermal_conductivity(cv=cv, dv=dv, eos=eos),
             species_diffusivity=self.species_diffusivity(cv=cv, dv=dv, eos=eos)
         )
