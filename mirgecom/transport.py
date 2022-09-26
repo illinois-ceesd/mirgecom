@@ -95,7 +95,8 @@ class TransportModel:
     """
 
     def bulk_viscosity(self, cv: ConservedVars,
-                       dv: Optional[GasDependentVars] = None) -> DOFArray:
+                       dv: Optional[GasDependentVars] = None,
+                       viscosity: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas (${\mu}_{B}$)."""
         raise NotImplementedError()
 
@@ -105,13 +106,15 @@ class TransportModel:
         raise NotImplementedError()
 
     def volume_viscosity(self, cv: ConservedVars,
-                         dv: Optional[GasDependentVars] = None) -> DOFArray:
+                         dv: Optional[GasDependentVars] = None,
+                         viscosity: Optional[DOFArray]) -> DOFArray:
         r"""Get the 2nd coefficent of viscosity, $\lambda$."""
         raise NotImplementedError()
 
     def thermal_conductivity(self, cv: ConservedVars,
                              dv: Optional[GasDependentVars] = None,
-                             eos: Optional[GasEOS] = None) -> DOFArray:
+                             eos: Optional[GasEOS] = None,
+                             viscosity: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         raise NotImplementedError()
 
@@ -125,10 +128,13 @@ class TransportModel:
                        dv: Optional[GasDependentVars] = None,
                        eos: Optional[GasEOS] = None) -> GasTransportVars:
         r"""Compute the transport properties from the conserved state."""
+        viscosity = self.viscosity(cv=cv, dv=dv)
         return GasTransportVars(
-            bulk_viscosity=self.bulk_viscosity(cv=cv, dv=dv),
-            viscosity=self.viscosity(cv=cv, dv=dv),
-            thermal_conductivity=self.thermal_conductivity(cv=cv, dv=dv, eos=eos),
+            viscosity=viscosity,
+            bulk_viscosity=self.bulk_viscosity(cv=cv, dv=dv,
+                                               viscosity=viscosity),
+            thermal_conductivity=self.thermal_conductivity(
+                cv=cv, dv=dv, eos=eos, viscosity=viscosity),
             species_diffusivity=self.species_diffusivity(cv=cv, dv=dv, eos=eos)
         )
 
@@ -158,7 +164,8 @@ class SimpleTransport(TransportModel):
         self._d_alpha = species_diffusivity
 
     def bulk_viscosity(self, cv: ConservedVars,
-                       dv: Optional[GasDependentVars] = None) -> DOFArray:
+                       dv: Optional[GasDependentVars] = None,
+                       viscosity: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         return self._mu_bulk*(0*cv.mass + 1.0)
 
@@ -168,7 +175,8 @@ class SimpleTransport(TransportModel):
         return self._mu*(0*cv.mass + 1.0)
 
     def volume_viscosity(self, cv: ConservedVars,
-                         dv: Optional[GasDependentVars] = None) -> DOFArray:
+                         dv: Optional[GasDependentVars] = None,
+                         viscosity: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
         In this transport model, the second coefficient of viscosity is defined as:
@@ -179,7 +187,8 @@ class SimpleTransport(TransportModel):
 
     def thermal_conductivity(self, cv: ConservedVars,
                              dv: Optional[GasDependentVars] = None,
-                             eos: Optional[GasEOS] = None) -> DOFArray:
+                             eos: Optional[GasEOS] = None,
+                             viscosity: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         return self._kappa*(0*cv.mass + 1.0)
 
@@ -216,12 +225,17 @@ class PowerLawTransport(TransportModel):
         self._n = n
         self._d_alpha = species_diffusivity
 
-    def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def bulk_viscosity(self, cv: ConservedVars,
+                       dv: GasDependentVars,
+                       viscosity = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
         $\mu_{B} = \alpha\mu$
         """
-        return self._alpha * self.viscosity(cv, dv)
+        if viscosity is None:
+            viscosity = self.viscosity(cv, dv)
+
+        return self._alpha * viscosity
 
     # TODO: Should this be memoized? Avoid multiple calls?
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
@@ -231,23 +245,29 @@ class PowerLawTransport(TransportModel):
         """
         return self._beta * dv.temperature**self._n
 
-    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def volume_viscosity(self, cv: Optional[ConservedVars] = None,
+                         dv: Optional[GasDependentVars] = None,
+                         viscosity: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
         In this transport model, the second coefficient of viscosity is defined as:
 
         $\lambda = \left(\alpha - \frac{2}{3}\right)\mu$
         """
-        return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
+        if viscosity is None:
+            viscosity = self.viscosity(cv, dv)
+        return (self._alpha - 2.0/3.0)*viscosity
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-                             eos: GasEOS) -> DOFArray:
+                             eos: GasEOS, viscosity = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$.
 
         $\kappa = \sigma\mu{C}_{v}$
         """
+        if viscosity is None:
+            viscosity = self.viscosity(cv, dv)
         return (
-            self._sigma * self.viscosity(cv, dv)
+            self._sigma * viscosity
             * eos.heat_capacity_cv(cv, dv.temperature)
         )
 
