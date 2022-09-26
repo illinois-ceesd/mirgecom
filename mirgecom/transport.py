@@ -69,7 +69,6 @@ class GasTransportVars:
 
     .. attribute:: bulk_viscosity
     .. attribute:: viscosity
-    .. attribute:: volume_viscosity
     .. attribute:: thermal_conductivity
     .. attribute:: species_diffusivity
     """
