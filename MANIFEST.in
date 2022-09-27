@@ -1,2 +1,4 @@
 include mirgecom/mechanisms/*.yaml
 include mirgecom/mechanisms/*.cti
+include examples/*.geo
+include examples/*.msh
