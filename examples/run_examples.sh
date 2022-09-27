@@ -17,14 +17,23 @@ succeeded_examples=""
 mpi_exec="mpiexec"
 mpi_launcher=""
 if [[ $(hostname) == "porter" ]]; then
-    mpi_launcher="bash $examples_dir/scripts/run_gpus_generic.sh"
+    mpi_launcher="bash scripts/run_gpus_generic.sh"
 elif [[ $(hostname) == "lassen"* ]]; then
     export PYOPENCL_CTX="port:tesla"
     export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
     mpi_exec="jsrun -g 1 -a 1"
 fi
 
+examples=""
 for example in $examples_dir/*.py
+do
+    example_file=$(basename $example)
+    examples="$examples $example_file"
+done
+
+cd $examples_dir
+
+for example in $examples
 do
     date
     printf "***\n***\n"
