@@ -50,7 +50,6 @@ from mirgecom.boundary import (
     AdiabaticNoslipMovingBoundary,
     IsothermalNoSlipBoundary,
 )
-from mirgecom.wall_model import WallModel
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     coupled_ns_heat_operator
 )
@@ -232,10 +231,6 @@ def test_thermally_coupled_fluid_wall(
         wall_density = 10*fluid_density
         wall_heat_capacity = fluid_heat_capacity
         wall_kappa = 10*fluid_kappa
-        wall_model = WallModel(
-            density=wall_density,
-            heat_capacity=wall_heat_capacity,
-            thermal_conductivity=wall_kappa)
 
         base_wall_temp = 600
 
@@ -323,10 +318,11 @@ def test_thermally_coupled_fluid_wall(
             wall_temp = state[1]
             fluid_rhs, wall_rhs = coupled_ns_heat_operator(
                 dcoll,
-                gas_model, wall_model,
+                gas_model,
                 dd_vol_fluid, dd_vol_wall,
                 fluid_boundaries, wall_boundaries,
                 fluid_state, wall_temp,
+                wall_density, wall_heat_capacity, wall_kappa,
                 time=t,
                 quadrature_tag=quadrature_tag)
             fluid_rhs = replace(
