@@ -66,7 +66,8 @@ do
         echo "*** Example $example failed."
         failed_examples="$failed_examples $example"
     fi
-    rm -rf *vtu *sqlite *pkl *-journal restart_data
+    # FIXME: This could delete data from other runs
+    # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
 ((numtests=numsuccess+numfail))
 echo "*** Done running examples!"
