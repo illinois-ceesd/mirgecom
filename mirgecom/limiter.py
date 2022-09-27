@@ -35,6 +35,20 @@ from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as op
 
+from grudge.dof_desc import (
+    DOFDesc,
+    as_dofdesc,
+    DD_VOLUME_MODAL,
+    DD_VOLUME
+)
+
+import numpy as np
+from meshmode.transform_metadata import FirstAxisIsElementsTag
+from meshmode.dof_array import DOFArray
+
+from mirgecom.utils import force_evaluation
+
+import sys
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                              mmin=0.0, mmax=None, modify_average=False,
@@ -95,7 +109,36 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     cell_size = cell_volumes(dcoll)
 
     # Compute cell averages of the state
-    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, dd, field)
+    cell_avgs_old = 1.0/cell_size*op.elementwise_integral(dcoll, dd, field)
+
+################
+
+    def cancel_polynomials(grp):
+        return actx.from_numpy(np.asarray([1 if sum(mode_id) == 0
+                                           else 0 for mode_id in grp.mode_ids()])
+        )
+
+    modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
+    nodal_map = dcoll.connection_from_dds(DD_VOLUME_MODAL, DD_VOLUME)
+    discr = dcoll.discr_from_dd(DD_VOLUME)
+
+    modal_field = modal_map(field)
+
+    filtered_modal_field = DOFArray(
+        actx,
+        tuple(actx.einsum("ej,j->ej",
+                          vec_i,
+                          cancel_polynomials(grp),
+                          arg_names=("vec", "filter"),
+                          tagged=(FirstAxisIsElementsTag(),))
+              for grp, vec_i in zip(discr.groups, modal_field))
+    )
+
+    cell_avgs = nodal_map(filtered_modal_field)
+
+    print( np.max(np.abs( actx.to_numpy( cell_avgs_old - cell_avgs ))) )
+
+################
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:

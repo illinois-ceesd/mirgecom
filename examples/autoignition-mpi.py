@@ -499,25 +499,50 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
-    def limiter(cv, temp=None):
+    from mirgecom.limiter import bound_preserving_limiter
+    def limiter(cv, pressure, temperature):
+
         spec_lim = make_obj_array([
-            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmax=1.0)
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0)
             for i in range(nspecies)
         ])
 
-        kin_energy = 0.5*np.dot(cv.velocity, cv.velocity)
+        aux = cv.mass*0.0
+        for i in range(0,nspecies):
+          aux = aux + spec_lim[i]
+        spec_lim = spec_lim/aux
 
-        energy_lim = cv.mass*(
-            gas_model.eos.get_internal_energy(temp, species_mass_fractions=spec_lim)
-            + kin_energy
+        mass_lim = eos.get_density(pressure=pressure,
+            temperature=temperature, species_mass_fractions=spec_lim)
+
+        energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
+            temperature, species_mass_fractions=spec_lim)
+            + 0.5*np.dot(cv.velocity, cv.velocity)
         )
 
-        return make_conserved(dim=dim, mass=cv.mass, energy=energy_lim,
-                       momentum=cv.momentum, species_mass=cv.mass*spec_lim)
+        cv_limited = make_conserved(dim=dim, 
+                                    mass=mass_lim,
+                                    energy=energy_lim,
+                                    momentum=mass_lim*cv.velocity,
+                                    species_mass=mass_lim*spec_lim)
+
+        return cv_limited
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
-        fluid_state = construct_fluid_state(limiter(cv, temp=tseed), tseed)
+
+        # update temperature value
+        fluid_state = construct_fluid_state(cv, tseed)
+
+        # apply limiter and reevaluate energy
+        limited_cv = force_evaluation(actx, limiter(fluid_state.cv,
+                                                    fluid_state.pressure,
+                                                    fluid_state.temperature))
+
+        # get new fluid_state with limited species and respective energy
+        fluid_state = construct_fluid_state(limited_cv, tseed)
+
+        cv = fluid_state.cv
         dv = fluid_state.dv
 
         try:
