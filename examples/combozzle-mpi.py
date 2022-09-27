@@ -702,6 +702,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
         if log_dependent:
             logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                                                       extract_vars_for_logging,
