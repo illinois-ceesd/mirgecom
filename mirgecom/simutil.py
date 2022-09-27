@@ -21,7 +21,7 @@ Diagnostic utilities
 Mesh utilities
 --------------
 
-.. autofunction:: generate_and_distribute_mesh
+.. autofunction:: distribute_mesh
 
 File comparison utilities
 -------------------------
@@ -65,7 +65,7 @@ from functools import partial
 from meshmode.dof_array import DOFArray
 
 from typing import List, Dict
-from grudge.discretization import DiscretizationCollection
+from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 
 logger = logging.getLogger(__name__)
@@ -407,37 +407,149 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     global_nelements : :class:`int`
         The number of elements in the serial mesh
     """
-    from meshmode.distributed import (
-        MPIMeshDistributor,
-        get_partition_by_pymetis,
-    )
-    num_parts = comm.Get_size()
-    mesh_dist = MPIMeshDistributor(comm)
-    global_nelements = 0
+    from warnings import warn
+    warn(
+        "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
+        "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
+    return distribute_mesh(comm, generate_mesh)
 
-    if mesh_dist.is_mananger_rank():
 
-        mesh = generate_mesh()
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
+    r"""Distribute a mesh among all ranks in *comm*.
 
-        global_nelements = mesh.nelements
+    Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
+    partition the mesh, and distribute it to every rank in the provided MPI
+    communicator *comm*.
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-        del mesh
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+
+    Parameters
+    ----------
+    comm:
+        MPI communicator over which to partition the mesh
+    get_mesh_data:
+        Callable of zero arguments returning *mesh* or
+        *(mesh, tag_to_elements, volume_to_tags)*, where *mesh* is a
+        :class:`meshmode.mesh.Mesh`, *tag_to_elements* is a
+        :class:`dict` mapping mesh volume tags to :class:`numpy.ndarray`\ s of
+        element numbers, and *volume_to_tags* is a :class:`dict` that maps volumes
+        in the resulting distributed mesh to volume tags in *tag_to_elements*.
+    partition_generator_func:
+        Optional callable that takes *mesh*, *tag_to_elements*, and *comm*'s size,
+        and returns a :class:`numpy.ndarray` indicating to which rank each element
+        belongs.
+
+    Returns
+    -------
+    local_mesh_data: :class:`meshmode.mesh.Mesh` or :class:`dict`
+        If the result of calling *get_mesh_data* specifies a single volume,
+        *local_mesh_data* is the local mesh.  If it specifies multiple volumes,
+        *local_mesh_data* will be a :class:`dict` mapping volume tags to
+        corresponding local meshes.
+    global_nelements: :class:`int`
+        The number of elements in the global mesh
+    """
+    from meshmode.distributed import mpi_distribute
+
+    num_ranks = comm.Get_size()
+
+    if partition_generator_func is None:
+        def partition_generator_func(mesh, tag_to_elements, num_ranks):
+            from meshmode.distributed import get_partition_by_pymetis
+            return get_partition_by_pymetis(mesh, num_ranks)
+
+    if comm.Get_rank() == 0:
+        global_data = get_mesh_data()
+
+        from meshmode.mesh import Mesh
+        if isinstance(global_data, Mesh):
+            mesh = global_data
+            tag_to_elements = None
+            volume_to_tags = None
+        elif isinstance(global_data, tuple) and len(global_data) == 3:
+            mesh, tag_to_elements, volume_to_tags = global_data
+        else:
+            raise TypeError("Unexpected result from get_mesh_data")
+
+        from meshmode.mesh.processing import partition_mesh
+
+        rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
+
+        if tag_to_elements is None:
+            rank_to_elements = {
+                rank: np.where(rank_per_element == rank)[0]
+                for rank in range(num_ranks)}
+
+            rank_to_mesh_data = partition_mesh(mesh, rank_to_elements)
+
+        else:
+            tag_to_volume = {
+                tag: vol
+                for vol, tags in volume_to_tags.items()
+                for tag in tags}
+
+            volumes = list(volume_to_tags.keys())
+
+            volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
+            for tag, elements in tag_to_elements.items():
+                volume_index_per_element[elements] = volumes.index(
+                    tag_to_volume[tag])
+
+            if np.any(volume_index_per_element < 0):
+                raise ValueError("Missing volume specification for some elements.")
+
+            part_id_to_elements = {
+                PartID(volumes[vol_idx], rank):
+                    np.where(
+                        (volume_index_per_element == vol_idx)
+                        & (rank_per_element == rank))[0]
+                for vol_idx in range(len(volumes))
+                for rank in range(num_ranks)}
+
+            # FIXME: Find a better way to do this
+            part_id_to_part_index = {
+                part_id: part_index
+                for part_index, part_id in enumerate(part_id_to_elements.keys())}
+            from meshmode.mesh.processing import _compute_global_elem_to_part_elem
+            global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+                mesh.nelements, part_id_to_elements, part_id_to_part_index,
+                mesh.element_id_dtype)
+
+            tag_to_global_to_part = {
+                tag: global_elem_to_part_elem[elements, :]
+                for tag, elements in tag_to_elements.items()}
+
+            part_id_to_tag_to_elements = {}
+            for part_id in part_id_to_elements.keys():
+                part_idx = part_id_to_part_index[part_id]
+                part_tag_to_elements = {}
+                for tag, global_to_part in tag_to_global_to_part.items():
+                    part_tag_to_elements[tag] = global_to_part[
+                        global_to_part[:, 0] == part_idx, 1]
+                part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+
+            part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
+
+            rank_to_mesh_data = {
+                rank: {
+                    vol: (
+                        part_id_to_mesh[PartID(vol, rank)],
+                        part_id_to_tag_to_elements[PartID(vol, rank)])
+                    for vol in volumes}
+                for rank in range(num_ranks)}
+
+        local_mesh_data = mpi_distribute(
+            comm, source_rank=0, source_data=rank_to_mesh_data)
+
+        global_nelements = comm.bcast(mesh.nelements, root=0)
 
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        local_mesh_data = mpi_distribute(comm, source_rank=0)
 
-    return local_mesh, global_nelements
+        global_nelements = comm.bcast(None, root=0)
 
-
-def create_parallel_grid(comm, generate_grid):
-    """Generate and distribute mesh compatibility interface."""
-    from warnings import warn
-    warn("Do not call create_parallel_grid; use generate_and_distribute_mesh "
-         "instead. This function will disappear August 1, 2021",
-         DeprecationWarning, stacklevel=2)
-    return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
+    return local_mesh_data, global_nelements
 
 
 def get_reasonable_memory_pool(ctx, queue):
