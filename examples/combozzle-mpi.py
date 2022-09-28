@@ -24,6 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
+import time
 import yaml
 import numpy as np
 import pyopencl as cl
@@ -176,6 +177,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     nproc = comm.Get_size()
     nparts = nproc
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Main start: {time.ctime(time.time())}")
+    comm.Barrier()
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -589,6 +595,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     temperature_seed = init_temperature
     debug = False
 
+    comm.Barrier()
+    if rank == 0:
+        print(f"ACTX setup start: {time.ctime(time.time())}")
+    comm.Barrier()
+
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -634,6 +645,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     dcoll = create_discretization_collection(actx, local_mesh, order)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"ACTX Setup end -> Solution init start: {time.ctime(time.time())}")
+    comm.Barrier()
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
         return compiled_lsrk45_step(actx, state, t, dt, rhs)
@@ -1182,6 +1198,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     current_state = make_obj_array([current_cv, temperature_seed])
 
+    comm.Barrier()
+    if rank == 0:
+        print(f"Stepping start time: {time.ctime(time.time())}")
+    comm.Barrier()
+
     if timestepping_on:
         if rank == 0:
             print(f"Timestepping: {current_step=}, {current_t=}, {t_final=},"
@@ -1193,8 +1214,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                           state=current_state, t=current_t, t_final=t_final,
                           force_eval=force_eval)
 
+    comm.Barrier()
+
     # Dump the final data
     if rank == 0:
+        print(f"Stepping end time: {time.ctime(time.time())}")
         logger.info("Checkpointing final state ...")
 
     final_cv, tseed = force_evaluation(actx, current_state)
@@ -1227,6 +1251,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info("Fluid solution failed health check.")
         raise MyRuntimeError("Failed simulation health check.")
 
+    if rank == 0:
+        print(f"Simulation end time: {time.ctime(time.time())}")
+
+    comm.Barrier()
 
 if __name__ == "__main__":
     import argparse
@@ -1274,6 +1302,8 @@ if __name__ == "__main__":
         print(f"Reading user input from file: {input_file}")
     else:
         print("No user input file, using default values")
+
+    print(f"Calling main: {time.ctime(time.time())}")
 
     main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
          use_overintegration=args.overintegration,
