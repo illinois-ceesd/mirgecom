@@ -31,13 +31,9 @@ THE SOFTWARE.
 """
 
 from grudge.discretization import DiscretizationCollection
-from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as op
 
-from grudge.dof_desc import (
-    DD_VOLUME_MODAL,
-    DD_VOLUME
-)
+from grudge.dof_desc import DD_VOLUME_ALL_MODAL, DD_VOLUME_ALL
 
 import numpy as np
 from meshmode.transform_metadata import FirstAxisIsElementsTag
@@ -102,9 +98,9 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                                            else 0 for mode_id in grp.mode_ids()]))
 
     # map from nodal to modal
-    discr = dcoll.discr_from_dd(DD_VOLUME)
-    modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
-    nodal_map = dcoll.connection_from_dds(DD_VOLUME_MODAL, DD_VOLUME)
+    discr = dcoll.discr_from_dd(DD_VOLUME_ALL)
+    modal_map = dcoll.connection_from_dds(DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL)
+    nodal_map = dcoll.connection_from_dds(DD_VOLUME_ALL_MODAL, DD_VOLUME_ALL)
     modal_field = modal_map(field)
 
     # cancel the ``high-order'' polynomials p > 0, and only the average remains

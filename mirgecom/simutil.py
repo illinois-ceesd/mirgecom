@@ -68,6 +68,8 @@ from typing import List, Dict
 from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 
+from mirgecom.eos import MixtureDependentVars
+
 logger = logging.getLogger(__name__)
 
 
@@ -902,3 +904,14 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
                              "Max Value Error: ", maxvalueerror)
 
     print("HDF5 Fidelity test completed successfully with tolerance", tolerance)
+
+
+def update_dependent_vars(cv, temperature, smoothness, eos):
+    """Update DV if temperature is already known."""
+    return MixtureDependentVars(
+        temperature=temperature,
+        pressure=eos.pressure(cv, temperature),
+        speed_of_sound=eos.sound_speed(cv, temperature),
+        species_enthalpies=eos.species_enthalpies(cv, temperature),
+        smoothness=smoothness
+    )
