@@ -1256,6 +1256,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
 
+
 if __name__ == "__main__":
     import argparse
     casename = "combozzle"
