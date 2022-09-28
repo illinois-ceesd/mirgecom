@@ -499,7 +499,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
-    from mirgecom.limiter import bound_preserving_limiter
     def limiter(cv, pressure, temperature):
 
         spec_lim = make_obj_array([
@@ -508,8 +507,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
         aux = cv.mass*0.0
-        for i in range(0,nspecies):
-          aux = aux + spec_lim[i]
+        for i in range(0, nspecies):
+            aux = aux + spec_lim[i]
         spec_lim = spec_lim/aux
 
         mass_lim = eos.get_density(pressure=pressure,
@@ -520,7 +519,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             + 0.5*np.dot(cv.velocity, cv.velocity)
         )
 
-        cv_limited = make_conserved(dim=dim, 
+        cv_limited = make_conserved(dim=dim,
                                     mass=mass_lim,
                                     energy=energy_lim,
                                     momentum=mass_lim*cv.velocity,

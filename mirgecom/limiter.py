@@ -30,14 +30,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytools import memoize_in
 from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as op
 
 from grudge.dof_desc import (
-    DOFDesc,
-    as_dofdesc,
     DD_VOLUME_MODAL,
     DD_VOLUME
 )
@@ -46,9 +43,6 @@ import numpy as np
 from meshmode.transform_metadata import FirstAxisIsElementsTag
 from meshmode.dof_array import DOFArray
 
-from mirgecom.utils import force_evaluation
-
-import sys
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                              mmin=0.0, mmax=None, modify_average=False,
@@ -102,28 +96,18 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     """
     actx = field.array_context
 
-    @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume", dd))
-    def cell_volumes(dcoll):
-        return op.elementwise_integral(dcoll, dd, dcoll.zeros(actx) + 1.0)
-
-    cell_size = cell_volumes(dcoll)
-
     # Compute cell averages of the state
-    cell_avgs_old = 1.0/cell_size*op.elementwise_integral(dcoll, dd, field)
-
-################
-
     def cancel_polynomials(grp):
         return actx.from_numpy(np.asarray([1 if sum(mode_id) == 0
-                                           else 0 for mode_id in grp.mode_ids()])
-        )
+                                           else 0 for mode_id in grp.mode_ids()]))
 
+    # map from nodal to modal
+    discr = dcoll.discr_from_dd(DD_VOLUME)
     modal_map = dcoll.connection_from_dds(DD_VOLUME, DD_VOLUME_MODAL)
     nodal_map = dcoll.connection_from_dds(DD_VOLUME_MODAL, DD_VOLUME)
-    discr = dcoll.discr_from_dd(DD_VOLUME)
-
     modal_field = modal_map(field)
 
+    # cancel the ``high-order'' polynomials p > 0, and only the average remains
     filtered_modal_field = DOFArray(
         actx,
         tuple(actx.einsum("ej,j->ej",
@@ -134,11 +118,8 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
               for grp, vec_i in zip(discr.groups, modal_field))
     )
 
+    # convert back to nodal to have the average at all points
     cell_avgs = nodal_map(filtered_modal_field)
-
-    print( np.max(np.abs( actx.to_numpy( cell_avgs_old - cell_avgs ))) )
-
-################
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:
