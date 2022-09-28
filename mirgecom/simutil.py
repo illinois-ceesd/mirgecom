@@ -906,12 +906,11 @@ def compare_files_hdf5(first_file: str, second_file: str, tolerance: float = 1e-
     print("HDF5 Fidelity test completed successfully with tolerance", tolerance)
 
 
-def update_dependent_vars(cv, temperature, smoothness, eos):
+def update_dependent_vars(cv, temperature, eos):
     """Update DV if temperature is already known."""
     return MixtureDependentVars(
         temperature=temperature,
         pressure=eos.pressure(cv, temperature),
         speed_of_sound=eos.sound_speed(cv, temperature),
-        species_enthalpies=eos.species_enthalpies(cv, temperature),
-        smoothness=smoothness
+        species_enthalpies=eos.species_enthalpies(cv, temperature)
     )
