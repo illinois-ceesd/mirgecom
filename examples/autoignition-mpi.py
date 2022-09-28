@@ -500,7 +500,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return ts_field, cfl, min(t_remaining, dt)
 
     def limiter(cv, pressure, temperature):
-
         spec_lim = make_obj_array([
             bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0)
             for i in range(nspecies)
