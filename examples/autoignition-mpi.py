@@ -28,7 +28,7 @@ import numpy as np
 import pyopencl as cl
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.mesh import BTAG_ALL
 from mirgecom.discretization import create_discretization_collection
 from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
@@ -39,7 +39,8 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile
+    write_visfile,
+    update_dependent_vars
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -48,7 +49,9 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.gas_model import GasModel
+from mirgecom.gas_model import (
+    GasModel, make_fluid_state, ViscousFluidState, FluidState
+)
 from mirgecom.utils import force_evaluation
 from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.fluid import make_conserved
@@ -282,8 +285,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         y = cv.species_mass_fractions
         e = gas_model.eos.internal_energy(cv) / cv.mass
         return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
-
-    from mirgecom.gas_model import make_fluid_state
 
     def get_fluid_state(cv, tseed):
         return make_fluid_state(cv=cv, gas_model=gas_model,
@@ -526,19 +527,47 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return cv_limited
 
+    apply_limiter = actx.compile(limiter)
+
+    def _update_dv(cv, temperature):
+        return update_dependent_vars(cv, temperature, eos)
+
+    update_dv = actx.compile(_update_dv)
+
+    def _update_tv(cv, dv):
+        return gas_model.transport.transport_vars(cv, dv, eos)
+
+    update_tv = actx.compile(_update_tv)
+
+    def _update_fluid_state(cv, dv, tv=None):
+        if viscous_terms_on:
+            return ViscousFluidState(cv, dv, tv)
+        else:
+            return FluidState(cv, dv)
+            
+
+    update_fluid_state = actx.compile(_update_fluid_state)
+
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
 
         # update temperature value
         fluid_state = construct_fluid_state(cv, tseed)
 
-        # apply limiter and reevaluate energy
-        limited_cv = force_evaluation(actx, limiter(fluid_state.cv,
-                                                    fluid_state.pressure,
-                                                    fluid_state.temperature))
+        # apply limiter and reevaluate CV
+        limited_cv = apply_limiter(
+            fluid_state.cv, fluid_state.pressure, fluid_state.temperature)
 
-        # get new fluid_state with limited species and respective energy
-        fluid_state = construct_fluid_state(limited_cv, tseed)
+        # since temperature is not changed during the limiting process, it is
+        # possible to avoid recomputing it by NOT calling make_fluid_state.
+        # Thus, evaluate ONLY other DV and TV variables and reassemble the state
+        new_dv = update_dv(limited_cv, fluid_state.temperature)
+
+        if viscous_terms_on:
+            new_tv = update_tv(limited_cv, new_dv)
+            fluid_state = update_fluid_state(limited_cv, new_dv, new_tv)
+        else:
+            fluid_state = update_fluid_state(limited_cv, new_dv)
 
         cv = fluid_state.cv
         dv = fluid_state.dv
@@ -609,9 +638,20 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         cv, tseed = state
-        from mirgecom.gas_model import make_fluid_state
+
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
+
+        # same description as in pre-step
+        limited_cv = limiter(fluid_state.cv, fluid_state.pressure,
+                             fluid_state.temperature)
+        new_dv = update_dependent_vars(limited_cv, fluid_state.temperature, eos)
+        if viscous_terms_on:
+            new_tv = gas_model.transport.transport_vars(limited_cv, new_dv, eos)
+            fluid_state = ViscousFluidState(limited_cv, new_dv, new_tv)
+        else:
+            fluid_state = FluidState(limited_cv, new_dv)
+
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries=boundaries,
             quadrature_tag=quadrature_tag)
