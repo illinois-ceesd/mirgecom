@@ -33,7 +33,7 @@ THE SOFTWARE.
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
-from grudge.dof_desc import DD_VOLUME_ALL_MODAL, DD_VOLUME_ALL
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_MODAL
 
 import numpy as np
 from meshmode.transform_metadata import FirstAxisIsElementsTag
@@ -98,9 +98,13 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                                            else 0 for mode_id in grp.mode_ids()]))
 
     # map from nodal to modal
-    discr = dcoll.discr_from_dd(DD_VOLUME_ALL)
-    modal_map = dcoll.connection_from_dds(DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL)
-    nodal_map = dcoll.connection_from_dds(DD_VOLUME_ALL_MODAL, DD_VOLUME_ALL)
+    dd_nodal = dd
+    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
+
+    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
+    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
+
+    modal_discr = dcoll.discr_from_dd(dd_modal)
     modal_field = modal_map(field)
 
     # cancel the ``high-order'' polynomials p > 0, and only the average remains
@@ -111,7 +115,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                           cancel_polynomials(grp),
                           arg_names=("vec", "filter"),
                           tagged=(FirstAxisIsElementsTag(),))
-              for grp, vec_i in zip(discr.groups, modal_field))
+              for grp, vec_i in zip(modal_discr.groups, modal_field))
     )
 
     # convert back to nodal to have the average at all points
@@ -132,7 +136,9 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         )
 
     if mmax is not None:
-        cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax), mmax, cell_avgs)
+        if modify_average:
+            cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax),
+                                      mmax, cell_avgs)
 
         mmax_i = op.elementwise_max(dcoll, dd, field)
 

@@ -39,8 +39,7 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile,
-    update_dependent_vars
+    write_visfile
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -48,7 +47,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
-from mirgecom.eos import PyrometheusMixture
+from mirgecom.eos import PyrometheusMixture, MixtureDependentVars
 from mirgecom.gas_model import (
     GasModel, make_fluid_state, ViscousFluidState, FluidState
 )
@@ -500,52 +499,53 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
-    def limiter(cv, pressure, temperature):
+    def _limit_fluid_state(fluid_state):
+        pressure = fluid_state.dv.pressure
+        temperature = fluid_state.dv.temperature
+        cv = fluid_state.cv
+
+        # limit species
         spec_lim = make_obj_array([
             bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0)
             for i in range(nspecies)
         ])
 
+        # normalize to ensure sum_Yi = 1.0
         aux = cv.mass*0.0
         for i in range(0, nspecies):
             aux = aux + spec_lim[i]
         spec_lim = spec_lim/aux
 
+        # recompute density
         mass_lim = eos.get_density(pressure=pressure,
             temperature=temperature, species_mass_fractions=spec_lim)
 
+        # recompute energy
         energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
             temperature, species_mass_fractions=spec_lim)
             + 0.5*np.dot(cv.velocity, cv.velocity)
         )
 
-        cv_limited = make_conserved(dim=dim,
-                                    mass=mass_lim,
-                                    energy=energy_lim,
-                                    momentum=mass_lim*cv.velocity,
-                                    species_mass=mass_lim*spec_lim)
+        # make a new CV with the limited variables
+        limited_cv = make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
 
-        return cv_limited
+        # since temperature nor pressure are changed during the limiting process,
+        # it is possible to avoid recomputing it by NOT calling make_fluid_state.
+        # Thus, evaluate ONLY other DV and TV variables for the limited state
+        new_dv = MixtureDependentVars(
+            temperature=temperature,
+            pressure=pressure,
+            speed_of_sound=eos.sound_speed(limited_cv, temperature),
+            species_enthalpies=eos.species_enthalpies(limited_cv, temperature))
 
-    apply_limiter = actx.compile(limiter)
+        # update transport vars, if necessary
+        if gas_model.transport is not None:
+            new_tv = gas_model.transport.transport_vars(limited_cv, new_dv, eos)
+            return ViscousFluidState(limited_cv, new_dv, new_tv)
+        return FluidState(limited_cv, new_dv)
 
-    def _update_dv(cv, temperature):
-        return update_dependent_vars(cv, temperature, eos)
-
-    update_dv = actx.compile(_update_dv)
-
-    def _update_tv(cv, dv):
-        return gas_model.transport.transport_vars(cv, dv, eos)
-
-    update_tv = actx.compile(_update_tv)
-
-    def _update_fluid_state(cv, dv, tv=None):
-        if viscous_terms_on:
-            return ViscousFluidState(cv, dv, tv)
-        else:
-            return FluidState(cv, dv)
-
-    update_fluid_state = actx.compile(_update_fluid_state)
+    limit_fluid_state = actx.compile(_limit_fluid_state)
 
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
@@ -553,20 +553,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # update temperature value
         fluid_state = construct_fluid_state(cv, tseed)
 
-        # apply limiter and reevaluate CV
-        limited_cv = apply_limiter(
-            fluid_state.cv, fluid_state.pressure, fluid_state.temperature)
-
-        # since temperature is not changed during the limiting process, it is
-        # possible to avoid recomputing it by NOT calling make_fluid_state.
-        # Thus, evaluate ONLY other DV and TV variables and reassemble the state
-        new_dv = update_dv(limited_cv, fluid_state.temperature)
-
-        if viscous_terms_on:
-            new_tv = update_tv(limited_cv, new_dv)
-            fluid_state = update_fluid_state(limited_cv, new_dv, new_tv)
-        else:
-            fluid_state = update_fluid_state(limited_cv, new_dv)
+        # apply species limiter, reevaluate CV and fluid state keeping both
+        # pressure and temperature constants.
+        fluid_state = limit_fluid_state(fluid_state)
 
         cv = fluid_state.cv
         dv = fluid_state.dv
@@ -641,15 +630,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
 
-        # same description as in pre-step
-        limited_cv = limiter(fluid_state.cv, fluid_state.pressure,
-                             fluid_state.temperature)
-        new_dv = update_dependent_vars(limited_cv, fluid_state.temperature, eos)
-        if viscous_terms_on:
-            new_tv = gas_model.transport.transport_vars(limited_cv, new_dv, eos)
-            fluid_state = ViscousFluidState(limited_cv, new_dv, new_tv)
-        else:
-            fluid_state = FluidState(limited_cv, new_dv)
+        # limit fluid state
+        fluid_state = _limit_fluid_state(fluid_state)
 
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries=boundaries,
