@@ -544,7 +544,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             return ViscousFluidState(cv, dv, tv)
         else:
             return FluidState(cv, dv)
-            
 
     update_fluid_state = actx.compile(_update_fluid_state)
 
