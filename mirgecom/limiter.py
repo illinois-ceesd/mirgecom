@@ -90,7 +90,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
 
     @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume", dd))
     def cell_volumes(dcoll):
-        return op.elementwise_integral(dcoll, dd, dcoll.zeros(actx) + 1.0)
+        return op.elementwise_integral(dcoll, dd, dcoll.zeros(actx, dd=dd) + 1.0)
 
     cell_size = cell_volumes(dcoll)
 
