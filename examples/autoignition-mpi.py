@@ -533,11 +533,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # since temperature nor pressure are changed during the limiting process,
         # it is possible to avoid recomputing it by NOT calling make_fluid_state.
         # Thus, evaluate ONLY other DV and TV variables for the limited state
-        new_dv = MixtureDependentVars(
-            temperature=temperature,
-            pressure=pressure,
-            speed_of_sound=eos.sound_speed(limited_cv, temperature),
-            species_enthalpies=eos.species_enthalpies(limited_cv, temperature))
+        new_dv = fluid_state.dv.replace(
+               speed_of_sound=eos.sound_speed(limited_cv, temperature)
+               species_enthalpies=eos.species_enthalpies(limited_cv, temperature)
+        )
 
         # update transport vars, if necessary
         if gas_model.transport is not None:
