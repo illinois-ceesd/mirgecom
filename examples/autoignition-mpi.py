@@ -49,7 +49,7 @@ from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
-    GasModel, make_fluid_state, ViscousFluidState, FluidState
+    GasModel, make_fluid_state
 )
 from mirgecom.utils import force_evaluation
 from mirgecom.limiter import bound_preserving_limiter
@@ -280,18 +280,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     gas_model = GasModel(eos=eos, transport=transport_model)
     from pytools.obj_array import make_obj_array
 
-    def get_temperature_update(cv, temperature):
-        y = cv.species_mass_fractions
-        e = gas_model.eos.internal_energy(cv) / cv.mass
-        return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
-
-    def get_fluid_state(cv, tseed):
-        return make_fluid_state(cv=cv, gas_model=gas_model,
-                                temperature_seed=tseed)
-
-    compute_temperature_update = actx.compile(get_temperature_update)
-    construct_fluid_state = actx.compile(get_fluid_state)
-
     # }}}
 
     # {{{ MIRGE-Com state initialization
@@ -306,6 +294,86 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}
+
+    from mirgecom.viscous import get_viscous_timestep
+
+    def get_dt(state):
+        return get_viscous_timestep(dcoll, state=state)
+
+    compute_dt = actx.compile(get_dt)
+
+    from mirgecom.viscous import get_viscous_cfl
+
+    def get_cfl(state, dt):
+        return get_viscous_cfl(dcoll, dt=dt, state=state)
+
+    compute_cfl = actx.compile(get_cfl)
+
+    def get_production_rates(cv, temperature):
+        return eos.get_production_rates(cv, temperature)
+
+    compute_production_rates = actx.compile(get_production_rates)
+
+    def my_get_timestep(t, dt, state):
+        #  richer interface to calculate {dt,cfl} returns node-local estimates
+        t_remaining = max(0, t_final - t)
+
+        if constant_cfl:
+            ts_field = current_cfl * compute_dt(state)
+            from grudge.op import nodal_min_loc
+            dt = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", ts_field)),
+                               op="min")
+            cfl = current_cfl
+        else:
+            ts_field = compute_cfl(state, current_dt)
+            from grudge.op import nodal_max_loc
+            cfl = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", ts_field)),
+                                op="max")
+        return ts_field, cfl, min(t_remaining, dt)
+
+    def _limit_fluid_cv(cv, pressure, temperature):
+
+        # limit species
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0)
+            for i in range(nspecies)
+        ])
+
+        # normalize to ensure sum_Yi = 1.0
+        aux = cv.mass*0.0
+        for i in range(0, nspecies):
+            aux = aux + spec_lim[i]
+        spec_lim = spec_lim/aux
+
+        # recompute density
+        mass_lim = eos.get_density(pressure=pressure,
+            temperature=temperature, species_mass_fractions=spec_lim)
+
+        # recompute energy
+        energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
+            temperature, species_mass_fractions=spec_lim)
+            + 0.5*np.dot(cv.velocity, cv.velocity)
+        )
+
+        # make a new CV with the limited variables
+        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+                              momentum=mass_lim*cv.velocity,
+                              species_mass=mass_lim*spec_lim)
+
+    # limit_fluid_cv = actx.compile(_limit_fluid_cv)
+
+    def get_temperature_update(cv, temperature):
+        y = cv.species_mass_fractions
+        e = gas_model.eos.internal_energy(cv) / cv.mass
+        return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
+
+    def get_fluid_state(cv, tseed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=tseed,
+                                limiter_func=_limit_fluid_cv)
+
+    compute_temperature_update = actx.compile(get_temperature_update)
+    construct_fluid_state = actx.compile(get_fluid_state)
 
     if rst_filename:
         current_step = rst_step
@@ -463,99 +531,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-    from mirgecom.viscous import get_viscous_timestep
-
-    def get_dt(state):
-        return get_viscous_timestep(dcoll, state=state)
-
-    compute_dt = actx.compile(get_dt)
-
-    from mirgecom.viscous import get_viscous_cfl
-
-    def get_cfl(state, dt):
-        return get_viscous_cfl(dcoll, dt=dt, state=state)
-
-    compute_cfl = actx.compile(get_cfl)
-
-    def get_production_rates(cv, temperature):
-        return eos.get_production_rates(cv, temperature)
-
-    compute_production_rates = actx.compile(get_production_rates)
-
-    def my_get_timestep(t, dt, state):
-        #  richer interface to calculate {dt,cfl} returns node-local estimates
-        t_remaining = max(0, t_final - t)
-
-        if constant_cfl:
-            ts_field = current_cfl * compute_dt(state)
-            from grudge.op import nodal_min_loc
-            dt = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", ts_field)),
-                               op="min")
-            cfl = current_cfl
-        else:
-            ts_field = compute_cfl(state, current_dt)
-            from grudge.op import nodal_max_loc
-            cfl = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", ts_field)),
-                                op="max")
-        return ts_field, cfl, min(t_remaining, dt)
-
-    def _limit_fluid_state(fluid_state):
-        pressure = fluid_state.dv.pressure
-        temperature = fluid_state.dv.temperature
-        cv = fluid_state.cv
-
-        # limit species
-        spec_lim = make_obj_array([
-            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0)
-            for i in range(nspecies)
-        ])
-
-        # normalize to ensure sum_Yi = 1.0
-        aux = cv.mass*0.0
-        for i in range(0, nspecies):
-            aux = aux + spec_lim[i]
-        spec_lim = spec_lim/aux
-
-        # recompute density
-        mass_lim = eos.get_density(pressure=pressure,
-            temperature=temperature, species_mass_fractions=spec_lim)
-
-        # recompute energy
-        energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
-            temperature, species_mass_fractions=spec_lim)
-            + 0.5*np.dot(cv.velocity, cv.velocity)
-        )
-
-        # make a new CV with the limited variables
-        limited_cv = make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
-            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
-
-        # since temperature nor pressure are changed during the limiting process,
-        # it is possible to avoid recomputing it by NOT calling make_fluid_state.
-        # Thus, evaluate ONLY other DV and TV variables for the limited state
-        new_dv = fluid_state.dv.replace(
-            speed_of_sound=eos.sound_speed(limited_cv, temperature),
-            species_enthalpies=eos.species_enthalpies(limited_cv, temperature)
-        )
-
-        # update transport vars, if necessary
-        if gas_model.transport is not None:
-            new_tv = gas_model.transport.transport_vars(limited_cv, new_dv, eos)
-            return ViscousFluidState(limited_cv, new_dv, new_tv)
-        return FluidState(limited_cv, new_dv)
-
-    limit_fluid_state = actx.compile(_limit_fluid_state)
-
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
 
         # update temperature value
         fluid_state = construct_fluid_state(cv, tseed)
-
-        # apply species limiter, reevaluate CV and fluid state keeping both
-        # pressure and temperature constants.
-        fluid_state = limit_fluid_state(fluid_state)
-
         cv = fluid_state.cv
         dv = fluid_state.dv
 
@@ -627,14 +607,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         cv, tseed = state
 
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
-                                       temperature_seed=tseed)
-
-        # limit fluid state
-        fluid_state = _limit_fluid_state(fluid_state)
+                                       temperature_seed=tseed,
+                                       limiter_func=_limit_fluid_cv)
 
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries=boundaries,
-            quadrature_tag=quadrature_tag)
+            quadrature_tag=quadrature_tag, limiter_func=_limit_fluid_cv)
+
         fluid_rhs = fluid_operator(
             dcoll, state=fluid_state, gas_model=gas_model, time=t,
             boundaries=boundaries, operator_states_quad=fluid_operator_states,

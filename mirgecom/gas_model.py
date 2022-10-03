@@ -289,12 +289,29 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None,
     -------
     :class:`~mirgecom.gas_model.FluidState`
 
-        Thermally consistent fluid state
+        Thermally coXnsistent fluid state
     """
-    dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed,
-                                      smoothness=smoothness)
+    temperature = gas_model.eos.temperature(
+        cv, temperature_seed=temperature_seed)
+    pressure = gas_model.eos.pressure(
+        cv, temperature=temperature)
+
     if limiter_func:
-        cv, dv = limiter_func(cv=cv, dv=dv)
+        cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature)
+
+    dv = GasDependentVars(
+        temperature=temperature,
+        pressure=pressure,
+        speed_of_sound=gas_model.eos.sound_speed(cv, temperature)
+    )
+
+    from mirgecom.eos import MixtureEOS, MixtureDependentVars
+    if isinstance(gas_model.eos, MixtureEOS):
+        dv = MixtureDependentVars(
+            temperature=dv.temperature,
+            pressure=dv.pressure,
+            speed_of_sound=dv.speed_of_sound,
+            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature))
 
     if gas_model.transport is not None:
         tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
