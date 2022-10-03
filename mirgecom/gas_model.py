@@ -284,10 +284,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, limiter_func=None):
 
         Thermally coXnsistent fluid state
     """
-    temperature = gas_model.eos.temperature(
-        cv, temperature_seed=temperature_seed)
-    pressure = gas_model.eos.pressure(
-        cv, temperature=temperature)
+    temperature = gas_model.eos.temperature(cv, temperature_seed=temperature_seed)
+    pressure = gas_model.eos.pressure(cv, temperature=temperature)
 
     if limiter_func:
         cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature)
