@@ -54,7 +54,12 @@ THE SOFTWARE.
 
 import numpy as np  # noqa
 
-from grudge.dof_desc import DOFDesc
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 
 from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.inviscid import (
@@ -64,11 +69,14 @@ from mirgecom.inviscid import (
 )
 
 from mirgecom.operators import div_operator
+from mirgecom.utils import normalize_boundaries
 
 
 def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                   quadrature_tag=None, operator_states_quad=None):
+                   quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
+                   comm_tag=None,
+                   operator_states_quad=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -91,7 +99,8 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
     boundaries
 
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     time
 
@@ -106,14 +115,31 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
         An optional identifier denoting a particular quadrature
         discretization to use during operator evaluations.
-        The default value is *None*.
+
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be a
+        volume on the base discretization.
+
+    comm_tag: Hashable
+
+        Tag for distributed communication
     """
-    dd_quad_vol = DOFDesc("vol", quadrature_tag)
-    dd_quad_faces = DOFDesc("all_faces", quadrature_tag)
+    boundaries = normalize_boundaries(boundaries)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
-        operator_states_quad = make_operator_fluid_states(dcoll, state, gas_model,
-                                                          boundaries, quadrature_tag)
+        operator_states_quad = make_operator_fluid_states(
+            dcoll, state, gas_model, boundaries, quadrature_tag,
+            dd=dd_vol, comm_tag=comm_tag)
 
     volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
         operator_states_quad
@@ -125,9 +151,10 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
     inviscid_flux_bnd = inviscid_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs_quad,
         domain_boundary_states_quad, quadrature_tag=quadrature_tag,
-        numerical_flux_func=inviscid_numerical_flux_func, time=time)
+        numerical_flux_func=inviscid_numerical_flux_func, time=time,
+        dd=dd_vol)
 
-    return -div_operator(dcoll, dd_quad_vol, dd_quad_faces,
+    return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
                          inviscid_flux_vol, inviscid_flux_bnd)
 
 

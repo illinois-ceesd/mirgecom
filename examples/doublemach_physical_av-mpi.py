@@ -30,7 +30,7 @@ import pyopencl as cl
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator
@@ -222,8 +222,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.discretization import create_discretization_collection
     order = 3
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             mpi_communicator=comm)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
@@ -308,6 +307,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def compute_smoothness(cv, grad_cv):
 
+        actx = cv.array_context
         from mirgecom.fluid import velocity_gradient
         div_v = np.trace(velocity_gradient(cv, grad_cv))
 
@@ -316,7 +316,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         gamma = gas_model.eos.gamma(cv)
         r = gas_model.eos.gas_const(cv)
         static_temp = 0.015
-        c_star = np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
+        c_star = actx.np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
         # smoothness = kappa_h*length_scales*div_v/dv.speed_of_sound
         indicator = -kappa_h*length_scales*div_v/c_star
 
@@ -351,9 +351,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      smoothness=smoothness)
     force_evaluation(actx, current_state)
 
-    def _boundary_state(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
                                                **kwargs),
@@ -364,9 +364,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         boundary_state_func=_boundary_state)
 
     boundaries = {
-        DTAG_BOUNDARY("flow"): flow_boundary,
-        DTAG_BOUNDARY("wall"): SymmetryBoundary(),
-        DTAG_BOUNDARY("out"): OutflowBoundary(boundary_pressure=1.0),
+        BoundaryDomainTag("flow"): flow_boundary,
+        BoundaryDomainTag("wall"): SymmetryBoundary(),
+        BoundaryDomainTag("out"): OutflowBoundary(boundary_pressure=1.0),
     }
 
     visualizer = make_visualizer(dcoll, order)
@@ -555,18 +555,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                     if do_viz:
                         # use the divergence to compute the smoothness field
                         force_evaluation(actx, t)
-                        grad_cv = grad_cv_operator(
-                            dcoll, gas_model, boundaries, fluid_state,
-                            time=t, quadrature_tag=quadrature_tag)
-                        # grad_cv = grad_cv_operator_compiled(fluid_state,
-                        #                                     time=t)
-                        smoothness = compute_smoothness(state, grad_cv)
+                        grad_cv = grad_cv_operator_compiled(fluid_state, time=t)
+                        smoothness = compute_smoothness_compiled(state, grad_cv)
 
                         # this works, but seems a lot of work,
                         # not sure if it's really faster
                         # avoids re-computing the temperature
                         from dataclasses import replace
-                        force_evaluation(actx, smoothness)
                         new_dv = replace(fluid_state.dv, smoothness=smoothness)
                         fluid_state = replace(fluid_state, dv=new_dv)
                         new_tv = gas_model.transport.transport_vars(
@@ -716,11 +711,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                            smoothness=no_smoothness)
 
         # use the divergence to compute the smoothness field
-        current_grad_cv = grad_cv_operator(
-            dcoll, gas_model, boundaries, current_state, time=current_t,
-            quadrature_tag=quadrature_tag)
-        # smoothness = compute_smoothness_compiled(current_cv, grad_cv)
-        smoothness = compute_smoothness(current_cv, current_grad_cv)
+        current_grad_cv = grad_cv_operator_compiled(current_state,
+                                                    time=current_t)
+        smoothness = compute_smoothness_compiled(current_cv,
+                                                 current_grad_cv)
 
         from dataclasses import replace
         new_dv = replace(current_state.dv, smoothness=smoothness)

@@ -32,11 +32,13 @@ THE SOFTWARE.
 
 from pytools import memoize_in
 from grudge.discretization import DiscretizationCollection
+from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as op
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
-                             mmin=0.0, mmax=None, modify_average=False):
+                             mmin=0.0, mmax=None, modify_average=False,
+                             dd=DD_VOLUME_ALL):
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
@@ -76,6 +78,8 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         Optional float with the target upper bound. Default to None.
     modify_average: bool
         Flag to avoid modification the cell average. Defaults to False.
+    dd: grudge.dof_desc.DOFDesc
+        The DOF descriptor corresponding to *field*.
 
     Returns
     -------
@@ -84,21 +88,21 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     """
     actx = field.array_context
 
-    @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume"))
+    @memoize_in(dcoll, (bound_preserving_limiter, "cell_volume", dd))
     def cell_volumes(dcoll):
-        return op.elementwise_integral(dcoll, dcoll.zeros(actx) + 1.0)
+        return op.elementwise_integral(dcoll, dd, dcoll.zeros(actx) + 1.0)
 
     cell_size = cell_volumes(dcoll)
 
     # Compute cell averages of the state
-    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, field)
+    cell_avgs = 1.0/cell_size*op.elementwise_integral(dcoll, dd, field)
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
     # Compute elementwise max/mins of the field
-    mmin_i = op.elementwise_min(dcoll, field)
+    mmin_i = op.elementwise_min(dcoll, dd, field)
 
     # Linear scaling of polynomial coefficients
     _theta = actx.np.minimum(
@@ -110,7 +114,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     if mmax is not None:
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmax), mmax, cell_avgs)
 
-        mmax_i = op.elementwise_max(dcoll, field)
+        mmax_i = op.elementwise_max(dcoll, dd, field)
 
         _theta = actx.np.minimum(
             _theta, actx.np.where(actx.np.greater(mmax_i, mmax),

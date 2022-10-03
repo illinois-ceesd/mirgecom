@@ -60,7 +60,7 @@ class _WaveTag:
     pass
 
 
-def wave_operator(dcoll, c, w):
+def wave_operator(dcoll, c, w, *, comm_tag=None):
     """Compute the RHS of the wave equation.
 
     Parameters
@@ -71,6 +71,8 @@ def wave_operator(dcoll, c, w):
         the (constant) wave speed
     w: numpy.ndarray
         an object array of DOF arrays, representing the state vector
+    comm_tag: Hashable
+        Tag for distributed communication
 
     Returns
     -------
@@ -88,8 +90,8 @@ def wave_operator(dcoll, c, w):
     return (
         op.inverse_mass(dcoll,
             flat_obj_array(
-                -c*op.weak_local_div(dcoll, "vol", v),
-                -c*op.weak_local_grad(dcoll, "vol", u)
+                -c*op.weak_local_div(dcoll, v),
+                -c*op.weak_local_grad(dcoll, u)
                 )
             +  # noqa: W504
             op.face_mass(dcoll,
@@ -98,7 +100,8 @@ def wave_operator(dcoll, c, w):
                                         exterior=dir_bc))
                 + sum(
                     _flux(dcoll, c=c, w_tpair=tpair)
-                    for tpair in interior_trace_pairs(dcoll, w, comm_tag=_WaveTag))
+                    for tpair in interior_trace_pairs(
+                        dcoll, w, comm_tag=(_WaveTag, comm_tag)))
                 )
             )
         )

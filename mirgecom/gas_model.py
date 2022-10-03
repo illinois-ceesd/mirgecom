@@ -59,12 +59,17 @@ from mirgecom.transport import (
     TransportModel,
     GasTransportVars
 )
-from grudge.dof_desc import DOFDesc, as_dofdesc
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 import grudge.op as op
 from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag
 )
+from mirgecom.utils import normalize_boundaries
 
 
 @dataclass(frozen=True)
@@ -429,8 +434,9 @@ class _FluidSmoothnessTag:
     pass
 
 
-def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
-                               quadrature_tag=None, limiter_func=None):
+def make_operator_fluid_states(
+        dcoll, volume_state, gas_model, boundaries, quadrature_tag=DISCR_TAG_BASE,
+        dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
     This routine prepares a model-consistent fluid state for each of the volume and
@@ -459,12 +465,19 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
         The physical model constructs for the gas_model
 
     boundaries
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`.
 
     quadrature_tag
-        An optional identifier denoting a particular quadrature
-        discretization to use during operator evaluations.
-        The default value is *None*.
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *volume_state* lives. Must
+        be a volume on the base discretization.
+
+    comm_tag: Hashable
+        Tag for distributed communication
 
     limiter_func:
 
@@ -478,19 +491,27 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
 
         Thermally consistent fluid state for the volume, fluid state trace pairs
         for the internal boundaries, and a dictionary of fluid states keyed by
-        valid btag in boundaries, all on the quadrature grid (if specified).
+        boundary domain tags in *boundaries*, all on the quadrature grid (if
+        specified).
     """
-    dd_base_vol = DOFDesc("vol")
-    dd_quad_vol = DOFDesc("vol", quadrature_tag)
+    boundaries = normalize_boundaries(boundaries)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
 
     # project pair to the quadrature discretization and update dd to quad
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     domain_boundary_states_quad = {
-        btag: project_fluid_state(dcoll, dd_base_vol,
-                                  as_dofdesc(btag).with_discr_tag(quadrature_tag),
+        bdtag: project_fluid_state(dcoll, dd_vol,
+                                  dd_vol_quad.with_domain_tag(bdtag),
                                   volume_state, gas_model, limiter_func=limiter_func)
-        for btag in boundaries
+        for bdtag in boundaries
     }
 
     # performs MPI communication of CV if needed
@@ -498,7 +519,9 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(dcoll, volume_state.cv, tag=_FluidCVTag)
+        for tpair in interior_trace_pairs(
+            dcoll, volume_state.cv, volume_dd=dd_vol,
+            comm_tag=(_FluidCVTag, comm_tag))
     ]
 
     tseed_interior_pairs = None
@@ -511,15 +534,17 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(dcoll, volume_state.temperature,
-                                              tag=_FluidTemperatureTag)]
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.temperature, volume_dd=dd_vol,
+                comm_tag=(_FluidTemperatureTag, comm_tag))]
 
     smoothness_interior_pairs = None
     if volume_state.smoothness is not None:
         smoothness_interior_pairs = [
             interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(dcoll, volume_state.smoothness,
-                                               tag=_FluidSmoothnessTag)]
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.smoothness, volume_dd=dd_vol,
+                tag=(_FluidSmoothnessTag, comm_tag))]
 
     interior_boundary_states_quad = \
         make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
@@ -529,7 +554,7 @@ def make_operator_fluid_states(dcoll, volume_state, gas_model, boundaries,
 
     # Interpolate the fluid state to the volume quadrature grid
     # (this includes the conserved and dependent quantities)
-    volume_state_quad = project_fluid_state(dcoll, dd_base_vol, dd_quad_vol,
+    volume_state_quad = project_fluid_state(dcoll, dd_vol, dd_vol_quad,
                                             volume_state, gas_model,
                                             limiter_func=limiter_func)
 
