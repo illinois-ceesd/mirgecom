@@ -99,7 +99,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     fluid_state = make_fluid_state(cv, gas_model)
 
     mu = tv_model.viscosity(cv=cv, dv=fluid_state.dv)
-    lam = tv_model.volume_viscosity(cv=cv, dv=fluid_state.dv)
+    lam = tv_model.volume_viscosity(cv=cv, dv=fluid_state.dv, viscosity=mu)
 
     # Exact answer for tau
     exp_grad_v = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
