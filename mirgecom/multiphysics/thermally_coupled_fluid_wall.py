@@ -83,6 +83,14 @@ class _GradTemperatureInterVolTag:
     pass
 
 
+class _NSOperatorTag:
+    pass
+
+
+class _DiffusionOperatorTag:
+    pass
+
+
 class InterfaceFluidBoundary(PrescribedFluidBoundary):
     """Interface boundary condition for the fluid side."""
 
@@ -580,7 +588,7 @@ def _heat_operator(
         * diffusion_operator(
             dcoll, wall_kappa, boundaries, temperature,
             penalty_amount=penalty_amount, quadrature_tag=quadrature_tag,
-            dd=dd, grad_u=_grad_temperature))
+            dd=dd, grad_u=_grad_temperature, comm_tag=_DiffusionOperatorTag))
 
 
 def coupled_ns_heat_operator(
@@ -682,7 +690,7 @@ def coupled_ns_heat_operator(
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         operator_states_quad=fluid_operator_states_quad,
-        grad_t=fluid_grad_temperature)
+        grad_t=fluid_grad_temperature, comm_tag=_NSOperatorTag)
 
     if use_av:
         if av_kwargs is None:
