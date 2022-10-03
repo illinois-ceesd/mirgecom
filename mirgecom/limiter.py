@@ -98,6 +98,9 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                                            else 0 for mode_id in grp.mode_ids()]))
 
     # map from nodal to modal
+    if dd is None:
+        dd = DD_VOLUME_ALL
+
     dd_nodal = dd
     dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
 

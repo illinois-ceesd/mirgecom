@@ -255,7 +255,8 @@ class ViscousFluidState(FluidState):
         return self.tv.species_diffusivity
 
 
-def make_fluid_state(cv, gas_model, temperature_seed=None, limiter_func=None):
+def make_fluid_state(cv, gas_model, temperature_seed=None, limiter_func=None,
+                     limiter_dd=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
     Parameters
@@ -288,7 +289,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, limiter_func=None):
     pressure = gas_model.eos.pressure(cv, temperature=temperature)
 
     if limiter_func:
-        cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature)
+        cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
+                          dd=limiter_dd)
 
     dv = GasDependentVars(
         temperature=temperature,
@@ -360,7 +362,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
 
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed,
-                            limiter_func=limiter_func)
+                            limiter_func=limiter_func, limiter_dd=tgt)
 
 
 def _getattr_ish(obj, name):
@@ -413,10 +415,10 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
         cv_pair.dd,
         interior=make_fluid_state(cv_pair.int, gas_model,
                                   temperature_seed=_getattr_ish(tseed_pair, "int"),
-                                  limiter_func=limiter_func),
+                                  limiter_func=limiter_func, limiter_dd=cv_pair.dd),
         exterior=make_fluid_state(cv_pair.ext, gas_model,
                                   temperature_seed=_getattr_ish(tseed_pair, "ext"),
-                                  limiter_func=limiter_func))
+                                  limiter_func=limiter_func, limiter_dd=cv_pair.dd))
         for cv_pair, tseed_pair in zip(cv_pairs, temperature_seed_pairs)]
 
 

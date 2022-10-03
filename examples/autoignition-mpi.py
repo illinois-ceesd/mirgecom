@@ -331,11 +331,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
-    def _limit_fluid_cv(cv, pressure, temperature):
+    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
 
         # limit species
         spec_lim = make_obj_array([
-            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0)
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0,
+                                     dd=dd)
             for i in range(nspecies)
         ])
 
@@ -611,12 +612,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                        limiter_func=_limit_fluid_cv)
 
         # Boo-hoo, no work with projection, need to specify DD maybe
-        # fluid_operator_states = make_operator_fluid_states(
-        #    dcoll, fluid_state, gas_model, boundaries=boundaries,
-        #    quadrature_tag=quadrature_tag, limiter_func=_limit_fluid_cv)
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries=boundaries,
-            quadrature_tag=quadrature_tag)
+            quadrature_tag=quadrature_tag, limiter_func=_limit_fluid_cv)
+        # fluid_operator_states = make_operator_fluid_states(
+        #    dcoll, fluid_state, gas_model, boundaries=boundaries,
+        #    quadrature_tag=quadrature_tag)
 
         fluid_rhs = fluid_operator(
             dcoll, state=fluid_state, gas_model=gas_model, time=t,
