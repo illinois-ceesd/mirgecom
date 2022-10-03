@@ -47,7 +47,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import MixtureInitializer
-from mirgecom.eos import PyrometheusMixture, MixtureDependentVars
+from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
     GasModel, make_fluid_state, ViscousFluidState, FluidState
 )
@@ -534,8 +534,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # it is possible to avoid recomputing it by NOT calling make_fluid_state.
         # Thus, evaluate ONLY other DV and TV variables for the limited state
         new_dv = fluid_state.dv.replace(
-               speed_of_sound=eos.sound_speed(limited_cv, temperature)
-               species_enthalpies=eos.species_enthalpies(limited_cv, temperature)
+            speed_of_sound=eos.sound_speed(limited_cv, temperature),
+            species_enthalpies=eos.species_enthalpies(limited_cv, temperature)
         )
 
         # update transport vars, if necessary
