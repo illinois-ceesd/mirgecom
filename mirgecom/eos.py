@@ -262,7 +262,6 @@ class MixtureEOS(GasEOS):
         )
 
 
-
 class IdealSingleGas(GasEOS):
     r"""Ideal gas law single-component gas ($p = \rho{R}{T}$).
 

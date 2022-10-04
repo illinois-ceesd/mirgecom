@@ -33,7 +33,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import SimpleTransport, PowerLawTransport
 from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
 
@@ -43,8 +43,8 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
-    AdiabaticSlipBoundary,
-    IsothermalNoSlipBoundary,
+    SymmetryBoundary,
+    IsothermalWallBoundary,
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -119,6 +119,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
     timestepper = rk4_step
     debug = False
+
+    transp_model = "PowerLaw"
 
     # Some i/o frequencies
     nstatus = 1
@@ -229,12 +231,19 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
-    # {{{ Initialize simple transport model
-    kappa = 1e-5
-    spec_diffusivity = 1e-5 * np.ones(nspecies)
-    sigma = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
-                                      species_diffusivity=spec_diffusivity)
+    # {{{ Initialize transport model
+    if transp_model == "Simple":
+        kappa = 1e-5
+        spec_diffusivity = 1e-5 * np.ones(nspecies)
+        sigma = 1e-5
+        transport_model = SimpleTransport(viscosity=sigma,
+            thermal_conductivity=kappa, species_diffusivity=spec_diffusivity)
+    if transp_model == "PowerLaw":
+        kappa = 1e-5
+        lewis = np.ones((nspecies))
+        i_h2 = cantera_soln.species_index("H2")
+        lewis[i_h2] = 0.2
+        transport_model = PowerLawTransport(lewis=lewis)
     # }}}
 
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
@@ -259,8 +268,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    #    my_boundary = AdiabaticSlipBoundary()
-    my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
+    #    my_boundary = SymmetryBoundary()
+    my_boundary = IsothermalWallBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
     def _get_temperature_update(cv, temperature):
