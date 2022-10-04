@@ -289,7 +289,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, limiter_func=None,
     -------
     :class:`~mirgecom.gas_model.FluidState`
 
-        Thermally coXnsistent fluid state
+        Thermally consistent fluid state
     """
     temperature = gas_model.eos.temperature(cv, temperature_seed=temperature_seed)
     pressure = gas_model.eos.pressure(cv, temperature=temperature)
