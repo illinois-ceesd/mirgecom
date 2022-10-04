@@ -73,12 +73,19 @@ class GasTransportVars:
     .. attribute:: viscosity
     .. attribute:: thermal_conductivity
     .. attribute:: species_diffusivity
+
+    .. automethod:: replace
     """
 
     bulk_viscosity: np.ndarray
     viscosity: np.ndarray
     thermal_conductivity: np.ndarray
     species_diffusivity: np.ndarray
+
+    def replace(self, **kwargs):
+        """Return a copy of *self* with the attributes in *kwargs* replaced."""
+        from dataclasses import replace
+        return replace(self, **kwargs)
 
 
 class TransportModel:
