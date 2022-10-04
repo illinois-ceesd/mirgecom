@@ -384,8 +384,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             gas_model,
             dd_vol_fluid, dd_vol_wall,
             fluid_boundaries, wall_boundaries,
-            fluid_state, wall_temperature,
-            wall_kappa,
+            fluid_state, wall_kappa, wall_temperature,
             time=t,
             quadrature_tag=quadrature_tag)
         return make_obj_array([fluid_grad_t, wall_grad_t])
@@ -528,9 +527,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             gas_model,
             dd_vol_fluid, dd_vol_wall,
             fluid_boundaries, wall_boundaries,
-            fluid_state, wall_temperature,
-            wall_density, wall_heat_capacity, wall_kappa,
-            time=t, wall_time_scale=wall_time_scale, quadrature_tag=quadrature_tag)
+            fluid_state,
+            wall_density, wall_heat_capacity, wall_kappa, wall_temperature,
+            time=t, quadrature_tag=quadrature_tag)
+        wall_rhs = wall_time_scale * wall_rhs
         from dataclasses import replace
         fluid_rhs = replace(
             fluid_rhs,
