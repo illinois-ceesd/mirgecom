@@ -280,7 +280,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def _get_fluid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model,
-                                temperature_seed=temp_seed)
+                                temperature_seed=temp_seed,
+                                smoothness=nodes[0]*0.0)
 
     get_temperature_update = actx.compile(_get_temperature_update)
     get_fluid_state = actx.compile(_get_fluid_state)
