@@ -74,18 +74,14 @@ class GasDependentVars:
 
     .. attribute:: temperature
     .. attribute:: pressure
-
-    .. automethod:: replace
+    .. attribute:: speed_of_sound
+    .. attribute:: smoothness
     """
 
     temperature: DOFArray
     pressure: DOFArray
     speed_of_sound: DOFArray
-
-    def replace(self, **kwargs):
-        """Return a copy of *self* with the attributes in *kwargs* replaced."""
-        from dataclasses import replace
-        return replace(self, **kwargs)
+    smoothness: DOFArray
 
 
 @dataclass_array_container
@@ -94,16 +90,9 @@ class MixtureDependentVars(GasDependentVars):
     """Mixture state-dependent quantities for :class:`MixtureEOS`.
 
     ..attribute:: species_enthalpies
-
-    ..automethod:: replace
     """
 
     species_enthalpies: DOFArray
-
-    def replace(self, **kwargs):
-        """Return a copy of *self* with the attributes in *kwargs* replaced."""
-        from dataclasses import replace
-        return replace(self, **kwargs)
 
 
 class GasEOS(metaclass=ABCMeta):
@@ -181,7 +170,8 @@ class GasEOS(metaclass=ABCMeta):
 
     def dependent_vars(
             self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> GasDependentVars:
+            temperature_seed: Optional[DOFArray] = None,
+            smoothness: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -189,10 +179,16 @@ class GasEOS(metaclass=ABCMeta):
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
+        # MJA, it doesn't appear that we can have a None field embedded inside DV,
+        # make a dummy smoothness in this case
+        if smoothness is None:
+            smoothness = 0. * cv.mass
+
         return GasDependentVars(
             temperature=temperature,
             pressure=self.pressure(cv, temperature),
-            speed_of_sound=self.sound_speed(cv, temperature)
+            speed_of_sound=self.sound_speed(cv, temperature),
+            smoothness=smoothness
         )
 
 
@@ -243,7 +239,8 @@ class MixtureEOS(GasEOS):
 
     def dependent_vars(
             self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> MixtureDependentVars:
+            temperature_seed: Optional[DOFArray] = None,
+            smoothness: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -251,12 +248,19 @@ class MixtureEOS(GasEOS):
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
+        # MJA, it doesn't appear that we can have a None field embedded inside DV,
+        # make a dummy smoothness in this case
+        if smoothness is None:
+            smoothness = 0. * cv.mass
+
         return MixtureDependentVars(
             temperature=temperature,
             pressure=self.pressure(cv, temperature),
             speed_of_sound=self.sound_speed(cv, temperature),
-            species_enthalpies=self.species_enthalpies(cv, temperature)
+            species_enthalpies=self.species_enthalpies(cv, temperature),
+            smoothness=smoothness
         )
+
 
 
 class IdealSingleGas(GasEOS):
