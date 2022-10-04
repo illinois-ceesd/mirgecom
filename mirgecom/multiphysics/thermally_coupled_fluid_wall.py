@@ -596,7 +596,7 @@ def coupled_ns_heat_operator(
         fluid_boundaries, wall_boundaries,
         fluid_state, wall_density, wall_heat_capacity, wall_kappa, wall_temperature,
         *,
-        time=0., wall_time_scale=1,
+        time=0.,
         fluid_gradient_numerical_flux_func=num_flux_central,
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         use_av=False,
@@ -692,7 +692,7 @@ def coupled_ns_heat_operator(
             dcoll, fluid_all_boundaries, fluid_state, quadrature_tag=quadrature_tag,
             dd=fluid_dd, **av_kwargs)
 
-    wall_rhs = wall_time_scale * _heat_operator(
+    wall_rhs = _heat_operator(
         dcoll, wall_density, wall_heat_capacity, wall_kappa,
         wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
