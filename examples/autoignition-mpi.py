@@ -372,7 +372,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_fluid_state(cv=cv, gas_model=gas_model,
                                 temperature_seed=tseed,
                                 limiter_func=_limit_fluid_cv,
-                                smoothness=nodes[0]*0.0 #FIXME just so it won't complain
+                                # FIXME just so it won't complain
+                                smoothness=nodes[0]*0.0
                                 )
 
     compute_temperature_update = actx.compile(get_temperature_update)
