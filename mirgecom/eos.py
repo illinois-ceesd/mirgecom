@@ -90,9 +90,16 @@ class MixtureDependentVars(GasDependentVars):
     """Mixture state-dependent quantities for :class:`MixtureEOS`.
 
     ..attribute:: species_enthalpies
+
+    ..automethod:: replace
     """
 
     species_enthalpies: DOFArray
+
+    def replace(self, **kwargs):
+        """Return a copy of *self* with the attributes in *kwargs* replaced."""
+        from dataclasses import replace
+        return replace(self, **kwargs)
 
 
 class GasEOS(metaclass=ABCMeta):
