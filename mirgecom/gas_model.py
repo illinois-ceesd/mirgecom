@@ -390,7 +390,7 @@ def _getattr_ish(obj, name):
 
 
 def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=None,
-                                 smoothness_pairs=None, limiter_func=None):
+                                 limiter_func=None):
     """Create a fluid state from the conserved vars and equation of state.
 
     This routine helps create a thermally consistent fluid state out of a collection
@@ -450,10 +450,6 @@ class _FluidCVTag:
 
 
 class _FluidTemperatureTag:
-    pass
-
-
-class _FluidSmoothnessTag:
     pass
 
 
