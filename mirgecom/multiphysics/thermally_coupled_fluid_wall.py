@@ -571,30 +571,12 @@ def coupled_grad_t_operator(
             quadrature_tag=quadrature_tag, dd=wall_dd))
 
 
-def _heat_operator(
-        dcoll,
-        # FIXME: Create a state object for the wall
-        wall_density, wall_heat_capacity, wall_kappa,
-        boundaries, temperature,
-        *,
-        penalty_amount, quadrature_tag, dd,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        _grad_temperature=None):
-    return (
-        1/(wall_density * wall_heat_capacity)
-        * diffusion_operator(
-            dcoll, wall_kappa, boundaries, temperature,
-            penalty_amount=penalty_amount, quadrature_tag=quadrature_tag,
-            dd=dd, grad_u=_grad_temperature, comm_tag=_DiffusionOperatorTag))
-
-
 def coupled_ns_heat_operator(
         dcoll,
         gas_model,
         fluid_dd, wall_dd,
         fluid_boundaries, wall_boundaries,
-        fluid_state, wall_density, wall_heat_capacity, wall_kappa, wall_temperature,
+        fluid_state, wall_density, wall_heat_capacity, wall_kappa, wall_energy,
         *,
         time=0.,
         fluid_gradient_numerical_flux_func=num_flux_central,
@@ -615,6 +597,8 @@ def coupled_ns_heat_operator(
     wall_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
+
+    wall_temperature = wall_energy / (wall_density * wall_heat_capacity)
 
     kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
         dcoll,
@@ -692,10 +676,9 @@ def coupled_ns_heat_operator(
             dcoll, fluid_all_boundaries, fluid_state, quadrature_tag=quadrature_tag,
             dd=fluid_dd, **av_kwargs)
 
-    wall_rhs = _heat_operator(
-        dcoll, wall_density, wall_heat_capacity, wall_kappa,
-        wall_all_boundaries, wall_temperature,
+    wall_rhs = diffusion_operator(
+        dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        dd=wall_dd, _grad_temperature=wall_grad_temperature)
+        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_DiffusionOperatorTag)
 
     return fluid_rhs, wall_rhs

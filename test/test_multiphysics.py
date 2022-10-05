@@ -315,18 +315,20 @@ def test_thermally_coupled_fluid_wall(
 
         def get_rhs(t, state):
             fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
-            wall_temp = state[1]
-            fluid_rhs, wall_rhs = coupled_ns_heat_operator(
+            wall_energy = wall_density * wall_heat_capacity * state[1]
+            fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
                 dcoll,
                 gas_model,
                 dd_vol_fluid, dd_vol_wall,
                 fluid_boundaries, wall_boundaries,
-                fluid_state, wall_density, wall_heat_capacity, wall_kappa, wall_temp,
+                fluid_state,
+                wall_density, wall_heat_capacity, wall_kappa, wall_energy,
                 time=t,
                 quadrature_tag=quadrature_tag)
             fluid_rhs = replace(
                 fluid_rhs,
                 momentum=fluid_rhs.momentum + momentum_source_func(fluid_nodes, t))
+            wall_rhs = wall_energy_rhs / (wall_density * wall_heat_capacity)
             return make_obj_array([fluid_rhs, wall_rhs])
 
         def cv_from_temp(temp):
