@@ -576,7 +576,7 @@ def coupled_ns_heat_operator(
         gas_model,
         fluid_dd, wall_dd,
         fluid_boundaries, wall_boundaries,
-        fluid_state, wall_density, wall_heat_capacity, wall_kappa, wall_energy,
+        fluid_state, wall_kappa, wall_temperature,
         *,
         time=0.,
         fluid_gradient_numerical_flux_func=num_flux_central,
@@ -597,8 +597,6 @@ def coupled_ns_heat_operator(
     wall_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
-
-    wall_temperature = wall_energy / (wall_density * wall_heat_capacity)
 
     kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
         dcoll,
