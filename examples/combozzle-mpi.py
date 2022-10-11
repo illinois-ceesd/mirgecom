@@ -96,8 +96,10 @@ def _get_box_mesh(dim, a, b, n, t=None, periodic=None):
     dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+        if not periodic[i]:
+            bttf["-"+str(i+1)] = ["-"+dim_names[i]]
+            bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
     return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t,
                periodic=periodic)
@@ -180,7 +182,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
     if rank == 0:
-        print(f"Main start: {time.ctime(time.time())}")
+        print(f"Hello: {time.ctime(time.time())}")
     comm.Barrier()
 
     from mirgecom.simutil import global_reduce as _global_reduce
@@ -225,7 +227,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nhealth = 100
     nrestart = 1000
     do_checkpoint = 0
-    boundary_report = 0
+    boundary_report = 1
     do_callbacks = 0
 
     # }}}  Time stepping control
@@ -597,7 +599,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
     if rank == 0:
-        print(f"ACTX setup start: {time.ctime(time.time())}")
+        print(f"Queue/ACTX setup start: {time.ctime(time.time())}")
     comm.Barrier()
 
     if use_profiling:
@@ -613,6 +615,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Queue/ACTX setup done: {time.ctime(time.time())}")
+    comm.Barrier()
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -638,6 +645,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    comm.Barrier()
+    if rank == 0:
+        print(f"Mesh setup done: {time.ctime(time.time())}")
+    comm.Barrier()
+
     print(f"{rank=},{dim=},{order=},{local_nelements=},{global_nelements=}")
     if grid_only:
         return 0
@@ -648,7 +660,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
     if rank == 0:
-        print(f"ACTX Setup end -> Solution init start: {time.ctime(time.time())}")
+        print(f"Discretization Setup end: {time.ctime(time.time())}")
     comm.Barrier()
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
@@ -732,6 +744,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 ("max_pressure",    "{value:1.9e})\n"),
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
                 ("max_temperature",    "{value:7g})\n")])
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Solution init start: {time.ctime(time.time())}")
+    comm.Barrier()
 
     if single_gas_only:
         nspecies = 0
@@ -958,6 +975,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"Expected equilibrium state:"
                         f" {eq_pressure=}, {eq_temperature=},"
                         f" {eq_density=}, {eq_mass_fractions=}")
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Solution init done: {time.ctime(time.time())}")
+    comm.Barrier()
 
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
@@ -1241,6 +1263,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
 
+    if rank == 0:
+        print(f"Simulation end time: {time.ctime(time.time())}")
+
+
     finish_tol = 1e-16
     assert np.abs(current_t - t_final) < finish_tol
 
@@ -1251,10 +1277,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info("Fluid solution failed health check.")
         raise MyRuntimeError("Failed simulation health check.")
 
-    if rank == 0:
-        print(f"Simulation end time: {time.ctime(time.time())}")
-
     comm.Barrier()
+    if rank == 0:
+        print(f"Goodbye: {time.ctime(time.time())}")
 
 
 if __name__ == "__main__":
@@ -1278,8 +1303,8 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    from warnings import warn
-    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    # from warnings import warn
+    # warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     lazy = args.lazy
     log_dependent = False
     force_eval = not args.no_force
@@ -1304,7 +1329,7 @@ if __name__ == "__main__":
     else:
         print("No user input file, using default values")
 
-    print(f"Calling main: {time.ctime(time.time())}")
+    # print(f"Calling main: {time.ctime(time.time())}")
 
     main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
          use_overintegration=args.overintegration,
