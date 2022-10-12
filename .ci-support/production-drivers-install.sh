@@ -24,7 +24,11 @@ do
     PRODUCTION_DRIVER_DIR="production_driver_$PRODUCTION_DRIVER_NAME"
     git clone -b "$PRODUCTION_DRIVER_BRANCH" https\://github.com/"$PRODUCTION_DRIVER_REPO" "$PRODUCTION_DRIVER_DIR"
     cd "$PRODUCTION_DRIVER_DIR"/smoke_test
-    ln -s *.py driver.py  #  name the driver generically
+    if [ -f prediction.py ]; then
+        ln -s prediction.py driver.py
+    else
+        ln -s *.py driver.py  #  name the driver generically
+    fi
     cd ../..
 done
 IFS="$OIFS"
