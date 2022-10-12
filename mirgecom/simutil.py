@@ -464,6 +464,33 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     return distribute_mesh(comm, generate_mesh)
 
 
+def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
+                               nranks_per_axis=None):
+    """Partition a mesh uniformly along the major coordinate axes."""
+    mesh_dimension = mesh.dim
+    if nranks_per_axis is None:
+        nranks_per_axis = np.ones(mesh_dimension)
+        nranks_per_axis[0] = num_ranks
+    if len(nranks_per_axis) != mesh_dimension:
+        raise ValueError("nranks_per_axis must match mesh dimension.")
+    nranks_test = 1
+    for i in range(mesh_dimension):
+        nranks_test = nranks_test * nranks_per_axis[i]
+    if nranks_test != num_ranks:
+        raise ValueError("nranks_per_axis must match num_ranks.")
+
+    mesh_groups, = mesh.groups
+    mesh_verts = mesh.vertices
+    mesh_x = mesh_verts[0]
+    x_min = np.min(mesh_x)
+    x_max = np.max(mesh_x)
+    x_interval = x_max - x_min
+    part_dx = x_interval / nranks_per_axis[0]
+    elem_x = mesh_verts[0, mesh_groups.vertex_indices]
+    elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
+    return ((elem_centroids-x_min) / part_dx).astype(int)
+
+
 def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
@@ -527,7 +554,9 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
 
         print(f"distribute_mesh partitioning begin: {time.ctime(time.time())}")
         from meshmode.mesh.processing import partition_mesh
-        rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
+        rank_per_element = \
+            partition_generator_func(mesh, tag_to_elements=tag_to_elements,
+                                     num_ranks=num_ranks)
         print(f"distribute_mesh partitioning done: {time.ctime(time.time())}")
         print(f"distribute_mesh: mesh data struct start: {time.ctime(time.time())}")
 
@@ -621,7 +650,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     return local_mesh_data, global_nelements
 
 
-def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL):
+def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
+                    mesh=None):
     """Generate a report of the grid boundaries."""
     boundaries = normalize_boundaries(boundaries)
 
@@ -632,7 +662,14 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL):
         nproc = comm.Get_size()
         rank = comm.Get_rank()
 
-    local_header = f"nproc: {nproc}\nrank: {rank}\n"
+    if mesh is not None:
+        nelem = 0
+        for grp in mesh.groups:
+            nelem = nelem + grp.nelements
+        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}"
+    else:
+        local_header = f"nproc: {nproc}\nrank: {rank}"
+
     from io import StringIO
     local_report = StringIO(local_header)
     local_report.seek(0, 2)
