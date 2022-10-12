@@ -457,7 +457,6 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     global_nelements : :class:`int`
         The number of elements in the serial mesh
     """
-    import time
     from warnings import warn
     warn(
         "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
@@ -513,7 +512,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             return get_partition_by_pymetis(mesh, num_ranks)
 
     if rank == 0:
-        print(f"Mesh generation begin: {time.ctime(time.time())}")
+        print(f"distribute_mesh:generate begin: {time.ctime(time.time())}")
         global_data = get_mesh_data()
 
         from meshmode.mesh import Mesh
@@ -526,21 +525,23 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
         else:
             raise TypeError("Unexpected result from get_mesh_data")
 
-        print(f"Mesh generation end: {time.ctime(time.time())}")
-        print(f"Mesh partition begin: {time.ctime(time.time())}")
+        print(f"distribute_mesh partitioning begin: {time.ctime(time.time())}")
         from meshmode.mesh.processing import partition_mesh
-
         rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
-        print(f"Mesh partition_generator_func done: {time.ctime(time.time())}")
+        print(f"distribute_mesh partitioning done: {time.ctime(time.time())}")
+        print(f"distribute_mesh: mesh data struct start: {time.ctime(time.time())}")
+
+        from pyinstrument import Profiler
+
+        profiler = Profiler()
+        profiler.start()
 
         if tag_to_elements is None:
             rank_to_elements = {
                 rank: np.where(rank_per_element == rank)[0]
                 for rank in range(num_ranks)}
-            print(f"Mesh partition e-conn inverted: {time.ctime(time.time())}")
 
             rank_to_mesh_data = partition_mesh(mesh, rank_to_elements)
-            print(f"Mesh partition_mesh done: {time.ctime(time.time())}")
 
         else:
             tag_to_volume = {
@@ -599,7 +600,10 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                     for vol in volumes}
                 for rank in range(num_ranks)}
 
-        print(f"Mesh partitioning done: {time.ctime(time.time())}")
+        profiler.stop()
+        profiler.print()
+
+        print(f"distribute_mesh: mesh data struct done: {time.ctime(time.time())}")
 
         local_mesh_data = mpi_distribute(
             comm, source_rank=0, source_data=rank_to_mesh_data)
@@ -613,7 +617,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
 
     comm.Barrier()
     if rank == 0:
-        print(f"Mesh distribution done: {time.ctime(time.time())}")
+        print(f"distrubute_mesh distribution done: {time.ctime(time.time())}")
     return local_mesh_data, global_nelements
 
 
