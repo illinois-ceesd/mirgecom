@@ -465,7 +465,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
 
 
 def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
-                               nranks_per_axis=None):
+                               nranks_per_axis=None, auto_balance=False):
     """Partition a mesh uniformly along the major coordinate axes."""
     mesh_dimension = mesh.dim
     if nranks_per_axis is None:
@@ -482,13 +482,131 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
     mesh_groups, = mesh.groups
     mesh_verts = mesh.vertices
     mesh_x = mesh_verts[0]
+
     x_min = np.min(mesh_x)
     x_max = np.max(mesh_x)
     x_interval = x_max - x_min
-    part_dx = x_interval / nranks_per_axis[0]
+    part_loc = np.linspace(x_min, x_max, num_ranks+1)
+
+    part_interval = x_interval / nranks_per_axis[0]
     elem_x = mesh_verts[0, mesh_groups.vertex_indices]
     elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
-    return ((elem_centroids-x_min) / part_dx).astype(int)
+    global_nelements = len(elem_centroids)
+    aver_part_nelem = global_nelements / num_ranks
+
+    elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
+
+    if auto_balance:
+
+        part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
+                            for r in range(num_ranks)}
+        nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
+        adv_part = 1
+
+        for r in range(num_ranks-1):
+
+            adv_part = max(int((part_loc[r+1]-x_min) / part_interval), 1)
+            niter = 0
+            num_elem_needed = aver_part_nelem - nelem_part[r]
+            part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
+            # while nelem_part[adv_part] == 0:
+            #    adv_part = adv_part + 1
+
+            print(f"Processing part({r=})")
+            print(f"{part_loc[r]=}")
+            print(f"{adv_part=}")
+
+            while ((part_imbalance > .01) and (adv_part < num_ranks)):
+
+                print(f"-{nelem_part[r]=}")
+                print(f"-{part_loc[r+1]=},{part_loc[adv_part+1]=}")
+                print(f"-{num_elem_needed=},{part_imbalance=}")
+                print(f"-{nelem_part[adv_part]=}")
+
+                if niter > 10:
+                    raise ValueError("Detected too many iterations in partitioning.")
+
+                if num_elem_needed > 0:
+
+                    # Partition is SMALLER than it should be
+                    nelem_bag = nelem_part[adv_part]
+                    print(f"-{nelem_bag=}")
+
+                    portion_needed = (float(num_elem_needed)
+                                      / float(nelem_part[adv_part]))
+
+                    print(f"--Chomping {portion_needed*100}% of next"
+                          f" partition({adv_part}).")
+
+                    if portion_needed == 1.0:  # Chomp
+                        part_loc[r+1] = part_loc[r+2]
+                        # add all elements of next part to this part
+                        num_elems_added = nelem_part[adv_part]
+                        part_to_elements[r].update(part_to_elements[adv_part])
+                        # update elem_to_partition for moved elements
+                        for e in part_to_elements[adv_part]:
+                            elem_to_rank[e] = r
+                        nelem_part[r] = nelem_part[r] + num_elems_added
+                        part_to_elements[adv_part].difference_update(
+                            part_to_elements[adv_part])
+                        # next_pos = sliding_pos + part_interval
+                        nelem_part[adv_part] = 0
+                        adv_part = adv_part + 1
+                        print(f"--{adv_part=}")
+                        # next_rank = next_rank + 1
+
+                    else:  # Bite
+                        if portion_needed > .05:
+                            portion_needed = .9*portion_needed
+                        sliding_interval = part_loc[adv_part+1] - part_loc[r+1]
+                        pos_update = portion_needed*sliding_interval
+                        print(f"--Advancing part({r}) by +{pos_update}")
+                        part_loc[r+1] = part_loc[r+1] + pos_update
+                        # loop over next part's elements and move those
+                        # that fall into the new part's bounding box
+                        moved_elements = set()
+                        for e in part_to_elements[adv_part]:
+                            if elem_centroids[e] <= part_loc[r+1]:
+                                moved_elements.add(e)
+                        part_to_elements[r].update(moved_elements)
+                        part_to_elements[adv_part].difference_update(moved_elements)
+                        # update elem_to_partition for moved elements
+                        for e in moved_elements:
+                            elem_to_rank[e] = r
+                        num_elements_added = len(moved_elements)
+
+                    print(f"--Number of elements added: {num_elements_added}")
+
+                else:
+
+                    # Partition is LARGER than it should be
+                    portion_needed = abs(num_elem_needed)/float(nelem_part[r])
+                    if portion_needed > .05:
+                        portion_needed = .9*portion_needed
+                    print(f"--Reducing partition size by {portion_needed*100}%.")
+                    # Move the partition location
+                    sliding_interval = part_loc[r+1] - part_loc[r]
+                    pos_update = portion_needed*sliding_interval
+                    part_loc[r+1] = part_loc[r+1] - pos_update
+                    # Move *this* part's elements if they fell out
+                    moved_elements = set()
+                    for e in part_to_elements[r]:
+                        if elem_centroids[e] > part_loc[r+1]:
+                            moved_elements.add(e)
+                            elem_to_rank[e] = r+1
+                    part_to_elements[r].difference_update(moved_elements)
+                    part_to_elements[adv_part].update(moved_elements)
+                    num_elements_added = -len(moved_elements)
+
+                nelem_part[r] = nelem_part[r] + num_elements_added
+                nelem_part[adv_part] = nelem_part[adv_part] - num_elements_added
+                num_elem_needed = num_elem_needed - num_elements_added
+                part_imbalance = \
+                    np.abs(num_elem_needed) / float(aver_part_nelem)
+                niter = niter + 1
+
+            print(f"-Part({r=}): {nelem_part[r]=}, {part_imbalance=}")
+        return elem_to_rank
 
 
 def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
