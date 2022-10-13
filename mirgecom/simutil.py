@@ -494,6 +494,11 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
     global_nelements = len(elem_centroids)
     aver_part_nelem = global_nelements / num_ranks
 
+    print(f"Partitioning {global_nelements} elements in"
+          f" [{x_min},{x_max}]/{num_ranks}")
+    print(f"Average nelem/part: {aver_part_nelem}")
+    print(f"Initial part locs: {part_loc=}")
+
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
     if auto_balance:
@@ -509,8 +514,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
             niter = 0
             num_elem_needed = aver_part_nelem - nelem_part[r]
             part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
-            # while nelem_part[adv_part] == 0:
-            #    adv_part = adv_part + 1
 
             print(f"Processing part({r=})")
             print(f"{part_loc[r]=}")
@@ -523,7 +526,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                 print(f"-{num_elem_needed=},{part_imbalance=}")
                 print(f"-{nelem_part[adv_part]=}")
 
-                if niter > 10:
+                if niter > 100:
                     raise ValueError("Detected too many iterations in partitioning.")
 
                 if num_elem_needed > 0:
@@ -532,7 +535,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                     nelem_bag = nelem_part[adv_part]
                     print(f"-{nelem_bag=}")
 
-                    portion_needed = (float(num_elem_needed)
+                    portion_needed = (float(abs(num_elem_needed))
                                       / float(nelem_part[adv_part]))
 
                     print(f"--Chomping {portion_needed*100}% of next"
@@ -556,18 +559,35 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                         # next_rank = next_rank + 1
 
                     else:  # Bite
-                        if portion_needed > .05:
-                            portion_needed = .9*portion_needed
                         sliding_interval = part_loc[adv_part+1] - part_loc[r+1]
-                        pos_update = portion_needed*sliding_interval
+                        fine_tuned = False
+                        while not fine_tuned:
+                            pos_update = portion_needed*sliding_interval
+                            new_loc = part_loc[r+1] + pos_update
+                            moved_elements = set()
+                            num_elem_mv = 0
+                            for e in part_to_elements[adv_part]:
+                                if elem_centroids[e] <= new_loc:
+                                    moved_elements.add(e)
+                                    num_elem_mv = num_elem_mv + 1
+                            if num_elem_mv < num_elem_needed:
+                                fine_tuned = True
+                            else:
+                                ovrsht = (num_elem_mv - num_elem_needed)
+                                rel_ovrsht = ovrsht/float(num_elem_needed)
+                                if rel_ovrsht > 1.0:
+                                    portion_needed = portion_needed/2.0
+                                else:
+                                    fine_tuned = True
+                        print(f"--Tuned: {portion_needed=}")
                         print(f"--Advancing part({r}) by +{pos_update}")
                         part_loc[r+1] = part_loc[r+1] + pos_update
                         # loop over next part's elements and move those
                         # that fall into the new part's bounding box
-                        moved_elements = set()
-                        for e in part_to_elements[adv_part]:
-                            if elem_centroids[e] <= part_loc[r+1]:
-                                moved_elements.add(e)
+                        # moved_elements = set()
+                        # for e in part_to_elements[adv_part]:
+                        #     if elem_centroids[e] <= part_loc[r+1]:
+                        #        moved_elements.add(e)
                         part_to_elements[r].update(moved_elements)
                         part_to_elements[adv_part].difference_update(moved_elements)
                         # update elem_to_partition for moved elements
@@ -580,20 +600,39 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                 else:
 
                     # Partition is LARGER than it should be
-                    portion_needed = abs(num_elem_needed)/float(nelem_part[r])
-                    if portion_needed > .05:
-                        portion_needed = .9*portion_needed
+                    sliding_interval = part_loc[r+1] - part_loc[r]
+                    num_to_move = -num_elem_needed
+                    portion_needed = num_to_move/float(nelem_part[r])
+
+                    fine_tuned = False
+                    while not fine_tuned:
+                        # if portion_needed > .05:
+                        #    portion_needed = .9*portion_needed
+                        pos_update = portion_needed*sliding_interval
+                        new_pos = part_loc[r+1] - pos_update
+                        moved_elements = set()
+                        num_elem_mv = 0
+                        for e in part_to_elements[r]:
+                            if elem_centroids[e] > new_pos:
+                                moved_elements.add(e)
+                                num_elem_mv = num_elem_mv + 1
+                        if num_elem_mv < num_to_move:
+                            fine_tuned = True
+                        else:
+                            ovrsht = (num_elem_mv - num_to_move)
+                            rel_ovrsht = ovrsht/float(num_to_move)
+                            if rel_ovrsht > 1.0:
+                                portion_needed = portion_needed/2.0
+                            else:
+                                fine_tuned = True
+
                     print(f"--Reducing partition size by {portion_needed*100}%.")
                     # Move the partition location
-                    sliding_interval = part_loc[r+1] - part_loc[r]
-                    pos_update = portion_needed*sliding_interval
-                    part_loc[r+1] = part_loc[r+1] - pos_update
+                    part_loc[r+1] = new_pos
                     # Move *this* part's elements if they fell out
-                    moved_elements = set()
-                    for e in part_to_elements[r]:
-                        if elem_centroids[e] > part_loc[r+1]:
-                            moved_elements.add(e)
-                            elem_to_rank[e] = r+1
+                    for e in moved_elements:
+                        elem_to_rank[e] = r+1
+
                     part_to_elements[r].difference_update(moved_elements)
                     part_to_elements[adv_part].update(moved_elements)
                     num_elements_added = -len(moved_elements)
