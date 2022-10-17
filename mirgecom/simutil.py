@@ -494,28 +494,31 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
     elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
     global_nelements = len(elem_centroids)
     aver_part_nelem = global_nelements / num_ranks
-    debug = True
 
     if debug:
         print(f"Partitioning {global_nelements} elements in"
               f" [{x_min},{x_max}]/{num_ranks}")
         print(f"Average nelem/part: {aver_part_nelem}")
         print(f"Initial part locs: {part_loc=}")
-        
+
+    # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
+    # Automatic load-balancing
     if auto_balance:
 
+        # maps partition id to list of elements in that partition
         part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
                             for r in range(num_ranks)}
+        # make an array of the geometrically even partition sizes
+        # avoids calling "len" over and over on the element sets
         nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
-        adv_part = 1
 
         if debug:
             print(f"Initial: {nelem_part=}")
 
         for r in range(num_ranks-1):
-            
+
             # find the element reservoir (next part with elements in it)
             adv_part = r + 1
             while nelem_part[adv_part] == 0:
@@ -534,14 +537,17 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
             total_change = 0
             moved_elements = set()
 
-            while ((part_imbalance > imbalance_tolerance) and (adv_part < num_ranks)):
-                # This partition needs to keep changing in size until it meets the 
+            while ((part_imbalance > imbalance_tolerance)
+                   and (adv_part < num_ranks)):
+                # This partition needs to keep changing in size until it meets the
                 # specified imbalance tolerance, or gives up trying
 
+                # seek out the element reservoir
                 while nelem_part[adv_part] == 0:
                     adv_part = adv_part + 1
                     if adv_part >= num_ranks:
                         raise ValueError("Ran out of elements to partition.")
+
                 if debug:
                     print(f"-{nelem_part[r]=}, adv_part({adv_part}),"
                           f" {nelem_part[adv_part]=}")
@@ -552,7 +558,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                     raise ValueError("Detected too many iterations in partitioning.")
 
                 # The purpose of the next block is to populate the "moved_elements"
-                # data structure. Then those elements will be moved between the 
+                # data structure. Then those elements will be moved between the
                 # current partition being processed and the "reservoir,"
                 # *and* to adjust the position of the "right" side of the current
                 # partition boundary.
@@ -620,7 +626,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
 
                     # Partition is LARGER than it should be
                     # Grab the spatial size of the current partition
-                    # to compute the portion we need to shave off
+                    # to estimate the portion we need to shave off
+                    # assuming uniform element density
                     part_interval = part_loc[r+1] - part_loc[r]
                     num_to_move = -num_elem_needed
                     portion_needed = num_to_move/float(nelem_part[r])
@@ -651,7 +658,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                                 portion_needed = portion_needed/2.0
                             else:
                                 fine_tuned = True
-                            
+
+                    # new "right" wall location of shranken part
+                    # and negative num_elements_added for removal
                     new_loc = new_pos
                     num_elements_added = -len(moved_elements)
                     if debug:
@@ -660,7 +669,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                         print(f"--Removing {-num_elements_added} from part({r}).")
 
                 # Now "moved_elements", "num_elements_added", and "new_loc"
-                # are computed.  Update the partition, reservoir.
+                # are computed.  Update the partition, and reservoir.
                 if debug:
                     print(f"--Number of elements to ADD: {num_elements_added}.")
 
@@ -697,7 +706,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                 print(f"-Part({r}): {total_change=}")
                 print(f"-Part({r=}): {nelem_part[r]=}, {part_imbalance=}")
                 print(f"-Part({adv_part}): {nelem_part[adv_part]=}")
-                
+
         # Validate the partitioning before returning
         total_partitioned_elements = sum([len(part_to_elements[r])
                                           for r in range(num_ranks)])
