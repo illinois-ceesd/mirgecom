@@ -458,7 +458,8 @@ def diffusion_operator(
         # FIXME: Do something similar to make_operator_fluid_states to avoid
         # communicating kappa and u multiple times
         grad_u = grad_operator(
-            dcoll, kappa, boundaries, u, quadrature_tag=quadrature_tag, dd=dd_vol)
+            dcoll, kappa, boundaries, u, quadrature_tag=quadrature_tag, dd=dd_vol,
+            comm_tag=comm_tag)
 
     kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
     grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
