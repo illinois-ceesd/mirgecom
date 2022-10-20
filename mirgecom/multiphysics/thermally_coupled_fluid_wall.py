@@ -83,11 +83,23 @@ class _GradTemperatureInterVolTag:
     pass
 
 
-class _NSOperatorTag:
+class _FluidOpStatesTag:
     pass
 
 
-class _DiffusionOperatorTag:
+class _FluidGradTag:
+    pass
+
+
+class _FluidOperatorTag:
+    pass
+
+
+class _WallGradTag:
+    pass
+
+
+class _WallOperatorTag:
     pass
 
 
@@ -565,10 +577,11 @@ def coupled_grad_t_operator(
             dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
             time=time, numerical_flux_func=fluid_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=fluid_dd,
-            operator_states_quad=_fluid_operator_states_quad),
+            operator_states_quad=_fluid_operator_states_quad,
+            comm_tag=_FluidGradTag),
         wall_grad_t_operator(
             dcoll, wall_kappa, wall_all_boundaries_no_grad, wall_temperature,
-            quadrature_tag=quadrature_tag, dd=wall_dd))
+            quadrature_tag=quadrature_tag, dd=wall_dd, comm_tag=_WallGradTag))
 
 
 def coupled_ns_heat_operator(
@@ -626,7 +639,7 @@ def coupled_ns_heat_operator(
 
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
-        quadrature_tag, dd=fluid_dd)
+        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag)
 
     fluid_grad_temperature, wall_grad_temperature = coupled_grad_t_operator(
         dcoll,
@@ -665,7 +678,7 @@ def coupled_ns_heat_operator(
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         operator_states_quad=fluid_operator_states_quad,
-        grad_t=fluid_grad_temperature, comm_tag=_NSOperatorTag)
+        grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
 
     if use_av:
         if av_kwargs is None:
@@ -677,6 +690,6 @@ def coupled_ns_heat_operator(
     wall_rhs = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_DiffusionOperatorTag)
+        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_WallOperatorTag)
 
     return fluid_rhs, wall_rhs
