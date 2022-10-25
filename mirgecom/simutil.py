@@ -552,6 +552,75 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     return local_mesh_data, global_nelements
 
 
+def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
+    r"""
+    Create a mesh containing a subset of another mesh's volumes.
+
+    Parameters
+    ----------
+    mesh: :class:`meshmode.mesh.Mesh`
+        The original mesh.
+    tag_to_elements:
+        A :class:`dict` mapping mesh volume tags to :class:`numpy.ndarray`\ s
+        of element numbers in *mesh*.
+    selected_tags:
+        A sequence of tags in *tag_to_elements* representing the subset of volumes
+        to be included.
+    boundary_tag:
+        Tag to assign to the boundary that was previously the interface between
+        included/excluded volumes.
+
+    Returns
+    -------
+    in_mesh: :class:`meshmode.mesh.Mesh`
+        The resulting mesh.
+    tag_to_in_elements:
+        A :class:`dict` mapping the tags from *selected_tags* to
+        :class:`numpy.ndarray`\ s of element numbers in *in_mesh*.
+    """
+    is_in_element = np.full(mesh.nelements, False)
+    for tag, elements in tag_to_elements.items():
+        if tag in selected_tags:
+            is_in_element[elements] = True
+
+    from meshmode.mesh.processing import partition_mesh
+    in_mesh = partition_mesh(mesh, {
+        "_in": np.where(is_in_element)[0],
+        "_out": np.where(~is_in_element)[0]})["_in"]
+
+    # partition_mesh creates a partition boundary for "_out"; replace with a
+    # normal boundary
+    new_facial_adjacency_groups = []
+    from meshmode.mesh import InterPartAdjacencyGroup, BoundaryAdjacencyGroup
+    for grp_list in in_mesh.facial_adjacency_groups:
+        new_grp_list = []
+        for fagrp in grp_list:
+            if (
+                    isinstance(fagrp, InterPartAdjacencyGroup)
+                    and fagrp.part_id == "_out"):
+                new_fagrp = BoundaryAdjacencyGroup(
+                    igroup=fagrp.igroup,
+                    boundary_tag=boundary_tag,
+                    elements=fagrp.elements,
+                    element_faces=fagrp.element_faces)
+            else:
+                new_fagrp = fagrp
+            new_grp_list.append(new_fagrp)
+        new_facial_adjacency_groups.append(new_grp_list)
+    in_mesh = in_mesh.copy(facial_adjacency_groups=new_facial_adjacency_groups)
+
+    element_to_in_element = np.where(
+        is_in_element,
+        np.cumsum(is_in_element) - 1,
+        np.full(mesh.nelements, -1))
+
+    tag_to_in_elements = {
+        tag: element_to_in_element[tag_to_elements[tag]]
+        for tag in selected_tags}
+
+    return in_mesh, tag_to_in_elements
+
+
 def get_reasonable_memory_pool(ctx, queue):
     """Return an SVM or buffer memory pool based on what the device supports."""
     from pyopencl.characterize import has_coarse_grain_buffer_svm
