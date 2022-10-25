@@ -711,10 +711,18 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
         total_partitioned_elements = sum([len(part_to_elements[r])
                                           for r in range(num_ranks)])
         total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
+
         if total_partitioned_elements != total_nelem_part:
             raise ValueError("Element counts dont match")
         if total_partitioned_elements != global_nelements:
             raise ValueError("Total elements dont match.")
+        if len(elem_to_rank) != global_nelements:
+            raise ValueError("Elem-to-rank wrong size.")
+
+        for e in range(global_nelements):
+            part = elem_to_rank[e]
+            if e not in part_to_elements[part]:
+                raise ValueError("part/element/part map mismatch.")
 
         return elem_to_rank
 
@@ -894,9 +902,9 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
         nelem = 0
         for grp in mesh.groups:
             nelem = nelem + grp.nelements
-        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}"
+        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}\n"
     else:
-        local_header = f"nproc: {nproc}\nrank: {rank}"
+        local_header = f"nproc: {nproc}\nrank: {rank}\n"
 
     from io import StringIO
     local_report = StringIO(local_header)
@@ -910,10 +918,12 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
     from meshmode.mesh import BTAG_PARTITION
     from meshmode.distributed import get_connected_parts
     connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
+    local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
     local_report.write(f"connected_part_ids: {connected_part_ids}\n")
     part_nodes = []
     for connected_part_id in connected_part_ids:
-        boundary_discr = dcoll.discr_from_dd(BTAG_PARTITION(connected_part_id))
+        boundary_discr = dcoll.discr_from_dd(
+            dd.trace(BTAG_PARTITION(connected_part_id)))
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
         part_nodes.append(nnodes)
     if part_nodes:

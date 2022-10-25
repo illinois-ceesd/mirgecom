@@ -82,6 +82,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
+    from communicator import Communicator
+    comm = Communicator(comm)
+
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
@@ -289,6 +292,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        comm.comm_profile.reset()
         fluid_state = make_fluid_state(state, gas_model)
         cv = fluid_state.cv
         dv = fluid_state.dv
@@ -348,6 +352,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
+        comm.comm_profile.finalize()
+        comm.comm_profile.print_profile()
+        comm.comm_profile.print_msg_sizes()
         if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
