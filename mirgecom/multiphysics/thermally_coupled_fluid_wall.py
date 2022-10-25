@@ -102,11 +102,23 @@ class _GradTemperatureInterVolTag:
     pass
 
 
-class _NSOperatorTag:
+class _FluidOpStatesTag:
     pass
 
 
-class _DiffusionOperatorTag:
+class _FluidGradTag:
+    pass
+
+
+class _FluidOperatorTag:
+    pass
+
+
+class _WallGradTag:
+    pass
+
+
+class _WallOperatorTag:
     pass
 
 
