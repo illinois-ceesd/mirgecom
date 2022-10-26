@@ -432,7 +432,7 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
         componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
-def generate_and_distribute_mesh(comm, generate_mesh):
+def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     """Generate a mesh and distribute it among all ranks in *comm*.
 
     Generate the mesh with the user-supplied mesh generation function
@@ -461,7 +461,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     warn(
         "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
         "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
-    return distribute_mesh(comm, generate_mesh)
+    return distribute_mesh(comm, generate_mesh, **kwargs)
 
 
 def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
@@ -504,18 +504,18 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
     # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
+    # map partition id to list of elements in that partition
+    part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
+                        for r in range(num_ranks)}
+    # make an array of the geometrically even partition sizes
+    # avoids calling "len" over and over on the element sets
+    nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
+
+    if debug:
+        print(f"Initial: {nelem_part=}")
+
     # Automatic load-balancing
     if auto_balance:
-
-        # maps partition id to list of elements in that partition
-        part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
-                            for r in range(num_ranks)}
-        # make an array of the geometrically even partition sizes
-        # avoids calling "len" over and over on the element sets
-        nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
-
-        if debug:
-            print(f"Initial: {nelem_part=}")
 
         for r in range(num_ranks-1):
 
@@ -593,9 +593,11 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                         # This part is needed because the elements are not
                         # distributed uniformly in space.
                         fine_tuned = False
+                        trial_portion_needed = portion_needed
                         while not fine_tuned:
-                            pos_update = portion_needed*reserv_interval
+                            pos_update = trial_portion_needed*reserv_interval
                             new_loc = part_loc[r+1] + pos_update
+
                             moved_elements = set()
                             num_elem_mv = 0
                             for e in part_to_elements[adv_part]:
@@ -609,10 +611,11 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                                 rel_ovrsht = ovrsht/float(num_elem_needed)
                                 if rel_ovrsht > 0.8:
                                     # bisect the space grabbed and try again
-                                    portion_needed = portion_needed/2.0
+                                    trial_portion_needed = trial_portion_needed/2.0
                                 else:
                                     fine_tuned = True
 
+                        portion_needed = trial_portion_needed
                         new_loc = part_loc[r+1] + pos_update
                         if debug:
                             print(f"--Tuned: {portion_needed=} [by spatial volume]")
@@ -707,24 +710,39 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
                 print(f"-Part({r=}): {nelem_part[r]=}, {part_imbalance=}")
                 print(f"-Part({adv_part}): {nelem_part[adv_part]=}")
 
-        # Validate the partitioning before returning
-        total_partitioned_elements = sum([len(part_to_elements[r])
-                                          for r in range(num_ranks)])
-        total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
+    # Validate the partitioning before returning
+    total_partitioned_elements = sum([len(part_to_elements[r])
+                                      for r in range(num_ranks)])
+    total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
+    
+    if debug:
+        print("Validating mesh parts.")
 
-        if total_partitioned_elements != total_nelem_part:
-            raise ValueError("Element counts dont match")
-        if total_partitioned_elements != global_nelements:
-            raise ValueError("Total elements dont match.")
-        if len(elem_to_rank) != global_nelements:
-            raise ValueError("Elem-to-rank wrong size.")
+    if total_partitioned_elements != total_nelem_part:
+        raise ValueError("Validator: parted element counts dont match")
+    if total_partitioned_elements != global_nelements:
+        raise ValueError("Validator: global element counts dont match.")
+    if len(elem_to_rank) != global_nelements:
+        raise ValueError("Validator: elem-to-rank wrong size.")
+    if np.any(nelem_part) <= 0:
+        raise ValueError("Validator: empty partitions.")
 
-        for e in range(global_nelements):
-            part = elem_to_rank[e]
-            if e not in part_to_elements[part]:
-                raise ValueError("part/element/part map mismatch.")
+    for e in range(global_nelements):
+        part = elem_to_rank[e]
+        if e not in part_to_elements[part]:
+            raise ValueError("Validator: part/element/part map mismatch.")
 
-        return elem_to_rank
+    part_counts = np.zeros(global_nelements)
+    for part_elements in part_to_elements.values():
+        for element in part_elements:
+            part_counts[element] = part_counts[element] + 1
+
+    if np.any(part_counts > 1):
+        raise ValueError("Validator: degenerate elements")
+    if np.any(part_counts < 1):
+        raise ValueError("Validator: orphaned elements")
+
+    return elem_to_rank
 
 
 def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
@@ -789,10 +807,12 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             raise TypeError("Unexpected result from get_mesh_data")
 
         print(f"distribute_mesh partitioning begin: {time.ctime(time.time())}")
+
         from meshmode.mesh.processing import partition_mesh
         rank_per_element = \
             partition_generator_func(mesh, tag_to_elements=tag_to_elements,
                                      num_ranks=num_ranks)
+
         print(f"distribute_mesh partitioning done: {time.ctime(time.time())}")
         print(f"distribute_mesh: mesh data struct start: {time.ctime(time.time())}")
 
