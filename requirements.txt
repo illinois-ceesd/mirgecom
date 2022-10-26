@@ -3,7 +3,6 @@ mpi4py
 numpy
 pytest
 pytest-cov
-pyvisfile
 pymetis
 importlib-resources
 psutil
@@ -18,9 +17,10 @@ git+https://github.com/pythological/kanren.git#egg=miniKanren
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git#egg=modepy
 --editable git+https://github.com/kaushikcfd/arraycontext.git#egg=arraycontext
---editable git+https://github.com/kaushikcfd/meshmode.git#egg=meshmode
---editable git+https://github.com/inducer/grudge.git#egg=grudge
+--editable git+https://github.com/majosm/meshmode.git@production#egg=meshmode
+--editable git+https://github.com/majosm/grudge.git@coupled-volumes#egg=grudge
 --editable git+https://github.com/kaushikcfd/pytato.git#egg=pytato
 --editable git+https://github.com/pyrometheus/pyrometheus.git#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 --editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
+--editable git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile
