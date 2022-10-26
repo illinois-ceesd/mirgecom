@@ -71,6 +71,25 @@ from mirgecom.diffusion import (
 )
 
 
+class _FluidOpStatesTag:
+    pass
+
+
+class _FluidGradTag:
+    pass
+
+
+class _FluidOperatorTag:
+    pass
+
+
+class _WallGradTag:
+    pass
+
+
+class _WallOperatorTag:
+    pass
+
 class _TemperatureInterVolTag:
     pass
 

@@ -96,11 +96,128 @@ def _get_box_mesh(dim, a, b, n, t=None, periodic=None):
     dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+        if not periodic[i]:
+            bttf["-"+str(i+1)] = ["-"+dim_names[i]]
+            bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
     return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t,
                periodic=periodic)
+
+
+def get_elements_in_box(box_a, box_b, mesh, elements=None):
+
+    mesh_groups, = mesh.groups
+    mesh_verts = mesh.vertices
+
+    mesh_verts = mesh.vertices
+    elem_verts = mesh_verts[:, mesh_groups.vertex_indices]
+    elem_centroids = np.sum(elem_verts, axis=2) / elem_verts.shape[2]
+    num_elements = elem_centroids.shape[1]
+    dim = mesh_verts.shape[0]
+    box_els = set()
+    if elements is None:
+        elements = range(num_elements)
+
+    for e in elements:
+        elem_centroid = elem_centroids[:,e]
+        in_box = True
+        for d in range(dim):
+            in_box = (in_box and (elem_centroid[d] >= box_a[d]
+                                  and elem_centroid[d] <= box_b[d]))
+        if in_box:
+            box_els.add(e)
+
+
+    return box_els
+
+
+def test_mesh(dim, a, b, mesh, axis_fractions_wall=None):
+
+    if axis_fractions_wall is None:
+        axis_fractions_wall = [1/4, 1/2, 1/2]
+
+    if len(axis_fractions_wall) != dim:
+        raise ValueError("Wall axis fractions must be of size(dimension).")
+
+    mesh_lens = [b[i] - a[i] for i in range(dim)]
+    print(f"{mesh_lens=}")
+
+    wall_box_lens = [mesh_lens[i]*axis_fractions_wall[i] for i in range(dim)]
+
+    wall_b = [b[i] for i in range(dim)]
+    wall_a = [b[i] - wall_box_lens[i] for i in range(dim)]
+
+    print(f"{wall_box_lens=},{wall_a=},{wall_b=}")
+    
+    domain_elements = get_elements_in_box(
+        box_a=a, box_b=b, mesh=mesh)
+
+    structures_elements = get_elements_in_box(
+        box_a=wall_a, box_b=wall_b, mesh=mesh)
+
+    print(f"{len(structures_elements)=}")
+
+    fluid_elements = domain_elements - structures_elements
+    print(f"{len(fluid_elements)=}")
+
+    axis_fractions_wall[0] = axis_fractions_wall[0]/2
+    surround_box_lens = [mesh_lens[i]*axis_fractions_wall[i] for i in range(dim)]
+    surround_b = [b[i] for i in range(dim)]
+    surround_a = [b[i] - surround_box_lens[i] for i in range(dim)]
+    print(f"{surround_box_lens=},{surround_a=},{surround_b=}")
+
+    surround_elements = get_elements_in_box(
+        box_a=surround_a, box_b=surround_b, mesh=mesh,
+        elements=structures_elements)
+    print(f"{len(surround_elements)=}")
+
+    wall_elements = structures_elements - surround_elements
+    print(f"{len(wall_elements)=}")
+
+    volume_to_tags = {
+        "fluid": ["fluid"],
+        "wall": ["wall_insert", "wall_surround"]}
+    
+    tag_to_elements = {
+        "fluid": np.array(list(fluid_elements)),
+        "wall_insert": np.array(list(wall_elements)),
+        "wall_surround": np.array(list(surround_elements))}
+
+    return mesh, tag_to_elements, volume_to_tags
+
+def mesh_testing(mesh, box_a, box_b):
+
+    mesh_groups, = mesh.groups
+
+    mesh_verts = mesh.vertices
+    print(f"{mesh_verts.shape=}")
+
+    elem_verts = mesh_verts[:, mesh_groups.vertex_indices]
+    print(f"{elem_verts.shape=}")
+
+    elem_centroids = np.sum(elem_verts, axis=2) / elem_verts.shape[2]
+    print(f"{elem_centroids.shape=}")
+
+    num_elements = elem_centroids.shape[1]
+    dim = mesh_verts.shape[0]
+    print(f"{num_elements=},{dim=}")
+    box_els = []
+    for e in range(num_elements):
+        elem_centroid = elem_centroids[:,e]
+        in_box = True
+        for d in range(dim):
+            in_box = (in_box and (elem_centroid[d] >= box_a[d]
+                                  and elem_centroid[d] <= box_b[d]))
+        if in_box:
+            box_els.append(e)
+
+    print(f"nelem in box: {len(box_els)=}")
+    # elem_x = mesh_verts[0, mesh_groups.vertex_indices]
+    # elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
+    # global_nelements = len(elem_centroids)
+    # aver_part_nelem = global_nelements / num_ranks
+
 
 
 class InitSponge:
@@ -180,7 +297,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
     if rank == 0:
-        print(f"Main start: {time.ctime(time.time())}")
+        print(f"Hello: {time.ctime(time.time())}")
     comm.Barrier()
 
     from mirgecom.simutil import global_reduce as _global_reduce
@@ -225,7 +342,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     nhealth = 100
     nrestart = 1000
     do_checkpoint = 0
-    boundary_report = 0
+    boundary_report = 1
     do_callbacks = 0
 
     # }}}  Time stepping control
@@ -597,7 +714,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
     if rank == 0:
-        print(f"ACTX setup start: {time.ctime(time.time())}")
+        print(f"Queue/ACTX setup start: {time.ctime(time.time())}")
     comm.Barrier()
 
     if use_profiling:
@@ -613,6 +730,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Queue/ACTX setup done: {time.ctime(time.time())}")
+    comm.Barrier()
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -638,9 +760,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    comm.Barrier()
+    if rank == 0:
+        print(f"Mesh setup done: {time.ctime(time.time())}")
+    comm.Barrier()
+
     print(f"{rank=},{dim=},{order=},{local_nelements=},{global_nelements=}")
     if grid_only:
         return 0
+
+    mesh, tag_to_els, vols_to_tags = test_mesh(dim, box_ll, box_ur, local_mesh)
+
+    return 0
 
     dcoll = create_discretization_collection(actx, local_mesh, order)
     nodes = actx.thaw(dcoll.nodes())
@@ -648,7 +779,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
     if rank == 0:
-        print(f"ACTX Setup end -> Solution init start: {time.ctime(time.time())}")
+        print(f"Discretization Setup end: {time.ctime(time.time())}")
     comm.Barrier()
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
@@ -732,6 +863,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 ("max_pressure",    "{value:1.9e})\n"),
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
                 ("max_temperature",    "{value:7g})\n")])
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Solution init start: {time.ctime(time.time())}")
+    comm.Barrier()
 
     if single_gas_only:
         nspecies = 0
@@ -958,6 +1094,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"Expected equilibrium state:"
                         f" {eq_pressure=}, {eq_temperature=},"
                         f" {eq_density=}, {eq_mass_fractions=}")
+
+    comm.Barrier()
+    if rank == 0:
+        print(f"Solution init done: {time.ctime(time.time())}")
+    comm.Barrier()
 
     def my_write_status(dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
@@ -1241,6 +1382,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     comm.Barrier()
 
+    if rank == 0:
+        print(f"Simulation end time: {time.ctime(time.time())}")
+
+
     finish_tol = 1e-16
     assert np.abs(current_t - t_final) < finish_tol
 
@@ -1251,10 +1396,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info("Fluid solution failed health check.")
         raise MyRuntimeError("Failed simulation health check.")
 
-    if rank == 0:
-        print(f"Simulation end time: {time.ctime(time.time())}")
-
     comm.Barrier()
+    if rank == 0:
+        print(f"Goodbye: {time.ctime(time.time())}")
 
 
 if __name__ == "__main__":
@@ -1278,8 +1422,8 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    from warnings import warn
-    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    # from warnings import warn
+    # warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     lazy = args.lazy
     log_dependent = False
     force_eval = not args.no_force
@@ -1304,7 +1448,7 @@ if __name__ == "__main__":
     else:
         print("No user input file, using default values")
 
-    print(f"Calling main: {time.ctime(time.time())}")
+    # print(f"Calling main: {time.ctime(time.time())}")
 
     main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
          use_overintegration=args.overintegration,
