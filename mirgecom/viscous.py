@@ -457,11 +457,24 @@ def viscous_flux_on_element_boundary(
 
 
 def get_viscous_timestep(dcoll, state, *, dd=DD_VOLUME_ALL):
-    """Routine returns the the node-local maximum stable viscous timestep.
+    r"""Routine returns the the node-local maximum stable viscous timestep.
+
+    The locally required timestep $\delta{t}_l$ is calculated from the fluid
+    local wavespeed $s_f$, fluid viscosity $\mu$, fluid density $\rho$, and
+    species diffusivities $d_\alpha$ as:
+
+    .. math::
+        \delta{t}_l =  \frac{\Delta{x}_l}{s_l + \left(\frac{\mu}{\rho} +
+        \mathbf{\text{max}}_\alpha(d_\alpha)\right)\left(\Delta{x}_l\right)^{-1}},
+
+    where $\Delta{x}_l$ is given by
+    :func:`grudge.dt_utils.characteristic_lengthscales`, and the rest are
+    fluid state-dependent quantities. For non-mixture states, species
+    diffusivities $d_\alpha=0$.
 
     Parameters
     ----------
-    dcoll: grudge.discretization.DiscretizationCollection
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
         the discretization collection to use
 
