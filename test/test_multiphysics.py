@@ -47,8 +47,8 @@ from mirgecom.gas_model import (
     make_fluid_state
 )
 from mirgecom.boundary import (
-    AdiabaticNoslipWallBoundary,
-    IsothermalWallBoundary,
+    AdiabaticNoslipMovingBoundary,
+    IsothermalNoSlipBoundary,
 )
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     coupled_ns_heat_operator
@@ -235,10 +235,10 @@ def test_thermally_coupled_fluid_wall(
         base_wall_temp = 600
 
         fluid_boundaries = {
-            dd_vol_fluid.trace("-0").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+0").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("-0").domain_tag: AdiabaticNoslipMovingBoundary(),
+            dd_vol_fluid.trace("+0").domain_tag: AdiabaticNoslipMovingBoundary(),
             dd_vol_fluid.trace("+1").domain_tag:
-                IsothermalWallBoundary(wall_temperature=base_fluid_temp),
+                IsothermalNoSlipBoundary(wall_temperature=base_fluid_temp),
         }
 
         wall_boundaries = {

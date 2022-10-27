@@ -54,7 +54,7 @@ from mirgecom.io import make_init_message
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    IsothermalWallBoundary,
+    IsothermalNoSlipBoundary,
 )
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -302,7 +302,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_state = make_obj_array([current_cv, current_wall_temperature])
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("Upper Sides").domain_tag: IsothermalWallBoundary(
+        dd_vol_fluid.trace("Upper Sides").domain_tag: IsothermalNoSlipBoundary(
             wall_temperature=isothermal_wall_temp)}
     wall_boundaries = {
         dd_vol_wall.trace("Lower Sides").domain_tag: NeumannDiffusionBoundary(0)}
