@@ -460,7 +460,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
         If *auto_balance* is True, this parameter indicates the acceptable
         relative difference to the average number of elements per partition.
         It defaults to balance within 1%.
-    debug: boolean
+    debug: bool
         En/disable debugging/diagnostic print reporting.
 
     Returns
