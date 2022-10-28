@@ -23,6 +23,7 @@ Mesh utilities
 --------------
 
 .. autofunction:: distribute_mesh
+.. autofunction:: geometric_mesh_partitioner
 
 Simulation support utilities
 ----------------------------
@@ -432,7 +433,319 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
         componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
-def generate_and_distribute_mesh(comm, generate_mesh):
+def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
+                               nranks_per_axis=None, auto_balance=False,
+                               imbalance_tolerance=.01, debug=False):
+    """Partition a mesh uniformly along the X coordinate axis.
+
+    The intent is to partition the mesh uniformly along user-specified
+    directions. In this current interation, the capability is demonstrated
+    by splitting along the X axis.
+
+    Parameters
+    ----------
+    mesh: :class:`meshmode.mesh.Mesh`
+        The serial mesh to partition
+    num_ranks: int
+        The number of partitions to make
+    tag_to_elements:
+        Maps volume tags to elements.  Currently unused.
+    nranks_per_axis: numpy.ndarray
+        How many partitions per specified axis.  Currently unused.
+    auto_balance: bool
+        Indicates whether to perform automatic balancing.  If true, the
+        partitioner will try to balance the number of elements over
+        the partitions.
+    imbalance_tolerance: float
+        If *auto_balance* is True, this parameter indicates the acceptable
+        relative difference to the average number of elements per partition.
+        It defaults to balance within 1%.
+    debug: boolean
+        En/disable debugging/diagnostic print reporting.
+
+    Returns
+    -------
+    elem_to_rank: numpy.ndarray
+        Array indicating the MPI rank for each element
+    """
+    mesh_dimension = mesh.dim
+    if nranks_per_axis is None:
+        nranks_per_axis = np.ones(mesh_dimension)
+        nranks_per_axis[0] = num_ranks
+    if len(nranks_per_axis) != mesh_dimension:
+        raise ValueError("nranks_per_axis must match mesh dimension.")
+    nranks_test = 1
+    for i in range(mesh_dimension):
+        nranks_test = nranks_test * nranks_per_axis[i]
+    if nranks_test != num_ranks:
+        raise ValueError("nranks_per_axis must match num_ranks.")
+
+    mesh_groups, = mesh.groups
+    mesh_verts = mesh.vertices
+    mesh_x = mesh_verts[0]
+
+    x_min = np.min(mesh_x)
+    x_max = np.max(mesh_x)
+    x_interval = x_max - x_min
+    part_loc = np.linspace(x_min, x_max, num_ranks+1)
+
+    part_interval = x_interval / nranks_per_axis[0]
+    elem_x = mesh_verts[0, mesh_groups.vertex_indices]
+    elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
+    global_nelements = len(elem_centroids)
+    aver_part_nelem = global_nelements / num_ranks
+
+    if debug:
+        print(f"Partitioning {global_nelements} elements in"
+              f" [{x_min},{x_max}]/{num_ranks}")
+        print(f"Average nelem/part: {aver_part_nelem}")
+        print(f"Initial part locs: {part_loc=}")
+
+    # Create geometrically even partitions
+    elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
+
+    # map partition id to list of elements in that partition
+    part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
+                        for r in range(num_ranks)}
+    # make an array of the geometrically even partition sizes
+    # avoids calling "len" over and over on the element sets
+    nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
+
+    if debug:
+        print(f"Initial: {nelem_part=}")
+
+    # Automatic load-balancing
+    if auto_balance:
+
+        for r in range(num_ranks-1):
+
+            # find the element reservoir (next part with elements in it)
+            adv_part = r + 1
+            while nelem_part[adv_part] == 0:
+                adv_part = adv_part + 1
+
+            num_elem_needed = aver_part_nelem - nelem_part[r]
+            part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
+
+            if debug:
+                print(f"Processing part({r=})")
+                print(f"{part_loc[r]=}, {adv_part=}")
+                print(f"{num_elem_needed=}, {part_imbalance=}")
+                print(f"{nelem_part=}")
+
+            niter = 0
+            total_change = 0
+            moved_elements = set()
+
+            while ((part_imbalance > imbalance_tolerance)
+                   and (adv_part < num_ranks)):
+                # This partition needs to keep changing in size until it meets the
+                # specified imbalance tolerance, or gives up trying
+
+                # seek out the element reservoir
+                while nelem_part[adv_part] == 0:
+                    adv_part = adv_part + 1
+                    if adv_part >= num_ranks:
+                        raise ValueError("Ran out of elements to partition.")
+
+                if debug:
+                    print(f"-{nelem_part[r]=}, adv_part({adv_part}),"
+                          f" {nelem_part[adv_part]=}")
+                    print(f"-{part_loc[r+1]=},{part_loc[adv_part+1]=}")
+                    print(f"-{num_elem_needed=},{part_imbalance=}")
+
+                if niter > 100:
+                    raise ValueError("Detected too many iterations in partitioning.")
+
+                # The purpose of the next block is to populate the "moved_elements"
+                # data structure. Then those elements will be moved between the
+                # current partition being processed and the "reservoir,"
+                # *and* to adjust the position of the "right" side of the current
+                # partition boundary.
+                moved_elements = set()
+                num_elements_added = 0
+
+                if num_elem_needed > 0:
+
+                    # Partition is SMALLER than it should be, grab elements from
+                    # the reservoir
+                    if debug:
+                        print(f"-Grabbing elements from reservoir({adv_part})"
+                              f", {nelem_part[adv_part]=}")
+
+                    portion_needed = (float(abs(num_elem_needed))
+                                      / float(nelem_part[adv_part]))
+                    portion_needed = min(portion_needed, 1.0)
+
+                    if debug:
+                        print(f"--Chomping {portion_needed*100}% of"
+                              f" reservoir({adv_part}) [by nelem].")
+
+                    if portion_needed == 1.0:  # Chomp
+                        new_loc = part_loc[adv_part+1]
+                        moved_elements.update(part_to_elements[adv_part])
+
+                    else:  # Bite
+                        # This is the spatial size of the reservoir
+                        reserv_interval = part_loc[adv_part+1] - part_loc[r+1]
+
+                        # Find what portion of the reservoir to grab spatially
+                        # This part is needed because the elements are not
+                        # distributed uniformly in space.
+                        fine_tuned = False
+                        trial_portion_needed = portion_needed
+                        while not fine_tuned:
+                            pos_update = trial_portion_needed*reserv_interval
+                            new_loc = part_loc[r+1] + pos_update
+
+                            moved_elements = set()
+                            num_elem_mv = 0
+                            for e in part_to_elements[adv_part]:
+                                if elem_centroids[e] <= new_loc:
+                                    moved_elements.add(e)
+                                    num_elem_mv = num_elem_mv + 1
+                            if num_elem_mv < num_elem_needed:
+                                fine_tuned = True
+                            else:
+                                ovrsht = (num_elem_mv - num_elem_needed)
+                                rel_ovrsht = ovrsht/float(num_elem_needed)
+                                if rel_ovrsht > 0.8:
+                                    # bisect the space grabbed and try again
+                                    trial_portion_needed = trial_portion_needed/2.0
+                                else:
+                                    fine_tuned = True
+
+                        portion_needed = trial_portion_needed
+                        new_loc = part_loc[r+1] + pos_update
+                        if debug:
+                            print(f"--Tuned: {portion_needed=} [by spatial volume]")
+                            print(f"--Advancing part({r}) by +{pos_update}")
+
+                    num_elements_added = len(moved_elements)
+                    if debug:
+                        print(f"--Adding {num_elements_added} to part({r}).")
+
+                else:
+
+                    # Partition is LARGER than it should be
+                    # Grab the spatial size of the current partition
+                    # to estimate the portion we need to shave off
+                    # assuming uniform element density
+                    part_interval = part_loc[r+1] - part_loc[r]
+                    num_to_move = -num_elem_needed
+                    portion_needed = num_to_move/float(nelem_part[r])
+
+                    if debug:
+                        print(f"--Shaving off {portion_needed*100}% of"
+                              f" partition({r}) [by nelem].")
+
+                    # Tune the shaved portion to account for
+                    # non-uniform element density
+                    fine_tuned = False
+                    while not fine_tuned:
+                        pos_update = portion_needed*part_interval
+                        new_pos = part_loc[r+1] - pos_update
+                        moved_elements = set()
+                        num_elem_mv = 0
+                        for e in part_to_elements[r]:
+                            if elem_centroids[e] > new_pos:
+                                moved_elements.add(e)
+                                num_elem_mv = num_elem_mv + 1
+                        if num_elem_mv < num_to_move:
+                            fine_tuned = True
+                        else:
+                            ovrsht = (num_elem_mv - num_to_move)
+                            rel_ovrsht = ovrsht/float(num_to_move)
+                            if rel_ovrsht > 0.8:
+                                # bisect and try again
+                                portion_needed = portion_needed/2.0
+                            else:
+                                fine_tuned = True
+
+                    # new "right" wall location of shranken part
+                    # and negative num_elements_added for removal
+                    new_loc = new_pos
+                    num_elements_added = -len(moved_elements)
+                    if debug:
+                        print(f"--Reducing partition size by {portion_needed*100}%"
+                              " [by nelem].")
+                        print(f"--Removing {-num_elements_added} from part({r}).")
+
+                # Now "moved_elements", "num_elements_added", and "new_loc"
+                # are computed.  Update the partition, and reservoir.
+                if debug:
+                    print(f"--Number of elements to ADD: {num_elements_added}.")
+
+                if num_elements_added > 0:
+                    part_to_elements[r].update(moved_elements)
+                    part_to_elements[adv_part].difference_update(
+                        moved_elements)
+                    for e in moved_elements:
+                        elem_to_rank[e] = r
+                else:
+                    part_to_elements[r].difference_update(moved_elements)
+                    part_to_elements[adv_part].update(moved_elements)
+                    for e in moved_elements:
+                        elem_to_rank[e] = adv_part
+
+                total_change = total_change + num_elements_added
+                part_loc[r+1] = new_loc
+                if debug:
+                    print(f"--Before: {nelem_part=}")
+                nelem_part[r] = nelem_part[r] + num_elements_added
+                nelem_part[adv_part] = nelem_part[adv_part] - num_elements_added
+                if debug:
+                    print(f"--After: {nelem_part=}")
+
+                # Compute new nelem_needed and part_imbalance
+                num_elem_needed = num_elem_needed - num_elements_added
+                part_imbalance = \
+                    np.abs(num_elem_needed) / float(aver_part_nelem)
+                niter = niter + 1
+
+            # Summarize the total change and state of the partition
+            # and reservoir
+            if debug:
+                print(f"-Part({r}): {total_change=}")
+                print(f"-Part({r=}): {nelem_part[r]=}, {part_imbalance=}")
+                print(f"-Part({adv_part}): {nelem_part[adv_part]=}")
+
+    # Validate the partitioning before returning
+    total_partitioned_elements = sum([len(part_to_elements[r])
+                                      for r in range(num_ranks)])
+    total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
+
+    if debug:
+        print("Validating mesh parts.")
+
+    if total_partitioned_elements != total_nelem_part:
+        raise ValueError("Validator: parted element counts dont match")
+    if total_partitioned_elements != global_nelements:
+        raise ValueError("Validator: global element counts dont match.")
+    if len(elem_to_rank) != global_nelements:
+        raise ValueError("Validator: elem-to-rank wrong size.")
+    if np.any(nelem_part) <= 0:
+        raise ValueError("Validator: empty partitions.")
+
+    for e in range(global_nelements):
+        part = elem_to_rank[e]
+        if e not in part_to_elements[part]:
+            raise ValueError("Validator: part/element/part map mismatch.")
+
+    part_counts = np.zeros(global_nelements)
+    for part_elements in part_to_elements.values():
+        for element in part_elements:
+            part_counts[element] = part_counts[element] + 1
+
+    if np.any(part_counts > 1):
+        raise ValueError("Validator: degenerate elements")
+    if np.any(part_counts < 1):
+        raise ValueError("Validator: orphaned elements")
+
+    return elem_to_rank
+
+
+def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     """Generate a mesh and distribute it among all ranks in *comm*.
 
     Generate the mesh with the user-supplied mesh generation function
@@ -461,7 +774,7 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     warn(
         "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
         "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
-    return distribute_mesh(comm, generate_mesh)
+    return distribute_mesh(comm, generate_mesh, **kwargs)
 
 
 def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
