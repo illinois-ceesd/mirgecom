@@ -915,7 +915,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     return local_mesh_data, global_nelements
 
 
-def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL):
+def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
+                    mesh=None):
     """Generate a report of the grid boundaries."""
     boundaries = normalize_boundaries(boundaries)
 
@@ -926,7 +927,14 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL):
         nproc = comm.Get_size()
         rank = comm.Get_rank()
 
-    local_header = f"nproc: {nproc}\nrank: {rank}\n"
+    if mesh is not None:
+        nelem = 0
+        for grp in mesh.groups:
+            nelem = nelem + grp.nelements
+        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}\n"
+    else:
+        local_header = f"nproc: {nproc}\nrank: {rank}\n"
+
     from io import StringIO
     local_report = StringIO(local_header)
     local_report.seek(0, 2)
@@ -939,10 +947,12 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL):
     from meshmode.mesh import BTAG_PARTITION
     from meshmode.distributed import get_connected_parts
     connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
+    local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
     local_report.write(f"connected_part_ids: {connected_part_ids}\n")
     part_nodes = []
     for connected_part_id in connected_part_ids:
-        boundary_discr = dcoll.discr_from_dd(BTAG_PARTITION(connected_part_id))
+        boundary_discr = dcoll.discr_from_dd(
+            dd.trace(BTAG_PARTITION(connected_part_id)))
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
         part_nodes.append(nnodes)
     if part_nodes:
