@@ -10,7 +10,7 @@ cd ${DRIVERS_HOME}
 for production_driver in $(ls | grep "production_driver_");
 do
     cd "$production_driver"/smoke_test
-    python -m mpi4py ./driver.py -i run_params.yaml
+    mpiexec -n 2 python -m mpi4py ./driver.py -i run_params.yaml --log --lazy
     cd ../../
 done
 cd -
