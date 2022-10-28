@@ -95,4 +95,5 @@ rst_prolog = """
 # FIXME: Remove when grudge#280 gets merged
 nitpick_ignore_regex = [
     ("py:class", r".*BoundaryDomainTag.*"),
+    ("py:class", "importlib.abc.Traversable")
 ]
