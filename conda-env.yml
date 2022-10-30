@@ -9,7 +9,6 @@ channels:
 dependencies:
 - git
 - gh
-- mypy
 - conda-forge::numpy
 - pocl
 - clinfo
@@ -23,6 +22,4 @@ dependencies:
 - pytest
 - pylint
 - pydocstyle
-- cantera
-- h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
