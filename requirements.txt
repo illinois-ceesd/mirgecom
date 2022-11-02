@@ -12,32 +12,16 @@ git+https://github.com/pythological/kanren.git#egg=miniKanren
 
 # The following packages will be git cloned by emirge:
 
-## ======== OLD
-#--editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
-##--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
-#--editable git+https://github.com/kaushikcfd/loopy.git#egg=loopy
-#--editable git+https://github.com/inducer/dagrt.git#egg=dagrt
-#--editable git+https://github.com/inducer/leap.git#egg=leap
-#--editable git+https://github.com/inducer/modepy.git#egg=modepy
-#--editable git+https://github.com/kaushikcfd/arraycontext.git#egg=arraycontext
-#--editable git+https://github.com/kaushikcfd/meshmode.git#egg=meshmode
-#--editable git+https://github.com/inducer/grudge.git#egg=grudge
-#--editable git+https://github.com/kaushikcfd/pytato.git#egg=pytato
-#--editable git+https://github.com/pyrometheus/pyrometheus.git#egg=pyrometheus
-#--editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
-#--editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
-# ========= OLD
-
---editable git+https://github.com/kaushikcfd/arraycontext.git@7a22d2d#egg=arraycontext
---editable git+https://github.com/inducer/dagrt.git@v2021.1-12-g6fb66bf#egg=dagrt
---editable git+https://github.com/kaushikcfd/feinsum.git@a4e8465#egg=feinsum
---editable git+https://github.com/majosm/grudge.git@3af1ca5#egg=grudge
---editable git+https://github.com/inducer/leap.git@3a49342#egg=leap
---editable git+https://github.com/illinois-ceesd/logpyle.git@v2021.0-7-g42e89c8#egg=logpyle
---editable git+https://github.com/kaushikcfd/loopy.git@50e243ba#egg=loopy
---editable git+https://github.com/majosm/meshmode.git@2dddf25#egg=meshmode
---editable git+https://github.com/inducer/modepy.git@v2021.1-77-gecfe4bd#egg=modepy
---editable git+https://github.com/inducer/pymbolic.git@v2022.1-30-g8991e74#egg=pymbolic
---editable git+https://github.com/pyrometheus/pyrometheus.git@feeee93#egg=pyrometheus
---editable git+https://github.com/kaushikcfd/pytato.git@v2021.1-606-ga174a76#egg=pytato
---editable git+https://github.com/inducer/pyvisfile.git@v2022.1.1-3-g79f62c3#egg=pyvisfile
+--editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
+# --editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
+--editable git+https://github.com/inducer/loopy.git#egg=loopy
+--editable git+https://github.com/inducer/dagrt.git#egg=dagrt
+--editable git+https://github.com/inducer/leap.git#egg=leap
+--editable git+https://github.com/inducer/modepy.git#egg=modepy
+--editable git+https://github.com/inducer/arraycontext.git#egg=arraycontext
+--editable git+https://github.com/inducer/meshmode.git#egg=meshmode
+--editable git+https://github.com/inducer/grudge.git#egg=grudge
+--editable git+https://github.com/inducer/pytato.git#egg=pytato
+--editable git+https://github.com/pyrometheus/pyrometheus.git#egg=pyrometheus
+--editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
+--editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
