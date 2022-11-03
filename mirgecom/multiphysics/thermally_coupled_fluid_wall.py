@@ -400,9 +400,16 @@ def _kappa_inter_volume_trace_pairs(
         gas_model,
         fluid_dd, wall_dd,
         fluid_state, wall_kappa):
+    actx = fluid_state.array_context
+    fluid_kappa = fluid_state.thermal_conductivity
+
+    from meshmode.dof_array import DOFArray
+    if not isinstance(fluid_kappa, DOFArray):
+        fluid_kappa = fluid_kappa * (dcoll.zeros(actx, dd=fluid_dd) + 1)
+    if not isinstance(wall_kappa, DOFArray):
+        wall_kappa = wall_kappa * (dcoll.zeros(actx, dd=wall_dd) + 1)
     pairwise_kappa = {
-        (fluid_dd, wall_dd):
-            (fluid_state.thermal_conductivity, wall_kappa)}
+        (fluid_dd, wall_dd): (fluid_kappa, wall_kappa)}
     return inter_volume_trace_pairs(
         dcoll, pairwise_kappa, comm_tag=_KappaInterVolTag)
 
