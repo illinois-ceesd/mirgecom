@@ -29,6 +29,9 @@ git config user.email "ci-runner@ci.machine.com"
 git config user.name "CI Runner"
 
 # Making a dedicated production remote adds production forks
+if git config remote.production.url > /dev/null; then 
+    git remote remove production
+fi
 git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
 git fetch production
 
