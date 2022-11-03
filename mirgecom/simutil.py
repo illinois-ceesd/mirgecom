@@ -902,9 +902,9 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
         nelem = 0
         for grp in mesh.groups:
             nelem = nelem + grp.nelements
-        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}"
+        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}\n"
     else:
-        local_header = f"nproc: {nproc}\nrank: {rank}"
+        local_header = f"nproc: {nproc}\nrank: {rank}\n"
 
     from io import StringIO
     local_report = StringIO(local_header)
@@ -919,13 +919,14 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
     from meshmode.distributed import get_connected_parts
     connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
     local_report.write(f"connected_part_ids: {connected_part_ids}\n")
-    part_nodes = []
+    part_elements = []
     for connected_part_id in connected_part_ids:
-        boundary_discr = dcoll.discr_from_dd(BTAG_PARTITION(connected_part_id))
-        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-        part_nodes.append(nnodes)
-    if part_nodes:
-        local_report.write(f"nnodes_pb: {part_nodes}\n")
+        boundary_discr = dcoll.discr_from_dd(dd.trace(BTAG_PARTITION(connected_part_id)))
+        nelements = sum([grp.nelements for grp in boundary_discr.mesh.groups])
+        part_elements.append(nelements)
+    for part_id, nelements in zip(connected_part_ids, part_elements):
+        local_report.write(f"{part_id=}\n")
+        local_report.write(f"{nelements=}\n")
 
     local_report.write("-----\n")
     local_report.seek(0)
