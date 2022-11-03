@@ -41,7 +41,7 @@ do
     then
         echo "*** Running parallel lazy example (2 ranks): $example"
         set -x
-        ${mpi_exec} -n 2 python -u -O -m mpi4py ${example} --lazy
+        ${mpi_exec} -n 2 $mpi_launcher python -u -O -m mpi4py ${example} --lazy
         example_return_code=$?
         set +x
     elif [[ "$example" == *"-mpi.py" ]]; then
