@@ -60,9 +60,10 @@ def import_mechdata():
 
     Returns
     -------
-    :class:`importlib.abc.Traversable`
-        Object of type :class:`importlib.abc.Traversable` representing the container
-        (think directory) of the thermochemistry mechanism data (think CTI files).
+    :class:`importlib.resources.abc.Traversable`
+        Object of type :class:`importlib.resources.abc.Traversable` representing the
+        container (think directory) of the thermochemistry mechanism data
+        (think YAML files).
     """
     return importlib_resources.files(get_mechanisms_pkgname())
 
