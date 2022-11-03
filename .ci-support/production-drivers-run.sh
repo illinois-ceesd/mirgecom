@@ -14,14 +14,15 @@ mpi_launcher=""
 if [[ $(hostname) == "porter" ]]; then
     rm -rf run_gpus_generic.sh
     cat <<EOF > run_gpus_generic.sh
+if [[ -n "\$OMPI_COMM_WORLD_NODE_RANK" ]]; then
+    # Open MPI
+    export CUDA_VISIBLE_DEVICES=\$OMPI_COMM_WORLD_LOCAL_RANK
+elif [[ -n "\$MPI_LOCALRANKID" ]]; then
+     # mpich/mvapich
+     export CUDA_VISIBLE_DEVICES=\$MPI_LOCALRANKID
+fi
 
-    if [[ -n "\$OMPI_COMM_WORLD_NODE_RANK" ]]; then
-        # Open MPI
-        export CUDA_VISIBLE_DEVICES=$OMPI_COMM_WORLD_LOCAL_RANK
-    elif [[ -n "\$MPI_LOCALRANKID" ]]; then
-        # mpich/mvapich
-        export CUDA_VISIBLE_DEVICES=$MPI_LOCALRANKID
-    fi
+"\$@"
 EOF
     chmod +x run_gpus_generic.sh
     mpi_launcher="bash ../../run_gpus_generic.sh"
